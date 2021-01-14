@@ -70,12 +70,13 @@ from .trainer_callback import (
     TrainerState,
 )
 from .trainer_pt_utils import (
+    DistributedLengthGroupedSampler,
     DistributedTensorGatherer,
     LabelSmoother,
+    LengthGroupedSampler,
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
-    get_tpu_sampler,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -94,7 +95,7 @@ from .trainer_utils import (
     set_seed,
     speed_metrics,
 )
-from .training_args import TrainingArguments
+from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
 
 
@@ -448,14 +449,32 @@ class Trainer:
             self.train_dataset, collections.abc.Sized
         ):
             return None
-        elif is_torch_tpu_available():
-            return get_tpu_sampler(self.train_dataset)
+
+        # Gather the number of processes and this process index.
+        if self.args.parallel_mode == ParallelMode.TPU:
+            num_processes = xm.xrt_world_size()
+            process_index = xm.get_ordinal()
+        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
+            num_processes = torch.distributed.get_world_size()
+            process_index = torch.distributed.get_rank()
         else:
-            return (
-                RandomSampler(self.train_dataset)
-                if self.args.local_rank == -1
-                else DistributedSampler(self.train_dataset)
-            )
+            num_processes = 1
+            process_index = 0
+
+        # Build the sampler.
+        if self.args.group_by_length:
+            if num_processes <= 1:
+                return LengthGroupedSampler(self.train_dataset, self.args.train_batch_size)
+            else:
+                return DistributedLengthGroupedSampler(
+                    self.train_dataset, self.args.train_batch_size, num_replicas=num_processes, rank=process_index
+                )
+
+        else:
+            if num_processes <= 1:
+                return RandomSampler(self.train_dataset)
+            else:
+                return DistributedSampler(self.train_dataset, num_replicas=num_processes, rank=process_index)
 
     def get_train_dataloader(self) -> DataLoader:
         """

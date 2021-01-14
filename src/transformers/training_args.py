@@ -227,6 +227,9 @@ class TrainingArguments:
         adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
+        group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
+            padding applied and be more efficient). Only useful if applying dynamic padding.
     """
 
     output_dir: str = field(
@@ -405,6 +408,10 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
+    group_by_length: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
