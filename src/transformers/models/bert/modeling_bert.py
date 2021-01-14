@@ -1205,7 +1205,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[2:]
+            output = (prediction_scores,) + outputs[1:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
