@@ -37,7 +37,8 @@ jobs:
       - name: Build conda packages
         run: |
           conda info
-          conda build .github/conda
+          conda list
+          conda-build .github/conda
 
       - name: Upload to Anaconda
-        run: anaconda upload `conda build .github/conda --output` --force
+        run: anaconda upload `conda-build .github/conda --output` --force
