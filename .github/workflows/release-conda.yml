@@ -5,7 +5,7 @@ on:
     tags:
       - v*
     branches:
-      - *conda*
+      - fix-conda*
 
 env:
   ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
