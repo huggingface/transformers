@@ -207,7 +207,7 @@ class ModelTesterMixin:
                 ]
                 expected_arg_names.extend(
                     ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" in arg_names
+                    if "head_mask" and "decoder_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
@@ -469,7 +469,10 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
             if model.config.is_encoder_decoder:
-                inputs["decoder_head_mask"] = head_mask
+                signature = inspect.signature(model.forward)
+                arg_names = [*signature.parameters.keys()]
+                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                    inputs["decoder_head_mask"] = head_mask
 
             outputs = model(**inputs, return_dict=True)
 
