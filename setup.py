@@ -140,9 +140,29 @@ _deps = [
 ]
 
 
-# tokenizers: "tokenizers==0.9.4" lookup table
-# support non-versions file too so that they can be checked at run time
+# this is a lookup table with items like:
+#
+# tokenizers: "tokenizers==0.9.4"
+# packaging: "packaging"
+#
+# some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps)}
+
+# since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
+# anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
+#
+# python -c 'import sys; from transformers.dependency_versions_table import deps; \
+# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets
+#
+# Just pass the desired package names to that script as it's shown with 2 packages above.
+#
+# If transformers is not yet installed and the work is done from the cloned repo remember to add `PYTHONPATH=src` to the script above
+#
+# You can then feed this for example to `pip`:
+#
+# pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
+# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
+#
 
 
 def deps_list(*pkgs):
