@@ -118,9 +118,10 @@ Installation Notes
 
 As of this writing, both FairScale and Deepspeed require compilation of CUDA C++ code, before they can be used.
 
-While all installation issues should be dealt with through the corresponding github Issues of FairScale and DeepSpeed,
-there are a few common issues that one may encounter while building any PyTorch extension that needs to build CUDA
-extensions.
+While all installation issues should be dealt with through the corresponding GitHub Issues of `FairScale
+<https://github.com/facebookresearch/fairscale/issues>`__ and `Deepspeed
+<https://github.com/microsoft/DeepSpeed/issues>`__, there are a few common issues that one may encounter while building
+any PyTorch extension that needs to build CUDA extensions.
 
 Therefore, if you encounter a CUDA-related build issue while doing one of the following or both:
 
@@ -136,14 +137,21 @@ different remember to adjust the version number to the one you are after.
 
 **Possible problem #1:**
 
-While, pytorch comes with its own CUDA toolkit, to build these two projects you must have an identical version of CUDA
+While, Pytorch comes with its own CUDA toolkit, to build these two projects you must have an identical version of CUDA
 installed system-wide.
 
-For example, if you installed ``pytorch`` with ``cudatoolkit==10.2`` in the python environment, you also need to have
+For example, if you installed ``pytorch`` with ``cudatoolkit==10.2`` in the Python environment, you also need to have
 CUDA ``10.2`` installed system-wide.
 
 The exact location may vary from system to system, but ``/usr/local/cuda-10.2`` is the most common location on many
-Unix systems. If you don't have it installed, install it first. You will find the instructions by using your favorite
+Unix systems. When CUDA is correctly set up and added to the ``PATH`` environment variable, one can find the
+installation location by doing:
+
+.. code-block:: bash
+
+    which nvcc
+
+If you don't have CUDA installed system-wide, install it first. You will find the instructions by using your favorite
 search engine. For example, if you're on Ubuntu you may want to search for: `ubuntu cuda 10.2 install
 <https://www.google.com/search?q=ubuntu+cuda+10.2+install>`__.
 
@@ -244,7 +252,7 @@ To deploy this feature:
 
        pip install fairscale
 
-   or find more details on `the FairScale's github page
+   or find more details on `the FairScale's GitHub page
    <https://github.com/facebookresearch/fairscale/#installation>`__.
 
 2. Add ``--sharded_ddp`` to the command line arguments, and make sure you have added the distributed launcher ``-m
@@ -641,7 +649,7 @@ You can work with FP16 in one of the following ways:
 2. NVIDIA's apex, as documented `here
    <https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options>`__.
 
-If you want to use an equivalent of the pytorch native amp, you can either configure the ``fp16`` entry in the
+If you want to use an equivalent of the Pytorch native amp, you can either configure the ``fp16`` entry in the
 configuration file, or use the following command line arguments: ``--fp16 --fp16_backend amp``.
 
 Here is an example of the ``fp16`` configuration:
@@ -710,5 +718,5 @@ Main DeepSpeed Resources
 - `Blog posts <https://www.microsoft.com/en-us/research/search/?q=deepspeed>`__
 
 Finally, please, remember that, HuggingFace :class:`~transformers.Trainer` only integrates DeepSpeed, therefore if you
-have any problems or questions with regards to DeepSpeed usage, please, file an issue with `DeepSpeed github
+have any problems or questions with regards to DeepSpeed usage, please, file an issue with `DeepSpeed GitHub
 <https://github.com/microsoft/DeepSpeed/issues>`__.
