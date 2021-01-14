@@ -516,26 +516,6 @@ class MBartStandaloneDecoderModelTester:
             lm_labels,
         )
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.encoder_seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            lm_labels,
-        )
-
     def create_and_check_decoder_model_past(
         self,
         config,

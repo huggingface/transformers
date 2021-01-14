@@ -842,7 +842,7 @@ class BartEncoderDecoderModelTest(EncoderDecoderMixin, unittest.TestCase):
     def prepare_config_and_inputs(self):
         model_tester_encoder = BertModelTester(self, batch_size=13)
         model_tester_decoder = BartStandaloneDecoderModelTester(
-            self, batch_size=13, hidden_size=32, max_position_embeddings=512
+            self, batch_size=13, d_model=32, max_position_embeddings=512
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs_for_decoder()

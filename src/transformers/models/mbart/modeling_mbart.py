@@ -1538,12 +1538,12 @@ class MBartForCausalLM(MBartPreTrainedModel):
         r"""
         Args:
             input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
 
                 Indices can be obtained using :class:`~transformers.ProphetNetTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-                details.
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
 
                 `What are input IDs? <../glossary.html#input-ids>`__
             attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1554,21 +1554,23 @@ class MBartForCausalLM(MBartPreTrainedModel):
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-                the model is configured as a decoder.
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                if the model is configured as a decoder.
             encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-                the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+                Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
+                in the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
             past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
+                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+                decoding.
 
                 If :obj:`past_key_values` are used, the user can optionally input only the last ``decoder_input_ids``
                 (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
                 instead of all ``decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
             labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
-                config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
-                (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
+                config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are
+                ignored (masked), the loss is only computed for the tokens with labels in ``[0, ...,
+                config.vocab_size]``.
             use_cache (:obj:`bool`, `optional`):
                 If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
                 decoding (see :obj:`past_key_values`).
@@ -1576,11 +1578,11 @@ class MBartForCausalLM(MBartPreTrainedModel):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
             output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-                tensors for more detail.
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
             output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-                more detail.
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 

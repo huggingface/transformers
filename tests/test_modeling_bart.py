@@ -784,6 +784,7 @@ class BartStandaloneDecoderModelTester:
         config = BartConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
+            encoder_layers=self.decoder_layers,
             decoder_layers=self.decoder_layers,
             decoder_ffn_dim=self.decoder_ffn_dim,
             encoder_attention_heads=self.encoder_attention_heads,
@@ -812,8 +813,8 @@ class BartStandaloneDecoderModelTester:
             lm_labels,
         ) = self.prepare_config_and_inputs()
 
-        encoder_hidden_states = floats_tensor([self.batch_size, self.encoder_seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+        encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
 
         return (
             config,
