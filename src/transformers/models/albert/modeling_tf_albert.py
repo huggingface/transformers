@@ -470,6 +470,21 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder.word_embeddings = value
+        self.decoder.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias, "decoder_bias": self.decoder_bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.decoder_bias = value["decoder_bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
@@ -505,10 +520,7 @@ class TFAlbertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -803,6 +815,18 @@ class TFAlbertModel(TFAlbertPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -823,34 +847,8 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
         self.sop_classifier = TFAlbertSOPHead(config, name="sop_classifier")
 
-    def get_output_embeddings(self):
-        return self.albert.embeddings
-
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        # ALBERT is a special case where there are two bias to update
-        # even though self.bias is not used anywhere and is here
-        # just to make the loading weights from a PT model happy
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/bias"
-            self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-            self.predictions.bias.assign(init_bias)
-
-            init_decoder_bias = tf.zeros((new_num_tokens,))
-            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/decoder_bias"
-            self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-
-            self.predictions.decoder_bias.assign(init_decoder_bias)
+    def get_lm_head(self):
+        return self.predictions
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=TFAlbertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -928,6 +926,17 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFAlbertForPreTrainingOutput(
+            prediction_logits=output.prediction_logits,
+            sop_logits=output.sop_logits,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 class TFAlbertSOPHead(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -957,34 +966,8 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         self.albert = TFAlbertMainLayer(config, add_pooling_layer=False, name="albert")
         self.predictions = TFAlbertMLMHead(config, self.albert.embeddings, name="predictions")
 
-    def get_output_embeddings(self):
-        return self.albert.embeddings
-
-    def resize_token_embeddings(self, new_num_tokens):
-        super().resize_token_embeddings(new_num_tokens=new_num_tokens)
-
-        # ALBERT is a special case where there are two bias to update
-        # even though self.bias is not used anywhere and is here
-        # just to make the loading weights from a PT model happy
-        if new_num_tokens is not None:
-            num_tokens_to_copy = min(self.predictions.bias.shape[0], new_num_tokens)
-            self.predictions.vocab_size = num_tokens_to_copy
-            init_bias = tf.zeros((new_num_tokens,))
-            init_bias[:num_tokens_to_copy] = self.predictions.bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/bias"
-            self.predictions.bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-            self.predictions.bias.assign(init_bias)
-
-            init_decoder_bias = tf.zeros((new_num_tokens,))
-            init_decoder_bias[:num_tokens_to_copy] = self.predictions.decoder_bias.value()[:num_tokens_to_copy]
-            name = self.name + "/" + self.predictions.name + "/decoder_bias"
-            self.predictions.decoder_bias = self.add_weight(
-                shape=(new_num_tokens,), initializer="zeros", trainable=True, name=name
-            )
-
-            self.predictions.decoder_bias.assign(init_decoder_bias)
+    def get_lm_head(self):
+        return self.predictions
 
     @add_start_docstrings_to_model_forward(ALBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1057,6 +1040,13 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1154,6 +1144,13 @@ class TFAlbertForSequenceClassification(TFAlbertPreTrainedModel, TFSequenceClass
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1248,6 +1245,13 @@ class TFAlbertForTokenClassification(TFAlbertPreTrainedModel, TFTokenClassificat
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1355,6 +1359,15 @@ class TFAlbertForQuestionAnswering(TFAlbertPreTrainedModel, TFQuestionAnsweringL
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )
 
 
@@ -1486,3 +1499,24 @@ class TFAlbertForMultipleChoice(TFAlbertPreTrainedModel, TFMultipleChoiceLoss):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)

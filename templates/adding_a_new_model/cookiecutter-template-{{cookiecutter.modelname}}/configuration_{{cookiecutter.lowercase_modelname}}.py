@@ -135,6 +135,10 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "{{cookiecutter.lowercase_modelname}}"
+    {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+    {% else -%}
+    keys_to_ignore_at_inference = ["past_key_values"]
+    {% endif -%}
 
     def __init__(
         self,
@@ -174,6 +178,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         classifier_dropout=0.0,
+        scale_embedding=False,
         gradient_checkpointing=False,
         {% endif -%}
         pad_token_id=1,
@@ -226,6 +231,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         {% endif -%}
 
     {% if cookiecutter.is_encoder_decoder_model == "False" %}

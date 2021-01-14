@@ -44,7 +44,11 @@ from ..bert.modeling_tf_bert import (
     TFBertLMHeadModel,
     TFBertModel,
 )
-from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration
+from ..blenderbot.modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
+from ..blenderbot_small.modeling_tf_blenderbot_small import (
+    TFBlenderbotSmallForConditionalGeneration,
+    TFBlenderbotSmallModel,
+)
 from ..camembert.modeling_tf_camembert import (
     TFCamembertForMaskedLM,
     TFCamembertForMultipleChoice,
@@ -90,6 +94,7 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
+from ..led.modeling_tf_led import TFLEDForConditionalGeneration, TFLEDModel
 from ..longformer.modeling_tf_longformer import (
     TFLongformerForMaskedLM,
     TFLongformerForMultipleChoice,
@@ -99,8 +104,8 @@ from ..longformer.modeling_tf_longformer import (
     TFLongformerModel,
 )
 from ..lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
-from ..marian.modeling_tf_marian import TFMarianMTModel
-from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration
+from ..marian.modeling_tf_marian import TFMarianModel, TFMarianMTModel
+from ..mbart.modeling_tf_mbart import TFMBartForConditionalGeneration, TFMBartModel
 from ..mobilebert.modeling_tf_mobilebert import (
     TFMobileBertForMaskedLM,
     TFMobileBertForMultipleChoice,
@@ -121,7 +126,7 @@ from ..mpnet.modeling_tf_mpnet import (
 )
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
-from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration
+from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -166,6 +171,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     CTRLConfig,
     DistilBertConfig,
@@ -174,6 +180,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
     MarianConfig,
@@ -199,6 +206,7 @@ logger = logging.get_logger(__name__)
 TF_MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (LEDConfig, TFLEDModel),
         (LxmertConfig, TFLxmertModel),
         (MT5Config, TFMT5Model),
         (T5Config, TFT5Model),
@@ -222,6 +230,12 @@ TF_MODEL_MAPPING = OrderedDict(
         (FunnelConfig, TFFunnelModel),
         (DPRConfig, TFDPRQuestionEncoder),
         (MPNetConfig, TFMPNetModel),
+        (BartConfig, TFBartModel),
+        (MBartConfig, TFMBartModel),
+        (MarianConfig, TFMarianModel),
+        (PegasusConfig, TFPegasusModel),
+        (BlenderbotConfig, TFBlenderbotModel),
+        (BlenderbotSmallConfig, TFBlenderbotSmallModel),
     ]
 )
 
@@ -254,6 +268,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (LEDConfig, TFLEDForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -317,12 +332,14 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (LEDConfig, TFLEDForConditionalGeneration),
         (MT5Config, TFMT5ForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
         (MarianConfig, TFMarianMTModel),
         (MBartConfig, TFMBartForConditionalGeneration),
         (PegasusConfig, TFPegasusForConditionalGeneration),
         (BlenderbotConfig, TFBlenderbotForConditionalGeneration),
+        (BlenderbotSmallConfig, TFBlenderbotSmallForConditionalGeneration),
         (BartConfig, TFBartForConditionalGeneration),
     ]
 )

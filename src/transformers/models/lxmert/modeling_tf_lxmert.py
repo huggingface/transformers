@@ -16,6 +16,7 @@
 # limitations under the License.
 """ TF 2.0 LXMERT model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
@@ -706,10 +707,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -850,6 +848,23 @@ class TFLxmertPreTrainedModel(TFPreTrainedModel):
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         return getattr(self, self.base_model_prefix).dummy_inputs
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "visual_feats": tf.TensorSpec((None, None, None), tf.float32, name="visual_feats"),
+                "visual_pos": tf.TensorSpec((None, None, None), tf.float32, name="visual_pos"),
+                "visual_attention_mask": tf.TensorSpec((None, None), tf.int32, name="visual_attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 LXMERT_START_DOCSTRING = r"""
@@ -1014,6 +1029,24 @@ class TFLxmertModel(TFLxmertPreTrainedModel):
 
         return outputs
 
+    def serving_output(self, output):
+        l_hs = tf.convert_to_tensor(output.language_hidden_states) if self.config.output_hidden_states else None
+        v_hs = tf.convert_to_tensor(output.vision_hidden_states) if self.config.output_hidden_states else None
+        l_attns = tf.convert_to_tensor(output.language_attentions) if self.config.output_attentions else None
+        v_attns = tf.convert_to_tensor(output.vision_attentions) if self.config.output_attentions else None
+        c_enc_attns = tf.convert_to_tensor(output.cross_encoder_attentions) if self.config.output_attentions else None
+
+        return TFLxmertModelOutput(
+            pooled_output=output.pooled_output,
+            language_output=output.language_output,
+            vision_output=output.vision_output,
+            language_hidden_states=l_hs,
+            vision_hidden_states=v_hs,
+            language_attentions=l_attns,
+            vision_attentions=v_attns,
+            cross_encoder_attentions=c_enc_attns,
+        )
+
 
 class TFLxmertPooler(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -1067,6 +1100,20 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
         super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -1257,13 +1304,11 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             **({"obj_labels": obj_labels} if self.config.task_obj_predict else {}),
         }
 
-    def get_output_embeddings(self):
-        return self.lxmert.embeddings
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.cls.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.cls.name + "/" + self.cls.predictions.name
 
     @add_start_docstrings_to_model_forward(LXMERT_INPUTS_DOCSTRING)
@@ -1430,4 +1475,22 @@ class TFLxmertForPreTraining(TFLxmertPreTrainedModel):
             language_attentions=lxmert_output.language_attentions,
             vision_attentions=lxmert_output.vision_attentions,
             cross_encoder_attentions=lxmert_output.cross_encoder_attentions,
+        )
+
+    def serving_output(self, output):
+        l_hs = tf.convert_to_tensor(output.language_hidden_states) if self.config.output_hidden_states else None
+        v_hs = tf.convert_to_tensor(output.vision_hidden_states) if self.config.output_hidden_states else None
+        l_attns = tf.convert_to_tensor(output.language_attentions) if self.config.output_attentions else None
+        v_attns = tf.convert_to_tensor(output.vision_attentions) if self.config.output_attentions else None
+        c_enc_attns = tf.convert_to_tensor(output.cross_encoder_attentions) if self.config.output_attentions else None
+
+        return TFLxmertForPreTrainingOutput(
+            prediction_logits=output.prediction_logits,
+            cross_relationship_score=output.cross_relationship_score,
+            question_answering_score=output.question_answering_score,
+            language_hidden_states=l_hs,
+            vision_hidden_states=v_hs,
+            language_attentions=l_attns,
+            vision_attentions=v_attns,
+            cross_encoder_attentions=c_enc_attns,
         )
