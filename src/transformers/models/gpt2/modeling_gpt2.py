@@ -717,18 +717,22 @@ class GPT2Model(GPT2PreTrainedModel):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             if getattr(self.config, "gradient_checkpointing", False):
+                if use_cache:
+                    raise ValueError(
+                        "When using `gradient_checkpointing, make sure that `use_cache=False` and `config.use_cache=False`."
+                    )
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # checkpointing only works with tuple returns, not with lists
-                        return tuple(output for output in module(*inputs, use_cache, output_attentions))
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
 
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
-                    layer_past,
+                    None,
                     attention_mask,
                     head_mask[i],
                     encoder_hidden_states,
