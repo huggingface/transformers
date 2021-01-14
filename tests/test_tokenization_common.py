@@ -1704,6 +1704,10 @@ class TokenizerTesterMixin:
                 first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
                 sequence = " ".join(first_ten_tokens)
                 encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="pt")
+
+                # Ensure that the BatchEncoding.to() method works.
+                encoded_sequence.to(model.device)
+
                 batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
                 # This should not fail
 
