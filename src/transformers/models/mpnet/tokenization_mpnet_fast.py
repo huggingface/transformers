@@ -102,6 +102,7 @@ class MPNetTokenizerFast(PreTrainedTokenizerFast):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = MPNetTokenizer
+    model_input_names = ["attention_mask"]
 
     def __init__(
         self,
