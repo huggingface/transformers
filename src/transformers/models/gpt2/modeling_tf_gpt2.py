@@ -108,7 +108,7 @@ class TFAttention(tf.keras.layers.Layer):
         _, _, nd, ns = shape_list(w)
         b = self.causal_attention_mask(nd, ns, dtype=w.dtype)
         b = tf.reshape(b, [1, 1, nd, ns])
-        w = w * b - 1e4 * (1 - b)
+        w = w * b - float("-inf") * (1 - b)
 
         if attention_mask is not None:
             # Apply the attention mask
@@ -316,12 +316,12 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and -inf for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
 
             inputs["attention_mask"] = tf.cast(inputs["attention_mask"], tf.float32)
-            inputs["attention_mask"] = (1.0 - inputs["attention_mask"]) * -10000.0
+            inputs["attention_mask"] = (1.0 - inputs["attention_mask"]) * float("-inf")
         else:
             inputs["attention_mask"] = None
 
