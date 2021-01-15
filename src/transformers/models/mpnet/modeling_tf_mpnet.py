@@ -155,7 +155,7 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         Get token embeddings of inputs
 
         Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
+            inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
             mode: string, a valid value is one of "embedding" and "linear"
 
         Returns:
