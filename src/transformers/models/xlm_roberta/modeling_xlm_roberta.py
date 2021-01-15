@@ -70,7 +70,6 @@ class XLMRobertaModel(RobertaModel):
     documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
 
 
@@ -84,7 +83,6 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
     documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
 
 
@@ -98,7 +96,6 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
 
 
@@ -115,7 +112,6 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     appropriate documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
 
 
@@ -132,7 +128,6 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     appropriate documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
 
 
@@ -149,7 +144,6 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     appropriate documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
 
 
@@ -166,5 +160,4 @@ class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
     appropriate documentation alongside usage examples.
     """
 
-    _keys_to_ignore_on_load_missing = [r"lm_head.decoder.bias", "position_ids"]
     config_class = XLMRobertaConfig
