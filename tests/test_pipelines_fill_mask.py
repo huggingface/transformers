@@ -77,8 +77,11 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         self.assertIsInstance(outputs, list)
 
         # This used to fail with `cannot mix args and kwargs`
-        outputs = nlp(valid_inputs, something=False)
+        outputs = nlp(valid_inputs, verbose=False)
         self.assertIsInstance(outputs, list)
+
+        # This fails because `invalid_arg` is not an argument of the pipeline's tokenizer
+        self.assertRaises(TypeError, nlp, valid_inputs, invalid_arg=False)
 
     @require_torch
     def test_torch_fill_mask_with_targets(self):

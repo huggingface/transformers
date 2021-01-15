@@ -590,6 +590,7 @@ class Pipeline(_ScikitCompat):
             return_tensors=self.framework,
             padding=padding,
             truncation=truncation,
+            **kwargs,
         )
 
         return inputs
