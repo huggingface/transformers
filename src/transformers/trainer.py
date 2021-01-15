@@ -931,7 +931,9 @@ class Trainer:
                             )
 
                     # Optimizer step
-                    if is_torch_tpu_available():
+                    if self.deepspeed:
+                        self.deepspeed.step()
+                    elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
                     elif self.use_amp:
                         self.scaler.step(self.optimizer)
