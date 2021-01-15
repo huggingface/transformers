@@ -638,7 +638,7 @@ class TFTrainer:
                 reduced_features = {
                     k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
                 }
-                
+
                 if tf.is_tensor(labels):
                     reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
                 elif isinstance(labels, dict):
@@ -672,7 +672,6 @@ class TFTrainer:
                     }
                 else:
                     raise ValueError("The labels must be either a tf.Tensor or a dict.")
-                
 
             gradients = self.gradient_accumulator.gradients
             gradients = [
