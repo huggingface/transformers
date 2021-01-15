@@ -34,6 +34,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
+    MBartTokenizer,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     default_data_collator,
@@ -295,6 +296,16 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
+    task_specific_params = model.config.task_specific_params
+    if task_specific_params is not None and data_args.task in task_specific_params:
+        model.config.update(task_specific_params[data_args.task])
+
+    # TODO: check and add the prefix for the T5 tokenizer?
+
+    # Set decoder_start_token_id for MBart
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
+        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     if training_args.do_train:
@@ -346,7 +357,7 @@ def main():
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
-    padding = None if data_args.pad_to_max_length else False
+    padding = "max_length" if data_args.pad_to_max_length else False
     tokenizer.src_lang = "en_XX"
     tokenizer.tgt_lang = "en_XX"
 
@@ -423,6 +434,8 @@ def main():
         # Extract a few results from ROUGE
         if metric_name == "rouge":
             result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
+        else:
+            result = {"bleu": result["score"]}
 
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
