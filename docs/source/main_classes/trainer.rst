@@ -402,6 +402,18 @@ find more details in the discussion below.
 For a practical usage example of this type of deployment, please, see this `post
 <https://github.com/huggingface/transformers/issues/8771#issuecomment-759176685>`__.
 
+Notes:
+
+- if you need to run on a specific GPU, which is different from GPU 0, you can't use ``CUDA_VISIBLE_DEVICES`` to limit
+  the visible scope of available GPUs. Instead, you have to use the following syntax:
+
+   .. code-block:: bash
+
+       deepspeed --include localhost:1 ./finetune_trainer.py
+
+   In this example, we tell DeepSpeed to use GPU 1.
+
+
 Configuration
 =======================================================================================================================
 
