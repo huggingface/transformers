@@ -938,15 +938,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     @staticmethod
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
-        This function is used to re-order the :obj:`past_key_values` or :obj:`mems` cache if
+        This function is used to re-order the :obj:`past_key_values` cache if
         :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
-        called. This is required to match :obj:`past_key_values` or :obj:`mems` with the correct beam_idx at every
-        generation step.
-
-        For custom re-ordering of :obj:`past_key_values` or :obj:`mems`, the function should be implemented in
-        subclasses of :class:`~transformers.PreTrainedModel`.
+        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
         """
-        # return tuple(layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in past)
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
@@ -1118,15 +1113,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     @staticmethod
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
-        This function is used to re-order the :obj:`past_key_values` or :obj:`mems` cache if
+        This function is used to re-order the :obj:`past_key_values` cache if
         :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
-        called. This is required to match :obj:`past_key_values` or :obj:`mems` with the correct beam_idx at every
-        generation step.
-
-        For custom re-ordering of :obj:`past_key_values` or :obj:`mems`, the function should be implemented in
-        subclasses of :class:`~transformers.PreTrainedModel`.
+        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
         """
-        # return tuple(layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in past)
         return tuple(
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past
