@@ -370,8 +370,8 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
         mc_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
         past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            :obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers`, with each tuple having 2 tuples each of
-            which has a tensor of shape :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`).
+           Tuple of length :obj:`config.n_layers`, containing tuples of tensors of shape
+            :obj:`(batch_size, num_heads, sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
             :obj:`past_key_values` input) to speed up sequential decoding.
