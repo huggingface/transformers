@@ -23,7 +23,7 @@ from unittest.mock import patch
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, slow, torch_device
 
 
 SRC_DIRS = [
@@ -262,6 +262,7 @@ class ExamplesTests(TestCasePlus):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)
 
+    @slow
     @require_torch_non_multi_gpu_but_fix_me
     def test_run_seq2seq_summarization(self):
         stream_handler = logging.StreamHandler(sys.stdout)
@@ -294,6 +295,7 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_rougeL"], 7)
             self.assertGreaterEqual(result["eval_rougeLsum"], 7)
 
+    @slow
     @require_torch_non_multi_gpu_but_fix_me
     def test_run_seq2seq_translation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
