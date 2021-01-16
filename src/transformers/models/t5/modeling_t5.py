@@ -1059,13 +1059,15 @@ T5_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in ``[0,
+            1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
         decoder_head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. in the decoder Mask values selected in ``[0, 1]``:
+            Mask to nullify selected heads of the self-attention modules. in the decoder Mask values selected in ``[0,
+            1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
