@@ -409,7 +409,7 @@ class T5Attention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_value=None,
-        head_mask=None,
+        layer_head_mask=None,
         query_length=None,
         use_cache=False,
         output_attentions=False,
@@ -504,8 +504,8 @@ class T5Attention(nn.Module):
         )  # (batch_size, n_heads, seq_length, key_length)
 
         # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
 
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
@@ -530,7 +530,7 @@ class T5LayerSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        head_mask=None,
+        layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
@@ -540,7 +540,7 @@ class T5LayerSelfAttention(nn.Module):
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            head_mask=head_mask,
+            layer_head_mask=layer_head_mask,
             past_key_value=past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -563,7 +563,7 @@ class T5LayerCrossAttention(nn.Module):
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        head_mask=None,
+        layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         query_length=None,
@@ -575,7 +575,7 @@ class T5LayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            head_mask=head_mask,
+            layer_head_mask=layer_head_mask,
             past_key_value=past_key_value,
             use_cache=use_cache,
             query_length=query_length,
@@ -605,7 +605,7 @@ class T5Block(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        head_mask=None,
+        layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
@@ -632,7 +632,7 @@ class T5Block(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            head_mask=head_mask,
+            layer_head_mask=layer_head_mask,
             past_key_value=self_attn_past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -659,7 +659,7 @@ class T5Block(nn.Module):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask,
+                layer_head_mask=layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 query_length=query_length,
                 use_cache=use_cache,
@@ -940,7 +940,7 @@ class T5Stack(T5PreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask[i],
+                layer_head_mask=head_mask[i],
                 past_key_value=past_key_value,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -1058,6 +1058,18 @@ T5_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the self-attention modules. in the decoder Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`:
             `attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
@@ -1069,12 +1081,6 @@ T5_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -1229,9 +1235,10 @@ class T5Model(T5PreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        head_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         use_cache=None,
@@ -1298,7 +1305,7 @@ class T5Model(T5PreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
+            head_mask=decoder_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1409,9 +1416,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        head_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         labels=None,
@@ -1503,7 +1511,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
+            head_mask=decoder_head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
