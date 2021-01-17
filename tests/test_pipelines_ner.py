@@ -31,9 +31,9 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     ]  # Default model - Models tested without the @slow decorator
     large_models = []  # Models tested with the @slow decorator
 
-    def _test_pipeline(self, nlp: Pipeline):
+    def _test_pipeline(self, ner: Pipeline):
         output_keys = {"entity", "word", "score", "start", "end"}
-        if nlp.grouped_entities:
+        if ner.grouped_entities:
             output_keys = {"entity_group", "word", "score", "start", "end"}
 
         ungrouped_ner_inputs = [
@@ -236,9 +236,9 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             ],
         ]
 
-        self.assertIsNotNone(nlp)
+        self.assertIsNotNone(ner)
 
-        mono_result = nlp(VALID_INPUTS[0])
+        mono_result = ner(VALID_INPUTS[0])
         self.assertIsInstance(mono_result, list)
         self.assertIsInstance(mono_result[0], (dict, list))
 
@@ -248,7 +248,7 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         for key in output_keys:
             self.assertIn(key, mono_result[0])
 
-        multi_result = [nlp(input) for input in VALID_INPUTS]
+        multi_result = [ner(input) for input in VALID_INPUTS]
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -259,35 +259,35 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             for key in output_keys:
                 self.assertIn(key, result)
 
-        if nlp.grouped_entities:
-            if nlp.ignore_subwords:
+        if ner.grouped_entities:
+            if ner.ignore_subwords:
                 for ungrouped_input, grouped_result in zip(ungrouped_ner_inputs, expected_grouped_ner_results):
-                    self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+                    self.assertEqual(ner.group_entities(ungrouped_input), grouped_result)
             else:
                 for ungrouped_input, grouped_result in zip(
                     ungrouped_ner_inputs, expected_grouped_ner_results_w_subword
                 ):
-                    self.assertEqual(nlp.group_entities(ungrouped_input), grouped_result)
+                    self.assertEqual(ner.group_entities(ungrouped_input), grouped_result)
 
     @require_tf
     def test_tf_only(self):
         model_name = "Narsil/small"  # This model only has a TensorFlow version
         # We test that if we don't specificy framework='tf', it gets detected automatically
-        nlp = pipeline(task="ner", model=model_name)
-        self._test_pipeline(nlp)
+        ner = pipeline(task="ner", model=model_name)
+        self._test_pipeline(ner)
 
     @require_tf
     def test_tf_defaults(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
-        self._test_pipeline(nlp)
+            ner = pipeline(task="ner", model=model_name, tokenizer=tokenizer, framework="tf")
+        self._test_pipeline(ner)
 
     @require_tf
     def test_tf_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
+            ner = pipeline(
                 task="ner",
                 model=model_name,
                 tokenizer=tokenizer,
@@ -295,11 +295,11 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 grouped_entities=True,
                 ignore_subwords=True,
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(ner)
 
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
+            ner = pipeline(
                 task="ner",
                 model=model_name,
                 tokenizer=tokenizer,
@@ -307,7 +307,7 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
                 grouped_entities=True,
                 ignore_subwords=False,
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(ner)
 
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):
@@ -321,20 +321,20 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     def test_pt_defaults_slow_tokenizer(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
-            nlp = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
-            self._test_pipeline(nlp)
+            ner = pipeline(task="ner", model=model_name, tokenizer=tokenizer)
+            self._test_pipeline(ner)
 
     @require_torch
     def test_pt_defaults(self):
         for model_name in self.small_models:
-            nlp = pipeline(task="ner", model=model_name)
-            self._test_pipeline(nlp)
+            ner = pipeline(task="ner", model=model_name)
+            self._test_pipeline(ner)
 
     @slow
     @require_torch
     def test_simple(self):
-        nlp = pipeline(task="ner", model="dslim/bert-base-NER", grouped_entities=True)
-        output = nlp("Hello Sarah Jessica Parker who Jessica lives in New York")
+        ner = pipeline(task="ner", model="dslim/bert-base-NER", grouped_entities=True)
+        output = ner("Hello Sarah Jessica Parker who Jessica lives in New York")
 
         def simplify(output):
             for i in range(len(output)):
@@ -362,17 +362,17 @@ class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     def test_pt_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
+            ner = pipeline(
                 task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=True
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(ner)
 
         for model_name in self.small_models:
             tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-            nlp = pipeline(
+            ner = pipeline(
                 task="ner", model=model_name, tokenizer=tokenizer, grouped_entities=True, ignore_subwords=False
             )
-            self._test_pipeline(nlp)
+            self._test_pipeline(ner)
 
 
 class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):

@@ -50,7 +50,7 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         },
     ]
 
-    def _test_pipeline(self, nlp: Pipeline):
+    def _test_pipeline(self, qa_pipe: Pipeline):
         output_keys = {"score", "answer", "start", "end"}
         valid_inputs = [
             {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."},
@@ -65,15 +65,15 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             {"question": "What is does with empty context ?", "context": ""},
             {"question": "What is does with empty context ?", "context": None},
         ]
-        self.assertIsNotNone(nlp)
+        self.assertIsNotNone(qa_pipe)
 
-        mono_result = nlp(valid_inputs[0])
+        mono_result = qa_pipe(valid_inputs[0])
         self.assertIsInstance(mono_result, dict)
 
         for key in output_keys:
             self.assertIn(key, mono_result)
 
-        multi_result = nlp(valid_inputs)
+        multi_result = qa_pipe(valid_inputs)
         self.assertIsInstance(multi_result, list)
         self.assertIsInstance(multi_result[0], dict)
 
@@ -81,8 +81,8 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             for key in output_keys:
                 self.assertIn(key, result)
         for bad_input in invalid_inputs:
-            self.assertRaises(ValueError, nlp, bad_input)
-        self.assertRaises(ValueError, nlp, invalid_inputs)
+            self.assertRaises(ValueError, qa_pipe, bad_input)
+        self.assertRaises(ValueError, qa_pipe, invalid_inputs)
 
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()
