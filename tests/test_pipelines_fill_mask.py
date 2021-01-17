@@ -68,16 +68,16 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
     @require_torch
     def test_torch_fill_mask(self):
         valid_inputs = "My name is <mask>"
-        nlp = pipeline(task="fill-mask", model=self.small_models[0])
-        outputs = nlp(valid_inputs)
+        unmask = pipeline(task="fill-mask", model=self.small_models[0])
+        outputs = unmask(valid_inputs)
         self.assertIsInstance(outputs, list)
 
         # This passes
-        outputs = nlp(valid_inputs, targets=[" Patrick", " Clara"])
+        outputs = unmask(valid_inputs, targets=[" Patrick", " Clara"])
         self.assertIsInstance(outputs, list)
 
         # This used to fail with `cannot mix args and kwargs`
-        outputs = nlp(valid_inputs, something=False)
+        outputs = unmask(valid_inputs, something=False)
         self.assertIsInstance(outputs, list)
 
     @require_torch
@@ -86,13 +86,13 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         valid_targets = [[" Teven", " Patrick", " Clara"], [" Sam"]]
         invalid_targets = [[], [""], ""]
         for model_name in self.small_models:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
+            unmask = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="pt")
             for targets in valid_targets:
-                outputs = nlp(valid_inputs, targets=targets)
+                outputs = unmask(valid_inputs, targets=targets)
                 self.assertIsInstance(outputs, list)
                 self.assertEqual(len(outputs), len(targets))
             for targets in invalid_targets:
-                self.assertRaises(ValueError, nlp, valid_inputs, targets=targets)
+                self.assertRaises(ValueError, unmask, valid_inputs, targets=targets)
 
     @require_tf
     def test_tf_fill_mask_with_targets(self):
@@ -100,13 +100,13 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         valid_targets = [[" Teven", " Patrick", " Clara"], [" Sam"]]
         invalid_targets = [[], [""], ""]
         for model_name in self.small_models:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf")
+            unmask = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf")
             for targets in valid_targets:
-                outputs = nlp(valid_inputs, targets=targets)
+                outputs = unmask(valid_inputs, targets=targets)
                 self.assertIsInstance(outputs, list)
                 self.assertEqual(len(outputs), len(targets))
             for targets in invalid_targets:
-                self.assertRaises(ValueError, nlp, valid_inputs, targets=targets)
+                self.assertRaises(ValueError, unmask, valid_inputs, targets=targets)
 
     @require_torch
     @slow
@@ -118,7 +118,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         ]
         valid_targets = [" Patrick", " Clara"]
         for model_name in self.large_models:
-            nlp = pipeline(
+            unmask = pipeline(
                 task="fill-mask",
                 model=model_name,
                 tokenizer=model_name,
@@ -126,14 +126,14 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 top_k=2,
             )
 
-            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            mono_result = unmask(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            multi_result = [unmask(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -147,17 +147,17 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, nlp, [None])
+            self.assertRaises(Exception, unmask, [None])
 
             valid_inputs = valid_inputs[:1]
-            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            mono_result = unmask(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            multi_result = [unmask(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -171,7 +171,7 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, nlp, [None])
+            self.assertRaises(Exception, unmask, [None])
 
     @require_tf
     @slow
@@ -183,16 +183,16 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
         ]
         valid_targets = [" Patrick", " Clara"]
         for model_name in self.large_models:
-            nlp = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2)
+            unmask = pipeline(task="fill-mask", model=model_name, tokenizer=model_name, framework="tf", topk=2)
 
-            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            mono_result = unmask(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            multi_result = [unmask(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -206,17 +206,17 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, nlp, [None])
+            self.assertRaises(Exception, unmask, [None])
 
             valid_inputs = valid_inputs[:1]
-            mono_result = nlp(valid_inputs[0], targets=valid_targets)
+            mono_result = unmask(valid_inputs[0], targets=valid_targets)
             self.assertIsInstance(mono_result, list)
             self.assertIsInstance(mono_result[0], dict)
 
             for mandatory_key in mandatory_keys:
                 self.assertIn(mandatory_key, mono_result[0])
 
-            multi_result = [nlp(valid_input) for valid_input in valid_inputs]
+            multi_result = [unmask(valid_input) for valid_input in valid_inputs]
             self.assertIsInstance(multi_result, list)
             self.assertIsInstance(multi_result[0], (dict, list))
 
@@ -230,4 +230,4 @@ class FillMaskPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCase):
                 for key in mandatory_keys:
                     self.assertIn(key, result)
 
-            self.assertRaises(Exception, nlp, [None])
+            self.assertRaises(Exception, unmask, [None])
