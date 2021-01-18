@@ -204,9 +204,13 @@ class ModelTesterMixin:
                     "attention_mask",
                     "decoder_input_ids",
                     "decoder_attention_mask",
-                    "encoder_outputs",
                 ]
-                self.assertListEqual(arg_names[:5], expected_arg_names)
+                expected_arg_names.extend(
+                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" in arg_names
+                    else ["encoder_outputs"]
+                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
@@ -395,7 +399,6 @@ class ModelTesterMixin:
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
-
                     traced_model = torch.jit.trace(
                         model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
@@ -465,6 +468,11 @@ class ModelTesterMixin:
             head_mask.requires_grad_(requires_grad=True)
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
+            if model.config.is_encoder_decoder:
+                signature = inspect.signature(model.forward)
+                arg_names = [*signature.parameters.keys()]
+                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                    inputs["decoder_head_mask"] = head_mask
 
             outputs = model(**inputs, return_dict=True)
 
@@ -474,24 +482,31 @@ class ModelTesterMixin:
             output.backward()
             multihead_outputs = head_mask.grad
 
-            attentions = outputs[-1]
-
-            # Remove Nan
-            for t in attentions:
-                self.assertLess(
-                    torch.sum(torch.isnan(t)), t.numel() / 4
-                )  # Check we don't have more than 25% nans (arbitrary)
-            attentions = [
-                t.masked_fill(torch.isnan(t), 0.0) for t in attentions
-            ]  # remove them (the test is less complete)
-
             self.assertIsNotNone(multihead_outputs)
             self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
-            self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
-            self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
-            self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-            self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
-            self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            def check_attentions_validity(attentions):
+                # Remove Nan
+                for t in attentions:
+                    self.assertLess(
+                        torch.sum(torch.isnan(t)), t.numel() / 4
+                    )  # Check we don't have more than 25% nans (arbitrary)
+                attentions = [
+                    t.masked_fill(torch.isnan(t), 0.0) for t in attentions
+                ]  # remove them (the test is less complete)
+
+                self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
+                if len(attentions) > 2:  # encoder-decoder models have only 2 layers in each module
+                    self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            if model.config.is_encoder_decoder:
+                check_attentions_validity(outputs.encoder_attentions)
+                check_attentions_validity(outputs.decoder_attentions)
+            else:
+                check_attentions_validity(outputs.attentions)
 
     def test_head_pruning(self):
         if not self.test_pruning:
