@@ -51,12 +51,12 @@ Here is an example of the conversion process for a pre-trained ``BERT-Base Uncas
 
 .. code-block:: shell
 
-   export t5=/path/to/bert/uncased_L-12_H-768_A-12
+   export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
    transformers-cli convert --model_type bert \
-     --tf_checkpoint $t5/bert_model.ckpt \
-     --config $t5/bert_config.json \
-     --pytorch_dump_output $t5/pytorch_model.bin
+     --tf_checkpoint $BERT_BASE_DIR/bert_model.ckpt \
+     --config $BERT_BASE_DIR/bert_config.json \
+     --pytorch_dump_output $BERT_BASE_DIR/pytorch_model.bin
 
 You can download Google's pre-trained models for the conversion `here
 <https://github.com/google-research/bert#pre-trained-models>`__.
@@ -76,12 +76,12 @@ Here is an example of the conversion process for the pre-trained ``ALBERT Base``
 
 .. code-block:: shell
 
-   export ALt5=/path/to/albert/albert_base
+   export ALBERT_BASE_DIR=/path/to/albert/albert_base
 
    transformers-cli convert --model_type albert \
-     --tf_checkpoint $ALt5/model.ckpt-best \
-     --config $ALt5/albert_config.json \
-     --pytorch_dump_output $ALt5/pytorch_model.bin
+     --tf_checkpoint $ALBERT_BASE_DIR/model.ckpt-best \
+     --config $ALBERT_BASE_DIR/albert_config.json \
+     --pytorch_dump_output $ALBERT_BASE_DIR/pytorch_model.bin
 
 You can download Google's pre-trained models for the conversion `here
 <https://github.com/google-research/albert#pre-trained-models>`__.
@@ -177,9 +177,9 @@ Here is an example of the conversion process for a pre-trained T5 model:
 
 .. code-block:: shell
 
-   export T5=/path/to/t5/checkpoint
+   export T5=/path/to/t5/uncased_L-12_H-768_A-12
 
    transformers-cli convert --model_type t5 \
      --tf_checkpoint $T5/t5_model.ckpt \
-     --config $T5/bert_config.json \
+     --config $T5/t5_config.json \
      --pytorch_dump_output $T5/pytorch_model.bin
