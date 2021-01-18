@@ -380,7 +380,7 @@ class BlenderbotSmallDecoderLayer(nn.Module):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(config.encoder_attention_heads,)`.
-            encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
+                encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
             size `(config.encoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (:obj:`bool`, `optional`):
