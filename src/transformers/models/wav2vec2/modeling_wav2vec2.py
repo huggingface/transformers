@@ -25,10 +25,7 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import MaskedLMOutput
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-)
+from ...modeling_utils import PreTrainedModel, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
 
@@ -49,7 +46,13 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = nn.Conv1d(self.input_conv_dim, config.out_conv_dim, kernel_size=config.conv_kernel[layer_id], stride=config.conv_stride[layer_id], bias=False)
+        self.conv = nn.Conv1d(
+            self.input_conv_dim,
+            config.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=False,
+        )
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -66,7 +69,13 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = nn.Conv1d(self.input_conv_dim, config.out_conv_dim, kernel_size=config.conv_kernel[layer_id], stride=config.conv_stride[layer_id], bias=False)
+        self.conv = nn.Conv1d(
+            self.input_conv_dim,
+            config.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=False,
+        )
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -84,15 +93,17 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
-        self.conv = nn.Conv1d(self.input_conv_dim, config.out_conv_dim, kernel_size=config.conv_kernel[layer_id], stride=config.conv_stride[layer_id], bias=False)
+        self.conv = nn.Conv1d(
+            self.input_conv_dim,
+            config.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=False,
+        )
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-        self.layer_norm = nn.GroupNorm(
-            num_groups=self.out_conv_dim,
-            num_channels=self.out_conv_dim,
-            affine=True
-        )
+        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
     def forward(
         self,
@@ -104,7 +115,13 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
 class Wav2Vec2PositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.conv = nn.Conv1d(config.hidden_size, config.hidden_size, kernel_size=config.num_conv_pos_embeddings, padding=config.num_conv_pos_embeddings // 2, groups=config.num_conv_pos_embedding_groups)
+        self.conv = nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.num_conv_pos_embeddings,
+            padding=config.num_conv_pos_embeddings // 2,
+            groups=config.num_conv_pos_embedding_groups,
+        )
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -134,10 +151,17 @@ class Wav2Vec2FeatureExtractor(nn.Module):
 
         if config.feat_extract_layer_norm == "group_norm":
             self.pre_conv_layer = Wav2Vec2GroupNormConvLayer(config, layer_id=0)
-            self.conv_layers = nn.ModuleList([Wav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)])
+            self.conv_layers = nn.ModuleList(
+                [
+                    Wav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1)
+                    for i in range(config.num_feat_extract_layers - 1)
+                ]
+            )
         elif config.feat_extract_layer_norm == "layer_norm":
             self.pre_conv_layer = Wav2Vec2LayerNormConvLayer(config, layer_id=0)
-            self.conv_layers = nn.ModuleList([Wav2Vec2LayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)])
+            self.conv_layers = nn.ModuleList(
+                [Wav2Vec2LayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)]
+            )
         else:
             raise ValueError("...")
 
