@@ -175,8 +175,7 @@ class TFTrainer:
         approx = math.floor if self.args.dataloader_drop_last else math.ceil
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
-            eval_dataset.repeat()
-            .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
+            eval_dataset.batch(self.args.eval_batch_size, drop_remainder=True)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
@@ -205,8 +204,7 @@ class TFTrainer:
         approx = math.floor if self.args.dataloader_drop_last else math.ceil
         steps = approx(num_examples / self.args.eval_batch_size)
         ds = (
-            test_dataset.repeat()
-            .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
+            test_dataset.batch(self.args.eval_batch_size, drop_remainder=True)
             .prefetch(tf.data.experimental.AUTOTUNE)
         )
 
@@ -312,17 +310,8 @@ class TFTrainer:
             self._past = None
 
         for step, batch in enumerate(dataset):
-            # if the number of examples in the last batch < batch_size,
-            # the last batch will be filled with the first examples in the dataset
-            # we need to remove those examples and only include the remaining examples
-            include = self.args.eval_batch_size
-            if step == steps - 1 and num_examples % self.args.eval_batch_size != 0:
-                include = num_examples % self.args.eval_batch_size
-
-            logits = self.distributed_prediction_steps(batch, include)[:include]
-
+            logits = self.distributed_prediction_steps(batch)
             _, labels = batch
-            labels = labels[:include]
 
             if not prediction_loss_only:
                 if isinstance(logits, tuple):
@@ -353,9 +342,6 @@ class TFTrainer:
                         label_ids = labels.numpy()
                     else:
                         label_ids = np.append(label_ids, labels.numpy(), axis=0)
-
-                if step == steps - 1:
-                    break
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
@@ -435,7 +421,7 @@ class TFTrainer:
         return output.metrics
 
     def prediction_step(
-        self, features: tf.Tensor, labels: tf.Tensor, nb_instances_in_global_batch: tf.Tensor, include: int
+        self, features: tf.Tensor, labels: tf.Tensor, nb_instances_in_global_batch: tf.Tensor
     ) -> tf.Tensor:
         """
         Compute the prediction on features and update the loss with labels.
@@ -445,17 +431,17 @@ class TFTrainer:
         per_example_loss, logits = self.run_model(features, labels, False)
         scaled_loss = per_example_loss / tf.cast(nb_instances_in_global_batch, dtype=per_example_loss.dtype)
 
-        mask = [1 if i < include else 0 for i in range(self.args.eval_batch_size)]
-        self.eval_loss.update_state(scaled_loss, mask)
+        self.eval_loss.update_state(scaled_loss)
 
         return logits
 
-    def distributed_prediction_steps(self, batch, include):
+    @tf.function
+    def distributed_prediction_steps(self, batch):
 
         nb_instances_in_batch = self._compute_nb_instances(batch)
         inputs = self._get_step_inputs(batch, nb_instances_in_batch)
 
-        logits = self.args.strategy.run(self.prediction_step, (inputs[0], inputs[1], inputs[2], include))
+        logits = self.args.strategy.run(self.prediction_step, inputs)
 
         return logits
 
