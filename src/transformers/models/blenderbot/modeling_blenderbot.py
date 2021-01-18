@@ -23,6 +23,7 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
