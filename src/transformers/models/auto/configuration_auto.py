@@ -58,6 +58,7 @@ from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFI
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from ..transfo_xl.configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+from ..wav2vec2.configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
 from ..xlm.configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from ..xlm_prophetnet.configuration_xlm_prophetnet import (
     XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -71,6 +72,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -112,6 +114,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("wav2vec2", Wav2Vec2Config),
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
         ("retribert", RetriBertConfig),
@@ -159,6 +162,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("wav2vec2", "Wav2Vec2"),
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),
         ("retribert", "RetriBERT"),

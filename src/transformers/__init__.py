@@ -125,6 +125,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config", "Wav2Vec2Tokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -275,6 +276,7 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.wav2vec2"].append("Wav2Vec2TokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -359,6 +361,22 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
+    _import_structure["models.wav2vec2"].extend(
+        [
+            "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ForMaskedLM",
+            "Wav2Vec2ForCausalLM",
+            "Wav2Vec2ForMultipleChoice",
+            "Wav2Vec2ForQuestionAnswering",
+            "Wav2Vec2ForSequenceClassification",
+            "Wav2Vec2ForTokenClassification",
+            "Wav2Vec2Layer",
+            "Wav2Vec2Model",
+            "Wav2Vec2PreTrainedModel",
+            "load_tf_weights_in_wav2vec2",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1276,6 +1294,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config, Wav2Vec2Tokenizer
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -1376,6 +1395,7 @@ if TYPE_CHECKING:
         from .models.roberta import RobertaTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.wav2vec2 import Wav2Vec2TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -1737,6 +1757,19 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.wav2vec2 import (
+            WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ForCausalLM,
+            Wav2Vec2ForMaskedLM,
+            Wav2Vec2ForMultipleChoice,
+            Wav2Vec2ForQuestionAnswering,
+            Wav2Vec2ForSequenceClassification,
+            Wav2Vec2ForTokenClassification,
+            Wav2Vec2Layer,
+            Wav2Vec2Model,
+            Wav2Vec2PreTrainedModel,
+            load_tf_weights_in_wav2vec2,
         )
         from .models.xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
