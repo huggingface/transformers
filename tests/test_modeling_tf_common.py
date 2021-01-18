@@ -667,8 +667,6 @@ class TFModelTesterMixin:
 
             outputs = model(**inputs, return_dict=True)
 
-            # TODO Test that we can get a gradient back for importance score computation
-
             def check_attentions_validity(attentions):
                 # Remove Nan
                 for t in attentions:
