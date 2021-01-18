@@ -336,11 +336,6 @@ TensorFlow and/or Flax.
 
 .. toctree::
     :maxdepth: 2
-    :caption: Adding new model/tokenizer
-
-
-.. toctree::
-    :maxdepth: 2
     :caption: Research
 
     bertology
