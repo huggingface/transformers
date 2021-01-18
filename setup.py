@@ -228,7 +228,6 @@ extras["modelcreation"] = deps_list("cookiecutter")
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
-extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 extras["testing"] = (
     deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil")
     + extras["retrieval"]
