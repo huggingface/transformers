@@ -429,7 +429,6 @@ class TFTrainer:
 
         return logits
 
-    @tf.function
     def distributed_prediction_steps(self, batch):
 
         nb_instances_in_batch = self._compute_nb_instances(batch)
