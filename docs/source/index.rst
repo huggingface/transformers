@@ -330,8 +330,14 @@ TensorFlow and/or Flax.
     converting_tensorflow_models
     migration
     contributing
+    add_new_model
     testing
     serialization
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Adding new model/tokenizer
+
 
 .. toctree::
     :maxdepth: 2
