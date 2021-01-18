@@ -716,11 +716,13 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False):
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
                 if use_cache:
-                    raise ValueError(
-                        "When using `gradient_checkpointing, make sure that `use_cache=False` and `config.use_cache=False`."
+                    logger.warn(
+                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
                     )
+                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
