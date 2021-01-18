@@ -174,10 +174,7 @@ class TFTrainer:
 
         approx = math.floor if self.args.dataloader_drop_last else math.ceil
         steps = approx(num_examples / self.args.eval_batch_size)
-        ds = (
-            eval_dataset.batch(self.args.eval_batch_size, drop_remainder=True)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
+        ds = eval_dataset.batch(self.args.eval_batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
@@ -203,10 +200,7 @@ class TFTrainer:
 
         approx = math.floor if self.args.dataloader_drop_last else math.ceil
         steps = approx(num_examples / self.args.eval_batch_size)
-        ds = (
-            test_dataset.batch(self.args.eval_batch_size, drop_remainder=True)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
+        ds = test_dataset.batch(self.args.eval_batch_size, drop_remainder=True).prefetch(tf.data.experimental.AUTOTUNE)
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
