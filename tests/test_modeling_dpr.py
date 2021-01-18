@@ -263,52 +263,28 @@ class DPRModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_reader_inference(self):
-        tokenizer = DPRReaderTokenizer.from_pretrained('facebook/dpr-reader-single-nq-base')
-        model = DPRReader.from_pretrained('facebook/dpr-reader-single-nq-base')
+        tokenizer = DPRReaderTokenizer.from_pretrained("facebook/dpr-reader-single-nq-base")
+        model = DPRReader.from_pretrained("facebook/dpr-reader-single-nq-base")
 
-        encoded_inputs = tokenizer(questions="What is love ?",
-                                   titles="Haddaway",
-                                   texts="What Is Love is a song recorded by the artist Haddaway",
-                                   padding=True,
-                                   return_tensors='pt')
+        encoded_inputs = tokenizer(
+            questions="What is love ?",
+            titles="Haddaway",
+            texts="What Is Love is a song recorded by the artist Haddaway",
+            padding=True,
+            return_tensors="pt",
+        )
 
         outputs = model(**encoded_inputs)
 
         # compare the actual values for a slice.
         expected_start_logits = torch.tensor(
-            [
-                [
-                    -10.3005,
-                    -10.7765,
-                    -11.4872,
-                    -11.6841,
-                    -11.9312,
-                    -10.3002,
-                    -9.8544,
-                    -11.7378,
-                    -12.0821,
-                    -10.2975
-                ]
-            ],
+            [[-10.3005, -10.7765, -11.4872, -11.6841, -11.9312, -10.3002, -9.8544, -11.7378, -12.0821, -10.2975]],
             dtype=torch.float,
             device=torch_device,
         )
 
         expected_end_logits = torch.tensor(
-            [
-                [
-                    -11.0684,
-                    -11.7041,
-                    -11.5397,
-                    -10.3465,
-                    -10.8791,
-                    -6.8443,
-                    -11.9959,
-                    -11.0364,
-                    -10.0096,
-                    -6.8405
-                ]
-            ],
+            [[-11.0684, -11.7041, -11.5397, -10.3465, -10.8791, -6.8443, -11.9959, -11.0364, -10.0096, -6.8405]],
             dtype=torch.float,
             device=torch_device,
         )
