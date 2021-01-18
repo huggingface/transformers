@@ -539,7 +539,7 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
             return {
                 "input_ids": inputs_list,
                 "attention_mask": attns_list,
-                "langs_list": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
             }
         else:
             return {"input_ids": inputs_list, "attention_mask": attns_list}
@@ -1048,10 +1048,17 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {
-            "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-            "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-        }
+        # Sometimes XLM has language embeddings so don't forget to build them as well if needed
+        if self.config.use_lang_emb and self.config.n_langs > 1:
+            return {
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+            }
+        else:
+            return {
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+            }
+        
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(

@@ -217,7 +217,7 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
             return {
                 "input_ids": inputs_list,
                 "attention_mask": attns_list,
-                "langs_list": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
             }
         else:
             return {"input_ids": inputs_list, "attention_mask": attns_list}
