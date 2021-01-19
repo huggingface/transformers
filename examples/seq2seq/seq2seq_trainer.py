@@ -60,7 +60,7 @@ class Seq2SeqTrainer(Trainer):
             assert isinstance(
                 self.model, PreTrainedModel
             ), f"If no `config` is passed the model to be trained has to be of type `PreTrainedModel`, but is {self.model.__class__}"
-            self.config = self._actual_model(self.model).config
+            self.config = self.model.config
         else:
             self.config = config
 
