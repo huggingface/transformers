@@ -250,7 +250,7 @@ class DataCollatorForSeq2Seq:
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
         label_pad_token_id (:obj:`int`, `optional`, defaults to -100):
-            The id to use when padding the labels (-100 will be automatically ignore by PyTorch loss functions).
+            The id to use when padding the labels (-100 will be automatically ignored by PyTorch loss functions).
     """
 
     tokenizer: PreTrainedTokenizerBase
