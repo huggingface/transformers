@@ -117,6 +117,12 @@ class ConvertCommand(BaseTransformersCLICommand):
             )
 
             convert_openai_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
+        elif self._model_type == "t5":
+            from ..models.t5.convert_t5_original_tf_checkpoint_to_pytorch import (
+                convert_tf_checkpoint_to_pytorch,
+            )
+
+            convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         elif self._model_type == "transfo_xl":
             try:
                 from ..models.transfo_xl.convert_transfo_xl_original_tf_checkpoint_to_pytorch import (
@@ -166,13 +172,7 @@ class ConvertCommand(BaseTransformersCLICommand):
             )
 
             convert_lxmert_checkpoint_to_pytorch(self._tf_checkpoint, self._pytorch_dump_output)
-        elif self._model_type == "t5":
-            from ..models.t5.convert_t5_original_tf_checkpoint_to_pytorch import (
-                convert_tf_checkpoint_to_pytorch,
-            )
-
-            convert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         else:
             raise ValueError(
-                "--model_type should be selected in the list [bert, gpt, gpt2, transfo_xl, xlnet, xlm, lxmert, t5]"
+                "--model_type should be selected in the list [bert, gpt, gpt2, t5, transfo_xl, xlnet, xlm, lxmert]"
             )
