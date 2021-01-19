@@ -471,7 +471,8 @@ class LayoutLMEncoder(nn.Module):
 
                 if use_cache:
                     logger.warn(
-                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
                     )
                     use_cache = False
 
