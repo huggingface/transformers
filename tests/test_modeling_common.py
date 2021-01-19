@@ -1073,7 +1073,7 @@ class ModelTesterMixin:
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask"]
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask"]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
