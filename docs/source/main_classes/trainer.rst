@@ -729,6 +729,11 @@ Main DeepSpeed Resources
 - `API docs <https://deepspeed.readthedocs.io/en/latest/index.html>`__
 - `Blog posts <https://www.microsoft.com/en-us/research/search/?q=deepspeed>`__
 
+Papers:
+
+- `ZeRO: Memory Optimizations Toward Training Trillion Parameter Models <https://arxiv.org/abs/1910.02054>`__
+- `ZeRO-Offload: Democratizing Billion-Scale Model Training <https://arxiv.org/abs/2101.06840>`__
+
 Finally, please, remember that, HuggingFace :class:`~transformers.Trainer` only integrates DeepSpeed, therefore if you
 have any problems or questions with regards to DeepSpeed usage, please, file an issue with `DeepSpeed GitHub
 <https://github.com/microsoft/DeepSpeed/issues>`__.
