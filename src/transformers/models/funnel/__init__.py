@@ -23,6 +23,7 @@ from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_availa
 
 _import_structure = {
     "configuration_funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig"],
+    "convert_funnel_original_tf_checkpoint_to_pytorch": [],
     "tokenization_funnel": ["FunnelTokenizer"],
 }
 

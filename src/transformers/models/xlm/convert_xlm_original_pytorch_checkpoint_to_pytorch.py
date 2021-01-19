@@ -21,9 +21,9 @@ import json
 import numpy
 import torch
 
-from ...file_utils import CONFIG_NAME, WEIGHTS_NAME
-from ...utils import logging
-from .tokenization_xlm import VOCAB_FILES_NAMES
+from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
+from transformers.models.xlm.tokenization_xlm import VOCAB_FILES_NAMES
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()

@@ -17,7 +17,7 @@ import os
 from pathlib import Path
 from typing import List, Tuple
 
-from .convert_marian_to_pytorch import (
+from transformers.models.marian.convert_marian_to_pytorch import (
     FRONT_MATTER_TEMPLATE,
     _parse_readme,
     convert_all_sentencepiece_models,
