@@ -17,7 +17,7 @@
 
 import os
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -233,7 +233,7 @@ class Attention(nn.Module):
             value = torch.cat((past_value, value), dim=-2)
 
         if use_cache is True:
-            present = torch.stack((key.transpose(-2, -1), value))  # transpose to have same shapes for stacking
+            present = (key.transpose(-2, -1), value)  # transpose to have same shapes
         else:
             present = None
 
@@ -370,9 +370,9 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
             Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
         mc_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_choices)`):
             Prediction scores of the multiple choice classification head (scores for each choice before SoftMax).
-        past_key_values (:obj:`List[torch.FloatTensor]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
-            List of :obj:`torch.FloatTensor` of length :obj:`config.n_layers`, with each tensor of shape :obj:`(2,
-            batch_size, num_heads, sequence_length, embed_size_per_head)`).
+        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]`, `optional`, returned when ``use_cache=True`` is passed or when ``config.use_cache=True``):
+            Tuple of length :obj:`config.n_layers`, containing tuples of tensors of shape :obj:`(batch_size, num_heads,
+            sequence_length, embed_size_per_head)`).
 
             Contains pre-computed hidden-states (key and values in the attention blocks) that can be used (see
             :obj:`past_key_values` input) to speed up sequential decoding.
@@ -393,7 +393,7 @@ class GPT2DoubleHeadsModelOutput(ModelOutput):
     mc_loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     mc_logits: torch.FloatTensor = None
-    past_key_values: Optional[List[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -419,7 +419,7 @@ GPT2_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, input_ids_length)`):
             :obj:`input_ids_length` = ``sequence_length`` if :obj:`past_key_values` is ``None`` else
-            ``past_key_values[0].shape[-2]`` (``sequence_length`` of input past key value states). Indices of input
+            ``past_key_values[0][0].shape[-2]`` (``sequence_length`` of input past key value states). Indices of input
             sequence tokens in the vocabulary.
 
             If :obj:`past_key_values` is used, only ``input_ids`` that do not have their past calculated should be
@@ -430,7 +430,7 @@ GPT2_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        past_key_values (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
+        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             :obj:`past_key_values` output below). Can be used to speed up sequential decoding. The ``input_ids`` which
             have their past given to this model should not be passed as ``input_ids`` as they have already been
@@ -640,7 +640,7 @@ class GPT2Model(GPT2PreTrainedModel):
 
         if past_key_values is None:
             past_length = 0
-            past_key_values = [None] * len(self.h)
+            past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
@@ -708,7 +708,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 torch.cuda.set_device(hidden_states.device)
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if layer_past is not None:
-                    layer_past = layer_past.to(hidden_states.device)
+                    layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
                 # Ensure that attention_mask is always on the same device as hidden_states
                 if attention_mask is not None:
                     attention_mask = attention_mask.to(hidden_states.device)
@@ -717,19 +717,25 @@ class GPT2Model(GPT2PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            if getattr(self.config, "gradient_checkpointing", False):
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                if use_cache:
+                    logger.warn(
+                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                    )
+                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        # checkpointing only works with tuple returns, not with lists
-                        return tuple(output for output in module(*inputs, use_cache, output_attentions))
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
 
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(block),
                     hidden_states,
-                    layer_past,
+                    None,
                     attention_mask,
                     head_mask[i],
                     encoder_hidden_states,
@@ -932,6 +938,18 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
             cross_attentions=transformer_outputs.cross_attentions,
         )
 
+    @staticmethod
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the :obj:`past_key_values` cache if
+        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
+        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
+
 
 @add_start_docstrings(
     """
@@ -1093,6 +1111,18 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             past_key_values=transformer_outputs.past_key_values,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    @staticmethod
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the :obj:`past_key_values` cache if
+        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
+        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
         )
 
 
