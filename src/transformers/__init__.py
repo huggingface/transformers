@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.2.0dev0"
+__version__ = "4.3.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -561,6 +561,7 @@ if is_torch_available():
         [
             "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "LayoutLMForMaskedLM",
+            "LayoutLMForSequenceClassification",
             "LayoutLMForTokenClassification",
             "LayoutLMModel",
         ]
@@ -1597,6 +1598,7 @@ if TYPE_CHECKING:
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
+            LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
         )

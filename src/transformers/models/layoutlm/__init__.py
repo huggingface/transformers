@@ -33,6 +33,7 @@ if is_torch_available():
     _import_structure["modeling_layoutlm"] = [
         "LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "LayoutLMForMaskedLM",
+        "LayoutLMForSequenceClassification",
         "LayoutLMForTokenClassification",
         "LayoutLMModel",
     ]
@@ -49,6 +50,7 @@ if TYPE_CHECKING:
         from .modeling_layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
+            LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
         )

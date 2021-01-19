@@ -13,11 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from contextlib import contextmanager
 from typing import List, Optional
 
-from ...file_utils import add_start_docstrings
 from ...tokenization_utils import BatchEncoding
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from ...utils import logging
 from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 
@@ -172,52 +171,28 @@ class MBartTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
         src_lang: str = "en_XX",
         tgt_texts: Optional[List[str]] = None,
         tgt_lang: str = "ro_RO",
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        truncation: bool = True,
-        padding: str = "longest",
-        return_tensors: Optional[str] = None,
-        add_prefix_space: bool = False,  # ignored
         **kwargs,
     ) -> BatchEncoding:
-        if max_length is None:
-            max_length = self.model_max_length
-        self.set_src_lang_special_tokens(src_lang)
-        model_inputs: BatchEncoding = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        self.set_tgt_lang_special_tokens(tgt_lang)
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self.src_lang)
+        return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-        labels = self(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=True,
-            **kwargs,
-        )["input_ids"]
-        model_inputs["labels"] = labels
-        self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
-        return model_inputs
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
+        self.set_tgt_lang_special_tokens(self.tgt_lang)
+        yield
+        self.set_src_lang_special_tokens(self.src_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
