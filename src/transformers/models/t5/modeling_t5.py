@@ -1280,11 +1280,11 @@ class T5Model(T5PreTrainedModel):
         if head_mask is not None and decoder_head_mask is None:
             if self.config.num_layers == self.config.num_decoder_layers:
                 warning_msg = """
-                    The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. \
-                    Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will
-                    be removed \ in future versions. If you do not want to use any `decoder_head_mask` now, please set
-                    \ `decoder_head_mask = torch.ones(num_layers, num_heads)`.
-"""
+                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
+                Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be
+                removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
+                `decoder_head_mask = torch.ones(num_layers, num_heads)`.
+                """
                 warnings.warn(warning_msg, FutureWarning)
                 decoder_head_mask = head_mask
 
@@ -1483,11 +1483,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if head_mask is not None and decoder_head_mask is None:
             if self.config.num_layers == self.config.num_decoder_layers:
                 warning_msg = """
-                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. \
+                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
                 Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be
-                removed \ in future versions. If you do not want to use any `decoder_head_mask` now, please set \
+                removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
                 `decoder_head_mask = torch.ones(num_layers, num_heads)`.
-"""
+                """
                 warnings.warn(warning_msg, FutureWarning)
                 decoder_head_mask = head_mask
 

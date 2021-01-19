@@ -1122,11 +1122,11 @@ class TFT5Model(TFT5PreTrainedModel):
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
             warning_msg = """
-                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. \
+                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
                 Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be
-                removed \ in future versions. If you do not want to use any `decoder_head_mask` now, please set \
+                removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
                 `decoder_head_mask = tf.ones((num_layers, num_heads))`.
-"""
+                """
             warnings.warn(warning_msg, FutureWarning)
             decoder_head_mask = head_mask
 
@@ -1322,11 +1322,11 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
             warning_msg = """
-                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. \
+                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
                 Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be
-                removed \ in future versions. If you do not want to use any `decoder_head_mask` now, please set \
+                removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
                 `decoder_head_mask = tf.ones((num_layers, num_heads))`.
-"""
+                """
             warnings.warn(warning_msg, FutureWarning)
             decoder_head_mask = head_mask
 
