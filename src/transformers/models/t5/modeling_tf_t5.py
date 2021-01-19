@@ -469,6 +469,7 @@ class TFT5Block(tf.keras.layers.Layer):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         layer_head_mask=None,
+        encoder_layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
@@ -517,7 +518,7 @@ class TFT5Block(tf.keras.layers.Layer):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                layer_head_mask=layer_head_mask,
+                layer_head_mask=encoder_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 query_length=query_length,
                 use_cache=use_cache,
@@ -585,6 +586,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         encoder_attention_mask=None,
         inputs_embeds=None,
         head_mask=None,
+        encoder_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -602,6 +604,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
             encoder_attention_mask=encoder_attention_mask,
             inputs_embeds=inputs_embeds,
             head_mask=head_mask,
+            encoder_head_mask=encoder_head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -710,6 +713,8 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         assert inputs["head_mask"] is None, "Head mask not supported"
         inputs["head_mask"] = [None] * self.num_hidden_layers
+        assert inputs["encoder_head_mask"] is None, "Encoder head mask not supported"
+        inputs["encoder_head_mask"] = [None] * self.num_hidden_layers
         present_key_value_states = () if inputs["use_cache"] and self.is_decoder else None
         all_hidden_states = () if inputs["output_hidden_states"] else None
         all_attentions = () if inputs["output_attentions"] else None
@@ -729,6 +734,7 @@ class TFT5MainLayer(tf.keras.layers.Layer):
                 encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
                 layer_head_mask=inputs["head_mask"][i],
+                encoder_layer_head_mask=inputs["encoder_head_mask"][i],
                 past_key_value=past_key_value,
                 use_cache=inputs["use_cache"],
                 output_attentions=inputs["output_attentions"],
@@ -1115,18 +1121,14 @@ class TFT5Model(TFT5PreTrainedModel):
         """
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
-            if (
-                self.encoder_config.num_layers == self.decoder_config.num_layers
-                and self.encoder_config.num_heads == self.decoder_config.num_heads
-            ):
-                warning_msg = """
-                    The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
-                    Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will
-                    be removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
-                    `decoder_head_mask = tf.ones((num_layers, num_heads))`.
-                    """
-                warnings.warn(warning_msg, FutureWarning)
-                decoder_head_mask = head_mask
+            warning_msg = """
+                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. \
+                Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be
+                removed \ in future versions. If you do not want to use any `decoder_head_mask` now, please set \
+                `decoder_head_mask = tf.ones((num_layers, num_heads))`.
+"""
+            warnings.warn(warning_msg, FutureWarning)
+            decoder_head_mask = head_mask
 
         inputs = input_processing(
             func=self.call,
@@ -1176,6 +1178,7 @@ class TFT5Model(TFT5PreTrainedModel):
             encoder_attention_mask=inputs["attention_mask"],
             inputs_embeds=inputs["decoder_inputs_embeds"],
             head_mask=inputs["decoder_head_mask"],
+            encoder_head_mask=inputs["head_mask"],
             past_key_values=inputs["past_key_values"],
             use_cache=inputs["use_cache"],
             output_attentions=inputs["output_attentions"],
@@ -1318,18 +1321,14 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         """
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
-            if (
-                self.encoder_config.num_layers == self.decoder_config.num_layers
-                and self.encoder_config.num_heads == self.decoder_config.num_heads
-            ):
-                warning_msg = """
-                    The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
-                    Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will
-                    be removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
-                    `decoder_head_mask = tf.ones((num_layers, num_heads))`.
-                    """
-                warnings.warn(warning_msg, FutureWarning)
-                decoder_head_mask = head_mask
+            warning_msg = """
+                The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. \
+                Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be
+                removed \ in future versions. If you do not want to use any `decoder_head_mask` now, please set \
+                `decoder_head_mask = tf.ones((num_layers, num_heads))`.
+"""
+            warnings.warn(warning_msg, FutureWarning)
+            decoder_head_mask = head_mask
 
         inputs = input_processing(
             func=self.call,
