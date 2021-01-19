@@ -18,6 +18,7 @@
 import copy
 import math
 import os
+import warnings
 
 import torch
 import torch.nn.functional as F
@@ -1267,6 +1268,21 @@ class T5Model(T5PreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if (
+                self.encoder_config.num_layers == self.decoder_config.num_layers
+                and self.encoder_config.num_heads == self.decoder_config.num_heads
+            ):
+                warning_msg = """
+                    The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
+                    Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will
+                    be removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
+                    `decoder_head_mask = torch.ones(num_layers, num_heads)`.
+                    """
+                warnings.warn(warning_msg, FutureWarning)
+                decoder_head_mask = head_mask
+
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1456,6 +1472,21 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if (
+                self.encoder_config.num_layers == self.decoder_config.num_layers
+                and self.encoder_config.num_heads == self.decoder_config.num_heads
+            ):
+                warning_msg = """
+                    The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`.
+                    Currently, `decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will
+                    be removed in future versions. If you do not want to use any `decoder_head_mask` now, please set
+                    `decoder_head_mask = torch.ones(num_layers, num_heads)`.
+                    """
+                warnings.warn(warning_msg, FutureWarning)
+                decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
