@@ -1,6 +1,7 @@
 # *TEMPLATE*
 
-*search & replace the following keywords:*
+*search & replace the following keywords, e.g.:*
+`:%s/\[name of model\]/brand_new_bert/g`
 
 -[name of model]
 
@@ -10,18 +11,22 @@
 
 -[end date]
 
--[camelcase name of mode]
+-[camelcase name of model]
+
+-[link to original repo]
+
+-[name of repo]
 
 # How to add [name of model] to 🤗Transformers
 	
-Teacher: [name of hugging face teacher]
+Teacher: [name of teacher]
 	
 Begin: [start date]
 	
 Estimated time: [end date]
 
 The following sections explain in detail how to add [name of model] 
-to 🤗Transformers. You will work closely with [name of hugging face teacher] to
+to 🤗Transformers. You will work closely with [name of teacher] to
 integrate [name of model] into 🤗Transformers. By doing so, you will both gain a 
 theoretical and deep practical understanding of [name of model]. But more importantly, 
 you will have made a major open-source contribution to 🤗Transformers. Along the way,
@@ -70,8 +75,8 @@ To begin with, you should start by getting a good understanding of the model.
   - What type of tokenizer is used? A sentence piece tokenizer? Word piece tokenizer? Is it the same tokenizer as used for BERT or BART?
   
  After you feel like you have gotten a good overview of the architecture of the model, you might want 
- to write [name of hugging face teacher] for any questions you might have.
- This might include questions regarding the model's architecture, its attention layer, etc. [name of hugging face teacher] will be more 
+ to write [name of teacher] for any questions you might have.
+ This might include questions regarding the model's architecture, its attention layer, etc. [name of teacher] will be more 
  than happy to help you.
  
 ### Additional resources
@@ -92,7 +97,7 @@ You should have understood the following aspects of [name of model] by now:
 - [characteristic 2 of [name of model]]
 - ...
 
-If any of the mentioned aspects above are **not** clear to you, now is a great time to talk to [name of hugging face teacher] again!
+If any of the mentioned aspects above are **not** clear to you, now is a great time to talk to [name of teacher] again!
 
 ## Next prepare your environment
 
@@ -129,7 +134,7 @@ This creates a copy of the code under your GitHub user account.
 5. To port [name of model], you will also need access to its [original repository]([link to original repo]):
   
   ```bash
-  git clone [clone link to original repo]
+  git clone [link to original repo].git
   cd [name of repo]
   pip install -e .
   ```
@@ -140,7 +145,7 @@ Now you have set up a development environment to port [name of model] to 🤗Tra
 
 At first, you will work on the original repository. Often, the original implementation is very
  "researchy" meaning that documentation might be lacking and the code can be difficult to understand.
-But this should be exactly your motivation to reimplement [name of the model]. At Hugging Face, one of our main goals is to
+But this should be exactly your motivation to reimplement [name of model]. At Hugging Face, one of our main goals is to
 *make people stand on the shoulders of giants* which translates here very well into taking a working 
 model and rewriting it to make it as **accessible, user-friendly, and beautiful** as possible.
 This is the #1 motivation to re-implement models into 🤗Transformers - trying to maximize access 
@@ -280,17 +285,17 @@ questions that are not very useful for the public, feel free to ping [name of te
 ### Adapt the generated model's code for [name of model]
 	
 At first, we will focus only on the model itself and not care about the tokenizer. All the relevant code should be found in 
-the generated files `src/transformers/models/[lowercase name of model]/modeling_[lowercase name of model].py`
-and `src/transformers/models/[lowercase name of model]/configuration_[lowercase name of model].py`.
+the generated files `src/transformers/models/[name of model]/modeling_[name of model].py`
+and `src/transformers/models/[name of model]/configuration_[name of model].py`.
 
-Now you can finally start coding :). The generated code in `src/transformers/models/[lowercase name of model]/modeling_[lowercase name of model].py` will
-either has the same architecture as BERT or BART if it's an encoder-decoder model.
+Now you can finally start coding :). The generated code in `src/transformers/models/[name of model]/modeling_[name of model].py` will
+either has the same architecture as BERT if it's an encoder-only model or BART if it's an encoder-decoder model.
 At this point, you should remind yourself what you've learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization layer, etc...
 Here it is often useful to look at the similar architecture of already existing models in Transformers.
 
 **Note** that at this point, you don't have to be very sure that your code is fully correct or clean.
 Rather, it is advised to add a first *unclean*, copy-pasted version of the original code to 
-`src/transformers/models/[lowercase name of model]/modeling_[lowercase name of model].py` until you feel like all the 
+`src/transformers/models/[name of model]/modeling_[name of model].py` until you feel like all the 
 necessary code is added. From our experience, it is much more efficient to quickly add a first version of the required code
 and improve/correct the code iteratively with the conversion script as described in the next section. The only thing that has to work at this 
 point is that you can instantiate the 🤗Transformers implementation of [name of model], *i.e.* the following command works:
@@ -317,32 +322,111 @@ Now, you should write a conversion script that lets you convert the checkpoint y
 Here you should not try to write the conversion script from scratch, but find similar models in 🤗Transformers
 that require similar conversion scripts, *i.e.* whose original repository was written with the same framework as
 [name of model].
-	
-In the conversion script, you should make sure that you set the parameters correctly in `[camelcase name of model]Config()`
-to exactly match those that were used for the checkpoint you want to convert. Also, it is very important that before
-you set the retrieved weights to the new weight, *e.g.* via
+
+**Important**: In PyTorch, the name of a layer is defined by the name of the class attribute you give the layer. *E.g.*, let's define a dummy model in PyTorch, called `SimpleModel` as follows:
 
 ```python
-layer.weight.data = array
+import torch.nn as nn
+
+class SimpleModel(nn.Module):
+
+    def __init__(self):
+		    super().__init__()
+				self.dense = nn.Linear(10, 10)
+				self.intermediate = nn.Linear(10, 10)
+				self.layer_norm = nn.LayerNorm(10)
 ```
 
-you make sure that both their **shape and name match**. If either the shape or the name doesn't match, you probably assigned the wrong 
-checkpoint weight to a randomly initialized layer of the 🤗Transformers implementation. Therefore, it is ** necessary** to
+Now we can create an instance of this model definition which will fill all weights: `dense, intermediate, layer_norm` with random weights. We can print the model to see its architecture
+
+```python
+model = SimpleModel()
+
+print(model)
+```
+
+This will print out the following:
+
+```bash
+SimpleModel(
+  (dense): Linear(in_features=10, out_features=10, bias=True)
+  (intermediate): Linear(in_features=10, out_features=10, bias=True)
+  (layer_norm): LayerNorm((10,), eps=1e-05, elementwise_affine=True)
+)
+```
+
+We can see that the layers names are defined by the name of the class
+attribute in PyTorch. Printing out the values of a weight,
+
+```python
+print(model.dense.weight.data)
+```
+
+shows that the weights were randomly initialized
+
+```bash
+tensor([[-0.0818,  0.2207, -0.0749, -0.0030,  0.0045, -0.1569, -0.1598,  0.0212,
+         -0.2077,  0.2157],
+        [ 0.1044,  0.0201,  0.0990,  0.2482,  0.3116,  0.2509,  0.2866, -0.2190,
+          0.2166, -0.0212],
+        [-0.2000,  0.1107, -0.1999, -0.3119,  0.1559,  0.0993,  0.1776, -0.1950,
+         -0.1023, -0.0447],
+        [-0.0888, -0.1092,  0.2281,  0.0336,  0.1817, -0.0115,  0.2096,  0.1415,
+         -0.1876, -0.2467],
+        [ 0.2208, -0.2352, -0.1426, -0.2636, -0.2889, -0.2061, -0.2849, -0.0465,
+          0.2577,  0.0402],
+        [ 0.1502,  0.2465,  0.2566,  0.0693,  0.2352, -0.0530,  0.1859, -0.0604,
+          0.2132,  0.1680],
+        [ 0.1733, -0.2407, -0.1721,  0.1484,  0.0358, -0.0633, -0.0721, -0.0090,
+          0.2707, -0.2509],
+        [-0.1173,  0.1561,  0.2945,  0.0595, -0.1996,  0.2988, -0.0802,  0.0407,
+          0.1829, -0.1568],
+        [-0.1164, -0.2228, -0.0403,  0.0428,  0.1339,  0.0047,  0.1967,  0.2923,
+          0.0333, -0.0536],
+        [-0.1492, -0.1616,  0.1057,  0.1950, -0.2807, -0.2710, -0.1586,  0.0739,
+          0.2220,  0.2358]]).
+```
+
+In the conversion script, you should fill those randomly initialized weights with the 
+corresponding pretrained weights of the checkpoint by setting `weight.data` pointer to its 
+respective layer weight of the checkpoint. *E.g.* 
+
+```python
+# retrieve matching layer weights, e.g. by 
+# recursive algorithm
+layer_name = "dense"
+pretrained_weight = array_of_dense_layer
+
+model_pointer = getattr(model, "dense")
+
+model_pointer.weight.data = torch.from_numpy(pretrained_weight)
+```
+
+While doing so, it is crucial that you verify that each randomly initialized weight of your 
+PyTorch model and its corresponding pretrained checkpoint weight exactly match in both **shape 
+and name**.
+To do so, it is **necessary** to
 add assert statements for the shape and print out the names of the checkpoints weights. E.g. you should add statements like:
 
 ```python
 assert (
-	pointer_random_weight.shape == checkpoint_weight.shape
-), f"Pointer shape of random weight {pointer_random_weight.shape} and array shape of checkpoint weight {checkpoint_weight.shape} mismatched
+	 model_pointer.weight.shape == pretrained_weight.shape
+), f"Pointer shape of random weight {model_pointer.shape} and array shape of checkpoint weight {pretrained_weight.shape} mismatched
 ```
 
-and 
+In addition, you should also print out the names of both weights to make sure they match, *e.g.*
 
 ```python
-logger.info(f"Initialize PyTorch weight {pointer_random_weight.name} from {checkpoint_weight.name}")
+logger.info(f"Initialize PyTorch weight {layer_name} from {pretrained_weight.name}")
 ```
 
-for verification. Besides, you should also check that **all** required weights are initialized and print
+If either the shape or the name doesn't match, you probably assigned the wrong 
+checkpoint weight to a randomly initialized layer of the 🤗Transformers implementation. 
+
+An incorrect shape is most likeliy due to an incorrect setting of the config parameters in `[camelcase name of model]Config()` that do not exactly match those that were used for the checkpoint you want to convert. However, it could also be that PyTorch's implementation of a layer
+requires the weight to be transposed beforehand.
+
+Finally, you should also check that **all** required weights are initialized and print
 out all checkpoint weights that were not used for initialization to make sure the model is correctly converted.
 It is completely normal, that the conversion trials fail with either a wrong shape statement or wrong name assignment.
 This is most likely because either you used incorrect parameters in `[camelcase name of model]Config()`, have a wrong architecture 
