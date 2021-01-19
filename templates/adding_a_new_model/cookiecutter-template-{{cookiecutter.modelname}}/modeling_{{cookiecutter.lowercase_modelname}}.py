@@ -528,6 +528,13 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
+                if use_cache:
+                    logger.warn(
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
+                    )
+                    use_cache = False
+
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
                         return module(*inputs, past_key_value, output_attentions)
