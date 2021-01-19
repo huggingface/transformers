@@ -35,6 +35,11 @@ class DataCollatorForPermutationLanguageModeling:
         requires_pytorch(self)
 
 
+class DataCollatorForSeq2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DataCollatorForSOP:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
