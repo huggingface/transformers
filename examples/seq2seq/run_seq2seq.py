@@ -296,15 +296,11 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    task_specific_params = model.config.task_specific_params
-    if task_specific_params is not None and data_args.task in task_specific_params:
-        model.config.update(task_specific_params[data_args.task])
-
-    # TODO: check and add the prefix for the T5 tokenizer?
-
-    # Set decoder_start_token_id for MBart
+    # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
         model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+    if model.config.decoder_start_token_id is None:
+        raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -358,8 +354,6 @@ def main():
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
     padding = "max_length" if data_args.pad_to_max_length else False
-    tokenizer.src_lang = "en_XX"
-    tokenizer.tgt_lang = "en_XX"
 
     def preprocess_function(examples):
         if data_args.task.startswith("translation"):
@@ -373,6 +367,13 @@ def main():
         # Setup the tokenizer for targets
         with tokenizer.as_target_tokenizer():
             labels = tokenizer(targets, max_length=max_target_length, padding=padding, truncation=True)
+
+        # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
+        # padding in the loss.
+        if padding == "max_length" and data_args.ignore_pad_token_for_loss:
+            labels["input_ids"] = [
+                [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
+            ]
 
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
