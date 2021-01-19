@@ -155,9 +155,13 @@ class TFModelTesterMixin:
                     "attention_mask",
                     "decoder_input_ids",
                     "decoder_attention_mask",
-                    "encoder_outputs",
                 ]
-                self.assertListEqual(arg_names[:5], expected_arg_names)
+                expected_arg_names.extend(
+                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" in arg_names
+                    else ["encoder_outputs"]
+                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
             else:
                 expected_arg_names = ["input_ids"]
