@@ -91,37 +91,54 @@ class Wav2Vec2Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
+        hidden_size=768,  # encoder_embed_dim
+        feat_extract_layer_norm="group_norm",  # extractor_mode default => group_norm
+        feat_extract_dropout=0.0,  # hard-coded
+        feat_extract_activation="gelu",  # hard-coded
+        conv_dim=(512, 512, 512, 512, 512, 512, 512),  # conv_feature_layers [0]
+        conv_stride=(10, 2, 2, 2, 2, 2, 2),  # conv_feature_layers [2]
+        conv_kernel=(10, 3, 3, 3, 3, 2, 2),  # conv_feature_layers [1]
+        conv_bias=False,
+        num_conv_pos_embeddings=128,  # conv_pos
+        num_conv_pos_embedding_groups=16,  # conv_pos_groups
         num_hidden_layers=12,
         num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
         hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
+        intermediate_size=3072,
+        layer_norm_eps=1e-5,
+        hidden_act="gelu",
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_cache=True,
-        is_encoder_decoder=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        vocab_size=32,
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
-
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
+        self.feat_extract_layer_norm = feat_extract_layer_norm
+        self.feat_extract_dropout = feat_extract_dropout
+        self.feat_extract_activation = feat_extract_activation
+        self.conv_dim = list(conv_dim)
+        self.conv_stride = list(conv_stride)
+        self.conv_kernel = list(conv_kernel)
+        self.conv_bias = conv_bias
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.num_feat_extract_layers = len(self.conv_dim)
         self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
+        self.num_attention_heads = num_attention_heads
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
+        self.initializer_range = initializer_range
+        self.vocab_size = vocab_size
+
+        if (
+            (len(self.conv_stride) != self.num_feat_extract_layers)
+            or (len(self.conv_kernel) != self.num_feat_extract_layers)
+            or (len(self.conv_dim) != self.num_feat_extract_layers)
+        ):
+            raise ValueError(
+                "Configuration for convolutional layers is incorrect."
+                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`,"
+                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+            )

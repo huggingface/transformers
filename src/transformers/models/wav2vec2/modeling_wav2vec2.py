@@ -47,11 +47,11 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
-            self.input_conv_dim,
-            config.out_conv_dim,
+            self.in_conv_dim,
+            self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            bias=False,
+            bias=config.conv_bias,
         )
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -70,11 +70,11 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
-            self.input_conv_dim,
-            config.out_conv_dim,
+            self.in_conv_dim,
+            self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            bias=False,
+            bias=config.conv_bias,
         )
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
@@ -94,11 +94,11 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
         self.out_conv_dim = config.conv_dim[layer_id]
 
         self.conv = nn.Conv1d(
-            self.input_conv_dim,
-            config.out_conv_dim,
+            self.in_conv_dim,
+            self.out_conv_dim,
             kernel_size=config.conv_kernel[layer_id],
             stride=config.conv_stride[layer_id],
-            bias=False,
+            bias=config.conv_bias,
         )
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -122,6 +122,7 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
+        self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
@@ -150,24 +151,23 @@ class Wav2Vec2FeatureExtractor(nn.Module):
         super().__init__()
 
         if config.feat_extract_layer_norm == "group_norm":
-            self.pre_conv_layer = Wav2Vec2GroupNormConvLayer(config, layer_id=0)
             self.conv_layers = nn.ModuleList(
-                [
+                [Wav2Vec2GroupNormConvLayer(config, layer_id=0)]
+                + [
                     Wav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1)
                     for i in range(config.num_feat_extract_layers - 1)
                 ]
             )
         elif config.feat_extract_layer_norm == "layer_norm":
-            self.pre_conv_layer = Wav2Vec2LayerNormConvLayer(config, layer_id=0)
             self.conv_layers = nn.ModuleList(
-                [Wav2Vec2LayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)]
+                [Wav2Vec2LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
             )
         else:
             raise ValueError("...")
 
-        self.projection = nn.Linear(config.conv_channel_out[-1], self.hidden_size)
-        self.dropout = nn.Dropout(config.feature_extract_dropout)
-        self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+        self.dropout = nn.Dropout(config.feat_extract_dropout)
 
     def forward(
         self,
@@ -194,11 +194,11 @@ class Wav2Vec2Attention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-        self.output = Wav2Vec2SelfOutput(config)
-
-        self.is_decoder = config.is_decoder
+        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout1 = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout2 = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout3 = nn.Dropout(config.hidden_dropout_prob)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -211,23 +211,6 @@ class Wav2Vec2Attention(nn.Module):
         # ...
     ):
         # TODO(PVP)
-        pass
-
-
-class Wav2Vec2SelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout1 = nn.Dropout(config.hidden_dropout_prob)
-        self.dropout2 = nn.Dropout(config.hidden_dropout_prob)
-        self.dropout3 = nn.Dropout(config.hidden_dropout_prob)
-        self.self_attn_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states,
-        # ...
-    ):
         pass
 
 
@@ -248,7 +231,7 @@ class Wav2Vec2Output(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
@@ -259,10 +242,7 @@ class Wav2Vec2Output(nn.Module):
 class Wav2Vec2EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
         self.attention = Wav2Vec2Attention(config)
-        self.is_decoder = config.is_decoder
         self.intermediate = Wav2Vec2Intermediate(config)
         self.output = Wav2Vec2Output(config)
 
@@ -284,7 +264,9 @@ class Wav2Vec2Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
+        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -361,6 +343,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Conv1d):
+            torch.nn.init.kaiming_normal_(module.weight.data)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
@@ -418,14 +402,8 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `Wav2Vec2ForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
-            )
-
         self.wav2vec2 = Wav2Vec2Model(config)
-        self.cls = Wav2Vec2OnlyMLMHead(config)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
 
@@ -444,9 +422,6 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 class Wav2Vec2ForCausalLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `Wav2Vec2ForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.wav2vec2 = Wav2Vec2Model(config)
         self.cls = Wav2Vec2OnlyMLMHead(config)
