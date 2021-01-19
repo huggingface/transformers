@@ -587,8 +587,8 @@ class Trainer:
             else:
                 optimizer_cls = AdamW
                 optimizer_kwargs = {
-                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
-                    "eps": self.args.adam_epsilon,
+                    "betas": (self.args.adamw_beta1, self.args.adamw_beta2),
+                    "eps": self.args.adamw_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
             if self.sharded_dpp:
