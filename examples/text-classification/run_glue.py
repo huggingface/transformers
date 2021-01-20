@@ -216,7 +216,7 @@ def main():
         # Downloading and loading a dataset from the hub.
         if data_args.task_name == "mnli":
             if data_args.mnli_compat_mode:
-                logger.info(
+                logger.warning(
                     "The labels assignment is overwritten with the old assignment"
                     "['contradiction', 'entailment', 'neutral'] from transformers<3.5.0."
                 )
@@ -224,7 +224,7 @@ def main():
                     "glue", data_args.task_name, label_classes=["contradiction", "entailment", "neutral"]
                 )
             else:
-                logger.info(
+                logger.warning(
                     "Please be aware that since the version 3.5.0, the label assignment of MNLI has been changed."
                     "Use `--mnli_compat_mode` if you are loading a checkpoint trained with an older version of script."
                 )
