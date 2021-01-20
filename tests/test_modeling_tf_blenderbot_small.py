@@ -193,24 +193,6 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
             name = model.get_prefix_bias_name()
             assert name is None
 
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    def test_saved_model_creation(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    def test_saved_model_creation_extended(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
