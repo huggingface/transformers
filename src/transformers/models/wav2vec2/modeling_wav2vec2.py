@@ -56,11 +56,11 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
         self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(
-        self,
-        hidden_states=None,  # ...
-    ):
-        pass
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class Wav2Vec2LayerNormConvLayer(nn.Module):
@@ -105,11 +105,12 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
-    def forward(
-        self,
-        hidden_states=None,  # ...
-    ):
-        pass
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class Wav2Vec2PositionalConvEmbedding(nn.Module):
@@ -165,16 +166,31 @@ class Wav2Vec2FeatureExtractor(nn.Module):
         else:
             raise ValueError("...")
 
+        self.output = Wav2Vec2FeatureExtractorOutput(config)
+
+    def forward(self, input_ids):
+        hidden_states = input_ids[:, None]
+        for conv_layer in self.conv_layers:
+            hidden_states = conv_layer(hidden_states)
+
+        hidden_states = self.output(hidden_states)
+
+        return hidden_states
+
+
+class Wav2Vec2FeatureExtractorOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_extract_dropout)
 
-    def forward(
-        self,
-        input_ids=None,  # ...
-    ):
-        # TODO(PVP)
-        pass
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.transpose(1, 2)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
 
 
 class Wav2Vec2Attention(nn.Module):

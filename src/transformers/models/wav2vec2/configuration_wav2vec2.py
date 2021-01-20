@@ -96,7 +96,7 @@ class Wav2Vec2Config(PretrainedConfig):
         feat_extract_dropout=0.0,  # hard-coded
         feat_extract_activation="gelu",  # hard-coded
         conv_dim=(512, 512, 512, 512, 512, 512, 512),  # conv_feature_layers [0]
-        conv_stride=(10, 2, 2, 2, 2, 2, 2),  # conv_feature_layers [2]
+        conv_stride=(5, 2, 2, 2, 2, 2, 2),  # conv_feature_layers [2]
         conv_kernel=(10, 3, 3, 3, 3, 2, 2),  # conv_feature_layers [1]
         conv_bias=False,
         num_conv_pos_embeddings=128,  # conv_pos
