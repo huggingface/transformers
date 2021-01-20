@@ -42,16 +42,17 @@ Models:
  albert, bert, xlm: @LysandreJik
  blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5: @patrickvonplaten
  fsmt: @stas00
+ funnel: @sgugger
  gpt2: @LysandreJik, @patrickvonplaten
  rag: @patrickvonplaten, @lhoestq
  tensorflow: @jplu
  transfoxl, xlnet: @patrickvonplaten, @TevenLeScao
- funnel: @sgugger
 
 Library:
 
  benchmarks: @patrickvonplaten
  deepspeed: @stas00
+ ray/raytune: @richardliaw @amogkam
  text generationt: @patrickvonplaten, @TevenLeScao
  tokenizers: @mfuntowicz
  trainer, @sgugger
@@ -63,8 +64,8 @@ Documentation:
 
 HF projects:
 
- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
+ rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
 Maintained examples:
 
