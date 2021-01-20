@@ -24,11 +24,11 @@ General terms
 - MLM: masked language modeling, a pretraining task where the model sees a corrupted version of the texts, usually done
   by masking some tokens randomly, and has to predict the original text.
 - multimodal: a task that combines texts with another kind of inputs (for instance images).
-- NLG: natural language generation, all tasks related to generating text ( for instance talk with transformers,
-  translation)
+- NLG: natural language generation, all tasks related to generating text (for instance talk with transformers,
+  translation).
 - NLP: natural language processing, a generic way to say "deal with texts".
 - NLU: natural language understanding, all tasks related to understanding what is in a text (for instance classifying
-  the whole text, individual words)
+  the whole text, individual words).
 - pretrained model: a model that has been pretrained on some data (for instance all of Wikipedia). Pretraining methods
   involve a self-supervised objective, which can be reading the text and trying to predict the next word (see CLM) or
   masking some words and trying to predict them (see MLM).
