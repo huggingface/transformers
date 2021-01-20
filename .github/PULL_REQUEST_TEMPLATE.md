@@ -40,27 +40,23 @@ members/contributors which may be interested in your PR.
 Models:
 
  albert, bert, xlm: @LysandreJik
- blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5: @patrickvonplaten
+ blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5, transfoxl, xlnet: @patrickvonplaten
  fsmt: @stas00
  funnel: @sgugger
- gpt2: @LysandreJik, @patrickvonplaten
+ gpt2: @patrickvonplaten, @LysandreJik
  rag: @patrickvonplaten, @lhoestq
  tensorflow: @jplu
- transfoxl, xlnet: @patrickvonplaten, @TevenLeScao
 
 Library:
 
  benchmarks: @patrickvonplaten
  deepspeed: @stas00
- ray/raytune: @richardliaw @amogkam
- text generation: @patrickvonplaten, @TevenLeScao
- tokenizers: @mfuntowicz
- trainer, @sgugger
+ ray/raytune: @richardliaw, @amogkam
+ text generation: @patrickvonplaten
+ tokenizers: @n1t0
+ trainer: @sgugger
 
-Documentation:
-
- documentation: @sgugger
- model Cards: @julien-c
+Documentation: @sgugger
 
 HF projects:
 
@@ -69,7 +65,7 @@ HF projects:
 
 Maintained examples:
 
- examples/seq2seq: @patil-suraj
+ examples/seq2seq: @patil-suraj, @sgugger
  examples/token-classification: @stefan-it
 
 Research Projects:
