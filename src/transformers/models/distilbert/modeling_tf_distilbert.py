@@ -67,104 +67,128 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
+class TFDistilBertWordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
+class TFDistilBertPositionEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.position_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "max_position_embeddings": self.max_position_embeddings,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, position_ids):
+        input_shape = shape_list(tensor=position_ids)
+        position_embeddings = self.position_embeddings[: input_shape[1], :]
+
+        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
+
+
 class TFEmbeddings(tf.keras.layers.Layer):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.dim = config.dim
         self.initializer_range = config.initializer_range
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.dim,
-            embeddings_initializer=get_initializer(config.initializer_range),
+
+        self.word_embeddings = TFDistilBertWordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.dim,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
+        self.position_embeddings = TFDistilBertPositionEmbeddings(
+            max_position_embeddings=config.max_position_embeddings,
+            hidden_size=config.dim,
+            initializer_range=config.initializer_range,
             name="position_embeddings",
         )
-
+        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
 
-    def build(self, input_shape):
-        """Build shared word embedding layer """
-        with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight", shape=[self.vocab_size, self.dim], initializer=get_initializer(self.initializer_range)
-            )
-        super().build(input_shape)
-
-    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, mode="embedding", training=False):
+    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, training=False):
         """
-        Get token embeddings of inputs.
-
-        Args:
-            inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        if mode == "embedding":
-            return self._embedding(input_ids, position_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, position_ids, inputs_embeds, training=False):
-        """
-        Parameters:
-            input_ids: tf.Tensor(bs, max_seq_length) The token ids to embed.
-
-        Returns:
-            tf.Tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type embeddings)
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            seq_length = shape_list(input_ids)[1]
-        else:
-            seq_length = shape_list(inputs_embeds)[1]
+            inputs_embeds = self.word_embeddings(input_ids=input_ids)
 
         if position_ids is None:
-            position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
+            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
+        else:
+            position_embeds = self.position_embeddings(position_ids=position_ids)
 
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-        position_embeddings = tf.cast(
-            self.position_embeddings(position_ids), inputs_embeds.dtype
-        )  # (bs, max_seq_length, dim)
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
+        final_embeddings = self.LayerNorm(inputs=final_embeddings)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-        embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
-        embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
-        embeddings = self.dropout(embeddings, training=training)  # (bs, max_seq_length, dim)
-        return embeddings
-
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-
-        x = tf.reshape(inputs, [-1, self.dim])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
 class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
@@ -397,11 +421,11 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         self.transformer = TFTransformer(config, name="transformer")  # Encoder
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
@@ -636,7 +660,9 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
 class TFDistilBertLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
+        self.dim = config.dim
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -644,13 +670,14 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def get_output_embeddings(self):
         return self.input_embeddings
 
     def set_output_embeddings(self, value):
-        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
@@ -661,8 +688,12 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
         self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states):
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.dim])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
         return hidden_states
 
 
@@ -681,7 +712,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         )
         self.act = get_tf_activation("gelu")
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
-        self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
+        self.vocab_projector = TFDistilBertLMHead(
+            config, self.distilbert.embeddings.word_embeddings, name="vocab_projector"
+        )
 
     def get_lm_head(self):
         return self.vocab_projector
