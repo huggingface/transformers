@@ -37,26 +37,21 @@ members/contributors which may be interested in your PR.
  If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
  Please tag fewer than 3 people.
 
- albert, bert, XLM: @LysandreJik
- GPT2: @LysandreJik, @patrickvonplaten
- tokenizers: @mfuntowicz
- Trainer: @sgugger
- Benchmarks: @patrickvonplaten
- Model Cards: @julien-c
- examples/distillation: @VictorSanh
- nlp datasets: [different repo](https://github.com/huggingface/nlp)
- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
- Text Generation: @patrickvonplaten, @TevenLeScao
- Blenderbot, Bart, Marian, Pegasus: @patrickvonplaten
- T5: @patrickvonplaten
- Rag: @patrickvonplaten, @lhoestq
- EncoderDecoder: @patrickvonplaten
- Longformer, Reformer: @patrickvonplaten
- TransfoXL, XLNet: @TevenLeScao, @patrickvonplaten
- examples/seq2seq: @patil-suraj
+ albert, bert, xlm: @LysandreJik
+ benchmarks, blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5: @patrickvonplaten
+ deepspeed, fsmt: @stas00
  examples/bert-loses-patience: @JetRunner
- tensorflow: @jplu
+ examples/distillation: @VictorSanh
+ examples/seq2seq: @patil-suraj
  examples/token-classification: @stefan-it
- documentation: @sgugger
- FSMT: @stas00
+ gpt2: @LysandreJik, @patrickvonplaten
+ model Cards: @julien-c
+ nlp datasets: [different repo](https://github.com/huggingface/nlp)
+ rag: @patrickvonplaten, @lhoestq
+ rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
+ tensorflow: @jplu
+ text generation, transfoxl, xlnet: @patrickvonplaten, @TevenLeScao
+ tokenizers: @mfuntowicz
+ trainer, documentation: @sgugger
+
  -->
