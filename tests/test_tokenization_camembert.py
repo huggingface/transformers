@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Google T5 Authors and HuggingFace Inc. team.
+# Copyright 2018 HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,14 +18,15 @@ import os
 import unittest
 
 from transformers import CamembertTokenizer, CamembertTokenizerFast
-from transformers.testing_utils import _torch_available, require_sentencepiece, require_tokenizers
+from transformers.file_utils import is_torch_available
+from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
-FRAMEWORK = "pt" if _torch_available else "tf"
+FRAMEWORK = "pt" if is_torch_available() else "tf"
 
 
 @require_sentencepiece

@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import dataclasses
 import json
 import sys
@@ -39,6 +53,8 @@ class HfArgumentParser(ArgumentParser):
 
     def _add_dataclass_arguments(self, dtype: DataClassType):
         for field in dataclasses.fields(dtype):
+            if not field.init:
+                continue
             field_name = f"--{field.name}"
             kwargs = field.metadata.copy()
             # field.metadata is not used at all by Data Classes,
@@ -52,9 +68,15 @@ class HfArgumentParser(ArgumentParser):
             typestring = str(field.type)
             for prim_type in (int, float, str):
                 for collection in (List,):
-                    if typestring == f"typing.Union[{collection[prim_type]}, NoneType]":
+                    if (
+                        typestring == f"typing.Union[{collection[prim_type]}, NoneType]"
+                        or typestring == f"typing.Optional[{collection[prim_type]}]"
+                    ):
                         field.type = collection[prim_type]
-                if typestring == f"typing.Union[{prim_type.__name__}, NoneType]":
+                if (
+                    typestring == f"typing.Union[{prim_type.__name__}, NoneType]"
+                    or typestring == f"typing.Optional[{prim_type.__name__}]"
+                ):
                     field.type = prim_type
 
             if isinstance(field.type, type) and issubclass(field.type, Enum):
@@ -128,7 +150,7 @@ class HfArgumentParser(ArgumentParser):
         namespace, remaining_args = self.parse_known_args(args=args)
         outputs = []
         for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype)}
+            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in vars(namespace).items() if k in keys}
             for k in keys:
                 delattr(namespace, k)

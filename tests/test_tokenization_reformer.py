@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,6 +33,7 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = ReformerTokenizer
     rust_tokenizer_class = ReformerTokenizerFast
     test_rust_tokenizer = True
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()

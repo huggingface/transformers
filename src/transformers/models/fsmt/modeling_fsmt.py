@@ -34,7 +34,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, LayerNorm
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -235,7 +235,7 @@ FSMT_INPUTS_DOCSTRING = r"""
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the input_ids right, following the paper.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default. If you want to change padding behavior, you should read
             :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify. See diagram 1 in the paper for more info on
@@ -262,18 +262,6 @@ FSMT_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
-
-
-have_fused_layer_norm = False
-if torch.cuda.is_available():
-    try:
-        from apex.normalization import FusedLayerNorm
-
-        have_fused_layer_norm = True
-    except ImportError:
-        pass
-
-LayerNorm = FusedLayerNorm if have_fused_layer_norm else torch.nn.LayerNorm
 
 
 def invert_mask(attention_mask):

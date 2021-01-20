@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Fine-tuning with custom datasets
 =======================================================================================================================
 
@@ -546,12 +558,15 @@ we can use the built in :func:`~transformers.BatchEncoding.char_to_token` method
         end_positions = []
         for i in range(len(answers)):
             start_positions.append(encodings.char_to_token(i, answers[i]['answer_start']))
-            end_positions.append(encodings.char_to_token(i, answers[i]['answer_end'] - 1))
-            # if None, the answer passage has been truncated
+            end_positions.append(encodings.char_to_token(i, answers[i]['answer_end']))
+
+            # if start position is None, the answer passage has been truncated
             if start_positions[-1] is None:
                 start_positions[-1] = tokenizer.model_max_length
+
+            # if end position is None, the 'char_to_token' function points to the space before the correct token - > add + 1
             if end_positions[-1] is None:
-                end_positions[-1] = tokenizer.model_max_length
+                end_positions[-1] = encodings.char_to_token(i, answers[i]['answer_end'] + 1)
         encodings.update({'start_positions': start_positions, 'end_positions': end_positions})
 
     add_token_positions(train_encodings, train_answers)

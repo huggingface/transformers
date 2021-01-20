@@ -17,6 +17,7 @@
 """
 
 import itertools
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -330,10 +331,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.embeddings.weight = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -538,10 +536,13 @@ class TFXLMPreTrainedModel(TFPreTrainedModel):
         inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
         attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
         if self.config.use_lang_emb and self.config.n_langs > 1:
-            langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+            return {
+                "input_ids": inputs_list,
+                "attention_mask": attns_list,
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+            }
         else:
-            langs_list = None
-        return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
+            return {"input_ids": inputs_list, "attention_mask": attns_list}
 
 
 # Remove when XLMWithLMHead computes loss like other LM models
@@ -749,6 +750,13 @@ class TFXLMModel(TFXLMPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+
 
 class TFXLMPredLayer(tf.keras.layers.Layer):
     """
@@ -780,6 +788,20 @@ class TFXLMPredLayer(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.input_embeddings(hidden_states, mode="linear")
         hidden_states = hidden_states + self.bias
@@ -800,8 +822,12 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         self.transformer = TFXLMMainLayer(config, name="transformer")
         self.pred_layer = TFXLMPredLayer(config, self.transformer.embeddings, name="pred_layer_._proj")
 
-    def get_output_embeddings(self):
-        return self.pred_layer.input_embeddings
+    def get_lm_head(self):
+        return self.pred_layer
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.pred_layer.name
 
     def prepare_inputs_for_generation(self, inputs, **kwargs):
         mask_token_id = self.config.mask_token_id
@@ -885,6 +911,12 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
             logits=outputs, hidden_states=transformer_outputs.hidden_states, attentions=transformer_outputs.attentions
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFXLMWithLMHeadModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -963,7 +995,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         output = transformer_outputs[0]
@@ -982,6 +1014,13 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1009,10 +1048,16 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {
-            "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-            "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
-        }
+        # Sometimes XLM has language embeddings so don't forget to build them as well if needed
+        if self.config.use_lang_emb and self.config.n_langs > 1:
+            return {
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+                "langs": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+            }
+        else:
+            return {
+                "input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS),
+            }
 
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1123,6 +1168,27 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             attentions=transformer_outputs.attentions,
         )
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1223,6 +1289,13 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1334,4 +1407,13 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
             end_logits=end_logits,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

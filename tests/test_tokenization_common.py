@@ -83,6 +83,7 @@ class TokenizerTesterMixin:
     from_pretrained_kwargs = None
     from_pretrained_filter = None
     from_pretrained_vocab_key = "vocab_file"
+    test_seq2seq = True
 
     def setUp(self) -> None:
         # Tokenizer.filter makes it possible to filter which Tokenizer to case based on all the
@@ -584,7 +585,7 @@ class TokenizerTesterMixin:
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
-                # (regardeless of weither the model use token type ids)
+                # (regardless of whether the model use token type ids)
                 # We use this assumption in the QA pipeline among other place
                 output = tokenizer(seq_0, return_token_type_ids=True)
                 self.assertIn(0, output["token_type_ids"])
@@ -600,7 +601,7 @@ class TokenizerTesterMixin:
 
                 # We want to have sequence 0 and sequence 1 are tagged
                 # respectively with 0 and 1 token_ids
-                # (regardeless of weither the model use token type ids)
+                # (regardless of whether the model use token type ids)
                 # We use this assumption in the QA pipeline among other place
                 output = tokenizer(seq_0)
                 self.assertIn(0, output.sequence_ids())
@@ -1703,6 +1704,10 @@ class TokenizerTesterMixin:
                 first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
                 sequence = " ".join(first_ten_tokens)
                 encoded_sequence = tokenizer.encode_plus(sequence, return_tensors="pt")
+
+                # Ensure that the BatchEncoding.to() method works.
+                encoded_sequence.to(model.device)
+
                 batch_encoded_sequence = tokenizer.batch_encode_plus([sequence, sequence], return_tensors="pt")
                 # This should not fail
 
@@ -1799,10 +1804,11 @@ class TokenizerTesterMixin:
 
     @require_torch
     def test_prepare_seq2seq_batch(self):
+        if not self.test_seq2seq:
+            return
+
         tokenizer = self.get_tokenizer()
 
-        if not hasattr(tokenizer, "prepare_seq2seq_batch"):
-            return
         # Longer text that will definitely require truncation.
         src_text = [
             " UN Chief Says There Is No Military Solution in Syria",

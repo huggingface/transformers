@@ -93,6 +93,7 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
+    test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
 
     def __post_init__(self):
         if self.task_name is not None:
@@ -102,10 +103,12 @@ class DataTrainingArguments:
         elif self.train_file is None or self.validation_file is None:
             raise ValueError("Need either a GLUE task or a training/validation file.")
         else:
-            extension = self.train_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-            extension = self.validation_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            train_extension = self.train_file.split(".")[-1]
+            assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            validation_extension = self.validation_file.split(".")[-1]
+            assert (
+                validation_extension == train_extension
+            ), "`validation_file` should have the same extension (csv or json) as `train_file`."
 
 
 @dataclass
@@ -130,6 +133,17 @@ class ModelArguments:
     use_fast_tokenizer: bool = field(
         default=True,
         metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
+        },
     )
 
 
@@ -194,16 +208,33 @@ def main():
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
         datasets = load_dataset("glue", data_args.task_name)
-    elif data_args.train_file.endswith(".csv"):
-        # Loading a dataset from local csv files
-        datasets = load_dataset(
-            "csv", data_files={"train": data_args.train_file, "validation": data_args.validation_file}
-        )
     else:
-        # Loading a dataset from local json files
-        datasets = load_dataset(
-            "json", data_files={"train": data_args.train_file, "validation": data_args.validation_file}
-        )
+        # Loading a dataset from your local files.
+        # CSV/JSON training and evaluation files are needed.
+        data_files = {"train": data_args.train_file, "validation": data_args.validation_file}
+
+        # Get the test dataset: you can provide your own CSV/JSON test file (see below)
+        # when you use `do_predict` without specifying a GLUE benchmark task.
+        if training_args.do_predict:
+            if data_args.test_file is not None:
+                train_extension = data_args.train_file.split(".")[-1]
+                test_extension = data_args.test_file.split(".")[-1]
+                assert (
+                    test_extension == train_extension
+                ), "`test_file` should have the same extension (csv or json) as `train_file`."
+                data_files["test"] = data_args.test_file
+            else:
+                raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
+
+        for key in data_files.keys():
+            logger.info(f"load a local file for {key}: {data_files[key]}")
+
+        if data_args.train_file.endswith(".csv"):
+            # Loading a dataset from local csv files
+            datasets = load_dataset("csv", data_files=data_files)
+        else:
+            # Loading a dataset from local json files
+            datasets = load_dataset("json", data_files=data_files)
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -236,17 +267,23 @@ def main():
         num_labels=num_labels,
         finetuning_task=data_args.task_name,
         cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     model = AutoModelForSequenceClassification.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
         cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
     # Preprocessing the datasets
@@ -266,11 +303,9 @@ def main():
     # Padding strategy
     if data_args.pad_to_max_length:
         padding = "max_length"
-        max_length = data_args.max_seq_length
     else:
         # We will pad later, dynamically at batch creation, to the max sequence length in each batch
         padding = False
-        max_length = None
 
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
@@ -289,7 +324,7 @@ def main():
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",
             )
-    elif data_args.task_name is None:
+    elif data_args.task_name is None and not is_regression:
         label_to_id = {v: i for i, v in enumerate(label_list)}
 
     def preprocess_function(examples):
@@ -297,7 +332,7 @@ def main():
         args = (
             (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
         )
-        result = tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
+        result = tokenizer(*args, padding=padding, max_length=data_args.max_seq_length, truncation=True)
 
         # Map labels to IDs (not necessary for GLUE tasks)
         if label_to_id is not None and "label" in examples:
@@ -308,7 +343,7 @@ def main():
 
     train_dataset = datasets["train"]
     eval_dataset = datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
-    if data_args.task_name is not None:
+    if data_args.task_name is not None or data_args.test_file is not None:
         test_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
 
     # Log a few random samples from the training set:
@@ -350,10 +385,23 @@ def main():
 
     # Training
     if training_args.do_train:
-        trainer.train(
+        train_result = trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
+        metrics = train_result.metrics
+
         trainer.save_model()  # Saves the tokenizer too for easy upload
+
+        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
+        if trainer.is_world_process_zero():
+            with open(output_train_file, "w") as writer:
+                logger.info("***** Train results *****")
+                for key, value in sorted(metrics.items()):
+                    logger.info(f"  {key} = {value}")
+                    writer.write(f"{key} = {value}\n")
+
+            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
+            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
 
     # Evaluation
     eval_results = {}
@@ -374,7 +422,7 @@ def main():
             if trainer.is_world_process_zero():
                 with open(output_eval_file, "w") as writer:
                     logger.info(f"***** Eval results {task} *****")
-                    for key, value in eval_result.items():
+                    for key, value in sorted(eval_result.items()):
                         logger.info(f"  {key} = {value}")
                         writer.write(f"{key} = {value}\n")
 

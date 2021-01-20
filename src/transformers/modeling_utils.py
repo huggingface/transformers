@@ -404,6 +404,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
     """
     config_class = None
     base_model_prefix = ""
@@ -416,6 +417,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     # a list of of tensor names to ignore when saving the model (useful for keys that aren't
     # trained, but which are deterministic)
     _keys_to_ignore_on_save = None
+
+    is_parallelizable = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -886,6 +889,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -907,6 +913,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
                       with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
                       attribute will be passed to the underlying model's ``__init__`` function.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Examples::
 
@@ -931,6 +941,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
@@ -946,6 +957,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
                 revision=revision,
                 **kwargs,
             )
@@ -998,6 +1010,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
                 )
             except EnvironmentError as err:
                 logger.error(err)
