@@ -104,15 +104,15 @@ class TrainingArguments:
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
-            The initial learning rate for AdamW.
+            The initial learning rate for `~tranformers.AdamW`.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
             The weight decay to apply (if not zero).
-        adamw_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 hyperparameter for the AdamW optimizer.
-        adamw_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 hyperparameter for the AdamW optimizer.
-        adamw_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            The epsilon hyperparameter for the AdamW optimizer.
+        adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
+            The beta1 hyperparameter for the `~tranformers.AdamW` optimizer.
+        adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
+            The beta2 hyperparameter for the `~tranformers.AdamW` optimizer.
+        adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
+            The epsilon hyperparameter for the `~tranformers.AdamW` optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -290,9 +290,9 @@ class TrainingArguments:
 
     learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
     weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
-    adamw_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
-    adamw_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
-    adamw_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
