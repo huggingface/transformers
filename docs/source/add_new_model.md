@@ -373,7 +373,8 @@ and `src/transformers/models/*brand_new_bert*/configuration_*brand_new_bert*.py`
 Now you can finally start coding :). The generated code in `src/transformers/models/*brand_new_bert*/modeling_*brand_new_bert*.py` will
 either has the same architecture as BERT if it's an encoder-only model or BART if it's an encoder-decoder model.
 At this point, you should remind yourself what you've learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization layer, etc...
-Here it is often useful to look at the similar architecture of already existing models in Transformers.
+Again, it is often useful to look at the similar architecture of already existing models in Transformers to get a better 
+feeling of how your model should be implemented.
 
 **Note** that at this point, you don't have to be very sure that your code is fully correct or clean.
 Rather, it is advised to add a first *unclean*, copy-pasted version of the original code to 
@@ -399,6 +400,9 @@ conversion scripts in 🤗 Transformers for one that has been used to convert a 
 framework as *brand_new_bert*. Usually, it is enough to copy an already existing conversion script and slighly 
 adapt it for your use case. Don't hesitate to ask the Hugging Face team to point you to a similar already existing
 conversion script for your model.
+
+ - If you are porting a model from TensorFlow to PyTorch, a good starting point might be BERT's conversion script [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
+ - If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script [here](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
 
 In the following, we'll quickly explain how PyTorch models stores layer weights and define layer names.
 In PyTorch, the name of a layer is defined by the name of the class attribute you give the layer. 
