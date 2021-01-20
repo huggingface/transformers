@@ -63,14 +63,10 @@ HF projects:
  nlp datasets: [different repo](https://github.com/huggingface/nlp)
  rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
-Maintained examples:
+Examples:
 
- examples/seq2seq: @patil-suraj, @sgugger
- examples/token-classification: @stefan-it
-
-Research Projects:
-
- examples/research_projects/bert-loses-patience: @JetRunner
- examples/research_projects/distillation: @VictorSanh
+    maintained examples (not research project or legacy): @sgugger, @patil-suraj
+    research_projects/bert-loses-patience: @JetRunner
+    research_projects/distillation: @VictorSanh
 
  -->
