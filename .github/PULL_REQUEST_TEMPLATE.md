@@ -53,7 +53,7 @@ Library:
  benchmarks: @patrickvonplaten
  deepspeed: @stas00
  ray/raytune: @richardliaw @amogkam
- text generationt: @patrickvonplaten, @TevenLeScao
+ text generation: @patrickvonplaten, @TevenLeScao
  tokenizers: @mfuntowicz
  trainer, @sgugger
 
