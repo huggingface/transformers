@@ -477,7 +477,10 @@ if is_torch_available():
             "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DebertaForSequenceClassification",
             "DebertaModel",
+            "DebertaForMaskedLM",
             "DebertaPreTrainedModel",
+            "DebertaForTokenClassification",
+            "DebertaForQuestionAnswering",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -1527,7 +1530,10 @@ if TYPE_CHECKING:
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DebertaForMaskedLM,
+            DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
+            DebertaForTokenClassification,
             DebertaModel,
             DebertaPreTrainedModel,
         )
