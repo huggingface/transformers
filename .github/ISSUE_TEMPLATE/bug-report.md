@@ -26,7 +26,8 @@ assignees: ''
  Please tag fewer than 3 people.
 
  albert, bert, gpt2, xlm: @LysandreJik
- bart, blenderbot, t5, speed and memory benchmarks, pegasus, longformer/reformer, marian, mbart: @patrickvonplaten
+ bart, blenderbot, t5, pegasus, marian, mbart: @patrickvonplaten, @patil-suraj 
+ longformer, reformer, speed and memory benchmarks: @patrickvonplaten
  deepspeed, fsmt: @stas00
  documentation, trainer: @sgugger
  examples/bert-loses-patience: @JetRunner
