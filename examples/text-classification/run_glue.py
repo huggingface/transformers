@@ -94,6 +94,13 @@ class DataTrainingArguments:
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
     test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+    mnli_compat_mode: bool = field(
+        default=False,
+        metadata={
+            "help": "Use the old label assignments ['contradiction', 'entailment', 'neutral'] "
+            "in transformers<3.5.0. "
+        },
+    )
 
     def __post_init__(self):
         if self.task_name is not None:
@@ -207,7 +214,23 @@ def main():
     # download the dataset.
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset("glue", data_args.task_name)
+        if data_args.task_name == "mnli":
+            if data_args.mnli_compat_mode:
+                logger.info(
+                    "The labels assignment is overwritten with the old assignment"
+                    "['contradiction', 'entailment', 'neutral'] from transformers<3.5.0."
+                )
+                datasets = load_dataset(
+                    "glue", data_args.task_name, label_classes=["contradiction", "entailment", "neutral"]
+                )
+            else:
+                logger.info(
+                    "Please be aware that since the version 3.5.0, the label assignment of MNLI has been changed."
+                    "Use `--mnli_compat_mode` if you are loading a checkpoint trained with an older version of script."
+                )
+                datasets = load_dataset("glue", data_args.task_name)
+        else:
+            datasets = load_dataset("glue", data_args.task_name)
     else:
         # Loading a dataset from your local files.
         # CSV/JSON training and evaluation files are needed.
