@@ -25,7 +25,6 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from .file_utils import ENV_VARS_TRUE_VALUES
 from .trainer_utils import SchedulerType
 from .utils import logging
 
