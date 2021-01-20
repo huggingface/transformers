@@ -104,15 +104,15 @@ class TrainingArguments:
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
-            The initial learning rate for `~tranformers.AdamW`.
+            The initial learning rate for :class:`~transformers.AdamW` optimizer.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
-            The weight decay to apply (if not zero).
+            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in :class:`~transformers.AdamW` optimizer.
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 hyperparameter for the `~tranformers.AdamW` optimizer.
+            The beta1 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 hyperparameter for the `~tranformers.AdamW` optimizer.
+            The beta2 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            The epsilon hyperparameter for the `~tranformers.AdamW` optimizer.
+            The epsilon hyperparameter for the :class:`~transformers.AdamW` optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
