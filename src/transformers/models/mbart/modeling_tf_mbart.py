@@ -949,7 +949,7 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
         self.shared.weight = new_embeddings
         self.shared.vocab_size = self.shared.weight.shape[0]
         # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("led.shared") as shared_abs_scope_name:
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
             pass
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
