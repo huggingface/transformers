@@ -71,8 +71,8 @@ if version.parse(tf.version.VERSION) >= version.parse("2.4"):
     gelu = tf.keras.activations.gelu
     gelu_new = approximate_gelu_wrap
 else:
-    gelu = tf.keras.layers.Activation(_gelu)
-    gelu_new = tf.keras.layers.Activation(_gelu_new)
+    gelu = _gelu
+    gelu_new = _gelu_new
 
 
 ACT2FN = {
@@ -81,9 +81,9 @@ ACT2FN = {
     "swish": tf.keras.activations.swish,
     "silu": tf.keras.activations.swish,
     "gelu_new": gelu_new,
-    "mish": tf.keras.layers.Activation(mish),
+    "mish": mish,
     "tanh": tf.keras.activations.tanh,
-    "gelu_fast": tf.keras.layers.Activation(gelu_fast),
+    "gelu_fast": gelu_fast,
 }
 
 
