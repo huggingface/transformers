@@ -74,89 +74,78 @@ TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 INF = 1e6
 
 
-class TFFunnelEmbeddings(tf.keras.layers.Layer):
-    """Construct the embeddings from word embeddings."""
-
-    def __init__(self, config, **kwargs):
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
+class TFFunnelWordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
         super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
 
     def build(self, input_shape):
-        """Build shared word embedding layer """
-        with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight",
-                shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-        super().build(input_shape)
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
 
-    def call(
-        self,
-        input_ids=None,
-        inputs_embeds=None,
-        mode="embedding",
-        training=False,
-    ):
-        """
-        Get token embeddings of inputs
+        super().build(input_shape=input_shape)
 
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear"
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
 
-        Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; (2) mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size]
+        return dict(list(base_config.items()) + list(config.items()))
 
-        Raises:
-            ValueError: if mode is not valid.
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
 
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        if mode == "embedding":
-            return self._embedding(input_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, inputs_embeds, training=False):
-        """Applies embedding based on inputs tensor."""
-        assert not (input_ids is None and inputs_embeds is None)
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-
-        embeddings = self.layer_norm(inputs_embeds)
-        embeddings = self.dropout(embeddings, training=training)
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer
 
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size
+class TFFunnelEmbeddings(tf.keras.layers.Layer):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.word_embeddings = TFFunnelWordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
+
+    def call(self, input_ids=None, inputs_embeds=None, training=False):
+        """
+        Applies embedding based on inputs tensor.
 
         Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
+        assert not (input_ids is None and inputs_embeds is None)
+        assert not (input_ids is not None and inputs_embeds is not None)
 
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        if input_ids is not None:
+            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+
+        final_embeddings = self.LayerNorm(inputs=inputs_embeds)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
+
+        return final_embeddings
 
 
 class TFFunnelAttentionStructure:
@@ -784,11 +773,11 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         self.encoder = TFFunnelEncoder(config, name="encoder")
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -870,11 +859,11 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         self.decoder = TFFunnelDecoder(config, name="decoder")
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError  # Not implemented yet in the library fr TF 2.0 models
@@ -987,17 +976,19 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def get_output_embeddings(self):
         return self.input_embeddings
 
     def set_output_embeddings(self, value):
-        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
@@ -1008,8 +999,12 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
         self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states, training=False):
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
         return hidden_states
 
 
@@ -1362,7 +1357,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.funnel = TFFunnelMainLayer(config, name="funnel")
-        self.lm_head = TFFunnelMaskedLMHead(config, self.funnel.embeddings, name="lm_head")
+        self.lm_head = TFFunnelMaskedLMHead(config, self.funnel.embeddings.word_embeddings, name="lm_head")
 
     def get_lm_head(self):
         return self.lm_head
