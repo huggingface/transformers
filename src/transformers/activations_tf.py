@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import math
-from packaging import version
 
 import tensorflow as tf
+from packaging import version
 
 
 def _gelu(x):
