@@ -33,28 +33,27 @@ To start with let's try to get a general overview of the Transformers library.
 
 ## General overview of 🤗 Transformers
 
-TODO
+TODO(PVP)
 
-- Mention some general design principles
-- Mention the single file policy
-- Mention the copy over abstraction policy
-- ...
+	- Mention some general design principles
+	- Mention the single file policy
+	- Mention the copy over abstraction policy
+	- ...
 
 ### Overview of models
 
-TODO
+TODO(PVP)
 
-- Add graphic
+	- Add graphic
 
 ### Overview of tokenizers
 
-TODO
+TODO(PVP)
 
-- Add graphic
+	- Add graphic
 
-## Adding BrandNewBert to 🤗 Transformers
+## Step-by-step receipe to add a model to 🤗 Transformers
 
-For exemplary purposes, we will call the model that we will add to 🤗 Transformers BrandNewBert.
 Everyone has different preferences of how to port a model so it can be very helpful for you to 
 take a look at summaries of how other contributors ported models to Hugging Face. Here is a list 
 of community blog posts on how to port a model:
@@ -62,6 +61,16 @@ of community blog posts on how to port a model:
 1. (Porting GPT2 Model)[https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28] by [Thomas](https://huggingface.co/thomwolf)
 2. (Porting WMT19 MT Model)[https://huggingface.co/blog/porting-fsmt] by [Stas](https://huggingface.co/stas)
 3. TODO(PVP): ADD TAPAS blog post by Niels?
+
+From experience, the most important things to keep in mind when adding a model are:
+
+- Don't reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers 
+model already exists somewhere in 🤗 Transformers. Take some time to find similar,
+  already existing models and tokenizers you can copy from. [`grep`](https://www.gnu.org/software/grep/) and [`rg`](https://github.com/BurntSushi/ripgrep) are your friends.
+- It's more of an engineering challenge than a scientific challenge. You should spend more time 
+on creating an efficient debugging environment than trying to understand all theoretical 
+aspects of the model in the paper.
+- Ask for help, when you're stuck! Models are the core component of 🤗 Transformers, so the we at Hugging Face are more than happy to help you at every step to add your model. Don't hesitate to ask if you notice you are not making progess.
 
 In the following, we try to give you a general receipe that we found most useful when porting 
 a model to 🤗 Transformers.
@@ -84,9 +93,10 @@ by you as a To-Do List:
 - [ ] Merged the pull request
 - [ ] (Optionally) added a notebook
 
-To begin with, you should start by getting a good understanding of the model.
+For exemplary purposes, we will call the model that we will add to 🤗 Transformers BrandNewBert.
+To begin with, you should start by getting a good understanding of BrandNewBert.
   
-### Theoretical aspects of *brand_new_bert*
+### Theoretical aspects of BrandNewBert
   
 #### Paper
 
@@ -382,13 +392,17 @@ with random weights, thus making sure that the `init()` methods of all component
 
 #### Write a conversion script
 
-Now, you should write a conversion script that lets you convert the checkpoint you used to debug 
-*brand_new_bert* in the original repository to your just created 🤗 Transformers implementation of *brand_new_bert*.
-Here you should not try to write the conversion script from scratch, but find similar models in 🤗 Transformers
-that require similar conversion scripts, *i.e.* whose original repository was written with the same framework as
-*brand_new_bert*.
+Next, you should write a conversion script that lets you convert the checkpoint you used to debug 
+*brand_new_bert* in the original repository to a checkpoint compatible with your just created 🤗 Transformers implementation of *brand_new_bert*.
+It is not advised to write the conversion script from scratch, but rather to look through already existing
+conversion scripts in 🤗 Transformers for one that has been used to convert a similar model that was written in the same
+framework as *brand_new_bert*. Usually, it is enough to copy an already existing conversion script and slighly 
+adapt it for your use case. Don't hesitate to ask the Hugging Face team to point you to a similar already existing
+conversion script for your model.
 
-**Important**: In PyTorch, the name of a layer is defined by the name of the class attribute you give the layer. *E.g.*, let's define a dummy model in PyTorch, called `SimpleModel` as follows:
+In the following, we'll quickly explain how PyTorch models stores layer weights and define layer names.
+In PyTorch, the name of a layer is defined by the name of the class attribute you give the layer. 
+Let's define a dummy model in PyTorch, called `SimpleModel` as follows:
 
 ```python
 import torch.nn as nn
