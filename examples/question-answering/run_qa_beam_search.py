@@ -472,9 +472,7 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in datasets["validation"]]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    # TODO: Once the fix lands in a Datasets release, remove the _local here and the squad_v2_local folder.
-    current_dir = os.path.sep.join(os.path.join(__file__).split(os.path.sep)[:-1])
-    metric = load_metric(os.path.join(current_dir, "squad_v2_local") if data_args.version_2_with_negative else "squad")
+    metric = load_metric("squad_v2" if data_args.version_2_with_negative else "squad")
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
