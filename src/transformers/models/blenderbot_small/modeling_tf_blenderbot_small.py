@@ -1046,9 +1046,6 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-    def get_output_embeddings(self):
-        return self.model.shared
-
     @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,

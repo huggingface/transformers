@@ -1044,9 +1044,6 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
     def get_decoder(self):
         return self.model.decoder
 
-    def get_output_embeddings(self):
-        return self.model.shared
-
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
