@@ -31,7 +31,7 @@ def _gelu(x):
     return x * cdf
 
 
-def gelu_new(x):
+def _gelu_new(x):
     """
     Gaussian Error Linear Unit. This is a smoother version of the GELU. Original paper: https://arxiv.org/abs/1606.0841
 
