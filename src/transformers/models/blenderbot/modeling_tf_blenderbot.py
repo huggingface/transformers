@@ -973,22 +973,6 @@ class TFBlenderbotMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs
     ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> from transformers import BlenderbotTokenizer, TFBlenderbotModel
-
-            >>> model = TFBlenderbotModel.from_pretrained("facebook/blenderbot-400M-distill")
-            >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
-
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1291,7 +1275,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
 
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
