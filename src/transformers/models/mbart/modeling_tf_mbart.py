@@ -590,11 +590,8 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -738,11 +735,8 @@ class TFMBartDecoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -941,7 +935,7 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
 
         self.encoder = TFMBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFMBartDecoder(config, embed_tokens, name="decoder")
-    
+
     def get_input_embeddings(self):
         return self.shared
 
@@ -955,7 +949,7 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
-    
+
     def call(
         self,
         input_ids=None,
@@ -1060,7 +1054,7 @@ class TFMBartMainLayer(tf.keras.layers.Layer):
 class TFMBartModel(TFMBartPreTrainedModel):
     def __init__(self, config: MBartConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        
+
         self.model = TFMBartMainLayer(config, name="model")
 
     def get_encoder(self):

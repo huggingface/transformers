@@ -24,7 +24,8 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings, add_end_docstrings,
+    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -578,11 +579,8 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
         self.layers = [TFBlenderbotEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -724,11 +722,8 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -941,7 +936,7 @@ class TFBlenderbotMainLayer(tf.keras.layers.Layer):
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
-    
+
     def call(
         self,
         input_ids=None,
@@ -1040,7 +1035,7 @@ class TFBlenderbotMainLayer(tf.keras.layers.Layer):
 class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
     def __init__(self, config: BlenderbotConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        
+
         self.model = TFBlenderbotMainLayer(config, name="model")
 
     def get_encoder(self):
@@ -1051,20 +1046,19 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.model.shared
-    
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
             from ..blenderbot_small import TFBlenderbotSmallModel
+
             warnings.warn(
                 "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
                 FutureWarning,
             )
             return TFBlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
 
-        return super().from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1164,7 +1158,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
         self.final_logits_bias = self.add_weight(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
-    
+
     def get_decoder(self):
         return self.model.decoder
 
@@ -1187,15 +1181,14 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
         if pretrained_model_name_or_path == "facebook/blenderbot-90M":
             from ..blenderbot_small import TFBlenderbotSmallForConditionalGeneration
+
             warnings.warn(
                 "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
                 FutureWarning,
             )
             return TFBlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
 
-        return super().from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
+        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1362,21 +1355,6 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
             return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
         else:
             return logits
-
-    def get_encoder(self):
-        return self.model.encoder
-
-    def get_output_embeddings(self):
-        return self.get_input_embeddings()
-
-    def set_output_embeddings(self, value):
-        self.set_input_embeddings(value)
-
-    def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
-
-    def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
 
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.compute_loss
     def compute_loss(self, labels, logits):

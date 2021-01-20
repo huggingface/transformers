@@ -1201,21 +1201,6 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
         return self.serving_output(output)
 
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
 
 @dataclass
 # Copied from transformers.models.longformer.modeling_tf_longformer.TFLongformerBaseModelOutput with TFLongformer->TFLEDEncoder
@@ -1517,11 +1502,8 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         self.layers = [TFLEDEncoderLayer(config, i, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -1757,11 +1739,8 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens

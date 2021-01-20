@@ -2000,11 +2000,8 @@ class TF{{cookiecutter.camelcase_modelname}}Encoder(tf.keras.layers.Layer):
         self.layers = [TF{{cookiecutter.camelcase_modelname}}EncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -2143,15 +2140,12 @@ class TF{{cookiecutter.camelcase_modelname}}Decoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
-    
     def call(
         self,
         input_ids=None,

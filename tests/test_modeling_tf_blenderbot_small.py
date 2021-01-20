@@ -255,7 +255,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
-    
+
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
         pass

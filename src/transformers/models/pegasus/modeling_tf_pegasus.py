@@ -23,7 +23,8 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
-    add_code_sample_docstrings, add_end_docstrings,
+    add_code_sample_docstrings,
+    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -606,11 +607,8 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
         self.layers = [TFPegasusEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -751,11 +749,8 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def get_input_embeddings(self):
+    def get_embed_tokens(self):
         return self.embed_tokens
-
-    def set_embed_tokens(self, embed_tokens):
-        self.embed_tokens = embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -953,7 +948,7 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
 
         self.encoder = TFPegasusEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFPegasusDecoder(config, embed_tokens, name="decoder")
-    
+
     def get_input_embeddings(self):
         return self.shared
 
@@ -967,7 +962,7 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
         embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
         self.encoder.set_embed_tokens(embed_tokens)
         self.decoder.set_embed_tokens(embed_tokens)
-    
+
     def call(
         self,
         input_ids=None,
@@ -1069,7 +1064,7 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
 class TFPegasusModel(TFPegasusPreTrainedModel):
     def __init__(self, config: PegasusConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        
+
         self.model = TFPegasusMainLayer(config, name="model")
 
     def get_encoder(self):
