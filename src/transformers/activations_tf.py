@@ -64,9 +64,15 @@ def gelu_fast(x):
 
 
 if version.parse(tf.version.VERSION) >= version.parse("2.4"):
+    def approximate_gelu_wrap(x):
+        return tf.keras.activations.gelu(x, approximate=True)
+
     gelu = tf.keras.activations.gelu
+    gelu_new = approximate_gelu_wrap
+
 else:
     gelu = tf.keras.layers.Activation(_gelu)
+    gelu_new = tf.keras.layers.Activation(_gelu_new)
 
 
 ACT2FN = {
