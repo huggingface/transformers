@@ -39,34 +39,34 @@ members/contributors which may be interested in your PR.
 
 Models:
 
- albert, bert, xlm: @LysandreJik
- blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5, transfoxl, xlnet: @patrickvonplaten
- fsmt: @stas00
- funnel: @sgugger
- gpt2: @patrickvonplaten, @LysandreJik
- rag: @patrickvonplaten, @lhoestq
- tensorflow: @jplu
+- albert, bert, xlm: @LysandreJik
+- blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5, transfoxl, xlnet: @patrickvonplaten
+- fsmt: @stas00
+- funnel: @sgugger
+- gpt2: @patrickvonplaten, @LysandreJik
+- rag: @patrickvonplaten, @lhoestq
+- tensorflow: @jplu
 
 Library:
 
- benchmarks: @patrickvonplaten
- deepspeed: @stas00
- ray/raytune: @richardliaw, @amogkam
- text generation: @patrickvonplaten
- tokenizers: @n1t0
- trainer: @sgugger
+- benchmarks: @patrickvonplaten
+- deepspeed: @stas00
+- ray/raytune: @richardliaw, @amogkam
+- text generation: @patrickvonplaten
+- tokenizers: @n1t0
+- trainer: @sgugger
 
 Documentation: @sgugger
 
 HF projects:
 
- nlp datasets: [different repo](https://github.com/huggingface/nlp)
- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
+- nlp datasets: [different repo](https://github.com/huggingface/nlp)
+- rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
 Examples:
 
- maintained examples (not research project or legacy): @sgugger, @patil-suraj
- research_projects/bert-loses-patience: @JetRunner
- research_projects/distillation: @VictorSanh
+- maintained examples (not research project or legacy): @sgugger, @patil-suraj
+- research_projects/bert-loses-patience: @JetRunner
+- research_projects/distillation: @VictorSanh
 
  -->
