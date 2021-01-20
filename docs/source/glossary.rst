@@ -38,12 +38,6 @@ General terms
 - token: a part of a sentence, usually a word, but can also be a subword (non-common words are often split in subwords)
   or a punctuation symbol.
 
-`Darigov Research <https://www.darigovresearch.com/>`_ has worked on flashcards based on the above & below terms that has been put into a form which can be easily learnt/revised using `Anki <https://apps.ankiweb.net/>`_ an open source, cross platform app specifically designed for long term knowledge retention.
-
-- `Introductory video on how to use the flashcards <https://www.youtube.com/watch?v=Dji_h7PILrw>`_
-- `Hugging Face Transformers Glossary Flashcards <https://www.darigovresearch.com/huggingface-transformers-glossary-flashcards>`_
-
-
 Model inputs
 -----------------------------------------------------------------------------------------------------------------------
 
