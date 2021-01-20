@@ -106,7 +106,7 @@ class TrainingArguments:
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
             The initial learning rate for :class:`~transformers.AdamW` optimizer.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
-            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in 
+            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in
             :class:`~transformers.AdamW` optimizer.
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
             The beta1 hyperparameter for the :class:`~transformers.AdamW` optimizer.
