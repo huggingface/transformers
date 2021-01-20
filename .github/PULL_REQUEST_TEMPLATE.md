@@ -65,8 +65,8 @@ HF projects:
 
 Examples:
 
-    maintained examples (not research project or legacy): @sgugger, @patil-suraj
-    research_projects/bert-loses-patience: @JetRunner
-    research_projects/distillation: @VictorSanh
+ maintained examples (not research project or legacy): @sgugger, @patil-suraj
+ research_projects/bert-loses-patience: @JetRunner
+ research_projects/distillation: @VictorSanh
 
  -->
