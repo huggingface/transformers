@@ -1201,29 +1201,6 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
         return self.serving_output(output)
 
-    def get_input_embeddings(self):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        return base_model.shared
-
-    def set_input_embeddings(self, value):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        try:
-            base_model.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            base_model.shared.weight = value
-
-        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
-
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
-        base_model.encoder.set_embed_tokens(embed_tokens)
-        base_model.decoder.set_embed_tokens(embed_tokens)
-
     @tf.function(
         input_signature=[
             {
@@ -1985,7 +1962,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 class TFLEDMainLayer(tf.keras.layers.Layer):
     config_class = LEDConfig
 
-    def __init__(self, config: LEDConfig, *inputs, **kwargs):
+    def __init__(self, config: LEDConfig, **kwargs):
         super().__init__(**kwargs)
         self.config = config
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="led.shared")
