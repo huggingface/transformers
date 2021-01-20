@@ -238,9 +238,11 @@ class TFMBartAttention(tf.keras.layers.Layer):
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            assert layer_head_mask.shape == (
-                self.num_heads,
-            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.shape}"
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}"
+            )
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
             )
@@ -742,9 +744,11 @@ class TFMBartEncoder(tf.keras.layers.Layer):
 
         # check if head_mask has a correct number of layers specified if desired
         if inputs["head_mask"] is not None:
-            assert inputs["head_mask"].shape[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {inputs['head_mask'].shape[0]}."
+            tf.debugging.assert_equal(
+                shape_list(inputs["head_mask"])[0],
+                len(self.layers),
+                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}."
+            )
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
 
@@ -956,9 +960,11 @@ class TFMBartDecoder(tf.keras.layers.Layer):
 
         # check if head_mask has a correct number of layers specified if desired
         if inputs["head_mask"] is not None:
-            assert inputs["head_mask"].shape[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {inputs['head_mask'].shape[0]}."
+            tf.debugging.assert_equal(
+                shape_list(inputs["head_mask"])[0],
+                len(self.layers),
+                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}."
+            )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
