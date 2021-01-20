@@ -910,10 +910,13 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFBlenderbotSmallMainLayer(tf.keras.layers.layer):
+class TFBlenderbotSmallMainLayer(tf.keras.layers.Layer):
+    config_class = BlenderbotSmallConfig
+
     def __init__(self, config: BlenderbotSmallConfig, **kwargs):
         super().__init__(**kwargs)
 
+        self.config = config
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:

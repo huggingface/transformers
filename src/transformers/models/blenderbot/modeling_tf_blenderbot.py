@@ -47,7 +47,6 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
-from ..blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -415,19 +414,6 @@ class TFBlenderbotPreTrainedModel(TFPreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
-    
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
-        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
-                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
-                FutureWarning,
-            )
-            return TFBlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
-
-        return super().from_pretrained(
-            pretrained_model_name_or_path, *model_args, **kwargs
-        )
 
     @tf.function(
         input_signature=[
@@ -1051,7 +1037,6 @@ class TFBlenderbotMainLayer(tf.keras.layers.Layer):
     "The bare BLENDERBOT Model outputting raw hidden-states without any specific head on top.",
     BLENDERBOT_START_DOCSTRING,
 )
-@keras_serializable
 class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
     def __init__(self, config: BlenderbotConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1066,6 +1051,20 @@ class TFBlenderbotModel(TFBlenderbotPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.model.shared
+    
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
+            from ..blenderbot_small import TFBlenderbotSmallModel
+            warnings.warn(
+                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
+                FutureWarning,
+            )
+            return TFBlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
+
+        return super().from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1183,6 +1182,20 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
 
     def set_bias(self, value):
         self.final_logits_bias = value["final_logits_bias"]
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
+        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
+            from ..blenderbot_small import TFBlenderbotSmallForConditionalGeneration
+            warnings.warn(
+                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical checkpoint `facebook/small_blenderbot-90M` with `TFBlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
+                FutureWarning,
+            )
+            return TFBlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
+
+        return super().from_pretrained(
+            pretrained_model_name_or_path, *model_args, **kwargs
+        )
 
     @add_start_docstrings_to_model_forward(BLENDERBOT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
