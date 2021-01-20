@@ -307,7 +307,7 @@ class TFRobertaPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Roberta
 class TFRobertaSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -355,7 +355,7 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.einsum("aecd,abcd->acbe", key_layer, query_layer)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFRobertaModel call() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -375,7 +375,7 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Roberta
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
 class TFRobertaSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
