@@ -31,7 +31,10 @@ if is_torch_available():
         "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DebertaForSequenceClassification",
         "DebertaModel",
+        "DebertaForMaskedLM",
         "DebertaPreTrainedModel",
+        "DebertaForTokenClassification",
+        "DebertaForQuestionAnswering",
     ]
 
 
@@ -42,7 +45,10 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DebertaForMaskedLM,
+            DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
+            DebertaForTokenClassification,
             DebertaModel,
             DebertaPreTrainedModel,
         )

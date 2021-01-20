@@ -62,7 +62,13 @@ from ..camembert.modeling_camembert import (
     CamembertModel,
 )
 from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
-from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
+from ..deberta.modeling_deberta import (
+    DebertaForMaskedLM,
+    DebertaForQuestionAnswering,
+    DebertaForSequenceClassification,
+    DebertaForTokenClassification,
+    DebertaModel,
+)
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -378,6 +384,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
@@ -426,6 +433,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
@@ -503,6 +511,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
+        (DebertaConfig, DebertaForQuestionAnswering),
     ]
 )
 
@@ -533,6 +542,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
         (MPNetConfig, MPNetForTokenClassification),
+        (DebertaConfig, DebertaForTokenClassification),
     ]
 )
 
