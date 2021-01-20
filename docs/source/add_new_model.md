@@ -310,6 +310,12 @@ of your 🤗 Transformers' fork:
 cd transformers
 ```
 
+In the special case that you are adding a model whose architecture exactly matches the model architecture of an existing 
+model you only have to add a conversion script as described in [this section](#write-a-conversion-script). In this case 
+you can just re-use the whole model architecure of the already existing model.
+
+Otherwise, let's start generating a new model with the amazing Cookiecutter!
+
 #### Use the Cookiecutter to automatically generate the model's code
 
 To begin with head over to the [🤗 Transformers templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model) to make
@@ -365,7 +371,7 @@ In the same way, the Hugging Face team will open comments when reviewing your co
 questions that are not very useful for the public, feel free to ping the Hugging Face team by Slack or mail.
 
 #### Adapt the generated model's code for *brand_new_bert*
-	
+
 At first, we will focus only on the model itself and not care about the tokenizer. All the relevant code should be found in 
 the generated files `src/transformers/models/*brand_new_bert*/modeling_*brand_new_bert*.py`
 and `src/transformers/models/*brand_new_bert*/configuration_*brand_new_bert*.py`.
@@ -520,13 +526,13 @@ Having correctly loaded the checkpoint into the 🤗 Transformers implementation
 
 #### Implement the forward pass
 
-Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make sure that the forward pass is correctly implemented. In *Get familiar with the original repository.*, you have already created a script
+Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make sure that the forward pass is correctly implemented. In [Get familiar with the original repository](#get-familiar-with-the-original-repository), you have already created a script
 that runs a forward pass of the model using the original repository. Now you should write an analogous script using the 
 🤗 Transformers implementation instead of the original one. It should look as follows:
 
 ```python
 model = *brand_new_bert*Model.from_pretrained(/path/to/converted/checkpoint/folder)
-input_ids = ... # the exact same vector of input ids in PyTorch as those used in the *Get familiar with the original repository.* section
+input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
 output = model(input_ids).last_hidden_states
 ```
 
