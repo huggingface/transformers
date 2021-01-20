@@ -168,3 +168,18 @@ Here is an example of the conversion process for a pre-trained XLM model:
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT
     [--config XML_CONFIG] \
     [--finetuning_task_name XML_FINETUNED_TASK]
+
+
+T5
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Here is an example of the conversion process for a pre-trained T5 model:
+
+.. code-block:: shell
+
+   export T5=/path/to/t5/uncased_L-12_H-768_A-12
+
+   transformers-cli convert --model_type t5 \
+     --tf_checkpoint $T5/t5_model.ckpt \
+     --config $T5/t5_config.json \
+     --pytorch_dump_output $T5/pytorch_model.bin
