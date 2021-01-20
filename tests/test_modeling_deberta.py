@@ -29,7 +29,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (  # XxxForMaskedLM,; XxxForQuestionAnswering,; XxxForTokenClassification,
+    from transformers import (
         DebertaConfig,
         DebertaForMaskedLM,
         DebertaForQuestionAnswering,
