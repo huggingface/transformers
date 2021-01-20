@@ -739,7 +739,34 @@ class CTRLPreTrainedModel:
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class DebertaForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DebertaForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
