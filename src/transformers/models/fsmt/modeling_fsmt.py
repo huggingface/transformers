@@ -269,6 +269,7 @@ def invert_mask(attention_mask):
     assert attention_mask.dim() == 2
     return attention_mask.eq(0)
 
+
 def triu_onnx(x, diagonal=0):
     l = x.shape[0]
     arange = torch.arange(l, device=x.device)
@@ -278,6 +279,7 @@ def triu_onnx(x, diagonal=0):
         arange = arange + diagonal
     mask = mask >= arange
     return mask * x
+
 
 def _prepare_fsmt_decoder_inputs(
     config, input_ids, decoder_input_ids=None, decoder_padding_mask=None, causal_mask_dtype=torch.float32
