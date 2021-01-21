@@ -781,7 +781,7 @@ class T5PreTrainedModel(PreTrainedModel):
 class T5StackPipeSegment(nn.Module):
     def __init__(self, idx, layer_module, is_decoder, head_mask, output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add):
         super().__init__()
-        #self.batch_id = 0
+        self.batch_id = -1
         self.idx = idx
         self.layer_module = layer_module
         self.is_decoder = is_decoder
@@ -796,8 +796,9 @@ class T5StackPipeSegment(nn.Module):
         self.all_cross_attentions_add = all_cross_attentions_add
 
     def forward(self, inputs):
+        self.batch_id += 1
         inputs = pipe_decode_all(inputs, inputs[0].shape[0], inputs[0].device)
-        hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = inputs
+        hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = inputs
         idx = self.idx
 
         #self.past_key_value = recursive_to(inputs[0].device, self.past_key_value)
@@ -814,7 +815,6 @@ class T5StackPipeSegment(nn.Module):
         #     past_key_value = tuple(self.past_key_value[i][self.batch_id] for i in self.past_key_value)
         # else:
         #     past_key_value=None
-        # self.batch_id += 1
 
         # # restore None's if any
         # position_bias = None if len(position_bias.shape) == 1  else position_bias
@@ -853,7 +853,12 @@ class T5StackPipeSegment(nn.Module):
             encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
         # append next layer key value states
         if self.use_cache:
-            self.present_key_value_states_add(present_key_value_state)
+            print(idx, self.batch_id)
+            # present_key_values_p1 = torch.tensor([[idx, self.batch_id], [idx, self.batch_id]]).to(hidden_states.device)
+            # present_key_values_p2 = torch.tensor([[idx, self.batch_id], [idx, self.batch_id]]).to(hidden_states.device)
+            present_key_values_p1 = torch.cat(present_key_value_state[0:2], 1)
+            present_key_values_p2 = torch.cat(present_key_value_state[2:4], 1)
+            self.present_key_value_states_add(present_key_value_state, idx, self.batch_id)
 
         if self.output_attentions:
             self.all_attentions_add(layer_outputs[3])
@@ -871,7 +876,7 @@ class T5StackPipeSegment(nn.Module):
         # all_attentions = tnone if all_attentions is None else all_attentions
         # all_cross_attentions = tnone if all_cross_attentions is None else all_cross_attentions
 
-        outputs = (hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias)
+        outputs = (hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias)
         outputs = pipe_encode_all(outputs, hidden_states.shape[0], hidden_states.device)
         return outputs
 
@@ -988,9 +993,13 @@ class T5Stack(T5PreTrainedModel):
         def all_hidden_states_add(x):
             nonlocal all_hidden_states
             all_hidden_states += (x,)
-        def present_key_value_states_add(x):
+
+        present_key_value_states = [[0 for x in range(2)] for y in range(6)]
+        def present_key_value_states_add(x, block_id, micro_batch_id):
             nonlocal present_key_value_states
-            present_key_value_states += (x,)
+            #present_key_value_states += (x,)
+            present_key_value_states[block_id][micro_batch_id] = x
+            #present_key_value_states += (x,)
             #print(x.shape for x in present_key_value_states)
             #print(present_key_value_states)
         def all_attentions_add(x):
@@ -1002,9 +1011,9 @@ class T5Stack(T5PreTrainedModel):
 
         # crazy flattening of 2 level tuples so that the batch dimension is first to be spliced upon and then restored on the other side
         if past_key_values is not None:
-            x1 = tuple(past_key_values[i][j] for i in range(len(past_key_values)) for j in [0,1])
+            x1 = tuple(past_key_values[i][j].to(0) for i in range(len(past_key_values)) for j in [0,1])
             #for i in x1: print(i.shape)
-            x2 = tuple(past_key_values[i][j] for i in range(len(past_key_values)) for j in [2,3])
+            x2 = tuple(past_key_values[i][j].to(0) for i in range(len(past_key_values)) for j in [2,3])
             #for i in x2: print(i.shape)
             past_key_values_p1 = torch.cat(x1, 1)
             past_key_values_p2 = torch.cat(x2, 1)
@@ -1012,6 +1021,10 @@ class T5Stack(T5PreTrainedModel):
         else:
             past_key_values_p1 = None
             past_key_values_p2 = None
+
+        # batch_size=2, blocks=6, fixed=2
+        present_key_values_p1 = torch.empty(2, 6*2).to(0)
+        present_key_values_p2 = torch.empty(2, 6*2).to(0)
 
         # rewrite the model after pre-trained weights were loaded
         layers = [T5StackPipeSegment(idx, layer_module, self.is_decoder, head_mask[idx], output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add) for idx, layer_module in enumerate(self.block)]
@@ -1026,12 +1039,12 @@ class T5Stack(T5PreTrainedModel):
             #for i, layer in enumerate(self.block_sequential):
             #    layer.to(0) # XXX: change to multiple GPUs when things work on one gpu
             layers0 = nn.Sequential(self.block_sequential[0:3]).to(0)
-            layers1 = nn.Sequential(self.block_sequential[3:6]).to(0)
+            layers1 = nn.Sequential(self.block_sequential[3:6]).to(1)
             self.block_sequential = nn.Sequential(layers0, layers1)
 
-            self.block_pipe = Pipe(self.block_sequential, chunks=1, checkpoint="never")
+            self.block_pipe = Pipe(self.block_sequential, chunks=2, checkpoint="never")
 
-        inputs = (hidden_states, extended_attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_extended_attention_mask, encoder_decoder_position_bias)
+        inputs = (hidden_states, extended_attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_extended_attention_mask, encoder_decoder_position_bias)
         #, all_hidden_states, present_key_value_states, all_attentions, all_cross_attentions)
         inputs = pipe_encode_all(inputs, batch_size, input_ids.device)
 
@@ -1043,22 +1056,39 @@ class T5Stack(T5PreTrainedModel):
             outputs = self.block_sequential(inputs)
 
         outputs = pipe_decode_all(outputs, batch_size, input_ids.device)
-        hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = outputs
+        hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = outputs
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        # if self.is_pipeline and present_key_value_states is not None:
-        #     new_x = ()
-        #     x = list(present_key_value_states)
-        #     for i in range(int(len(present_key_value_states)/2)):
-        #         new_y = ()
-        #         a = x[i*2]
-        #         b = x[i*2+1]
-        #         for j in range(len(a)):
-        #             new_y += (torch.cat((a[j].to(0), b[j].to(0)), 0),)
-        #         new_x += (new_y,)
-        #     present_key_value_states = new_x
+        if present_key_values_p1 is not None:
+            x1 = present_key_values_p1.chunk(6, 1)
+            finalx1 = tuple(x.chunk(2, 1) for x in x1)
+
+            #present_key_values_p1 = present_key_values_p1.chunk(6, 1).chunk(2, 1)
+            #present_key_values_p2
+
+        if self.is_pipeline and present_key_value_states is not None and present_key_value_states[0][0] != 0:
+            print()
+            new_x = ()
+            x = present_key_value_states
+            for block in present_key_value_states:
+                new_y = ()
+                for j in (0, 1, 2, 3):
+                    new_y += (torch.cat((block[0][j].to(0), block[1][j].to(0)), 0),)
+                new_x += (new_y,)
+            present_key_value_states = new_x
+
+            # new_x = ()
+            # x = list(present_key_value_states)
+            # for i in range(int(len(present_key_value_states)/2)):
+            #     new_y = ()
+            #     a = x[i*2]
+            #     b = x[i*2+1]
+            #     for j in range(len(a)):
+            #         new_y += (torch.cat((a[j].to(0), b[j].to(0)), 0),)
+            #     new_x += (new_y,)
+            # present_key_value_states = new_x
 
         # Add last layer
         if output_hidden_states:
