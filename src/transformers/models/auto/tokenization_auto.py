@@ -27,6 +27,7 @@ from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
+from ..conv_bert.tokenization_conv_bert import ConvBertTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
 from ..distilbert.tokenization_distilbert import DistilBertTokenizer
 from ..dpr.tokenization_dpr import DPRQuestionEncoderTokenizer
@@ -61,6 +62,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
     DistilBertConfig,
@@ -134,6 +136,7 @@ if is_tokenizers_available():
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
+    from ..conv_bert.tokenization_conv_bert_fast import ConvBertTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
     from ..electra.tokenization_electra_fast import ElectraTokenizerFast
@@ -163,6 +166,7 @@ else:
     BarthezTokenizerFast = None
     BertTokenizerFast = None
     CamembertTokenizerFast = None
+    ConvBertTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
     ElectraTokenizerFast = None
@@ -232,6 +236,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
+        (ConvBertConfig, (ConvBertTokenizer, None)),
     ]
 )
 
