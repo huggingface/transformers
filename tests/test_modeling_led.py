@@ -521,8 +521,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
 
         dct = tok.batch_encode_plus(
             [ARTICLE_LEP, ARTICLE_MAGNET],
-            max_length=12288,
+            max_length=6144,
             padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
 
@@ -535,9 +536,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
             no_repeat_ngram_size=3,
         )
 
-        EXPECTED_LEP = " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the gigaz option of the international linear collider ( ilc ) is realized in its first phase. \n the expected sensitivity to the branching ratio of rare decays, especially the flavor changing processes, can be greatly enhanced to @xcite. in light of this, \n its exotic or rare processes should be investigated comprehensively to evaluate their potential in probing new physics. in this paper \n, we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric standard model ( mssm ), where a light cp - odd higgs - boson with a singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry like the peccei - quuin symmetry ( pec24 ).    * \n pacs numbers : * 12.38.lg, 13.85.hb, 14.40.gp   + * keywords : * exotic decays ; flavor changing ; rare decay ; higgs + * pacs : * 11.15.ha, 12.39.hg, 11.30"
+        EXPECTED_LEP = " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the gigaz option of the international linear collider ( ilc ) can be realized in its first phase. \n the expected sensitivity to the branching ratio of the rare decays, especially its exotic or rare processes, should be investigated comprehensively to evaluate their potential in probing new physics. in this work \n, we extend the previous studies of these decays to some new models and investigate the decays altogether. we are motivated by some recent studies on the singlet extension of the mssm, such as the next - to - minimal supersymmetric standard model ( nmssm ) @xcite and the nearly - minimal - supersymmetry - standard - model(nmssm)@xcite, where a light cp - odd higgs boson with singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry.    # 1#2#3#4#5#6#7#8#9#10#11#12 "
 
-        EXPECTED_MAGNET = " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however, reported that a large positive magnetoresistance becomes very linear above a characteristic magnetic field. \n it is striking that this observation is in conflict with abrikosov s model and also with the classical parish - littlewood model. so far a reliable theoretical scheme capable of explaining this novel experiment has still been lacking. "
+        EXPECTED_MAGNET = " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however, reported that a large positive magnetoresistance becomes very linear in perpendicular magnetic field even in an opposite situation where the carrier sheet density is high that all electrons occupy more than one landau levels. \n it is striking that this observation is in conflict with abrikosov s model and also with the classical parish - littlewood model. "
 
         generated = tok.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
