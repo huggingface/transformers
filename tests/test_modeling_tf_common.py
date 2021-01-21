@@ -211,36 +211,35 @@ class TFModelTesterMixin:
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
+        config.output_attentions = False
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
 
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            # A saved model is always executed in graph mode, since we merged the PR #8777
-            # the booleans in graph mode are always the ones in the config, then we update
-            # the use_cache property if it exists in order to have similar booleans with the inputs
-            if "use_cache" in class_inputs_dict:
-                config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model")
-                model = tf.keras.models.load_model(saved_model_dir)
+                model.save_pretrained(tmpdirname, saved_model=True)
+                model = tf.keras.models.load_model(os.path.join(tmpdirname, "saved_model", "1"))
                 outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
-                    output = outputs["encoder_hidden_states"] if isinstance(outputs, dict) else outputs[-1]
+                    output = outputs["encoder_hidden_states"]
                 else:
-                    output = outputs["hidden_states"] if isinstance(outputs, dict) else outputs[-1]
+                    output = outputs["hidden_states"]
 
-                hidden_states = [t.numpy() for t in output]
                 self.assertEqual(len(outputs), num_out)
+
                 expected_num_layers = getattr(
                     self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
                 )
-                self.assertEqual(len(hidden_states), expected_num_layers)
+
+                self.assertEqual(len(output), expected_num_layers)
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
+                    list(output[0].shape[-2:]),
                     [self.model_tester.seq_length, self.model_tester.hidden_size],
                 )
 
@@ -248,36 +247,33 @@ class TFModelTesterMixin:
     def test_saved_model_with_attentions_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_attentions = True
+        config.output_hidden_states = False
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
 
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            # A saved model is always executed in graph mode, since we merged the PR #8777
-            # the booleans in graph mode are always the ones in the config, then we update
-            # the use_cache property if it exists in order to have similar booleans with the inputs
-            if "use_cache" in class_inputs_dict:
-                config.use_cache = class_inputs_dict.pop("use_cache")
             model = model_class(config)
             num_out = len(model(class_inputs_dict))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                saved_model_dir = os.path.join(tmpdirname, "saved_model")
-                model.save_pretrained(saved_model_dir)
-                model = tf.keras.models.load_model(saved_model_dir)
+                model.save_pretrained(tmpdirname, saved_model=True)
+                model = tf.keras.models.load_model(os.path.join(tmpdirname, "saved_model", "1"))
                 outputs = model(class_inputs_dict)
 
                 if self.is_encoder_decoder:
-                    output = outputs["encoder_attentions"] if isinstance(outputs, dict) else outputs[-1]
+                    output = outputs["encoder_attentions"]
                 else:
-                    output = outputs["attentions"] if isinstance(outputs, dict) else outputs[-1]
+                    output = outputs["attentions"]
 
-                attentions = [t.numpy() for t in output]
-                self.assertEqual(len(outputs), num_out)
-                self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+                self.assertEqual(len(output), num_out)
+                self.assertEqual(len(output), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
+                    list(output[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
@@ -829,31 +825,6 @@ class TFModelTesterMixin:
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
-    def _get_embeds(self, wte, input_ids):
-        # ^^ In our TF models, the input_embeddings can take slightly different forms,
-        # so we try a few of them.
-        # We used to fall back to just synthetically creating a dummy tensor of ones:
-        try:
-            x = wte(input_ids, mode="embedding")
-        except Exception:
-            try:
-                x = wte([input_ids], mode="embedding")
-            except Exception:
-                try:
-                    x = wte([input_ids, None, None, None], mode="embedding")
-                except Exception:
-                    if hasattr(self.model_tester, "embedding_size"):
-                        x = tf.ones(
-                            input_ids.shape + [self.model_tester.embedding_size],
-                            dtype=tf.dtypes.float32,
-                        )
-                    else:
-                        x = tf.ones(
-                            input_ids.shape + [self.model_tester.hidden_size],
-                            dtype=tf.dtypes.float32,
-                        )
-        return x
-
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -870,12 +841,11 @@ class TFModelTesterMixin:
                 del inputs["input_ids"]
                 inputs.pop("decoder_input_ids", None)
 
-            wte = model.get_input_embeddings()
             if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = self._get_embeds(wte, input_ids)
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
             else:
-                inputs["inputs_embeds"] = self._get_embeds(wte, encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = self._get_embeds(wte, decoder_input_ids)
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
 
             model(inputs)
 
@@ -906,24 +876,25 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def _get_word_embedding_weight(model, embedding_layer):
-            if hasattr(embedding_layer, "word_embeddings"):
-                return embedding_layer.word_embeddings
-            elif hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            elif hasattr(embedding_layer, "decoder"):
-                return embedding_layer.decoder
-            else:
-                # Here we build the word embeddings weights if not exists.
-                # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
-                if hasattr(embedding_layer, "word_embeddings"):
-                    return embedding_layer.word_embeddings
-                elif hasattr(embedding_layer, "weight"):
-                    return embedding_layer.weight
-                elif hasattr(embedding_layer, "decoder"):
-                    return embedding_layer.decoder
-                else:
-                    return None
+            embeds = getattr(embedding_layer, "weight", None)
+            if embeds is not None:
+                return embeds
+
+            embeds = getattr(embedding_layer, "decoder", None)
+            if embeds is not None:
+                return embeds
+
+            model(model.dummy_inputs)
+
+            embeds = getattr(embedding_layer, "weight", None)
+            if embeds is not None:
+                return embeds
+
+            embeds = getattr(embedding_layer, "decoder", None)
+            if embeds is not None:
+                return embeds
+
+            return None
 
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:

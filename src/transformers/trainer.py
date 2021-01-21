@@ -337,12 +337,15 @@ class Trainer:
         # Setup Sharded DDP training
         self.sharded_dpp = False
         if args.sharded_ddp:
+            if args.deepspeed:
+                raise ValueError(
+                    "Using --sharded_ddp together with --deepspeed is not possible, deactivate one of those flags."
+                )
+
             if args.local_rank == -1:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
-            elif args.deepspeed:
-                raise ValueError("can't use --sharded_ddp together with --deepspeed.")
             else:
                 self.sharded_dpp = True
 
@@ -1282,8 +1285,7 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.deepspeed:
-            # calling on DS engine (model_wrapped == DDP(Deepspeed(PretrainedModule)))
-            self.model_wrapped.module.backward(loss)
+            self.deepspeed.backward(loss)
         else:
             loss.backward()
 
@@ -1295,14 +1297,18 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
+        if self.label_smoother is not None and "labels" in inputs:
+            labels = inputs.pop("labels")
+        else:
+            labels = None
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
-        if self.label_smoother is not None and "labels" in inputs:
-            return self.label_smoother(outputs, inputs["labels"])
+        if labels is not None:
+            return self.label_smoother(outputs, labels)
         else:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             return outputs["loss"] if isinstance(outputs, dict) else outputs[0]

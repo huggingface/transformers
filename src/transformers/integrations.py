@@ -54,7 +54,7 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 
 # Integration functions:
 def is_wandb_available():
-    if os.getenv("WANDB_DISABLED"):
+    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         return False
     return importlib.util.find_spec("wandb") is not None
 
@@ -415,8 +415,9 @@ class TensorBoardCallback(TrainerCallback):
                     self._SummaryWriter = SummaryWriter
                 except ImportError:
                     self._SummaryWriter = None
+        else:
+            self._SummaryWriter = None
         self.tb_writer = tb_writer
-        self._SummaryWriter = SummaryWriter
 
     def _init_summary_writer(self, args, log_dir=None):
         log_dir = log_dir or args.logging_dir
