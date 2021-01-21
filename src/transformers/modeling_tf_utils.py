@@ -1144,6 +1144,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
+        print("*************@")
+        print(config)
+
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
             config_path = config if config is not None else pretrained_model_name_or_path

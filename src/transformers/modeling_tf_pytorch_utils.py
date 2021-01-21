@@ -43,6 +43,12 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
           other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
+    # support for ConvBERT model
+    tf_name_split = tf_name.split("/")
+    if tf_name_split[-1] == "depthwise_kernel":
+        tf_name = "/".join(tf_name_split[:-1]) + "/depthwise/weight"
+    if tf_name_split[-1] == "pointwise_kernel":
+        tf_name = "/".join(tf_name_split[:-1]) + "/pointwise/weight"
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
     )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
@@ -127,7 +133,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
-
     # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
@@ -175,8 +180,30 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
         array = pt_state_dict[name].numpy()
 
+        if name.endswith("depthwise.weight"):
+            array = numpy.transpose(array, axes=(2, 0, 1))
+            transpose = False
+
+        if name.endswith("pointwise.weight"):
+            array = numpy.transpose(array, axes=(2, 1, 0))
+            transpose = False
+
+        if name.endswith("conv_attn_key.bias"):
+            array = numpy.squeeze(array)
+            transpose = False
+
+        if 1 == 1:
+            if name.endswith("intermediate.dense.weight") or name.endswith("output.dense.weight"):
+                if not name.endswith("attention.output.dense.weight"):
+                    print(name)
+                    transpose = False
+
         if transpose:
             array = numpy.transpose(array)
+
+        print(sw_name)
+        print(list(symbolic_weight.shape))
+        print(list(array.shape))
 
         if len(symbolic_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)
