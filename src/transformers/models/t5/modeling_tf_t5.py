@@ -1207,7 +1207,7 @@ class TFT5Model(TFT5PreTrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = (tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,)
+        pkv = tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1437,7 +1437,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         )
 
     def serving_output(self, output):
-        pkv = (tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None,)
+        pkv = tf.convert_to_tensor(output.past_key_values[1:]) if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
