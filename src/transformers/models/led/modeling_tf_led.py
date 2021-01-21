@@ -1739,9 +1739,6 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
-    def get_embed_tokens(self):
-        return self.embed_tokens
-
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -1764,19 +1761,14 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         Args:
             input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.LEDTokenizer`. See
+                provide it. Indices can be obtained using :class:`~transformers.LEDTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
+                for details. `What are input IDs? <../glossary.html#input-ids>`__
             attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-
                 `What are attention masks? <../glossary.html#attention-mask>`__
             encoder_hidden_states (:obj:`tf.Tensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
@@ -1787,13 +1779,10 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
-
                 `What are attention masks? <../glossary.html#attention-mask>`__
             past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
-                decoding.
-
-                If :obj:`past_key_values` are used, the user can optionally input only the last
+                decoding. If :obj:`past_key_values` are used, the user can optionally input only the last
                 :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
                 shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
                 sequence_length)`.
@@ -1848,9 +1837,18 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 
         hidden_states = inputs["inputs_embeds"]
 
-        inputs["attention_mask"], combined_attention_mask = self.compute_combined_attns_mask(
-            inputs, input_shape, past_key_values_length
-        )
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
+        else:
+            combined_attention_mask = _expand_mask(
+                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
+            )
+
+        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
+            combined_attention_mask = combined_attention_mask + _expand_mask(
+                inputs["attention_mask"], tgt_len=input_shape[-1]
+            )
 
         if inputs["encoder_hidden_states"] is not None and inputs["encoder_attention_mask"] is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1860,15 +1858,13 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = () if inputs["output_hidden_states"] else None
-        all_self_attns = () if inputs["output_attentions"] else None
-        present_key_values = () if inputs["use_cache"] else None
-
+        all_hidden_states = ()
+        all_self_attns = ()
+        present_key_values = ()
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
-
             dropout_probability = random.uniform(0, 1)
 
             if inputs["training"] and (dropout_probability < self.layerdrop):
@@ -1892,12 +1888,12 @@ class TFLEDDecoder(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
+        else:
+            all_hidden_states = None
 
-        if inputs["output_attentions"]:
-            all_self_attns = list(all_self_attns)
+        all_self_attns = list(all_self_attns) if inputs["output_attentions"] else None
 
-        if inputs["use_cache"]:
-            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
+        present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
 
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns
@@ -1908,33 +1904,6 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 hidden_states=all_hidden_states,
                 attentions=all_self_attns,
             )
-
-    @tf.function
-    def compute_combined_attns_mask(self, inputs, input_shape, past_key_values_length):
-        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
-
-        if inputs["attention_mask"] is None and inputs["input_ids"] is not None and input_shape[-1] > 1:
-            attention_mask = tf.cast(
-                tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), inputs["input_ids"].dtype
-            )
-            attention_mask = tf.concat(
-                [
-                    tf.ones((input_shape[0], past_key_values_length), dtype=attention_mask.dtype),
-                    attention_mask,
-                ],
-                axis=-1,
-            )
-        else:
-            attention_mask = tf.ones((input_shape[0], input_shape[1] + past_key_values_length), dtype=tf.int32)
-
-        return attention_mask, combined_attention_mask
 
 
 @keras_serializable
