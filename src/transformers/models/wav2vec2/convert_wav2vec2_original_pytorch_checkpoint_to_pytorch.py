@@ -27,7 +27,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 MAPPING = {
-    "post_extract_proj": "wav2vec2.feature_extractor.output.projection",
+    "post_extract_proj": "wav2vec2.feature_projection.projection",
     "encoder.pos_conv.0": "wav2vec2.encoder.pos_conv_embed.conv",
     "self_attn.k_proj": "wav2vec2.encoder.layers.*.attention.key",
     "self_attn.v_proj": "wav2vec2.encoder.layers.*.attention.value",
@@ -38,7 +38,7 @@ MAPPING = {
     "fc2": "wav2vec2.encoder.layers.*.output.dense",
     "final_layer_norm": "wav2vec2.encoder.layers.*.output.layer_norm",
     "encoder.layer_norm": "wav2vec2.encoder.layer_norm",
-    "w2v_model.layer_norm": "wav2vec2.feature_extractor.output.layer_norm",
+    "w2v_model.layer_norm": "wav2vec2.feature_projection.layer_norm",
     "w2v_encoder.proj": "lm_head",
 }
 

@@ -127,11 +127,15 @@ class Wav2Vec2PositionalConvEmbedding(nn.Module):
         self.padding = Wav2Vec2SamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(
-        self,
-        hidden_states=None,  # ...
-    ):
-        pass
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.transpose(1, 2)
+
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.padding(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
 
 
 class Wav2Vec2SamePadLayer(nn.Module):
@@ -166,19 +170,15 @@ class Wav2Vec2FeatureExtractor(nn.Module):
         else:
             raise ValueError("...")
 
-        self.output = Wav2Vec2FeatureExtractorOutput(config)
-
     def forward(self, input_ids):
         hidden_states = input_ids[:, None]
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
 
-        hidden_states = self.output(hidden_states)
-
         return hidden_states
 
 
-class Wav2Vec2FeatureExtractorOutput(nn.Module):
+class Wav2Vec2FeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
@@ -221,12 +221,7 @@ class Wav2Vec2Attention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(
-        self,
-        hidden_states,
-        # ...
-    ):
-        # TODO(PVP)
+    def forward(self, hidden_states):
         pass
 
 
@@ -270,27 +265,31 @@ class Wav2Vec2EncoderLayer(nn.Module):
         # TODO(PVP)
         pass
 
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
-
 
 class Wav2Vec2Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
-        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # IMPORTANT: the param for dropout is probs wrong
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(
-        self,
-        hidden_states,
-        # ...
-    ):
-        # TODO(PVP)
-        pass
+    def forward(self, hidden_states):
+        position_embeddings = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        # IMPORTANT: those transpose ops can probs be deleted (there are unnecessary I think)
+        hidden_states = hidden_states.transpose(0, 1)
+        for layer in self.layers:
+            hidden_states = layer(hidden_states)
+
+        # IMPORTANT: those transpose ops can probs be deleted (there are unnecessary I think)
+        hidden_states = hidden_states.transpose(0, 1)
+        return hidden_states
 
 
 class Wav2Vec2PredictionHeadTransform(nn.Module):
@@ -391,26 +390,17 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         super().__init__(config)
         self.config = config
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
+        self.feature_projection = Wav2Vec2FeatureProjection(config)
         #        self.quantizer = Wav2Vec2Quantizer(config) TODO(PVP): is this only required for Training?
         self.encoder = Wav2Vec2Encoder(config)
 
         self.init_weights()
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
-
-    def forward(
-        self,
-        input_ids=None,
-        # ...
-    ):
-        # TODO(PVP)
-        pass
+    def forward(self, input_ids):
+        hidden_states = self.feature_extractor(input_ids)
+        hidden_states = self.feature_projection(hidden_states)
+        hidden_states = self.encoder(hidden_states)
+        return hidden_states
 
 
 @add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
