@@ -233,22 +233,8 @@ class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
     def test_saved_model_creation(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    def test_saved_model_creation_extended(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
+        # This test is too long (>30sec) and makes fail the CI
         pass
 
     def test_resize_token_embeddings(self):

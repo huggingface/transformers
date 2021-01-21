@@ -322,6 +322,7 @@ def input_processing(func, config, input_ids, **kwargs):
     """
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
+    signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
@@ -346,6 +347,8 @@ def input_processing(func, config, input_ids, **kwargs):
             f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
         )
 
+    kwargs.pop("kwargs_call")
+
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
@@ -356,8 +359,8 @@ def input_processing(func, config, input_ids, **kwargs):
         for i, input in enumerate(input_ids):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
             if type(input) == tf.Tensor:
-                # Tensor names have always the pattern name:device_id then we check only the
-                # name and not the device id
+                # Tensor names have always the pattern `name:id` then we check only the
+                # `name` part
                 tensor_name = input.name.split(":")[0]
 
                 if tensor_name in parameter_names:

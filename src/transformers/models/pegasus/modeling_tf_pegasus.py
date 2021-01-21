@@ -23,6 +23,7 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
+    add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -445,31 +446,6 @@ class TFPegasusPreTrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.get_input_embeddings
-    def get_input_embeddings(self):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        return base_model.shared
-
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartPretrainedModel.set_input_embeddings
-    def set_input_embeddings(self, value):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        try:
-            base_model.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            base_model.shared.weight = value
-
-        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
-
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
-        base_model.encoder.set_embed_tokens(embed_tokens)
-        base_model.decoder.set_embed_tokens(embed_tokens)
-
     @tf.function(
         input_signature=[
             {
@@ -631,6 +607,9 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
         self.layers = [TFPegasusEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
+    def get_embed_tokens(self):
+        return self.embed_tokens
+
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -769,6 +748,9 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
+
+    def get_embed_tokens(self):
+        return self.embed_tokens
 
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
@@ -946,16 +928,14 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
             )
 
 
-@add_start_docstrings(
-    "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
-    PEGASUS_START_DOCSTRING,
-)
 @keras_serializable
-class TFPegasusModel(TFPegasusPreTrainedModel):
-    base_model_prefix = "model"
+class TFPegasusMainLayer(tf.keras.layers.Layer):
+    config_class = PegasusConfig
 
-    def __init__(self, config: PegasusConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+    def __init__(self, config: PegasusConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        self.config = config
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
@@ -969,14 +949,20 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
         self.encoder = TFPegasusEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFPegasusDecoder(config, embed_tokens, name="decoder")
 
-    def get_encoder(self):
-        return self.encoder
+    def get_input_embeddings(self):
+        return self.shared
 
-    def get_decoder(self):
-        return self.decoder
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        self.shared.vocab_size = self.shared.weight.shape[0]
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
 
-    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=TFSeq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids=None,
@@ -994,22 +980,6 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
         training=False,
         **kwargs
     ):
-        r"""
-        Returns:
-
-        Example::
-
-            >>> from transformers import PegasusTokenizer, TFPegasusModel
-
-            >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
-            >>> model = TFPegasusModel.from_pretrained("google/pegasus-large")
-
-            >>> input_ids = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="tf").input_ids  # Batch size 1
-            >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
-            >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-
-            >>> last_hidden_states = outputs.last_hidden_state
-        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -1086,9 +1056,87 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
 
+
+@add_start_docstrings(
+    "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
+    PEGASUS_START_DOCSTRING,
+)
+class TFPegasusModel(TFPegasusPreTrainedModel):
+    def __init__(self, config: PegasusConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.model = TFPegasusMainLayer(config, name="model")
+
+    def get_encoder(self):
+        return self.model.encoder
+
+    def get_decoder(self):
+        return self.model.decoder
+
+    @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="google/pegasus-large",
+        output_type=TFSeq2SeqModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs
+    ):
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        outputs = self.model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            past_key_values=inputs["past_key_values"],
+            inputs_embeds=inputs["inputs_embeds"],
+            decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        return outputs
+
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartModel.serving_output
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1117,7 +1165,7 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.model = TFPegasusModel(config, name="model")
+        self.model = TFPegasusMainLayer(config, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
@@ -1234,7 +1282,7 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel):
 
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.serving_output
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
