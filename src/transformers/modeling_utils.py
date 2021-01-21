@@ -441,6 +441,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         self.config = config
         self.name_or_path = config.name_or_path
 
+        # Tie weights again if needed
+        self.tie_weights()
+
     @property
     def base_model(self) -> nn.Module:
         """
