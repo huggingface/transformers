@@ -256,6 +256,8 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+    test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = ConvBertModelTester(self)
