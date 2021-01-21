@@ -2437,7 +2437,11 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             # global attention on cls token
             inputs["global_attention_mask"] = tf.zeros_like(inputs["input_ids"])
             updates = tf.ones(shape_list(inputs["input_ids"])[0], dtype=tf.int32)
-            indices = tf.pad(tensor=tf.expand_dims(tf.range(shape_list(inputs["input_ids"])[0]), axis=1), paddings=[[0,0],[0,1]], constant_values=0)
+            indices = tf.pad(
+                tensor=tf.expand_dims(tf.range(shape_list(inputs["input_ids"])[0]), axis=1),
+                paddings=[[0, 0], [0, 1]],
+                constant_values=0,
+            )
             inputs["global_attention_mask"] = tf.tensor_scatter_nd_update(
                 inputs["global_attention_mask"],
                 indices,
