@@ -411,29 +411,6 @@ class TFBartPretrainedModel(TFPreTrainedModel):
         }
         return dummy_inputs
 
-    def get_input_embeddings(self):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        return base_model.shared
-
-    def set_input_embeddings(self, value):
-        base_model = getattr(self, self.base_model_prefix, self)
-
-        try:
-            base_model.shared.weight = value
-        except AttributeError:
-            self(self.dummy_inputs)
-            base_model.shared.weight = value
-
-        base_model.shared.vocab_size = shape_list(base_model.shared.weight)[0]
-
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
-            pass
-
-        embed_tokens = TFWrappedEmbeddings(base_model.shared, abs_scope_name=shared_abs_scope_name)
-        base_model.encoder.set_embed_tokens(embed_tokens)
-        base_model.decoder.set_embed_tokens(embed_tokens)
-
     @tf.function(
         input_signature=[
             {
@@ -605,6 +582,9 @@ class TFBartEncoder(tf.keras.layers.Layer):
         self.layers = [TFBartEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
 
+    def get_embed_tokens(self):
+        return self.embed_tokens
+
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -744,6 +724,9 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
 
+    def get_embed_tokens(self):
+        return self.embed_tokens
+
     def set_embed_tokens(self, embed_tokens):
         self.embed_tokens = embed_tokens
 
@@ -871,13 +854,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
         hidden_states = self.dropout(hidden_states, training=inputs["training"])
 
         # decoder layers
-        all_hidden_states = ()
-        all_self_attns = ()
-        present_key_values = ()
+        all_hidden_states = () if inputs["output_hidden_states"] else None
+        all_self_attns = () if inputs["output_attentions"] else None
+        present_key_values = () if inputs["use_cache"] else None
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
                 all_hidden_states += (hidden_states,)
+
             dropout_probability = random.uniform(0, 1)
 
             if inputs["training"] and (dropout_probability < self.layerdrop):
@@ -901,12 +886,12 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
         if inputs["output_hidden_states"]:
             all_hidden_states += (hidden_states,)
-        else:
-            all_hidden_states = None
 
-        all_self_attns = list(all_self_attns) if inputs["output_attentions"] else None
+        if inputs["output_attentions"]:
+            all_self_attns = list(all_self_attns)
 
-        present_key_values = (encoder_hidden_states, present_key_values) if inputs["use_cache"] else None
+        if inputs["use_cache"]:
+            present_key_values = (inputs["encoder_hidden_states"], present_key_values)
 
         if not inputs["return_dict"]:
             return hidden_states, present_key_values, all_hidden_states, all_self_attns
@@ -919,16 +904,14 @@ class TFBartDecoder(tf.keras.layers.Layer):
             )
 
 
-@add_start_docstrings(
-    "The bare BART Model outputting raw hidden-states without any specific head on top.",
-    BART_START_DOCSTRING,
-)
 @keras_serializable
-class TFBartModel(TFBartPretrainedModel):
-    base_model_prefix = "model"
+class TFBartMainLayer(tf.keras.layers.Layer):
+    config_class = BartConfig
 
-    def __init__(self, config: BartConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+    def __init__(self, config: BartConfig, **kwargs):
+        super().__init__(**kwargs)
+
+        self.config = config
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
         with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
@@ -942,19 +925,20 @@ class TFBartModel(TFBartPretrainedModel):
         self.encoder = TFBartEncoder(config, embed_tokens, name="encoder")
         self.decoder = TFBartDecoder(config, embed_tokens, name="decoder")
 
-    def get_encoder(self):
-        return self.encoder
+    def get_input_embeddings(self):
+        return self.shared
 
-    def get_decoder(self):
-        return self.decoder
+    def set_input_embeddings(self, new_embeddings):
+        self.shared.weight = new_embeddings
+        self.shared.vocab_size = self.shared.weight.shape[0]
+        # retrieve correct absolute scope for embed token wrapper
+        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+            pass
+        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
+        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
+        self.encoder.set_embed_tokens(embed_tokens)
+        self.decoder.set_embed_tokens(embed_tokens)
 
-    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
-        output_type=TFSeq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     def call(
         self,
         input_ids=None,
@@ -1053,8 +1037,86 @@ class TFBartModel(TFBartPretrainedModel):
             encoder_attentions=inputs["encoder_outputs"].attentions,
         )
 
+
+@add_start_docstrings(
+    "The bare BART Model outputting raw hidden-states without any specific head on top.",
+    BART_START_DOCSTRING,
+)
+class TFBartModel(TFBartPretrainedModel):
+    def __init__(self, config: BartConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.model = TFBartMainLayer(config, name="model")
+
+    def get_encoder(self):
+        return self.model.encoder
+
+    def get_decoder(self):
+        return self.model.decoder
+
+    @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="facebook/bart-large",
+        output_type=TFSeq2SeqModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs
+    ):
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            encoder_outputs=encoder_outputs,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        outputs = self.model(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            decoder_input_ids=inputs["decoder_input_ids"],
+            decoder_attention_mask=inputs["decoder_attention_mask"],
+            encoder_outputs=inputs["encoder_outputs"],
+            past_key_values=inputs["past_key_values"],
+            inputs_embeds=inputs["inputs_embeds"],
+            decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
+            use_cache=inputs["use_cache"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        return outputs
+
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
@@ -1083,7 +1145,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.model = TFBartModel(config, name="model")
+        self.model = TFBartMainLayer(config, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
@@ -1199,7 +1261,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel):
         )
 
     def serving_output(self, output):
-        pkv = (tf.tuple(output.past_key_values)[1] if self.config.use_cache else None,)
+        pkv = tf.tuple(output.past_key_values)[1] if self.config.use_cache else None
         dec_hs = tf.convert_to_tensor(output.decoder_hidden_states) if self.config.output_hidden_states else None
         dec_attns = tf.convert_to_tensor(output.decoder_attentions) if self.config.output_attentions else None
         enc_hs = tf.convert_to_tensor(output.encoder_hidden_states) if self.config.output_hidden_states else None
