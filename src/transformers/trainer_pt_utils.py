@@ -385,10 +385,13 @@ class LabelSmoother:
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
 
+        padding_mask = labels.eq(self.ignore_index)
+        # In case the ignore_index is -100, the gather will fail, so we replace labels by 0. The padding_mask
+        # will ignore them in any case.
+        labels = torch.where(padding_mask, torch.tensor(0), labels)
         nll_loss = log_probs.gather(dim=-1, index=labels)
         smoothed_loss = log_probs.sum(dim=-1, keepdim=True)
 
-        padding_mask = labels.eq(self.ignore_index)
         nll_loss.masked_fill_(padding_mask, 0.0)
         smoothed_loss.masked_fill_(padding_mask, 0.0)
 

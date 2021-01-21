@@ -71,7 +71,7 @@ class TrainerUtilsTest(unittest.TestCase):
         random_logits = torch.randn(4, 5, num_labels)
         random_labels = torch.randint(0, num_labels, (4, 5))
         loss = torch.nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
-        model_output = SequenceClassifierOutput(loss=loss, logits=random_logits)
+        model_output = SequenceClassifierOutput(logits=random_logits)
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
         log_probs = -torch.nn.functional.log_softmax(random_logits, dim=-1)
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
@@ -83,7 +83,7 @@ class TrainerUtilsTest(unittest.TestCase):
         random_labels[2, 3] = -100
 
         loss = torch.nn.functional.cross_entropy(random_logits.view(-1, num_labels), random_labels.view(-1))
-        model_output = SequenceClassifierOutput(loss=loss, logits=random_logits)
+        model_output = SequenceClassifierOutput(logits=random_logits)
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
         log_probs = -torch.nn.functional.log_softmax(random_logits, dim=-1)
         # Mask the log probs with the -100 labels
