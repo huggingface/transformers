@@ -542,7 +542,7 @@ class TFAlbertMLMHead(tf.keras.layers.Layer):
 
     def call(self, hidden_states):
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.activation(inputs=hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.LayerNorm(inputs=hidden_states)
         seq_length = shape_list(tensor=hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
