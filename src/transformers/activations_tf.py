@@ -15,9 +15,10 @@
 import math
 
 import tensorflow as tf
+from packaging import version
 
 
-def gelu(x):
+def _gelu(x):
     """
     Gaussian Error Linear Unit. Original Implementation of the gelu activation function in Google Bert repo when
     initially created. For information: OpenAI GPT's gelu is slightly different (and gives slightly different results):
@@ -25,12 +26,12 @@ def gelu(x):
     https://arxiv.org/abs/1606.08415
     """
     x = tf.convert_to_tensor(x)
-    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.math.sqrt(2.0)))
+    cdf = 0.5 * (1.0 + tf.math.erf(x / tf.cast(tf.sqrt(2.0), x.dtype)))
 
     return x * cdf
 
 
-def gelu_new(x):
+def _gelu_new(x):
     """
     Gaussian Error Linear Unit. This is a smoother version of the GELU. Original paper: https://arxiv.org/abs/1606.0841
 
@@ -56,21 +57,33 @@ def mish(x):
 
 def gelu_fast(x):
     x = tf.convert_to_tensor(x)
-    coeff1 = tf.cast(7978845608, x.dtype)
+    coeff1 = tf.cast(0.7978845608, x.dtype)
     coeff2 = tf.cast(0.044715, x.dtype)
 
     return 0.5 * x * (1.0 + tf.tanh(x * coeff2 * (1.0 + coeff1 * x * x)))
 
 
+if version.parse(tf.version.VERSION) >= version.parse("2.4"):
+
+    def approximate_gelu_wrap(x):
+        return tf.keras.activations.gelu(x, approximate=True)
+
+    gelu = tf.keras.activations.gelu
+    gelu_new = approximate_gelu_wrap
+else:
+    gelu = _gelu
+    gelu_new = _gelu_new
+
+
 ACT2FN = {
-    "gelu": tf.keras.layers.Activation(gelu),
+    "gelu": gelu,
     "relu": tf.keras.activations.relu,
     "swish": tf.keras.activations.swish,
     "silu": tf.keras.activations.swish,
-    "gelu_new": tf.keras.layers.Activation(gelu_new),
-    "mish": tf.keras.layers.Activation(mish),
+    "gelu_new": gelu_new,
+    "mish": mish,
     "tanh": tf.keras.activations.tanh,
-    "gelu_fast": tf.keras.layers.Activation(gelu_fast),
+    "gelu_fast": gelu_fast,
 }
 
 
