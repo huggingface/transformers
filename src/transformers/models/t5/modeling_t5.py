@@ -491,7 +491,9 @@ class T5Attention(nn.Module):
             # if key and values are already calculated
             # we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -seq_length:, :]
+                # Small optimization for easier export
+                # seq_length == hidden_states.shape[1]
+                position_bias = position_bias[:, :, -hidden_states.shape[1] :, :]
 
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
