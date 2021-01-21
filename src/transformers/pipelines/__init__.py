@@ -136,9 +136,9 @@ SUPPORTED_TASKS = {
         "tf": None,
         "default": {
             "model": {
-                "pt": "nielsr/tapas-base-finetuned-wtq",
-                "tokenizer": "nielsr/tapas-base-finetuned-wtq",
-                "tf": "nielsr/tapas-base-finetuned-wtq",
+                "pt": "google/tapas-base-finetuned-wtq",
+                "tokenizer": "google/tapas-base-finetuned-wtq",
+                "tf": "google/tapas-base-finetuned-wtq",
             },
         },
     },
