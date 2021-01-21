@@ -32,7 +32,7 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         "lysandre/tiny-tapas-random-wtq",
         "lysandre/tiny-tapas-random-sqa",
     ]
-    large_models = ["nielsr/tapas-base-finetuned-wtq"]  # Models tested with the @slow decorator
+    large_models = ["google/tapas-base-finetuned-wtq"]  # Models tested with the @slow decorator
     valid_inputs = [
         {
             "table": {
@@ -214,8 +214,8 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     def test_integration_sqa(self):
         tqa_pipeline = pipeline(
             "table-question-answering",
-            model="nielsr/tapas-base-finetuned-sqa",
-            tokenizer="nielsr/tapas-base-finetuned-sqa",
+            model="google/tapas-base-finetuned-sqa",
+            tokenizer="google/tapas-base-finetuned-sqa",
         )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
