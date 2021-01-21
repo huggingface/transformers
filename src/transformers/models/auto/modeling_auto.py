@@ -62,7 +62,6 @@ from ..camembert.modeling_camembert import (
 
 # Add modeling imports here
 from ..conv_bert.modeling_conv_bert import (
-    ConvBertForCausalLM,
     ConvBertForMaskedLM,
     ConvBertForMultipleChoice,
     ConvBertForQuestionAnswering,
@@ -403,7 +402,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (ConvBertConfig, ConvBertForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),

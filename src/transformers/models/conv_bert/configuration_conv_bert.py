@@ -98,6 +98,10 @@ class ConvBertConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        embedding_size=768,
+        head_ratio=2,
+        conv_kernel_size=9,
+        num_groups=1,
         **kwargs,
     ):
         super().__init__(
@@ -120,3 +124,7 @@ class ConvBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.embedding_size = embedding_size
+        self.head_ratio = head_ratio
+        self.conv_kernel_size = conv_kernel_size
+        self.num_groups = num_groups
