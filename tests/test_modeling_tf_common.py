@@ -184,7 +184,7 @@ class TFModelTesterMixin:
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname, saved_model=True)
-            saved_model_dir = os.path.join(tmpdirname, "saved_model")
+            saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
 
     @slow
@@ -204,7 +204,7 @@ class TFModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model")
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
                 self.assertTrue(os.path.exists(saved_model_dir))
 
     @slow
@@ -223,8 +223,8 @@ class TFModelTesterMixin:
             num_out = len(model(class_inputs_dict))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model")
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
                 model = tf.keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
@@ -263,8 +263,8 @@ class TFModelTesterMixin:
             num_out = len(model(class_inputs_dict))
 
             with tempfile.TemporaryDirectory() as tmpdirname:
-                saved_model_dir = os.path.join(tmpdirname, "saved_model")
-                model.save_pretrained(saved_model_dir)
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
                 model = tf.keras.models.load_model(saved_model_dir)
                 outputs = model(class_inputs_dict)
 
