@@ -8,7 +8,7 @@ from .modeling_tf_conv_bert import TFConvBertModel
 from .tokenization_conv_bert import ConvBertTokenizer
 
 
-model_path = "/home/abhishek/convbert_models/convbert_medium_small"
+model_path = "/home/abhishek/convbert_models/convbert_base"
 
 if __name__ == "__main__":
     conf = ConvBertConfig.from_json_file(os.path.join(model_path, "config.json"))
@@ -18,11 +18,11 @@ if __name__ == "__main__":
 
     model = load_tf_weights_in_conv_bert(model, conf, tf_checkpoint_path)
     model.eval()
-    model.save_pretrained(model_path)
+    # model.save_pretrained(model_path)
 
     tf_model = TFConvBertModel.from_pretrained(model_path, from_pt=True)
     tf_model.trainable = False
-    tf_model.save_pretrained(model_path)
+    # tf_model.save_pretrained(model_path)
 
     # symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
     # for symbolic_weight in symbolic_weights:

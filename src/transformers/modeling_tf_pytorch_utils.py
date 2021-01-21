@@ -192,7 +192,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             array = numpy.squeeze(array)
             transpose = False
 
-        if 1 == 1:
+        if 1 == 0:
             if name.endswith("intermediate.dense.weight") or name.endswith("output.dense.weight"):
                 if not name.endswith("attention.output.dense.weight"):
                     print(name)

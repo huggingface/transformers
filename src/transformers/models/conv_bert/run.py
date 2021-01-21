@@ -10,8 +10,7 @@ from .tokenization_conv_bert import ConvBertTokenizer
 
 if __name__ == "__main__":
     model_path = "YituTech/conv-bert-medium-small"
-    conf = ConvBertConfig.from_pretrained(model_path)
-    model = ConvBertModel(conf)
+    model = ConvBertModel.from_pretrained(model_path)
     model.eval()
     # model = load_tf_weights_in_conv_bert(model, conf, tf_checkpoint_path)
     # model.save_pretrained(model_path)
@@ -36,6 +35,5 @@ if __name__ == "__main__":
         print(symbolic_weight)
         break
 
-    # print(tf_model(inputs_tf).last_hidden_state)
-
-    # print(model(**inputs_pt).last_hidden_state)
+    print(tf_model(inputs_tf).last_hidden_state)
+    print(model(**inputs_pt).last_hidden_state)
