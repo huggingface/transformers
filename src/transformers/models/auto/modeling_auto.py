@@ -21,17 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-from ..conv_bert.modeling_conv_bert import (
-    ConvBertForMaskedLM,
-    ConvBertForCausalLM,
-    ConvBertForMultipleChoice,
-    ConvBertForQuestionAnswering,
-    ConvBertForSequenceClassification,
-    ConvBertForTokenClassification,
-    ConvBertModel,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -69,6 +58,17 @@ from ..camembert.modeling_camembert import (
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
+)
+
+# Add modeling imports here
+from ..conv_bert.modeling_conv_bert import (
+    ConvBertForCausalLM,
+    ConvBertForMaskedLM,
+    ConvBertForMultipleChoice,
+    ConvBertForQuestionAnswering,
+    ConvBertForSequenceClassification,
+    ConvBertForTokenClassification,
+    ConvBertModel,
 )
 from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
 from ..deberta.modeling_deberta import (
@@ -235,7 +235,6 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
-    ConvBertConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -244,6 +243,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
     DistilBertConfig,
@@ -366,7 +366,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(ConvBertConfig, ConvBertForMaskedLM),
+        (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -403,7 +403,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-(ConvBertConfig, ConvBertForCausalLM),
+        (ConvBertConfig, ConvBertForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
@@ -427,7 +427,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(ConvBertConfig, ConvBertForMaskedLM),
+        (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
@@ -541,7 +541,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(ConvBertConfig, ConvBertForTokenClassification),
+        (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
@@ -566,7 +566,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(ConvBertConfig, ConvBertForMultipleChoice),
+        (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),

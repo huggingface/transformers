@@ -1242,7 +1242,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1269,6 +1268,7 @@ if TYPE_CHECKING:
         BlenderbotSmallTokenizer,
     )
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+    from .models.conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -1388,12 +1388,12 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.conv_bert import ConvBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
         from .models.camembert import CamembertTokenizerFast
+        from .models.conv_bert import ConvBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
         from .models.dpr import DPRContextEncoderTokenizerFast, DPRQuestionEncoderTokenizerFast, DPRReaderTokenizerFast
         from .models.electra import ElectraTokenizerFast
@@ -1426,20 +1426,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.conv_bert import (
-            CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvBertForMaskedLM,
-            ConvBertForCausalLM,
-            ConvBertForMultipleChoice,
-            ConvBertForQuestionAnswering,
-            ConvBertForSequenceClassification,
-            ConvBertForTokenClassification,
-            ConvBertLayer,
-            ConvBertModel,
-            ConvBertPreTrainedModel,
-            load_tf_weights_in_conv_bert,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1569,6 +1555,19 @@ if TYPE_CHECKING:
             CamembertForSequenceClassification,
             CamembertForTokenClassification,
             CamembertModel,
+        )
+        from .models.conv_bert import (
+            CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvBertForCausalLM,
+            ConvBertForMaskedLM,
+            ConvBertForMultipleChoice,
+            ConvBertForQuestionAnswering,
+            ConvBertForSequenceClassification,
+            ConvBertForTokenClassification,
+            ConvBertLayer,
+            ConvBertModel,
+            ConvBertPreTrainedModel,
+            load_tf_weights_in_conv_bert,
         )
         from .models.ctrl import (
             CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -1860,19 +1859,6 @@ if TYPE_CHECKING:
     # TensorFlow
     if is_tf_available():
 
-        from .models.conv_bert import (
-            TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFConvBertForMaskedLM,
-            TFConvBertForCausalLM,
-            TFConvBertForMultipleChoice,
-            TFConvBertForQuestionAnswering,
-            TFConvBertForSequenceClassification,
-            TFConvBertForTokenClassification,
-            TFConvBertLayer,
-            TFConvBertModel,
-            TFConvBertPreTrainedModel,
-        )
-
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
         # Benchmarks
@@ -1940,6 +1926,18 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+        )
+        from .models.conv_bert import (
+            TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFConvBertForCausalLM,
+            TFConvBertForMaskedLM,
+            TFConvBertForMultipleChoice,
+            TFConvBertForQuestionAnswering,
+            TFConvBertForSequenceClassification,
+            TFConvBertForTokenClassification,
+            TFConvBertLayer,
+            TFConvBertModel,
+            TFConvBertPreTrainedModel,
         )
         from .models.ctrl import (
             TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,

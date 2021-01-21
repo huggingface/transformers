@@ -14,10 +14,9 @@
 # limitations under the License.
 
 
-
 import unittest
 
-from transformers import is_tf_available, ConvBertConfig
+from transformers import ConvBertConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -137,7 +136,7 @@ class TFConvBertModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_lm_head(
-            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.is_decoder = True
         model = TFConvBertForCausalLM(config=config)
@@ -292,6 +291,7 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFConvBertModel.from_pretrained("conv-bert-base")
         self.assertIsNotNone(model)
 
+
 @require_tf
 class TFConvBertModelIntegrationTest(unittest.TestCase):
     @slow
@@ -319,5 +319,3 @@ class TFConvBertModelIntegrationTest(unittest.TestCase):
             ]
         )
         tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
-
-

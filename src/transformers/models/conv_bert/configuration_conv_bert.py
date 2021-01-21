@@ -33,9 +33,10 @@ class ConvBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.ConvBertModel`. It is used to
     instantiate an ConvBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ConvBERT `conv-bert-base
-    <https://huggingface.co/conv-bert-base>`__ architecture.
-    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
+    <https://huggingface.co/conv-bert-base>`__ architecture. Configuration objects inherit from
+    :class:`~transformers.PretrainedConfig` and can be used to control the model outputs. Read the documentation from
+    :class:`~transformers.PretrainedConfig` for more information.
+
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the ConvBERT model. Defines the number of different tokens that can be represented by
@@ -67,6 +68,7 @@ class ConvBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+
     Example::
         >>> from transformers import ConvBertModel, ConvBertConfig
         >>> # Initializing a ConvBERT convbert-base-uncased style configuration

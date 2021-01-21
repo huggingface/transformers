@@ -16,7 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available, is_tokenizers_available
+
+from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
     "configuration_conv_bert": ["CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig"],
     "tokenization_conv_bert": ["ConvBertTokenizer"],
@@ -41,7 +44,6 @@ if is_torch_available():
     ]
 
 
-
 if is_tf_available():
     _import_structure["modeling_tf_conv_bert"] = [
         "TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -57,8 +59,6 @@ if is_tf_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
     from .tokenization_conv_bert import ConvBertTokenizer
@@ -69,8 +69,8 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_conv_bert import (
             CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvBertForMaskedLM,
             ConvBertForCausalLM,
+            ConvBertForMaskedLM,
             ConvBertForMultipleChoice,
             ConvBertForQuestionAnswering,
             ConvBertForSequenceClassification,
@@ -81,13 +81,11 @@ if TYPE_CHECKING:
             load_tf_weights_in_conv_bert,
         )
 
-
-
     if is_tf_available():
         from .modeling_tf_conv_bert import (
             TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFConvBertForMaskedLM,
             TFConvBertForCausalLM,
+            TFConvBertForMaskedLM,
             TFConvBertForMultipleChoice,
             TFConvBertForQuestionAnswering,
             TFConvBertForSequenceClassification,

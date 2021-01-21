@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN
+from ...activations import ACT2FN, get_activation
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -33,7 +33,6 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
-    BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -52,6 +51,7 @@ from ...utils import logging
 from .configuration_conv_bert import ConvBertConfig
 from .param_mapping import fetch_mapping
 
+
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ConvBertConfig"
@@ -68,9 +68,6 @@ CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
-        import re
-
-        import numpy as np
         import tensorflow as tf
     except ImportError:
         logger.error(
@@ -129,7 +126,6 @@ class ConvBertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.forward
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -187,7 +183,7 @@ class ConvBertSelfAttention(nn.Module):
 
         new_num_attention_heads = int(config.num_attention_heads / config.head_ratio)
         if new_num_attention_heads < 1:
-            self.head_ratio = num_attention_heads
+            self.head_ratio = config.num_attention_heads
             num_attention_heads = 1
         else:
             num_attention_heads = new_num_attention_heads
@@ -231,7 +227,6 @@ class ConvBertSelfAttention(nn.Module):
     ):
         mixed_query_layer = self.query(hidden_states)
         batch_size = hidden_states.size(0)
-        seqlen = hidden_states.size(1)
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
@@ -637,14 +632,15 @@ class ConvBertPreTrainedModel(PreTrainedModel):
 
 
 CONV_BERT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.ConvBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 CONV_BERT_INPUTS_DOCSTRING = r"""
@@ -652,37 +648,40 @@ CONV_BERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.ConvBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.ConvBertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-            
+
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
-            
+
+
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
-            
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-            
+
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-            
+
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -1053,8 +1052,10 @@ class ConvBertClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """ConvBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    ConvBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     CONV_BERT_START_DOCSTRING,
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
@@ -1088,9 +1089,8 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1133,8 +1133,10 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ConvBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    ConvBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     CONV_BERT_START_DOCSTRING,
 )
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
@@ -1171,9 +1173,9 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1224,8 +1226,10 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ConvBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    ConvBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     CONV_BERT_START_DOCSTRING,
 )
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
@@ -1261,8 +1265,8 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1310,8 +1314,10 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ConvBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    ConvBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     CONV_BERT_START_DOCSTRING,
 )
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
@@ -1350,12 +1356,12 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -26,8 +26,8 @@ from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
-from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..conv_bert.tokenization_conv_bert import ConvBertTokenizer
+from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
 from ..distilbert.tokenization_distilbert import DistilBertTokenizer
 from ..dpr.tokenization_dpr import DPRQuestionEncoderTokenizer

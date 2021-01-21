@@ -40,11 +40,9 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class ConvBertTokenizer(BertTokenizer):
     r"""
-    Construct a ConvBERT tokenizer.
-    :class:`~transformers.ConvBertTokenizer` is identical to :class:`~transformers.BertTokenizer` and runs end-to-end
-    tokenization: punctuation splitting and wordpiece.
-    Refer to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning
-    parameters.
+    Construct a ConvBERT tokenizer. :class:`~transformers.ConvBertTokenizer` is identical to
+    :class:`~transformers.BertTokenizer` and runs end-to-end tokenization: punctuation splitting and wordpiece. Refer
+    to superclass :class:`~transformers.BertTokenizer` for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -57,9 +55,8 @@ class ConvBertTokenizerFast(BertTokenizerFast):
     r"""
     Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's `tokenizers` library).
     :class:`~transformers.ConvBertTokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
-    parameters.
+    end-to-end tokenization: punctuation splitting and wordpiece. Refer to superclass
+    :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
