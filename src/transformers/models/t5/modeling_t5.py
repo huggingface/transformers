@@ -38,10 +38,14 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer, recursive_to
 from ...utils import logging
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_t5 import T5Config
+
+from torch.distributed.pipeline.sync import Pipe
+
+from ...modeling_utils import pipe_none_or_empty_to_torch, pipe_torch_to_none_or_empty, pipe_encode_all, pipe_decode_all
 
 
 logger = logging.get_logger(__name__)
@@ -774,6 +778,103 @@ class T5PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
+class T5StackPipeSegment(nn.Module):
+    def __init__(self, idx, layer_module, is_decoder, head_mask, output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add):
+        super().__init__()
+        #self.batch_id = 0
+        self.idx = idx
+        self.layer_module = layer_module
+        self.is_decoder = is_decoder
+        self.head_mask = head_mask
+        #self.past_key_value = past_key_value
+        self.output_hidden_states = output_hidden_states
+        self.use_cache = use_cache
+        self.output_attentions = output_attentions
+        self.all_hidden_states_add = all_hidden_states_add
+        self.present_key_value_states_add = present_key_value_states_add
+        self.all_attentions_add = all_attentions_add
+        self.all_cross_attentions_add = all_cross_attentions_add
+
+    def forward(self, inputs):
+        inputs = pipe_decode_all(inputs, inputs[0].shape[0], inputs[0].device)
+        hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = inputs
+        idx = self.idx
+
+        #self.past_key_value = recursive_to(inputs[0].device, self.past_key_value)
+        self.head_mask = recursive_to(inputs[0].device, self.head_mask)
+
+        # crazy restore: XXX: fix hardcoded numbers - 6 for number of blocks - 4 should always be there
+        if past_key_values_p1 is not None and past_key_values_p2 is not None:
+            past_key_value = (past_key_values_p1.chunk(6, 1)[self.idx].chunk(2, 1) +
+                              past_key_values_p2.chunk(6, 1)[self.idx].chunk(2, 1))
+        else:
+            past_key_value = None
+
+        # if self.past_key_value is not None:
+        #     past_key_value = tuple(self.past_key_value[i][self.batch_id] for i in self.past_key_value)
+        # else:
+        #     past_key_value=None
+        # self.batch_id += 1
+
+        # # restore None's if any
+        # position_bias = None if len(position_bias.shape) == 1  else position_bias
+        # encoder_hidden_states = None if len(encoder_hidden_states.shape) == 1  else encoder_hidden_states
+        # encoder_attention_mask = None if len(encoder_attention_mask.shape) == 1 else encoder_attention_mask
+        # encoder_decoder_position_bias = None if len(encoder_decoder_position_bias.shape) == 1 else encoder_decoder_position_bias
+
+        # all_hidden_states = () if torch.is_tensor(all_hidden_states) and len(all_hidden_states.shape) == 1 else all_hidden_states
+        # present_key_value_states = () if torch.is_tensor(present_key_value_states) and len(present_key_value_states.shape) == 1  else present_key_value_states
+        # all_attentions = () if len(all_attentions.shape) == 1 else all_attentions
+        # all_cross_attentions = () if len(all_cross_attentions.shape) == 1 else all_cross_attentions
+
+
+        if self.output_hidden_states:
+            self.all_hidden_states_add(hidden_states)
+
+        layer_outputs = self.layer_module(hidden_states,
+                attention_mask=attention_mask,
+                position_bias=position_bias,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                encoder_decoder_position_bias=encoder_decoder_position_bias,
+                head_mask=self.head_mask,
+                past_key_value=past_key_value,
+                use_cache=self.use_cache,
+                output_attentions=self.output_attentions)
+        # layer_outputs is a tuple with:
+        # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        hidden_states, present_key_value_state = layer_outputs[:2]
+
+        # We share the position biases between the layers - the first layer store them
+        # layer_outputs = hidden-states, key-value-states (self-attention weights),
+        # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
+        position_bias = layer_outputs[2]
+        if self.is_decoder and encoder_hidden_states is not None:
+            encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
+        # append next layer key value states
+        if self.use_cache:
+            self.present_key_value_states_add(present_key_value_state)
+
+        if self.output_attentions:
+            self.all_attentions_add(layer_outputs[3])
+            if self.is_decoder:
+                self.all_cross_attentions_add(layer_outputs[5])
+
+        #tnone = torch.tensor([float('nan')]*out_shape)
+        # tnone = torch.tensor([-100]*out_shape).to(hidden_states.device)
+        # position_bias = tnone if position_bias is None else position_bias
+        # encoder_hidden_states = tnone if encoder_hidden_states is None else encoder_hidden_states
+        # encoder_attention_mask = tnone if encoder_attention_mask is None else encoder_attention_mask
+        # encoder_decoder_position_bias = tnone if encoder_decoder_position_bias is None else encoder_decoder_position_bias
+        # all_hidden_states = tnone if all_hidden_states is None else all_hidden_states
+        # present_key_value_states = tnone if present_key_value_states is None else present_key_value_states
+        # all_attentions = tnone if all_attentions is None else all_attentions
+        # all_cross_attentions = tnone if all_cross_attentions is None else all_cross_attentions
+
+        outputs = (hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias)
+        outputs = pipe_encode_all(outputs, hidden_states.shape[0], hidden_states.device)
+        return outputs
+
 class T5Stack(T5PreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
@@ -784,46 +885,15 @@ class T5Stack(T5PreTrainedModel):
         self.block = nn.ModuleList(
             [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
+
+        #self.is_pipeline = False
+        self.is_pipeline = True
+
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
-        # Model parallel
         self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.block))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for layer in v:
-                cuda_device = "cuda:" + str(k)
-                self.block[layer] = self.block[layer].to(cuda_device)
-
-        # Set embed_tokens to first layer
-        self.embed_tokens = self.embed_tokens.to(self.first_device)
-        # Set final layer norm to last device
-        self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        for i in range(len(self.block)):
-            self.block[i] = self.block[i].to("cpu")
-        self.embed_tokens = self.embed_tokens.to("cpu")
-        self.final_layer_norm = self.final_layer_norm.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -893,8 +963,8 @@ class T5Stack(T5PreTrainedModel):
             )
 
         # initialize past_key_values with `None` if past does not exist
-        if past_key_values is None:
-            past_key_values = [None] * len(self.block)
+        #if past_key_values is None:
+        #    past_key_values = [None] * len(self.block)
 
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape, inputs_embeds.device)
@@ -915,63 +985,80 @@ class T5Stack(T5PreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
-        for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
-            # Model parallel
-            if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
-                # Ensure that attention_mask is always on the same device as hidden_states
-                if attention_mask is not None:
-                    attention_mask = attention_mask.to(hidden_states.device)
-                if position_bias is not None:
-                    position_bias = position_bias.to(hidden_states.device)
-                if encoder_hidden_states is not None:
-                    encoder_hidden_states = encoder_hidden_states.to(hidden_states.device)
-                if encoder_extended_attention_mask is not None:
-                    encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
-                if encoder_decoder_position_bias is not None:
-                    encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        def all_hidden_states_add(x):
+            nonlocal all_hidden_states
+            all_hidden_states += (x,)
+        def present_key_value_states_add(x):
+            nonlocal present_key_value_states
+            present_key_value_states += (x,)
+            #print(x.shape for x in present_key_value_states)
+            #print(present_key_value_states)
+        def all_attentions_add(x):
+            nonlocal all_attentions
+            all_attentions += (x,)
+        def all_cross_attentions_add(x):
+            nonlocal all_cross_attentions
+            all_cross_attentions += (x,)
 
-            layer_outputs = layer_module(
-                hidden_states,
-                attention_mask=extended_attention_mask,
-                position_bias=position_bias,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attention_mask=encoder_extended_attention_mask,
-                encoder_decoder_position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask[i],
-                past_key_value=past_key_value,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-            # layer_outputs is a tuple with:
-            # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            hidden_states, present_key_value_state = layer_outputs[:2]
+        # crazy flattening of 2 level tuples so that the batch dimension is first to be spliced upon and then restored on the other side
+        if past_key_values is not None:
+            x1 = tuple(past_key_values[i][j] for i in range(len(past_key_values)) for j in [0,1])
+            #for i in x1: print(i.shape)
+            x2 = tuple(past_key_values[i][j] for i in range(len(past_key_values)) for j in [2,3])
+            #for i in x2: print(i.shape)
+            past_key_values_p1 = torch.cat(x1, 1)
+            past_key_values_p2 = torch.cat(x2, 1)
+            #input = torch.cat(tuple(past_key_values[i][j] for i in range(len(past_key_values)) for j in range(len(past_key_values[i]))), 1)
+        else:
+            past_key_values_p1 = None
+            past_key_values_p2 = None
 
-            # We share the position biases between the layers - the first layer store them
-            # layer_outputs = hidden-states, key-value-states (self-attention weights),
-            # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            position_bias = layer_outputs[2]
-            if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
-            # append next layer key value states
-            if use_cache:
-                present_key_value_states = present_key_value_states + (present_key_value_state,)
+        # rewrite the model after pre-trained weights were loaded
+        layers = [T5StackPipeSegment(idx, layer_module, self.is_decoder, head_mask[idx], output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add) for idx, layer_module in enumerate(self.block)]
+        self.block_sequential = nn.Sequential(*layers)
 
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
-                if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+        # for now don't enable the pipe
+        if self.is_pipeline:
+            # XXX: switch pipe segments to other devices
+            device_idx = 0
+            segments = len(self.block_sequential)
+            #print(f"segments: {segments}")
+            #for i, layer in enumerate(self.block_sequential):
+            #    layer.to(0) # XXX: change to multiple GPUs when things work on one gpu
+            layers0 = nn.Sequential(self.block_sequential[0:3]).to(0)
+            layers1 = nn.Sequential(self.block_sequential[3:6]).to(0)
+            self.block_sequential = nn.Sequential(layers0, layers1)
 
-            # Model Parallel: If it's the last layer for that device, put things on the next device
-            if self.model_parallel:
-                for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
+            self.block_pipe = Pipe(self.block_sequential, chunks=1, checkpoint="never")
+
+        inputs = (hidden_states, extended_attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_extended_attention_mask, encoder_decoder_position_bias)
+        #, all_hidden_states, present_key_value_states, all_attentions, all_cross_attentions)
+        inputs = pipe_encode_all(inputs, batch_size, input_ids.device)
+
+        if self.is_pipeline:
+            outputs = self.block_pipe(inputs)
+            outputs = outputs.local_value()
+            outputs = recursive_to(input_ids.device, outputs)
+        else:
+            outputs = self.block_sequential(inputs)
+
+        outputs = pipe_decode_all(outputs, batch_size, input_ids.device)
+        hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = outputs
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
+
+        # if self.is_pipeline and present_key_value_states is not None:
+        #     new_x = ()
+        #     x = list(present_key_value_states)
+        #     for i in range(int(len(present_key_value_states)/2)):
+        #         new_y = ()
+        #         a = x[i*2]
+        #         b = x[i*2+1]
+        #         for j in range(len(a)):
+        #             new_y += (torch.cat((a[j].to(0), b[j].to(0)), 0),)
+        #         new_x += (new_y,)
+        #     present_key_value_states = new_x
 
         # Add last layer
         if output_hidden_states:

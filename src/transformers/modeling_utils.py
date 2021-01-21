@@ -1785,3 +1785,65 @@ def apply_chunking_to_forward(
         return torch.cat(output_chunks, dim=chunk_dim)
 
     return forward_fn(*input_tensors)
+
+def recursive_to(device, item):
+    """
+    Switch any tensors found in `item` to `device`. Currently can handle a single tensor, or any of the nested list,
+    tuple and dict structures.
+    """
+
+    if torch.is_tensor(item):
+        return item.to(device)
+
+    elif isinstance(item, list):
+        for i, x in enumerate(item):
+            item[i] = recursive_to(device, x)
+        return item
+
+    elif isinstance(item, tuple):
+        return tuple(recursive_to(device, list(item)))
+
+    elif isinstance(item, dict):
+        for k, v in item.items():
+            item[k] = recursive_to(device, v)
+        return item
+
+    else:
+        return item
+
+#tnone = torch.tensor([float('nan')]*batch_size)
+def pipe_none_or_empty_to_torch(x, batch_size, device):
+    tnone = torch.tensor([-100]*batch_size).to(device)
+    tempty = torch.empty(0).to(device)
+    if x is None:
+        return tnone.to(device)
+    if x == ():
+        return tempty.to(device)
+    return x
+
+def pipe_torch_to_none_or_empty(x, batch_size, device):
+    tnone = torch.tensor([-100]*batch_size).to(device)
+    #tempty = torch.empty(0).to(device)
+    # if torch.is_tensor(x):
+    #     print(x.shape, x)
+    # else:
+    #     print(x)
+    if torch.is_tensor(x) and x.shape[0] == batch_size:
+        if not x.numel():
+            return ()
+        # print(x.numel(), batch_size, x, tnone)
+        if x.shape == tnone.shape and all(x == tnone):
+            return None
+    return x
+
+def pipe_encode_all(input, batch_size, device):
+    input = list(input)
+    for i, x in enumerate(input):
+        input[i] = pipe_none_or_empty_to_torch(x, batch_size, device)
+    return tuple(input)
+
+def pipe_decode_all(input, batch_size, device):
+    input = list(input)       
+    for i, x in enumerate(input):
+        input[i] = pipe_torch_to_none_or_empty(x, batch_size, device)
+    return tuple(input)
