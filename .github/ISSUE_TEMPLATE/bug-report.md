@@ -44,7 +44,7 @@ Library:
 - text generation: @patrickvonplaten
 - tokenizers: @n1t0, @LysandreJik
 - trainer: @sgugger
-- pipelines: @LysandreJik 
+- pipelines: @LysandreJik
 
 Documentation: @sgugger
 
