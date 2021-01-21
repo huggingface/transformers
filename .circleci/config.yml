@@ -421,15 +421,15 @@ workflows:
             - run_tests_git_lfs
             - build_doc
             - deploy_doc: *workflow_filters
-    tpu_testing_jobs:
-        triggers:
-            - schedule:
-                # Set to run at the first minute of every hour.
-                cron: "0 8 * * *"
-                filters:
-                    branches:
-                        only:
-                            - master
-        jobs:
-            - cleanup-gke-jobs
-            - run_examples_tpu
+#    tpu_testing_jobs:
+#        triggers:
+#            - schedule:
+#                # Set to run at the first minute of every hour.
+#                cron: "0 8 * * *"
+#                filters:
+#                    branches:
+#                        only:
+#                            - master
+#        jobs:
+#            - cleanup-gke-jobs
+#            - run_examples_tpu
