@@ -28,7 +28,8 @@ assignees: ''
 Models:
 
 - albert, bert, xlm: @LysandreJik
-- blenderbot, bart, marian, pegasus, encoderdecoder, longformer, reformer, t5, transfoxl, xlnet: @patrickvonplaten
+- blenderbot, bart, marian, pegasus, encoderdecoder,  t5: @patrickvonplaten, @patil-suraj
+- longformer, reformer, transfoxl, xlnet: @patrickvonplaten
 - fsmt: @stas00
 - funnel: @sgugger
 - gpt2: @patrickvonplaten, @LysandreJik
