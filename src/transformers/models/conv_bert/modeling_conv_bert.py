@@ -151,9 +151,35 @@ class ConvBertEmbeddings(nn.Module):
         return embeddings
 
 
-class SeparableConv1D(nn.Module):
-    def __init__(self, input_filters, output_filters, kernel_size, **kwargs):
-        super().__init__(**kwargs)
+class ConvBertPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = ConvBertConfig
+    load_tf_weights = load_tf_weights_in_conv_bert
+    base_model_prefix = "conv_bert"
+    authorized_missing_keys = [r"position_ids"]
+    authorized_unexpected_keys = [r"conv_bert\.embeddings_project\.weight", r"conv_bert\.embeddings_project\.bias"]
+
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    def _init_weights(self, module):
+        """ Initialize the weights """
+        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
+            module.bias.data.zero_()
+
+
+class SeparableConv1D(ConvBertPreTrainedModel):
+    def __init__(self, config, input_filters, output_filters, kernel_size, **kwargs):
+        super().__init__(config)
         self.depthwise = nn.Conv1d(
             input_filters,
             input_filters,
@@ -165,8 +191,9 @@ class SeparableConv1D(nn.Module):
         self.pointwise = nn.Conv1d(input_filters, output_filters, kernel_size=1, bias=False)
         self.bias = nn.Parameter(torch.zeros(output_filters, 1))
 
-        nn.init.zeros_(self.depthwise.weight)
-        nn.init.zeros_(self.pointwise.weight)
+        # nn.init.zeros_(self.depthwise.weight)
+        # nn.init.zeros_(self.pointwise.weight)
+        self.init_weights()
 
     def forward(self, x):
         x = self.depthwise(x)
@@ -204,7 +231,9 @@ class ConvBertSelfAttention(nn.Module):
         self.key = nn.Linear(config.hidden_size, self.all_head_size)
         self.value = nn.Linear(config.hidden_size, self.all_head_size)
 
-        self.key_conv_attn_layer = SeparableConv1D(config.hidden_size, self.all_head_size, self.conv_kernel_size)
+        self.key_conv_attn_layer = SeparableConv1D(
+            config, config.hidden_size, self.all_head_size, self.conv_kernel_size
+        )
         self.conv_kernel_layer = nn.Linear(self.all_head_size, self.num_attention_heads * self.conv_kernel_size)
         self.conv_out_layer = nn.Linear(config.hidden_size, self.all_head_size)
 
@@ -624,14 +653,14 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
 
