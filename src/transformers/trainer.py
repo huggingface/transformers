@@ -337,12 +337,15 @@ class Trainer:
         # Setup Sharded DDP training
         self.sharded_dpp = False
         if args.sharded_ddp:
+            if args.deepspeed:
+                raise ValueError(
+                    "Using --sharded_ddp together with --deepspeed is not possible, deactivate one of those flags."
+                )
+
             if args.local_rank == -1:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
-            elif args.deepspeed:
-                raise ValueError("can't use --sharded_ddp together with --deepspeed.")
             else:
                 self.sharded_dpp = True
 
