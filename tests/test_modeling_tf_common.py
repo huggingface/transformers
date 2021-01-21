@@ -438,6 +438,11 @@ class TFModelTesterMixin:
 
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # head_mask and decoder_head_mask has different shapes than other input args
+        if "head_mask" in inputs_dict:
+            del inputs_dict["head_mask"]
+        if "decoder_head_mask" in inputs_dict:
+            del inputs_dict["decoder_head_mask"]
         tf_main_layer_classes = set(
             module_member
             for model_class in self.all_model_classes
