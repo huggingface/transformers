@@ -338,7 +338,7 @@ class Trainer:
         self.sharded_dpp = False
         if args.sharded_ddp:
             if args.deepspeed:
-                raise ValueError("can't use --sharded_ddp together with --deepspeed.")
+                raise ValueError("Using --sharded_ddp together with --deepspeed is not possible, deactivate one of those flags.")
 
             if args.local_rank == -1:
                 raise ValueError("Using sharded DDP only works in distributed training.")
