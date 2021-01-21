@@ -125,6 +125,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.conv_bert": ["CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -275,6 +276,7 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.conv_bert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -360,6 +362,22 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
+    _import_structure["models.conv_bert"].extend(
+        [
+            "CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ConvBertForMaskedLM",
+            "ConvBertForCausalLM",
+            "ConvBertForMultipleChoice",
+            "ConvBertForQuestionAnswering",
+            "ConvBertForSequenceClassification",
+            "ConvBertForTokenClassification",
+            "ConvBertLayer",
+            "ConvBertModel",
+            "ConvBertPreTrainedModel",
+            "load_tf_weights_in_conv_bert",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -816,6 +834,21 @@ if is_tf_available():
         "shape_list",
     ]
     # TensorFlow models structure
+
+    _import_structure["models.conv_bert"].extend(
+        [
+            "TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFConvBertForMaskedLM",
+            "TFConvBertForCausalLM",
+            "TFConvBertForMultipleChoice",
+            "TFConvBertForQuestionAnswering",
+            "TFConvBertForSequenceClassification",
+            "TFConvBertForTokenClassification",
+            "TFConvBertLayer",
+            "TFConvBertModel",
+            "TFConvBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1209,6 +1242,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1354,6 +1388,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.conv_bert import ConvBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1391,6 +1426,20 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.conv_bert import (
+            CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConvBertForMaskedLM,
+            ConvBertForCausalLM,
+            ConvBertForMultipleChoice,
+            ConvBertForQuestionAnswering,
+            ConvBertForSequenceClassification,
+            ConvBertForTokenClassification,
+            ConvBertLayer,
+            ConvBertModel,
+            ConvBertPreTrainedModel,
+            load_tf_weights_in_conv_bert,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1810,6 +1859,19 @@ if TYPE_CHECKING:
 
     # TensorFlow
     if is_tf_available():
+
+        from .models.conv_bert import (
+            TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFConvBertForMaskedLM,
+            TFConvBertForCausalLM,
+            TFConvBertForMultipleChoice,
+            TFConvBertForQuestionAnswering,
+            TFConvBertForSequenceClassification,
+            TFConvBertForTokenClassification,
+            TFConvBertLayer,
+            TFConvBertModel,
+            TFConvBertPreTrainedModel,
+        )
 
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 

@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    conv_bert,
     albert,
     auto,
     bart,
