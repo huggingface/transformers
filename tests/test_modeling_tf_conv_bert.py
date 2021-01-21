@@ -272,6 +272,68 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFConvBertModel.from_pretrained("conv-bert-base")
         self.assertIsNotNone(model)
 
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", self.model_tester.seq_length)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        decoder_key_length = getattr(self.model_tester, "key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        def check_decoder_attentions_output(outputs):
+            out_len = len(outputs)
+            self.assertEqual(out_len % 2, 0)
+            decoder_attentions = outputs.decoder_attentions
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads / 2, decoder_seq_length, decoder_key_length],
+            )
+
+        def check_encoder_attentions_output(outputs):
+            attentions = [
+                t.numpy() for t in (outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions)
+            ]
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads / 2, encoder_seq_length, encoder_key_length],
+            )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["use_cache"] = False
+            config.output_hidden_states = False
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            out_len = len(outputs)
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
+
+            if self.is_encoder_decoder:
+                model = model_class(config)
+                outputs = model(self._prepare_for_class(inputs_dict, model_class))
+                self.assertEqual(config.output_hidden_states, False)
+                check_decoder_attentions_output(outputs)
+
+            # Check that output attentions can also be changed via the config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(config.output_hidden_states, False)
+            check_encoder_attentions_output(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            config.output_hidden_states = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+            self.assertEqual(model.config.output_hidden_states, True)
+            check_encoder_attentions_output(outputs)
+
 
 @require_tf
 class TFConvBertModelIntegrationTest(unittest.TestCase):
