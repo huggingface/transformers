@@ -58,7 +58,6 @@ from ..camembert.modeling_tf_camembert import (
 
 # Add modeling imports here
 from ..conv_bert.modeling_tf_conv_bert import (
-    TFConvBertForCausalLM,
     TFConvBertForMaskedLM,
     TFConvBertForMultipleChoice,
     TFConvBertForQuestionAnswering,
@@ -308,7 +307,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (ConvBertConfig, TFConvBertForCausalLM),
         (BertConfig, TFBertLMHeadModel),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),

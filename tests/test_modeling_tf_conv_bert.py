@@ -27,7 +27,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        TFConvBertForCausalLM,
         TFConvBertForMaskedLM,
         TFConvBertForMultipleChoice,
         TFConvBertForQuestionAnswering,
@@ -135,21 +134,6 @@ class TFConvBertModelTester:
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_lm_head(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        config.is_decoder = True
-        model = TFConvBertForCausalLM(config=config)
-        inputs = {
-            "input_ids": input_ids,
-            "attention_mask": input_mask,
-            "token_type_ids": token_type_ids,
-        }
-        prediction_scores = model(inputs)["logits"]
-        self.parent.assertListEqual(
-            list(prediction_scores.numpy().shape), [self.batch_size, self.seq_length, self.vocab_size]
-        )
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -240,7 +224,6 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TFConvBertModel,
-            TFConvBertForCausalLM,
             TFConvBertForMaskedLM,
             TFConvBertForQuestionAnswering,
             TFConvBertForSequenceClassification,

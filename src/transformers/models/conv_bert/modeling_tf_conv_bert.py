@@ -719,7 +719,7 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -729,31 +729,23 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            position_ids = inputs[3] if len(inputs) > 3 else position_ids
-            head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            return_dict = inputs[8] if len(inputs) > 8 else return_dict
-            assert len(inputs) <= 9, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            position_ids = inputs.get("position_ids", position_ids)
-            head_mask = inputs.get("head_mask", head_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 9, "Too many inputs."
-        else:
-            input_ids = inputs
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
