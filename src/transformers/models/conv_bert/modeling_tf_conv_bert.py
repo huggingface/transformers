@@ -685,8 +685,8 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = value.shape[0]
 
     def _resize_token_embeddings(self, new_num_tokens):
         raise NotImplementedError

@@ -201,10 +201,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
         if transpose:
             array = numpy.transpose(array)
 
-        print(sw_name)
-        print(list(symbolic_weight.shape))
-        print(list(array.shape))
-
         if len(symbolic_weight.shape) < len(array.shape):
             array = numpy.squeeze(array)
         elif len(symbolic_weight.shape) > len(array.shape):
