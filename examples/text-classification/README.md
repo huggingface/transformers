@@ -147,7 +147,7 @@ This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It 
 on a single tesla V100 16GB. The data for XNLI can be downloaded with the following links and should be both saved (and un-zipped) in a
 `$XNLI_DIR` directory.
 
-* [XNLI 1.0](https://www.nyu.edu/projects/bowman/xnli/XNLI-1.0.zip)
+* [XNLI 1.0](https://cims.nyu.edu/~sbowman/xnli/XNLI-1.0.zip)
 * [XNLI-MT 1.0](https://dl.fbaipublicfiles.com/XNLI/XNLI-MT-1.0.zip)
 
 ```bash
