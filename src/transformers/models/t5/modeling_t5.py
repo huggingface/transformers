@@ -779,10 +779,11 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5StackPipeSegment(nn.Module):
-    def __init__(self, idx, layer_module, is_decoder, head_mask, output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add):
+    def __init__(self, idx, n_layers, layer_module, is_decoder, head_mask, output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add):
         super().__init__()
         self.batch_id = -1
         self.idx = idx
+        self.n_layers = n_layers
         self.layer_module = layer_module
         self.is_decoder = is_decoder
         self.head_mask = head_mask
@@ -804,10 +805,10 @@ class T5StackPipeSegment(nn.Module):
         #self.past_key_value = recursive_to(inputs[0].device, self.past_key_value)
         self.head_mask = recursive_to(inputs[0].device, self.head_mask)
 
-        # crazy restore: XXX: fix hardcoded numbers - 6 for number of blocks - 4 should always be there
+        # crazy restore: XXX: fix hardcoded numbers - self.n_layers for number of blocks - 2+2 should always be there
         if past_key_values_p1 is not None and past_key_values_p2 is not None:
-            past_key_value = (past_key_values_p1.chunk(6, 1)[self.idx].chunk(2, 1) +
-                              past_key_values_p2.chunk(6, 1)[self.idx].chunk(2, 1))
+            past_key_value = (past_key_values_p1.chunk(self.n_layers, 1)[self.idx].chunk(2, 1) +
+                              past_key_values_p2.chunk(self.n_layers, 1)[self.idx].chunk(2, 1))
         else:
             past_key_value = None
 
@@ -853,7 +854,7 @@ class T5StackPipeSegment(nn.Module):
             encoder_decoder_position_bias = layer_outputs[4 if self.output_attentions else 3]
         # append next layer key value states
         if self.use_cache:
-            print(idx, self.batch_id)
+            #print(idx, self.batch_id)
             # present_key_values_p1 = torch.tensor([[idx, self.batch_id], [idx, self.batch_id]]).to(hidden_states.device)
             # present_key_values_p2 = torch.tensor([[idx, self.batch_id], [idx, self.batch_id]]).to(hidden_states.device)
             present_key_values_p1 = torch.cat(present_key_value_state[0:2], 1)
@@ -990,11 +991,15 @@ class T5Stack(T5PreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
+        # PP
+        n_layers = len(self.block)
+        n_chunks = 4
+
         def all_hidden_states_add(x):
             nonlocal all_hidden_states
             all_hidden_states += (x,)
 
-        present_key_value_states = [[0 for x in range(2)] for y in range(6)]
+        present_key_value_states = [[0 for x in range(n_chunks)] for y in range(n_layers)]
         def present_key_value_states_add(x, block_id, micro_batch_id):
             nonlocal present_key_value_states
             #present_key_value_states += (x,)
@@ -1002,6 +1007,7 @@ class T5Stack(T5PreTrainedModel):
             #present_key_value_states += (x,)
             #print(x.shape for x in present_key_value_states)
             #print(present_key_value_states)
+
         def all_attentions_add(x):
             nonlocal all_attentions
             all_attentions += (x,)
@@ -1022,38 +1028,58 @@ class T5Stack(T5PreTrainedModel):
             past_key_values_p1 = None
             past_key_values_p2 = None
 
-        # batch_size=2, blocks=6, fixed=2
-        present_key_values_p1 = torch.empty(2, 6*2).to(0)
-        present_key_values_p2 = torch.empty(2, 6*2).to(0)
+        # batch_size=2, blocks=self.n_layers, fixed=2 (2+2 keys)
+        present_key_values_p1 = torch.empty(batch_size, n_layers*2).to(0)
+        present_key_values_p2 = torch.empty(batch_size, n_layers*2).to(0)
 
         # rewrite the model after pre-trained weights were loaded
-        layers = [T5StackPipeSegment(idx, layer_module, self.is_decoder, head_mask[idx], output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add) for idx, layer_module in enumerate(self.block)]
-        self.block_sequential = nn.Sequential(*layers)
+        layers = [T5StackPipeSegment(idx, n_layers, layer_module, self.is_decoder, head_mask[idx], output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add) for idx, layer_module in enumerate(self.block)]
+        #block_sequential = nn.Sequential(*layers)
 
         # for now don't enable the pipe
         if self.is_pipeline:
             # XXX: switch pipe segments to other devices
             device_idx = 0
-            segments = len(self.block_sequential)
+            #segments = len(layers)
             #print(f"segments: {segments}")
-            #for i, layer in enumerate(self.block_sequential):
+            #for i, layer in enumerate(block_sequential):
             #    layer.to(0) # XXX: change to multiple GPUs when things work on one gpu
-            layers0 = nn.Sequential(self.block_sequential[0:3]).to(0)
-            layers1 = nn.Sequential(self.block_sequential[3:6]).to(1)
-            self.block_sequential = nn.Sequential(layers0, layers1)
 
-            self.block_pipe = Pipe(self.block_sequential, chunks=2, checkpoint="never")
+            # XXX: later will have a map - for now just roughly split
+            # XXX: Need to build it once outside the model
+            n_gpus = torch.cuda.device_count()
+            if n_gpus < 2:
+                assert "Need at least 2 gpus to use the pipeline"
+
+            devices = list(range(n_gpus))
+            layer_ids = list(range(n_layers))
+            layer_splits = [layer_ids[i*n_layers // n_gpus: (i+1)*n_layers // n_gpus] for i in range(n_gpus)]
+            for device_id, layer_partition in zip(devices, layer_splits):
+                for layer_id in layer_partition:
+                    #print(f"{layer_id} => {device_id}")
+                    layers[layer_id].to(device_id)
+
+            # XXX: fix this to match the number of GPUs
+            # layers0 = nn.Sequential(block_sequential[0:3]).to(0)
+            # layers1 = nn.Sequential(block_sequential[3:6]).to(1)
+            #block_sequential = nn.Sequential(layers0, layers1)
+            #block_sequential = nn.Sequential(*layer_stack)
+
+            block_sequential = nn.Sequential(*layers)
+            block_pipe = Pipe(block_sequential, chunks=n_chunks, checkpoint="never")
+        else:
+            block_sequential = nn.Sequential(*layers)
 
         inputs = (hidden_states, extended_attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_extended_attention_mask, encoder_decoder_position_bias)
         #, all_hidden_states, present_key_value_states, all_attentions, all_cross_attentions)
         inputs = pipe_encode_all(inputs, batch_size, input_ids.device)
 
         if self.is_pipeline:
-            outputs = self.block_pipe(inputs)
+            outputs = block_pipe(inputs)
             outputs = outputs.local_value()
             outputs = recursive_to(input_ids.device, outputs)
         else:
-            outputs = self.block_sequential(inputs)
+            outputs = block_sequential(inputs)
 
         outputs = pipe_decode_all(outputs, batch_size, input_ids.device)
         hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = outputs
@@ -1061,34 +1087,30 @@ class T5Stack(T5PreTrainedModel):
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        if present_key_values_p1 is not None:
-            x1 = present_key_values_p1.chunk(6, 1)
-            finalx1 = tuple(x.chunk(2, 1) for x in x1)
+        # if present_key_values_p1 is not None:
+        #     x1 = present_key_values_p1.chunk(n_layers, 1)
+        #     finalx1 = tuple(x.chunk(2, 1) for x in x1)
 
-            #present_key_values_p1 = present_key_values_p1.chunk(6, 1).chunk(2, 1)
-            #present_key_values_p2
+        #     #present_key_values_p1 = present_key_values_p1.chunk(n_layers, 1).chunk(2, 1)
+        #     #present_key_values_p2
 
         if self.is_pipeline and present_key_value_states is not None and present_key_value_states[0][0] != 0:
-            print()
+            #print()
+            # reconstruct the flattened tensor to tuple of tuples of tensors
             new_x = ()
             x = present_key_value_states
+            # XXX: check we aren't inserting random garbage for the uneven last batch
             for block in present_key_value_states:
                 new_y = ()
                 for j in (0, 1, 2, 3):
-                    new_y += (torch.cat((block[0][j].to(0), block[1][j].to(0)), 0),)
+                    entries = tuple(block[i][j].to(0) for i in range(n_chunks))
+                    new_y += (torch.cat(entries, 0),)
+                    # new_y += (torch.cat((block[0][j].to(0),
+                    #                      block[1][j].to(0),
+                    #                      block[2][j].to(0),
+                    # ), 0),)
                 new_x += (new_y,)
             present_key_value_states = new_x
-
-            # new_x = ()
-            # x = list(present_key_value_states)
-            # for i in range(int(len(present_key_value_states)/2)):
-            #     new_y = ()
-            #     a = x[i*2]
-            #     b = x[i*2+1]
-            #     for j in range(len(a)):
-            #         new_y += (torch.cat((a[j].to(0), b[j].to(0)), 0),)
-            #     new_x += (new_y,)
-            # present_key_value_states = new_x
 
         # Add last layer
         if output_hidden_states:
