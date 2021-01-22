@@ -278,23 +278,9 @@ def booleans_processing(config, **kwargs):
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
-
     else:
-        if (
-            kwargs["output_attentions"] is not None
-            or kwargs["output_hidden_states"] is not None
-            or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
-        ):
-            tf.print(
-                "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
-                "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
-            )
-
         final_booleans["output_attentions"] = config.output_attentions
         final_booleans["output_hidden_states"] = config.output_hidden_states
-
-        if kwargs["return_dict"] is not None:
-            tf.print("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
