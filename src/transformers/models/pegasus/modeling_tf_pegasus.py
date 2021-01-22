@@ -601,6 +601,10 @@ PEGASUS_INPUTS_DOCSTRING = r"""
             output_attentions (:obj:`bool`, `optional`): Whether or not to return the attentions tensors of all
             attention layers. See ``attentions`` under returned tensors for more detail. This argument can be used only
             in eager mode, in graph mode the value in the config will be used instead.
+        output_attentions (:obj:`bool`, `optional`):
+            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
