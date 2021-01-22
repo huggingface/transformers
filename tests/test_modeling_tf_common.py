@@ -272,7 +272,7 @@ class TFModelTesterMixin:
                 else:
                     output = outputs["attentions"]
 
-                self.assertEqual(len(output), num_out)
+                self.assertEqual(len(outputs), num_out)
                 self.assertEqual(len(output), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(output[0].shape[-3:]),
