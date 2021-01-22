@@ -91,6 +91,7 @@ class TFTrainer:
             None,
             None,
         ),
+        predict_batch=True，
     ):
         self.model = model
         self.args = args
@@ -124,6 +125,8 @@ class TFTrainer:
             )
 
         set_seed(self.args.seed)
+        
+        self.__use_prediction_batch=predict_batch
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
         """
@@ -303,13 +306,26 @@ class TFTrainer:
         logger.info("  Num examples = %d", num_examples)
         logger.info("  Batch size = %d", self.args.eval_batch_size)
 
-        label_ids: np.ndarray = None
-        preds: np.ndarray = None
+        #label_ids: np.ndarray = None
+        #preds: np.ndarray = None
         self.eval_loss = tf.keras.metrics.Sum()
 
         # Reset the past mems state at the beginning of the evaluation if necessary.
         if self.args.past_index >= 0:
             self._past = None
+
+        # the numpy.append function is not suitable for large evaluation/test dataset
+        # which will cause "memory blocking issue" becasue numpy array requires continous memory
+        # and will try to re-allocate a ram space when the current capacity is not enough
+        # this procedure is quite low: tested when data set size  is larger than 10K
+
+        # we need to use the concatenate strategy or bacth generator strategy.
+
+        preds=[]
+        label_ids=[]
+        def merge_replica(tensor:PerReplica):
+            vals=[val.numpy() for val in tensor.values]
+            return np.concatenate(vals, axis=0)
 
         for step, batch in enumerate(dataset):
             logits = self.distributed_prediction_steps(batch)
@@ -323,47 +339,61 @@ class TFTrainer:
                     labels = labels[0]
 
                 if self.args.n_replicas > 1:
-                    for val in logits.values:
-                        if preds is None:
-                            preds = val.numpy()
-                        else:
-                            preds = np.append(preds, val.numpy(), axis=0)
-
-                    for val in labels.values:
-                        if label_ids is None:
-                            label_ids = val.numpy()
-                        else:
-                            label_ids = np.append(label_ids, val.numpy(), axis=0)
+                    preds.append(merge_replica(logits))
+                    label_ids.append(merge_replica(labels))
                 else:
-                    if preds is None:
-                        preds = logits.numpy()
-                    else:
-                        preds = np.append(preds, logits.numpy(), axis=0)
-
-                    if label_ids is None:
-                        label_ids = labels.numpy()
-                    else:
-                        label_ids = np.append(label_ids, labels.numpy(), axis=0)
+                    preds.append(logits.numpy())
+                    label_ids.append(labels.numpy())
 
                 if step == steps:
                     break
+        if self.__use_prediction_batch==False:
+            preds=np.concatenate(preds, axis=0)
+            label_ids=np.concatenate(label_ids, axis=0)
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
-            metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
+            # the metric strategy
+            if self.__use_prediction_batch:
+                metrics=[]
+                for i in range(len(preds)):
+                    metrics.append(
+                        self.compute_metrics(EvalPrediction(predictions=preds[i], label_ids=label_ids[i]))
+                    )
+            else:
+                metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
+        
+        # the metrics strategy
+        # the evaluate loss is shared for all batch data
+        shared_evaluate_loss=self.eval_loss.result().numpy() / steps
 
-        metrics["eval_loss"] = self.eval_loss.result().numpy() / steps
+        def post_process_helper(metric):
+            metric["eval_loss"] = shared_evaluate_loss
+            for key in list(metric.keys()):
+                if not key.startswith("eval_"):
+                    metric[f"eval_{key}"] = metric.pop(key)
 
-        for key in list(metrics.keys()):
-            if not key.startswith("eval_"):
-                metrics[f"eval_{key}"] = metrics.pop(key)
+        if self.__use_prediction_batch:
+            list(map(post_process_helper, metrics))
+        else:
+            post_process_helper(metrics)
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
 
-        return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
+        # the return strategy
+        if self.__use_prediction_batch:
+            keys=metrics[0].keys()
+            score={}
+            for k in keys:
+                val=[metrics[i][k] for i in range(len(metrics))]
+                score[k]=np.sum(val)/len(metrics)
+            return PredictionOutput(predictions=iter(preds), label_ids=iter(label_ids), metrics=score)
+            
+        else:
+            return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
     def log(self, logs: Dict[str, float]) -> None:
         """
