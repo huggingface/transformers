@@ -12,7 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
+import tempfile
 import unittest
 
 from transformers import ConvBertConfig, is_tf_available
@@ -269,6 +270,36 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
+
+    @slow
+    def test_saved_model_with_attentions_output(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_attentions = True
+        config.output_hidden_states = False
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = False
+
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                model = tf.keras.models.load_model(os.path.join(tmpdirname, "saved_model", "1"))
+                outputs = model(class_inputs_dict)
+                output = outputs["attentions"]
+
+                self.assertEqual(len(outputs), num_out)
+                self.assertEqual(len(output), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(output[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads / 2, encoder_seq_length, encoder_key_length],
+                )
 
     @slow
     def test_model_from_pretrained(self):
