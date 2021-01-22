@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 import json
+from itertools import groupby
 
+import datasets
 import fairseq
 import numpy as np
 import torch
 
-import soundfile as sf
 from transformers import Wav2Vec2ForMaskedLM
 
 
@@ -105,8 +106,8 @@ def test_all(example_wav):
     print("Succeded full model test")
 
 
-input_data, sample_rate = sf.read("../add_wav2vec/data/LibriSpeech/dev-clean/652/130726/652-130726-0001.flac")
-input_wav = torch.from_numpy(input_data)[None, :].to(torch.float32)
+dummy_speech_data = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+input_wav = torch.tensor(dummy_speech_data[0]["speech"])[None, :]
 
 # test(input_wav)
 
@@ -117,7 +118,10 @@ class Decoder:
         self.look_up = np.asarray(list(self.dict.keys()))
 
     def decode(self, ids):
-        return self.look_up[ids]
+        converted_tokens = self.look_up[ids]
+        fused_tokens = [tok[0] for tok in groupby(converted_tokens)]
+        output = " ".join("".join("".join(fused_tokens).split("<s>")).split("|"))
+        return output
 
 
 fsq_output = model(source=input_wav, padding_mask=None)["encoder_out"]
@@ -125,7 +129,7 @@ hf_output = hf_model(input_wav)
 argmax_logits = torch.argmax(hf_output[0], axis=-1)
 
 decoder = Decoder("../add_wav2vec/data/hf_dict.json")
-predict_lettels = decoder.decode(argmax_logits)
+prediction = decoder.decode(argmax_logits)
 
 import ipdb
 
