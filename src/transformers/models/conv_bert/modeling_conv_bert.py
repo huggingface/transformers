@@ -951,7 +951,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="conv-bert-base",
+        checkpoint="YituTech/conv-bert-base",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1035,7 +1035,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="conv-bert-base",
+        checkpoint="YituTech/conv-bert-base",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1127,7 +1127,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="conv-bert-base",
+        checkpoint="YituTech/conv-bert-base",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1216,7 +1216,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="conv-bert-base",
+        checkpoint="YituTech/conv-bert-base",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

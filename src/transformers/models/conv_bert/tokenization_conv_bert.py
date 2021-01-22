@@ -24,17 +24,17 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "conv-bert-base": "https://huggingface.co/conv-bert-base-uncased/resolve/main/vocab.txt",
+        "YituTech/conv-bert-base": "https://huggingface.co/conv-bert-base-uncased/resolve/main/vocab.txt",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "conv-bert-base": 512,
+    "YituTech/conv-bert-base": 512,
 }
 
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "conv-bert-base-uncased": {"do_lower_case": False},
+    "YituTech/conv-bert-base": {"do_lower_case": True},
 }
 
 

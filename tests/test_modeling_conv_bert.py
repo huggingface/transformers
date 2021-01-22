@@ -417,7 +417,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
 class ConvBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = ConvBertForMaskedLM.from_pretrained("conv-bert-base")
+        model = ConvBertForMaskedLM.from_pretrained("YituTech/conv-bert-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

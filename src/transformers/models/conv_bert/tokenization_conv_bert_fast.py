@@ -29,7 +29,7 @@ VOCAB_FILES_NAMES = {}
 PRETRAINED_VOCAB_FILES_MAP = {}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "conv-bert-base": 1024,
+    "YituTech/conv-bert-base": 1024,
 }
 
 
@@ -56,7 +56,7 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
         eos_token="<|endoftext|>",
         add_prefix_space=False,
         trim_offsets=True,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(
             ByteLevelBPETokenizer(
