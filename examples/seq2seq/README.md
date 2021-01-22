@@ -22,14 +22,98 @@ For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.
 
 ### Supported Architectures
 
-- `BartForConditionalGeneration` (and anything that inherits from it)
+- `BartForConditionalGeneration`
 - `MarianMTModel`
 - `PegasusForConditionalGeneration`
 - `MBartForConditionalGeneration`
 - `FSMTForConditionalGeneration`
 - `T5ForConditionalGeneration`
 
-## Datasets
+This directory is in a bit of messy state and is undergoing some cleaning, please bare with us in the meantime :-) Here are the instructions to use the new and old scripts for fine-tuning sequence-to-sequence models.
+
+## New script
+
+The new script for fine-tuning a model on a summarization or translation task is `run_seq2seq.py`. It is a lightweight example of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (json or csv), then fine-tune one of the architectures above on it.
+
+Here is an example on a summarization task:
+```bash
+python examples/seq2seq/run_seq2seq.py \
+    --model_name_or_path t5-small \
+    --do_train \
+    --do_eval \
+    --task summarization \
+    --dataset_name xsum \
+    --output_dir ~/tmp/tst-summarization \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --predict_with_generate
+```
+
+And here is how you would use it on your own files (replace `path_to_csv_or_json_file`, `text_column_name` and `summary_column_name` by the relevant values):
+```bash
+python examples/seq2seq/run_seq2seq.py \
+    -model_name_or_path t5-small \
+    --do_train \
+    --do_eval \
+    --task summarization \
+    --train_file path_to_csv_or_json_file \
+    --validation_file path_to_csv_or_json_file \
+    --output_dir ~/tmp/tst-summarization \
+    --overwrite_output_dir \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --predict_with_generate \
+    --text_column text_column_name \
+    --summary_column summary_column_name 
+```
+The training and validation files should have a column for the inputs texts and a column for the summaries.
+
+Here is an example of a translation fine-tuning:
+```bash
+python examples/seq2seq/run_seq2seq.py \
+    --model_name_or_path sshleifer/student_marian_en_ro_6_1 \
+    --do_train \
+    --do_eval \
+    --task translation_en_to_ro \
+    --dataset_name wmt16 \
+    --dataset_config_name ro-en \
+    --source_lang en-XX \
+    --target_lang ro-RO\
+    --output_dir ~/tmp/tst-translation \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --predict_with_generate
+```
+
+And here is how you would use it on your own files (replace `path_to_json_file`, by the relevant values):
+```bash
+python examples/seq2seq/run_seq2seq.py \
+    --model_name_or_path sshleifer/student_marian_en_ro_6_1 \
+    --do_train \
+    --do_eval \
+    --task translation_en_to_ro \
+    --dataset_name wmt16 \
+    --dataset_config_name ro-en \
+    --source_lang en-XX \
+    --target_lang ro-RO\
+    --train_file path_to_json_file \
+    --validation_file path_to_json_file \
+    --output_dir ~/tmp/tst-translation \
+    --per_device_train_batch_size=4 \
+    --per_device_eval_batch_size=4 \
+    --overwrite_output_dir \
+    --predict_with_generate
+```
+Here the files are expected to be JSON files, with each input being a dictionary with a key `"translation"` containing one key per language (here `"en"` and `"ro"`).
+
+## Old script
+
+The new script is very new and hasn't been widely tested yet. It also misses a few functionality offered by the old
+script, which is why we are leaving the old script here for now.
+
+### Downlowd the Datasets
 
 #### XSUM
 
