@@ -70,7 +70,7 @@ class TFConvBertModelTester:
         self.use_token_type_ids = True
         self.use_labels = True
         self.vocab_size = 99
-        self.hidden_size = 32
+        self.hidden_size = 768
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
@@ -83,6 +83,10 @@ class TFConvBertModelTester:
         self.initializer_range = 0.02
         self.num_labels = 3
         self.num_choices = 4
+        self.embedding_size = 768
+        self.head_ratio = 2
+        self.conv_kernel_size = 9
+        self.num_groups = 1
         self.scope = None
 
     def prepare_config_and_inputs(self):
