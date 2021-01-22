@@ -13,19 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import re
-import tempfile
 import unittest
-
-import numpy
 
 from transformers import ConvBertConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
-from transformers.testing_utils import is_pt_tf_cross_test
 
 
 if is_tf_available():
@@ -39,7 +33,6 @@ if is_tf_available():
         TFConvBertForTokenClassification,
         TFConvBertModel,
     )
-
 
 
 class TFConvBertModelTester:
