@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
+import json
+
 import fairseq
+import numpy as np
 import torch
 
+import soundfile as sf
 from transformers import Wav2Vec2ForMaskedLM
 
 
 hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
-
 wav2vec_path = "../add_wav2vec/data/wav2vec_small_960h.pt"
 
 model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
@@ -15,9 +18,6 @@ model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
 
 model = model[0]
 model.eval()
-
-# inference
-example_wav = torch.randn([1, 10000])
 
 
 class DummyEncoder(torch.nn.Module):
@@ -29,7 +29,7 @@ class DummyEncoder(torch.nn.Module):
         return self.dummy(x)
 
 
-def test_feature_extractor(hf_feat_extractor, fsq_feat_extract):
+def test_feature_extractor(hf_feat_extractor, fsq_feat_extract, example_wav):
     # set hf_feat_extractor.output to dummy
     fsq_output = fsq_feat_extract(example_wav)
     hf_output = hf_feat_extractor(example_wav)
@@ -40,7 +40,7 @@ def test_feature_extractor(hf_feat_extractor, fsq_feat_extract):
     torch.allclose(hf_output, fsq_output, atol=1e-3)
 
 
-def test_full_feature_extractor(hf_model, fsq_model):
+def test_full_feature_extractor(hf_model, fsq_model, example_wav):
     # set encoder to dummy for hf and fsq
     temp_fsq = fsq_model.encoder
     fsq_model.encoder = DummyEncoder()
@@ -59,7 +59,7 @@ def test_full_feature_extractor(hf_model, fsq_model):
     hf_model.encoder = temp_hf
 
 
-def test_full_encoder(hf_model, fsq_model):
+def test_full_encoder(hf_model, fsq_model, example_wav):
     fsq_output = fsq_model(example_wav, mask=False, features_only=True)["x"]
     hf_output = hf_model(example_wav)
 
@@ -69,9 +69,9 @@ def test_full_encoder(hf_model, fsq_model):
     torch.allclose(hf_output, fsq_output, atol=1e-3)
 
 
-def test_full_model(hf_model, fsq_model):
+def test_full_model(hf_model, fsq_model, example_wav):
     fsq_output = fsq_model(source=example_wav, padding_mask=None)["encoder_out"]
-    hf_output = hf_model(example_wav)
+    hf_output = hf_model(example_wav).transpose(0, 1)
 
     assert (
         hf_output.shape == fsq_output.shape
@@ -79,27 +79,55 @@ def test_full_model(hf_model, fsq_model):
     torch.allclose(hf_output, fsq_output, atol=1e-3)
 
 
-with torch.no_grad():
-    test_feature_extractor(hf_model.wav2vec2.feature_extractor, model.w2v_encoder.w2v_model.feature_extractor)
-print("Succeded 1st part feature extractor Test")
+def test_all(example_wav):
+    with torch.no_grad():
+        test_feature_extractor(
+            hf_model.wav2vec2.feature_extractor, model.w2v_encoder.w2v_model.feature_extractor, example_wav
+        )
+    print("Succeded 1st part feature extractor Test")
+
+    with torch.no_grad():
+        test_full_feature_extractor(hf_model.wav2vec2, model.w2v_encoder.w2v_model, example_wav)
+    print("Succeded full feature extractor Test")
+
+    with torch.no_grad():
+        # IMPORTANT: It is assumed that layer_norm_first is FALSE
+        # This is the case for `wav2vec_small_960h.pt`, but might not be for all models
+        # Adapt if necessary
+        test_full_encoder(hf_model.wav2vec2, model.w2v_encoder.w2v_model, example_wav)
+    print("Succeded full encoder test")
+
+    with torch.no_grad():
+        # IMPORTANT: It is assumed that layer_norm_first is FALSE
+        # This is the case for `wav2vec_small_960h.pt`, but might not be for all models
+        # Adapt if necessary
+        test_full_model(hf_model, model, example_wav)
+    print("Succeded full model test")
 
 
-with torch.no_grad():
-    test_full_feature_extractor(hf_model.wav2vec2, model.w2v_encoder.w2v_model)
-print("Succeded full feature extractor Test")
+input_data, sample_rate = sf.read("../add_wav2vec/data/LibriSpeech/dev-clean/652/130726/652-130726-0001.flac")
+input_wav = torch.from_numpy(input_data)[None, :].to(torch.float32)
+
+# test(input_wav)
 
 
-with torch.no_grad():
-    # IMPORTANT: It is assumed that layer_norm_first is FALSE
-    # This is the case for `wav2vec_small_960h.pt`, but might not be for all models
-    # Adapt if necessary
-    test_full_encoder(hf_model.wav2vec2, model.w2v_encoder.w2v_model)
-print("Succeded full encoder test")
+class Decoder:
+    def __init__(self, path_to_dict):
+        self.dict = json.load(open(path_to_dict))
+        self.look_up = np.asarray(list(self.dict.keys()))
+
+    def decode(self, ids):
+        return self.look_up[ids]
 
 
-with torch.no_grad():
-    # IMPORTANT: It is assumed that layer_norm_first is FALSE
-    # This is the case for `wav2vec_small_960h.pt`, but might not be for all models
-    # Adapt if necessary
-    test_full_model(hf_model, model)
-print("Succeded full model test")
+fsq_output = model(source=input_wav, padding_mask=None)["encoder_out"]
+hf_output = hf_model(input_wav)
+argmax_logits = torch.argmax(hf_output[0], axis=-1)
+
+decoder = Decoder("../add_wav2vec/data/hf_dict.json")
+predict_lettels = decoder.decode(argmax_logits)
+
+import ipdb
+
+
+ipdb.set_trace()

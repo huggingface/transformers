@@ -500,7 +500,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         # WHY SWITCH AXIS HERE AGAIN? DOES NOT MAKE TOO MUCH SENSE IMO
-        logits = logits.transpose(0, 1)
+        #        logits = logits.transpose(0, 1)
         return logits
 
 
