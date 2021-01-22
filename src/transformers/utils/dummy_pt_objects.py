@@ -2092,58 +2092,12 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class Wav2Vec2ForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class Wav2Vec2ForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class Wav2Vec2ForMultipleChoice:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class Wav2Vec2ForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class Wav2Vec2ForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class Wav2Vec2ForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class Wav2Vec2Layer:
-    def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
 
@@ -2163,10 +2117,6 @@ class Wav2Vec2PreTrainedModel:
     @classmethod
     def from_pretrained(self, *args, **kwargs):
         requires_pytorch(self)
-
-
-def load_tf_weights_in_wav2vec2(*args, **kwargs):
-    requires_pytorch(load_tf_weights_in_wav2vec2)
 
 
 XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None

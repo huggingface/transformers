@@ -32,15 +32,8 @@ if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "Wav2Vec2ForMaskedLM",
-        "Wav2Vec2ForCausalLM",
-        "Wav2Vec2ForMultipleChoice",
-        "Wav2Vec2ForQuestionAnswering",
-        "Wav2Vec2ForSequenceClassification",
-        "Wav2Vec2ForTokenClassification",
-        "Wav2Vec2Layer",
         "Wav2Vec2Model",
         "Wav2Vec2PreTrainedModel",
-        "load_tf_weights_in_wav2vec2",
     ]
 
 
@@ -54,16 +47,9 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Wav2Vec2ForCausalLM,
             Wav2Vec2ForMaskedLM,
-            Wav2Vec2ForMultipleChoice,
-            Wav2Vec2ForQuestionAnswering,
-            Wav2Vec2ForSequenceClassification,
-            Wav2Vec2ForTokenClassification,
-            Wav2Vec2Layer,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
-            load_tf_weights_in_wav2vec2,
         )
 
 
