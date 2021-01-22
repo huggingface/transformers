@@ -974,6 +974,8 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         # make sure that local attention probabilities are set to 0 for indices of global attn
+        # When is_global_attn is True, the last dimension is always self.one_sided_attn_window_size * 2 + 1 + 1
+        # because of the concat Line 713.
         attn_probs = tf.where(
             tf.broadcast_to(is_index_global_attn[:, :, None, None], shape_list(attn_probs)),
             tf.zeros(shape_list(attn_probs), dtype=tf.dtypes.float32),
