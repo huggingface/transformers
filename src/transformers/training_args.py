@@ -231,6 +231,9 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+            The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
     """
 
     output_dir: str = field(
@@ -413,6 +416,9 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
     )
+    report_to: Optional[List[str]] = field(
+        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
@@ -434,6 +440,11 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if self.report_to is None:
+            # Import at runtime to avoid a circular import.
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
