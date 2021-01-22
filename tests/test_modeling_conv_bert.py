@@ -417,19 +417,17 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
 class ConvBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = ConvBertForMaskedLM.from_pretrained("YituTech/conv-bert-base")
+        model = ConvBertModel.from_pretrained("YituTech/conv-bert-base")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
+        print(output[:, :3, :3])
 
-        # TODO Replace vocab size
-        vocab_size = 32000
-
-        expected_shape = torch.Size((1, 6, vocab_size))
+        expected_shape = torch.Size((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
 
         # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+            [[[-0.0348, -0.4686, -0.3064], [0.2264, -0.2699, -0.7423], [0.1032, -0.4501, -0.5828]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))

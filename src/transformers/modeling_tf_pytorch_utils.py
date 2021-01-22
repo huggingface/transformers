@@ -42,7 +42,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
           other
     """
-    tf_name = tf_name.replace(":0", "")  # device ids
+    tf_name = tf_name.replace(":0", "")  # device ids]
 
     tf_name = re.sub(
         r"/[^/]*___([^/]*)/", r"/\1/", tf_name
@@ -64,6 +64,10 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name[-1] = "weight"
     if tf_name[-1] == "beta":
         tf_name[-1] = "bias"
+
+    # The SeparableConv1D TF layer contains two weights that are translated to PyTorch Conv1D here
+    if tf_name[-1] == "pointwise_kernel" or tf_name[-1] == "depthwise_kernel":
+        tf_name[-1] = tf_name[-1].replace("_kernel", ".weight")
 
     # Remove prefix if needed
     tf_name = ".".join(tf_name)
