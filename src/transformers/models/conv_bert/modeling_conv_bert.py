@@ -25,14 +25,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, get_activation
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithCrossAttentions,
-    BaseModelOutputWithPastAndCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -165,14 +160,14 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
+        if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
 
@@ -651,14 +646,14 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
+        if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
 
@@ -858,7 +853,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/conv-bert-small-discriminator",
+        checkpoint="YituTech/conv-bert-base",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )

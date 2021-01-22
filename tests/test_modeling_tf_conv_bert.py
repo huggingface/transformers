@@ -13,8 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
+import os
+import re
+import tempfile
 import unittest
+
+import numpy
 
 from transformers import ConvBertConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
@@ -34,6 +38,187 @@ if is_tf_available():
         TFConvBertForTokenClassification,
         TFConvBertModel,
     )
+
+
+def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove=""):
+    """
+    Convert a TF 2.0 model variable name in a pytorch model weight name.
+
+    Conventions for TF2.0 scopes -> PyTorch attribute names conversions:
+
+        - '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
+        - '_._' is replaced by a new level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
+
+    return tuple with:
+
+        - pytorch model weight name
+        - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
+          other
+    """
+    tf_name = tf_name.replace(":0", "")  # device ids
+    # support for ConvBERT model
+    tf_name_split = tf_name.split("/")
+    if tf_name_split[-1] == "depthwise_kernel":
+        tf_name = "/".join(tf_name_split[:-1]) + "/depthwise/weight"
+    if tf_name_split[-1] == "pointwise_kernel":
+        tf_name = "/".join(tf_name_split[:-1]) + "/pointwise/weight"
+    tf_name = re.sub(
+        r"/[^/]*___([^/]*)/", r"/\1/", tf_name
+    )  # '$1___$2' is replaced by $2 (can be used to duplicate or remove layers in TF2.0 vs PyTorch)
+    tf_name = tf_name.replace(
+        "_._", "/"
+    )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
+    tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
+    tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
+    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    if len(tf_name) > 1:
+        tf_name = tf_name[1:]  # Remove level zero
+
+    # When should we transpose the weights
+    transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
+
+    # Convert standard TF2.0 names in PyTorch names
+    if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
+        tf_name[-1] = "weight"
+    if tf_name[-1] == "beta":
+        tf_name[-1] = "bias"
+
+    # Remove prefix if needed
+    tf_name = ".".join(tf_name)
+    if start_prefix_to_remove:
+        tf_name = tf_name.replace(start_prefix_to_remove, "", 1)
+
+    return tf_name, transpose
+
+
+def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_missing_keys=False):
+    """Load pytorch checkpoints in a TF 2.0 model"""
+    pt_state_dict = pt_model.state_dict()
+
+    return load_pytorch_weights_in_tf2_model(
+        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+    )
+
+
+def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False):
+    """Load pytorch state_dict in a TF 2.0 model."""
+    try:
+        import tensorflow as tf  # noqa: F401
+        import torch  # noqa: F401
+        from tensorflow.python.keras import backend as K
+    except ImportError:
+        raise
+
+    if tf_inputs is None:
+        tf_inputs = tf_model.dummy_inputs
+
+    if tf_inputs is not None:
+        tf_model(tf_inputs, training=False)  # Make sure model is built
+    # Adapt state dict - TODO remove this and update the AWS weights files instead
+    # Convert old format to new format if needed from a PyTorch state_dict
+    old_keys = []
+    new_keys = []
+    for key in pt_state_dict.keys():
+        new_key = None
+        if "gamma" in key:
+            new_key = key.replace("gamma", "weight")
+        if "beta" in key:
+            new_key = key.replace("beta", "bias")
+        if new_key:
+            old_keys.append(key)
+            new_keys.append(new_key)
+    for old_key, new_key in zip(old_keys, new_keys):
+        pt_state_dict[new_key] = pt_state_dict.pop(old_key)
+
+    # Make sure we are able to load PyTorch base models as well as derived models (with heads)
+    # TF models always have a prefix, some of PyTorch models (base ones) don't
+    start_prefix_to_remove = ""
+    if not any(s.startswith(tf_model.base_model_prefix) for s in pt_state_dict.keys()):
+        start_prefix_to_remove = tf_model.base_model_prefix + "."
+
+    symbolic_weights = tf_model.trainable_weights + tf_model.non_trainable_weights
+    tf_loaded_numel = 0
+    weight_value_tuples = []
+    all_pytorch_weights = set(list(pt_state_dict.keys()))
+    missing_keys = []
+    for symbolic_weight in symbolic_weights:
+        sw_name = symbolic_weight.name
+        name, transpose = convert_tf_weight_name_to_pt_weight_name(
+            sw_name, start_prefix_to_remove=start_prefix_to_remove
+        )
+
+        # Find associated numpy array in pytorch model state dict
+        if name not in pt_state_dict:
+            if allow_missing_keys:
+                missing_keys.append(name)
+                continue
+            elif tf_model._keys_to_ignore_on_load_missing is not None:
+                # authorized missing keys don't have to be loaded
+                if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
+                    continue
+
+            raise AttributeError("{} not found in PyTorch model".format(name))
+
+        array = pt_state_dict[name].numpy()
+
+        if name.endswith("depthwise.weight"):
+            array = numpy.transpose(array, axes=(2, 0, 1))
+            transpose = False
+
+        if name.endswith("pointwise.weight"):
+            array = numpy.transpose(array, axes=(2, 1, 0))
+            transpose = False
+
+        if name.endswith("conv_attn_key.bias"):
+            array = numpy.squeeze(array)
+            transpose = False
+
+        # if name.endswith("intermediate.dense.weight") or name.endswith("output.dense.weight"):
+        #     if not name.endswith("attention.output.dense.weight"):
+        #         print(name)
+        #         transpose = False
+
+        if transpose:
+            array = numpy.transpose(array)
+
+        if len(symbolic_weight.shape) < len(array.shape):
+            array = numpy.squeeze(array)
+        elif len(symbolic_weight.shape) > len(array.shape):
+            array = numpy.expand_dims(array, axis=0)
+
+        if list(symbolic_weight.shape) != list(array.shape):
+            try:
+                array = numpy.reshape(array, symbolic_weight.shape)
+            except AssertionError as e:
+                e.args += (symbolic_weight.shape, array.shape)
+                raise e
+
+        try:
+            assert list(symbolic_weight.shape) == list(array.shape)
+        except AssertionError as e:
+            e.args += (symbolic_weight.shape, array.shape)
+            raise e
+
+        tf_loaded_numel += array.size
+
+        weight_value_tuples.append((symbolic_weight, array))
+        all_pytorch_weights.discard(name)
+
+    K.batch_set_value(weight_value_tuples)
+
+    if tf_inputs is not None:
+        tf_model(tf_inputs, training=False)  # Make sure restore ops are run
+
+    unexpected_keys = list(all_pytorch_weights)
+
+    if tf_model._keys_to_ignore_on_load_missing is not None:
+        for pat in tf_model._keys_to_ignore_on_load_missing:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+    if tf_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in tf_model._keys_to_ignore_on_load_unexpected:
+            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
+    return tf_model
 
 
 class TFConvBertModelTester:
@@ -70,7 +255,7 @@ class TFConvBertModelTester:
         self.use_token_type_ids = True
         self.use_labels = True
         self.vocab_size = 99
-        self.hidden_size = 768
+        self.hidden_size = 384
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
@@ -83,7 +268,7 @@ class TFConvBertModelTester:
         self.initializer_range = 0.02
         self.num_labels = 3
         self.num_choices = 4
-        self.embedding_size = 768
+        self.embedding_size = 128
         self.head_ratio = 2
         self.conv_kernel_size = 9
         self.num_groups = 1
@@ -337,6 +522,104 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
+
+    def test_pt_tf_model_equivalence(self):
+        from transformers import is_torch_available
+
+        if not is_torch_available():
+            return
+
+        import numpy as np
+        import torch
+
+        import transformers
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class = getattr(transformers, pt_model_class_name)
+
+            config.output_hidden_states = True
+
+            tf_model = model_class(config)
+            pt_model = pt_model_class(config)
+
+            # Check we can load pt model in tf and vice-versa with model => model functions
+
+            tf_model = load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=self._prepare_for_class(inputs_dict, model_class)
+            )
+            pt_model = transformers.load_tf2_model_in_pytorch_model(pt_model, tf_model)
+
+            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            pt_model.eval()
+            pt_inputs_dict = {}
+            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
+                if type(key) == bool:
+                    pt_inputs_dict[name] = key
+                else:
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+
+            # need to rename encoder-decoder "inputs" for PyTorch
+            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
+            with torch.no_grad():
+                pto = pt_model(**pt_inputs_dict)
+            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class), training=False)
+            tf_hidden_states = tfo[0].numpy()
+            pt_hidden_states = pto[0].numpy()
+
+            tf_nans = np.copy(np.isnan(tf_hidden_states))
+            pt_nans = np.copy(np.isnan(pt_hidden_states))
+
+            pt_hidden_states[tf_nans] = 0
+            tf_hidden_states[tf_nans] = 0
+            pt_hidden_states[pt_nans] = 0
+            tf_hidden_states[pt_nans] = 0
+
+            max_diff = np.amax(np.abs(tf_hidden_states - pt_hidden_states))
+            self.assertLessEqual(max_diff, 4e-2)
+
+            # Check we can load pt model in tf and vice-versa with checkpoint => model functions
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                pt_checkpoint_path = os.path.join(tmpdirname, "pt_model.bin")
+                torch.save(pt_model.state_dict(), pt_checkpoint_path)
+                tf_model = transformers.load_pytorch_checkpoint_in_tf2_model(tf_model, pt_checkpoint_path)
+
+                tf_checkpoint_path = os.path.join(tmpdirname, "tf_model.h5")
+                tf_model.save_weights(tf_checkpoint_path)
+                pt_model = transformers.load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path)
+
+            # Check predictions on first output (logits/hidden-states) are close enought given low-level computational differences
+            pt_model.eval()
+            pt_inputs_dict = {}
+            for name, key in self._prepare_for_class(inputs_dict, model_class).items():
+                if type(key) == bool:
+                    key = np.array(key, dtype=bool)
+                    pt_inputs_dict[name] = torch.from_numpy(key).to(torch.long)
+                else:
+                    pt_inputs_dict[name] = torch.from_numpy(key.numpy()).to(torch.long)
+            # need to rename encoder-decoder "inputs" for PyTorch
+            if "inputs" in pt_inputs_dict and self.is_encoder_decoder:
+                pt_inputs_dict["input_ids"] = pt_inputs_dict.pop("inputs")
+
+            with torch.no_grad():
+                pto = pt_model(**pt_inputs_dict)
+            tfo = tf_model(self._prepare_for_class(inputs_dict, model_class))
+            tfo = tfo[0].numpy()
+            pto = pto[0].numpy()
+            tf_nans = np.copy(np.isnan(tfo))
+            pt_nans = np.copy(np.isnan(pto))
+
+            pto[tf_nans] = 0
+            tfo[tf_nans] = 0
+            pto[pt_nans] = 0
+            tfo[pt_nans] = 0
+
+            max_diff = np.amax(np.abs(tfo - pto))
+            self.assertLessEqual(max_diff, 4e-2)
 
 
 @require_tf

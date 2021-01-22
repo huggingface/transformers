@@ -17,8 +17,6 @@
 
 import tensorflow as tf
 
-from transformers.modeling_tf_outputs import TFCausalLMOutput
-
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -35,7 +33,6 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
@@ -593,7 +590,7 @@ class TFConvBertPredictionHeadTransform(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            config.embedding_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -617,6 +614,7 @@ class TFConvBertLMPredictionHead(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
+        self.embedding_size = config.embedding_size
 
         self.transform = TFConvBertPredictionHeadTransform(config, name="transform")
 
@@ -646,7 +644,7 @@ class TFConvBertLMPredictionHead(tf.keras.layers.Layer):
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(tensor=hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
@@ -968,27 +966,86 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
         return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
+class TFConvBertMaskedLMHead(tf.keras.layers.Layer):
+    def __init__(self, config, input_embeddings, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = config.vocab_size
+        self.embedding_size = config.embedding_size
+        self.input_embeddings = input_embeddings
+
+    def build(self, input_shape):
+        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
+        super().build(input_shape)
+
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
+    def call(self, hidden_states):
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
+        return hidden_states
+
+
+class TFConvBertGeneratorPredictions(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dense = tf.keras.layers.Dense(config.embedding_size, name="dense")
+
+    def call(self, generator_hidden_states, training=False):
+        hidden_states = self.dense(generator_hidden_states)
+        hidden_states = get_tf_activation("gelu")(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+
+        return hidden_states
+
+
 @add_start_docstrings("""ConvBERT Model with a `language modeling` head on top. """, CONV_BERT_START_DOCSTRING)
 class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
+        super().__init__(config, **kwargs)
 
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `TFConvBertForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
-            )
-
+        self.vocab_size = config.vocab_size
         self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
-        self.mlm = TFConvBertMLMHead(config, self.conv_bert.embeddings.word_embeddings, name="mlm___cls")
+        self.generator_predictions = TFConvBertGeneratorPredictions(config, name="generator_predictions")
+
+        if isinstance(config.hidden_act, str):
+            self.activation = get_tf_activation(config.hidden_act)
+        else:
+            self.activation = config.hidden_act
+
+        self.generator_lm_head = TFConvBertMaskedLMHead(
+            config, self.conv_bert.embeddings.word_embeddings, name="generator_lm_head"
+        )
 
     def get_lm_head(self):
-        return self.mlm.predictions
+        return self.generator_lm_head
+
+    def get_prefix_bias_name(self):
+        return self.name + "/" + self.generator_lm_head.name
 
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="conv-bert-base",
+        checkpoint="google/electra-small-generator",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1029,8 +1086,8 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.conv_bert(
-            inputs["input_ids"],
+        generator_hidden_states = self.conv_bert(
+            input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
             position_ids=inputs["position_ids"],
@@ -1041,125 +1098,29 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.mlm(sequence_output, training=inputs["training"])
+        generator_sequence_output = generator_hidden_states[0]
+        prediction_scores = self.generator_predictions(generator_sequence_output, training=inputs["training"])
+        prediction_scores = self.generator_lm_head(prediction_scores, training=inputs["training"])
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
         if not inputs["return_dict"]:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + generator_hidden_states[1:]
+
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
             loss=loss,
             logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            hidden_states=generator_hidden_states.hidden_states,
+            attentions=generator_hidden_states.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
-
-
-@add_start_docstrings(
-    """ConvBERT Model with a `language modeling` head on top for CLM fine-tuning. """, CONV_BERT_START_DOCSTRING
-)
-class TFConvBertForCausalLM(TFConvBertPreTrainedModel, TFCausalLanguageModelingLoss):
-    def __init__(self, config, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `TFConvBertForCausalLM` as a standalone, add `is_decoder=True.`")
-
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
-        self.mlm = TFConvBertMLMHead(config, self.conv_bert.embeddings.word_embeddings, name="mlm___cls")
-
-    def get_lm_head(self):
-        return self.mlm.predictions
-
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="conv-bert-base",
-        output_type=TFCausalLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def call(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        labels=None,
-        training=False,
-        **kwargs,
-    ):
-        r"""
-        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
-            config.vocab_size - 1]``.
-        """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            labels=labels,
-            training=training,
-            kwargs_call=kwargs,
-        )
-        outputs = self.conv_bert(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-        )
-        sequence_output = outputs[0]
-        logits = self.mlm(sequence_output, training=inputs["training"])
-        loss = None
-
-        if inputs["labels"] is not None:
-            # shift labels to the left and cut last logit token
-            logits = logits[:, :-1]
-            labels = inputs["labels"][:, 1:]
-            loss = self.compute_loss(labels, logits)
-
-        if not inputs["return_dict"]:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TFCausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFConvBertClassificationHead(tf.keras.layers.Layer):
