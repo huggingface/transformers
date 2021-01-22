@@ -52,7 +52,7 @@ if TYPE_CHECKING:
         )
 
     if is_tf_available():
-        from .modeling_tf_blenderbot import TFBlenderbotForConditionalGeneration, TFBlenderbotModel
+        from .modeling_tf_blenderbot_small import TFBlenderbotSmallForConditionalGeneration, TFBlenderbotSmallModel
 
 else:
     import importlib

@@ -26,6 +26,7 @@ from transformers import (
     AutoTokenizer,
     HfArgumentParser,
     MBartTokenizer,
+    MBartTokenizerFast,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     set_seed,
@@ -220,11 +221,14 @@ def main():
         data_args.eval_beams = model.config.num_beams
 
     # set decoder_start_token_id for MBart
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         assert (
             data_args.tgt_lang is not None and data_args.src_lang is not None
         ), "mBart requires --tgt_lang and --src_lang"
-        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        if isinstance(tokenizer, MBartTokenizer):
+            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        else:
+            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.tgt_lang)
 
     if model_args.freeze_embeds:
         freeze_embeds(model)
@@ -284,7 +288,9 @@ def main():
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=Seq2SeqDataCollator(tokenizer, data_args, training_args.tpu_num_cores),
+        data_collator=Seq2SeqDataCollator(
+            tokenizer, data_args, model.config.decoder_start_token_id, training_args.tpu_num_cores
+        ),
         compute_metrics=compute_metrics_fn,
         tokenizer=tokenizer,
     )
