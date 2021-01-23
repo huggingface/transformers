@@ -120,6 +120,7 @@ class RetrievAugLMMarginOutput(ModelOutput):
     generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
     generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -203,6 +204,7 @@ class RetrievAugLMOutput(ModelOutput):
     generator_enc_attentions: Optional[Tuple[torch.FloatTensor]] = None
     generator_dec_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     generator_dec_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    generator_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class RagPreTrainedModel(PreTrainedModel):
@@ -619,6 +621,7 @@ class RagModel(RagPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            output_attentions=output_attentions,
             return_dict=True,
         )
 
@@ -655,6 +658,7 @@ class RagModel(RagPreTrainedModel):
             generator_enc_attentions=gen_outputs.encoder_attentions,
             generator_dec_hidden_states=gen_outputs.decoder_hidden_states,
             generator_dec_attentions=gen_outputs.decoder_attentions,
+            generator_cross_attentions=gen_outputs.cross_attentions
         )
 
 
@@ -803,6 +807,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             generator_enc_attentions=outputs.generator_enc_attentions,
             generator_dec_hidden_states=outputs.generator_dec_hidden_states,
             generator_dec_attentions=outputs.generator_dec_attentions,
+            generator_cross_attentions=outputs.generator_cross_attentions,
         )
 
     @property
@@ -1264,6 +1269,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             generator_enc_attentions=outputs.generator_enc_attentions,
             generator_dec_hidden_states=outputs.generator_dec_hidden_states,
             generator_dec_attentions=outputs.generator_dec_attentions,
+            generator_cross_attentions=outputs.generator_cross_attentions,
         )
 
     @torch.no_grad()
