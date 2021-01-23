@@ -367,7 +367,6 @@ if is_torch_available():
         [
             "CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ConvBertForMaskedLM",
-            "ConvBertForCausalLM",
             "ConvBertForMultipleChoice",
             "ConvBertForQuestionAnswering",
             "ConvBertForSequenceClassification",
@@ -839,7 +838,6 @@ if is_tf_available():
         [
             "TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFConvBertForMaskedLM",
-            "TFConvBertForCausalLM",
             "TFConvBertForMultipleChoice",
             "TFConvBertForQuestionAnswering",
             "TFConvBertForSequenceClassification",
@@ -1558,7 +1556,6 @@ if TYPE_CHECKING:
         )
         from .models.conv_bert import (
             CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConvBertForCausalLM,
             ConvBertForMaskedLM,
             ConvBertForMultipleChoice,
             ConvBertForQuestionAnswering,
@@ -1929,7 +1926,6 @@ if TYPE_CHECKING:
         )
         from .models.conv_bert import (
             TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFConvBertForCausalLM,
             TFConvBertForMaskedLM,
             TFConvBertForMultipleChoice,
             TFConvBertForQuestionAnswering,

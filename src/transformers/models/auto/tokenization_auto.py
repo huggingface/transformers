@@ -236,7 +236,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
-        (ConvBertConfig, (ConvBertTokenizer, None)),
+        (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
     ]
 )
 

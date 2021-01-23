@@ -307,40 +307,15 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
 
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
-
-        # TODO: remove after testing
-        # value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
-
-        # width = mixed_key_conv_attn_layer.shape[-1]
-        # mixed_key_conv_attn_layer = tf.reshape(mixed_key_conv_attn_layer, [-1, width])
         conv_attn_layer = tf.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
 
-        # paddings = tf.constant(
-        #     [
-        #         [
-        #             0,
-        #             0,
-        #         ],
-        #         [int((self.conv_kernel_size - 1) / 2), int((self.conv_kernel_size - 1) / 2)],
-        #         [0, 0],
-        #     ]
-        # )
-
         conv_out_layer = self.conv_out_layer(hidden_states)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
-        # conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
 
-        # unfold_conv_out_layer = tf.stack(
-        #    [
-        #        tf.slice(conv_out_layer, [0, i, 0], [batch_size, mixed_query_layer.shape[1], self.all_head_size])
-        #        for i in range(self.conv_kernel_size)
-        #    ],
-        #    axis=-1,
-        # )
         conv_out_layer = tf.reshape(
             conv_out_layer, [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size, 1]
         )
@@ -1045,7 +1020,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/electra-small-generator",
+        checkpoint="YituTech/conv-bert-base",
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )

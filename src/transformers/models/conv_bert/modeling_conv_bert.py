@@ -97,8 +97,6 @@ def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
             value = value.permute(2, 1, 0)  # 2, 1, 0
         if tf_name.endswith("/conv_attn_key/bias"):
             value = value.unsqueeze(-1)
-        if value.shape != result.data.shape:
-            print(param_name, tf_name, result.data.shape, value.shape)
         result.data = value
     return model
 
@@ -157,21 +155,22 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     authorized_missing_keys = [r"position_ids"]
     authorized_unexpected_keys = [r"conv_bert\.embeddings_project\.weight", r"conv_bert\.embeddings_project\.bias"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
 
 class SeparableConv1D(ConvBertPreTrainedModel):
+    """This class implements separable convolution, i.e. a depthwise and a pointwise layer"""
+
     def __init__(self, config, input_filters, output_filters, kernel_size, **kwargs):
         super().__init__(config)
         self.depthwise = nn.Conv1d(
@@ -184,9 +183,6 @@ class SeparableConv1D(ConvBertPreTrainedModel):
         )
         self.pointwise = nn.Conv1d(input_filters, output_filters, kernel_size=1, bias=False)
         self.bias = nn.Parameter(torch.zeros(output_filters, 1))
-
-        # nn.init.zeros_(self.depthwise.weight)
-        # nn.init.zeros_(self.pointwise.weight)
         self.init_weights()
 
     def forward(self, x):
@@ -270,10 +266,6 @@ class ConvBertSelfAttention(nn.Module):
         query_layer = self.transpose_for_scores(mixed_query_layer)
         key_layer = self.transpose_for_scores(mixed_key_layer)
         value_layer = self.transpose_for_scores(mixed_value_layer)
-
-        # width = mixed_key_conv_attn_layer.size(-1)
-        # mixed_key_conv_attn_layer = torch.reshape(mixed_key_conv_attn_layer, [-1, width])
-        # print(mixed_key_conv_attn_layer.shape, mixed_query_layer.shape)
         conv_attn_layer = torch.multiply(mixed_key_conv_attn_layer, mixed_query_layer)
 
         conv_kernel_layer = self.conv_kernel_layer(conv_attn_layer)
@@ -296,7 +288,6 @@ class ConvBertSelfAttention(nn.Module):
         conv_out_layer = torch.reshape(conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
         conv_out_layer = torch.matmul(conv_out_layer, conv_kernel_layer)
         conv_out_layer = torch.reshape(conv_out_layer, [-1, self.all_head_size])
-        # conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -631,31 +622,6 @@ class ConvBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
-class ConvBertPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = ConvBertConfig
-    load_tf_weights = load_tf_weights_in_conv_bert
-    base_model_prefix = "conv_bert"
-    authorized_missing_keys = [r"position_ids"]
-    authorized_unexpected_keys = [r"conv_bert\.embeddings_project\.weight", r"conv_bert\.embeddings_project\.bias"]
-
-    def _init_weights(self, module):
-        """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            module.bias.data.zero_()
-
-
 CONV_BERT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
@@ -755,7 +721,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/conv-bert-small-discriminator",
+        checkpoint="YituTech/conv-bert-base",
         output_type=BaseModelOutputWithCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )

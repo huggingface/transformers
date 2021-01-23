@@ -605,6 +605,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "BarthezTokenizer": BarthezConverter,
     "BertTokenizer": BertConverter,
     "CamembertTokenizer": CamembertConverter,
+    "ConvBertTokenizer": BertConverter,
     "DistilBertTokenizer": BertConverter,
     "DPRReaderTokenizer": BertConverter,
     "DPRQuestionEncoderTokenizer": BertConverter,

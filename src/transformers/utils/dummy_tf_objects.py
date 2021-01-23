@@ -456,11 +456,6 @@ class TFCamembertModel:
 TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TFConvBertForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
 class TFConvBertForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_tf(self)

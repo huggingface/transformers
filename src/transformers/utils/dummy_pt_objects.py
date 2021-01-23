@@ -700,11 +700,6 @@ class CamembertModel:
 CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ConvBertForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class ConvBertForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
