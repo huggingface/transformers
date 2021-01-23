@@ -171,7 +171,9 @@ class CustomInputPipelineCommonMixin:
         """
         with mock.patch.object(
             pipe_slow.model, method, wraps=getattr(pipe_slow.model, method)
-        ) as mock_slow, mock.patch.object(pipe_fast.model, method, wraps=getattr(pipe_fast.model, method)) as mock_fast:
+        ) as mock_slow, mock.patch.object(
+            pipe_fast.model, method, wraps=getattr(pipe_fast.model, method)
+        ) as mock_fast:
             for inputs in self.valid_inputs:
                 if isinstance(inputs, dict):
                     inputs.update(self.pipeline_running_kwargs)
