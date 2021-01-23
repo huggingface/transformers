@@ -531,7 +531,7 @@ def calculate_rouge(
     """
     scorer = rouge_scorer.RougeScorer(rouge_keys, use_stemmer=use_stemmer)
     aggregator = scoring.BootstrapAggregator()
-    for pred, tgt in zip(tgt_lns, pred_lns):
+    for pred, tgt in zip(pred_lns, tgt_lns):
         # rougeLsum expects "\n" separated sentences within a summary
         if newline_sep:
             pred = add_newline_to_end_of_each_sentence(pred)
