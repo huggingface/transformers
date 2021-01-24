@@ -901,6 +901,15 @@ class T5Stack(T5PreTrainedModel):
         self.init_weights()
         self.model_parallel = False
 
+        self.pipeline_chunks = 0
+        self.device_map = None
+        self.pipeline_is_enabled = False
+
+    def pipeline_params(self, chunks, device_map):
+        self.pipeline_chunks = chunks
+        self.device_map = device_map
+        self.pipeline_is_enabled = True
+
     def get_input_embeddings(self):
         return self.embed_tokens
 
@@ -991,15 +1000,23 @@ class T5Stack(T5PreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
+        if not self.pipeline_is_enabled:
+            self.pipeline_chunks = 1
+
         # PP
+        # handle batches (usually last) that are shorter than pipeline_chunks
+        if batch_size < self.pipeline_chunks:
+            # XXX: Is it always last? so that we don't override user's chunks setting unless it's the last batch
+            self.pipeline_chunks = batch_size
+
         n_layers = len(self.block)
-        n_chunks = 4
+        #n_chunks = 4
 
         def all_hidden_states_add(x):
             nonlocal all_hidden_states
             all_hidden_states += (x,)
 
-        present_key_value_states = [[0 for x in range(n_chunks)] for y in range(n_layers)]
+        present_key_value_states = [[0 for x in range(self.pipeline_chunks)] for y in range(n_layers)]
         def present_key_value_states_add(x, block_id, micro_batch_id):
             nonlocal present_key_value_states
             #present_key_value_states += (x,)
@@ -1037,36 +1054,16 @@ class T5Stack(T5PreTrainedModel):
         #block_sequential = nn.Sequential(*layers)
 
         # for now don't enable the pipe
-        if self.is_pipeline:
-            # XXX: switch pipe segments to other devices
-            device_idx = 0
-            #segments = len(layers)
-            #print(f"segments: {segments}")
-            #for i, layer in enumerate(block_sequential):
-            #    layer.to(0) # XXX: change to multiple GPUs when things work on one gpu
+        if self.pipeline_is_enabled:
 
-            # XXX: later will have a map - for now just roughly split
-            # XXX: Need to build it once outside the model
-            n_gpus = torch.cuda.device_count()
-            if n_gpus < 2:
-                assert "Need at least 2 gpus to use the pipeline"
-
-            devices = list(range(n_gpus))
-            layer_ids = list(range(n_layers))
-            layer_splits = [layer_ids[i*n_layers // n_gpus: (i+1)*n_layers // n_gpus] for i in range(n_gpus)]
-            for device_id, layer_partition in zip(devices, layer_splits):
+            # print("using partitioning: ", dict(zip(devices, layer_splits)))
+            for device_id, layer_partition in self.device_map.items():
                 for layer_id in layer_partition:
                     #print(f"{layer_id} => {device_id}")
                     layers[layer_id].to(device_id)
 
-            # XXX: fix this to match the number of GPUs
-            # layers0 = nn.Sequential(block_sequential[0:3]).to(0)
-            # layers1 = nn.Sequential(block_sequential[3:6]).to(1)
-            #block_sequential = nn.Sequential(layers0, layers1)
-            #block_sequential = nn.Sequential(*layer_stack)
-
             block_sequential = nn.Sequential(*layers)
-            block_pipe = Pipe(block_sequential, chunks=n_chunks, checkpoint="never")
+            block_pipe = Pipe(block_sequential, chunks=self.pipeline_chunks, checkpoint="never")
         else:
             block_sequential = nn.Sequential(*layers)
 
@@ -1074,7 +1071,7 @@ class T5Stack(T5PreTrainedModel):
         #, all_hidden_states, present_key_value_states, all_attentions, all_cross_attentions)
         inputs = pipe_encode_all(inputs, batch_size, input_ids.device)
 
-        if self.is_pipeline:
+        if self.pipeline_is_enabled:
             outputs = block_pipe(inputs)
             outputs = outputs.local_value()
             outputs = recursive_to(input_ids.device, outputs)
@@ -1094,7 +1091,8 @@ class T5Stack(T5PreTrainedModel):
         #     #present_key_values_p1 = present_key_values_p1.chunk(n_layers, 1).chunk(2, 1)
         #     #present_key_values_p2
 
-        if self.is_pipeline and present_key_value_states is not None and present_key_value_states[0][0] != 0:
+        #if self.pipeline_is_enabled and present_key_value_states is not None and present_key_value_states[0][0] != 0:
+        if present_key_value_states is not None and present_key_value_states[0][0] != 0:
             #print()
             # reconstruct the flattened tensor to tuple of tuples of tensors
             new_x = ()
@@ -1103,7 +1101,7 @@ class T5Stack(T5PreTrainedModel):
             for block in present_key_value_states:
                 new_y = ()
                 for j in (0, 1, 2, 3):
-                    entries = tuple(block[i][j].to(0) for i in range(n_chunks))
+                    entries = tuple(block[i][j].to(0) for i in range(self.pipeline_chunks))
                     new_y += (torch.cat(entries, 0),)
                     # new_y += (torch.cat((block[0][j].to(0),
                     #                      block[1][j].to(0),
@@ -1495,6 +1493,77 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # Model parallel
         self.model_parallel = False
         self.device_map = None
+
+        self.pipeline_is_enabled = False
+
+    def pipeline_enable(self, chunks, device_map):
+        logger.info(f"enabling pipeline with chunks={chunks}")
+
+        # XXX: should be a separate function
+        import torch
+        n_gpus = torch.cuda.device_count()
+        if n_gpus < 2:
+            raise ValueError("Need at least 2 gpus to use the pipeline")
+
+        if device_map is not None:
+            logger.info(f"using user-provided device_map")
+        else:
+            def make_device_map(n_gpus, n_layers):
+                print(f"making default device map: n_gpus={n_gpus}, n_layers={n_layers}")
+                devices = list(range(n_gpus))
+                layer_ids = list(range(n_layers))
+                # XXX: later will have a map - for now just roughly split
+                # XXX: probably should balance more so that the 0th gpu has the least number of layers, rather than the last one, because 0th gpu is already very busy
+                layer_splits = [layer_ids[i*n_layers // n_gpus: (i+1)*n_layers // n_gpus] for i in range(n_gpus)]
+                return dict(zip(devices, layer_splits))
+
+
+            # XXX: for now assume encode/decoder symmetry - later fix to build each one separately
+            n_layers = len(self.encoder.block)
+            device_map = make_device_map(n_gpus, n_layers)
+
+        self.device_map = device_map
+        self.pipeline_is_enabled = True
+        logger.info(f"using pipeline partitioning: {device_map}")
+
+        # XXX: validate chunks is a good arg
+
+        self.encoder.pipeline_params(chunks=chunks, device_map=device_map)
+        self.decoder.pipeline_params(chunks=chunks, device_map=device_map)
+
+        # XXX for now hardcoded the RPC setup here - but it should happen in the trainer instead
+        import os
+        import torch
+        from torch.distributed import rpc
+        os.environ.update({"MASTER_ADDR": "localhost"})
+        os.environ.update({"MASTER_PORT": "10638"})
+        rpc.init_rpc(
+            "worker",
+            rank=0,
+            world_size=1,
+        )
+        num_devices = torch.cuda.device_count() if torch.cuda.is_available() else 2
+        device = torch.device("cuda")
+
+    def pipeline_finalize(self):
+        # XXX: should reset the max counter
+        # reset_peak_stats()
+        import torch
+        import json
+        n_gpus = torch.cuda.device_count()
+        mem_map = {}
+        for id in range(n_gpus):
+            with torch.cuda.device(id):
+                # XXX: this doesn't seem to report the right thing - getting much lower numbers
+                mem_map[id] = torch.cuda.max_memory_allocated() >> 20
+
+        logger.info(f"peak memory usage per device in MBs:\n{json.dumps(mem_map, sort_keys=True, indent=4)}")
+        # reset for the next train/eval/predict stage
+        # XXX: probably should do in the trainer?
+        torch.cuda.reset_peak_memory_stats()
+
+        # XXX: would be great to add gpu utilization stats as well
+
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):

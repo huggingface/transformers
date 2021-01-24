@@ -276,6 +276,25 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+        # XXX: for now hack over naive MP to have the same behavior
+        if len(self.args.pipeline):
+            # using range() syntax for upper boundary (i.e. not inclusive)
+            # --pipeline "chunks=5; device_map=0:0-10,1:10-20"
+            self.is_model_parallel = True
+
+            chunks_str, *device_map_str = self.args.pipeline.split()
+            chunks = int(chunks_str.split('=')[1])
+            device_map = None
+            if len(device_map_str):
+                device_map_range = device_map_str[0].split('=')[1]
+                device_map_range_str = device_map_range.split(',')
+                device_map = {}
+                for x in device_map_range_str:
+                    device_id, layers = x.split(':')
+                    device_map[int(device_id)] = list(range(*map(int, layers.split('-'))))
+
+            model.pipeline_enable(chunks=chunks, device_map=device_map)
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -288,6 +307,10 @@ class Trainer:
         else:
             # Force n_gpu to 1 to avoid DataParallel.
             self.args._n_gpu = 1
+
+        if len(self.args.pipeline):
+            model = model.to(args.device)
+
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
@@ -999,6 +1022,9 @@ class Trainer:
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
 
+        if len(self.args.pipeline):
+            model.pipeline_finalize()
+
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
     def _maybe_log_save_evaluate(self, tr_loss, model, trial, epoch):
@@ -1630,6 +1656,9 @@ class Trainer:
         for key in list(metrics.keys()):
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
+
+        if len(self.args.pipeline):
+            model.pipeline_finalize()
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
