@@ -154,6 +154,7 @@ on a single tesla V100 16GB. The data for XNLI can be downloaded with the follow
 export XNLI_DIR=/path/to/XNLI
 
 python run_xnli.py \
+  --task_name "xnli" \
   --model_name_or_path bert-base-multilingual-cased \
   --language de \
   --train_language en \
