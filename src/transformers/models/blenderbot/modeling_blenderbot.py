@@ -37,6 +37,7 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -1455,8 +1456,8 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
 
             >>> from transformers import BlenderbotTokenizer, BlenderbotForCausalLM
 
-            >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-90M')
-            >>> model =  BlenderbotForCausalLM.from_pretrained('facebook/blenderbot-90M', add_cross_attention=False)
+            >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-3B')
+            >>> model =  BlenderbotForCausalLM.from_pretrained('facebook/blenderbot-3B', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
