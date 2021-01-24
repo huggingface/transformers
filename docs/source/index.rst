@@ -327,6 +327,7 @@ TensorFlow and/or Flax.
     examples
     custom_datasets
     notebooks
+    community
     converting_tensorflow_models
     migration
     contributing

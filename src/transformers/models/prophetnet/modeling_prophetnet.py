@@ -1883,11 +1883,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         # set config for CLM
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.prophetnet = ProphetNetDecoderWrapper(config)
 
         self.padding_idx = config.pad_token_id

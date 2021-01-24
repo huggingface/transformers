@@ -104,15 +104,16 @@ class TrainingArguments:
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
-            The initial learning rate for Adam.
+            The initial learning rate for :class:`~transformers.AdamW` optimizer.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
-            The weight decay to apply (if not zero).
+            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in
+            :class:`~transformers.AdamW` optimizer.
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 hyperparameter for the Adam optimizer.
+            The beta1 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 hyperparameter for the Adam optimizer.
+            The beta2 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            The epsilon hyperparameter for the Adam optimizer.
+            The epsilon hyperparameter for the :class:`~transformers.AdamW` optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -230,6 +231,9 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+            The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
     """
 
     output_dir: str = field(
@@ -288,11 +292,11 @@ class TrainingArguments:
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
-    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
-    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
-    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for Adam optimizer"})
-    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for Adam optimizer"})
-    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
@@ -409,10 +413,13 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
+    )
+    report_to: Optional[List[str]] = field(
+        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
@@ -435,6 +442,11 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if self.report_to is None:
+            # Import at runtime to avoid a circular import.
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once

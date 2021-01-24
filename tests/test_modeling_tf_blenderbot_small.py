@@ -188,28 +188,19 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
-            assert x is None
-            name = model.get_prefix_bias_name()
-            assert name is None
 
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    def test_saved_model_creation(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
-
-    def test_saved_model_creation_extended(self):
-        # TODO(JPLU, PVP) - fix this with s2s tf-serving PR
-        pass
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -273,6 +264,10 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
+
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):

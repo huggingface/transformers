@@ -54,7 +54,7 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 
 # Integration functions:
 def is_wandb_available():
-    if os.getenv("WANDB_DISABLED"):
+    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         return False
     return importlib.util.find_spec("wandb") is not None
 
@@ -223,6 +223,21 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
+
+
+def get_available_reporting_integrations():
+    integrations = []
+    if is_azureml_available():
+        integrations.append("azure_ml")
+    if is_comet_available():
+        integrations.append("comet_ml")
+    if is_mlflow_available():
+        integrations.append("mlflow")
+    if is_tensorboard_available():
+        integrations.append("tensorboard")
+    if is_wandb_available():
+        integrations.append("wandb")
+    return integrations
 
 
 def rewrite_logs(d):
@@ -415,8 +430,9 @@ class TensorBoardCallback(TrainerCallback):
                     self._SummaryWriter = SummaryWriter
                 except ImportError:
                     self._SummaryWriter = None
+        else:
+            self._SummaryWriter = None
         self.tb_writer = tb_writer
-        self._SummaryWriter = SummaryWriter
 
     def _init_summary_writer(self, args, log_dir=None):
         log_dir = log_dir or args.logging_dir
@@ -756,3 +772,21 @@ class MLflowCallback(TrainerCallback):
         # not let you start a new run before the previous one is killed
         if self._ml_flow.active_run is not None:
             self._ml_flow.end_run(status="KILLED")
+
+
+INTEGRATION_TO_CALLBACK = {
+    "azure_ml": AzureMLCallback,
+    "comet_ml": CometCallback,
+    "mlflow": MLflowCallback,
+    "tensorboard": TensorBoardCallback,
+    "wandb": WandbCallback,
+}
+
+
+def get_reporting_integration_callbacks(report_to):
+    for integration in report_to:
+        if integration not in INTEGRATION_TO_CALLBACK:
+            raise ValueError(
+                f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
+            )
+    return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]

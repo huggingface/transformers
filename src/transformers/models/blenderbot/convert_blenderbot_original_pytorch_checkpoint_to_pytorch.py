@@ -18,8 +18,8 @@ import argparse
 
 import torch
 
-from ...models.bart import BartConfig, BartForConditionalGeneration
-from ...utils import logging
+from transformers import BartConfig, BartForConditionalGeneration
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()

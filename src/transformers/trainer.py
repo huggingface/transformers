@@ -31,15 +31,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 # Integrations must be imported before ML frameworks:
 from .integrations import (  # isort: split
     default_hp_search_backend,
+    get_reporting_integration_callbacks,
     hp_params,
-    is_azureml_available,
-    is_comet_available,
     is_fairscale_available,
-    is_mlflow_available,
     is_optuna_available,
     is_ray_tune_available,
-    is_tensorboard_available,
-    is_wandb_available,
     run_hp_search_optuna,
     run_hp_search_ray,
     init_deepspeed,
@@ -123,32 +119,6 @@ if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
-
-if is_tensorboard_available():
-    from .integrations import TensorBoardCallback
-
-    DEFAULT_CALLBACKS.append(TensorBoardCallback)
-
-
-if is_wandb_available():
-    from .integrations import WandbCallback
-
-    DEFAULT_CALLBACKS.append(WandbCallback)
-
-if is_comet_available():
-    from .integrations import CometCallback
-
-    DEFAULT_CALLBACKS.append(CometCallback)
-
-if is_mlflow_available():
-    from .integrations import MLflowCallback
-
-    DEFAULT_CALLBACKS.append(MLflowCallback)
-
-if is_azureml_available():
-    from .integrations import AzureMLCallback
-
-    DEFAULT_CALLBACKS.append(AzureMLCallback)
 
 if is_fairscale_available():
     from fairscale.nn.data_parallel import ShardedDataParallel as ShardedDDP
@@ -323,7 +293,8 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
+        default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
+        callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
         )
@@ -360,12 +331,15 @@ class Trainer:
         # Setup Sharded DDP training
         self.sharded_dpp = False
         if args.sharded_ddp:
+            if args.deepspeed:
+                raise ValueError(
+                    "Using --sharded_ddp together with --deepspeed is not possible, deactivate one of those flags."
+                )
+
             if args.local_rank == -1:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
-            elif args.deepspeed:
-                raise ValueError("can't use --sharded_ddp together with --deepspeed.")
             else:
                 self.sharded_dpp = True
 
@@ -1308,8 +1282,7 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.deepspeed:
-            # calling on DS engine (model_wrapped == DDP(Deepspeed(PretrainedModule)))
-            self.model_wrapped.module.backward(loss)
+            self.deepspeed.backward(loss)
         else:
             loss.backward()
 
@@ -1321,14 +1294,18 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
+        if self.label_smoother is not None and "labels" in inputs:
+            labels = inputs.pop("labels")
+        else:
+            labels = None
         outputs = model(**inputs)
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
-        if self.label_smoother is not None and "labels" in inputs:
-            return self.label_smoother(outputs, inputs["labels"])
+        if labels is not None:
+            return self.label_smoother(outputs, labels)
         else:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             return outputs["loss"] if isinstance(outputs, dict) else outputs[0]

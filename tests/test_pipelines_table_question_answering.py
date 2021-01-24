@@ -32,7 +32,7 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         "lysandre/tiny-tapas-random-wtq",
         "lysandre/tiny-tapas-random-sqa",
     ]
-    large_models = ["nielsr/tapas-base-finetuned-wtq"]  # Models tested with the @slow decorator
+    large_models = ["google/tapas-base-finetuned-wtq"]  # Models tested with the @slow decorator
     valid_inputs = [
         {
             "table": {
@@ -190,22 +190,25 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         results = tqa_pipeline(data, queries)
 
         expected_results = [
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"]},
-            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"]},
+            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
+            {"answer": "Transformers", "coordinates": [(0, 0)], "cells": ["Transformers"], "aggregator": "NONE"},
             {
-                "answer": "Transformers, Datasets, Tokenizers",
+                "answer": "COUNT > Transformers, Datasets, Tokenizers",
                 "coordinates": [(0, 0), (1, 0), (2, 0)],
                 "cells": ["Transformers", "Datasets", "Tokenizers"],
+                "aggregator": "COUNT",
             },
             {
-                "answer": "36542, 4512, 3934",
+                "answer": "AVERAGE > 36542, 4512, 3934",
                 "coordinates": [(0, 1), (1, 1), (2, 1)],
                 "cells": ["36542", "4512", "3934"],
+                "aggregator": "AVERAGE",
             },
             {
-                "answer": "36542, 4512, 3934",
+                "answer": "SUM > 36542, 4512, 3934",
                 "coordinates": [(0, 1), (1, 1), (2, 1)],
                 "cells": ["36542", "4512", "3934"],
+                "aggregator": "SUM",
             },
         ]
         self.assertListEqual(results, expected_results)
@@ -214,8 +217,8 @@ class TQAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     def test_integration_sqa(self):
         tqa_pipeline = pipeline(
             "table-question-answering",
-            model="nielsr/tapas-base-finetuned-sqa",
-            tokenizer="nielsr/tapas-base-finetuned-sqa",
+            model="google/tapas-base-finetuned-sqa",
+            tokenizer="google/tapas-base-finetuned-sqa",
         )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
