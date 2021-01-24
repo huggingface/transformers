@@ -798,6 +798,7 @@ class T5StackPipeSegment(nn.Module):
 
     def forward(self, inputs):
         self.batch_id += 1
+        #print(f"micro BS: {inputs[0].shape[0]}")
         inputs = pipe_decode_all(inputs, inputs[0].shape[0], inputs[0].device)
         hidden_states, attention_mask, position_bias, past_key_values_p1, past_key_values_p2, present_key_values_p1, present_key_values_p2, encoder_hidden_states, encoder_attention_mask, encoder_decoder_position_bias = inputs
         idx = self.idx
@@ -904,6 +905,7 @@ class T5Stack(T5PreTrainedModel):
         self.pipeline_chunks = 0
         self.device_map = None
         self.pipeline_is_enabled = False
+        self.pipeline_batch_size = None
 
     def pipeline_params(self, chunks, device_map):
         self.pipeline_chunks = chunks
@@ -930,6 +932,9 @@ class T5Stack(T5PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+
+        #print(f"mini BS: {input_ids.shape[0]}")
+
         # Model parallel
         if self.model_parallel:
             torch.cuda.set_device(self.first_device)
@@ -1000,14 +1005,16 @@ class T5Stack(T5PreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
-        if not self.pipeline_is_enabled:
+        if self.pipeline_is_enabled:
+            # handle batches (usually last) that are shorter than pipeline_chunks
+            if batch_size < self.pipeline_chunks:
+            #     # XXX: Is it always last? so that we don't override user's chunks setting unless it's the last batch
+                 self.pipeline_chunks = 1
+        else:
+            # non-pipeline run is the same as chunks=1 batch size-wise
             self.pipeline_chunks = 1
 
         # PP
-        # handle batches (usually last) that are shorter than pipeline_chunks
-        if batch_size < self.pipeline_chunks:
-            # XXX: Is it always last? so that we don't override user's chunks setting unless it's the last batch
-            self.pipeline_chunks = batch_size
 
         n_layers = len(self.block)
         #n_chunks = 4
@@ -1015,6 +1022,8 @@ class T5Stack(T5PreTrainedModel):
         def all_hidden_states_add(x):
             nonlocal all_hidden_states
             all_hidden_states += (x,)
+
+        # handle batches (usually last) that are can't be equally divided by pipeline_chunks
 
         present_key_value_states = [[0 for x in range(self.pipeline_chunks)] for y in range(n_layers)]
         def present_key_value_states_add(x, block_id, micro_batch_id):
@@ -1096,17 +1105,16 @@ class T5Stack(T5PreTrainedModel):
             #print()
             # reconstruct the flattened tensor to tuple of tuples of tensors
             new_x = ()
-            x = present_key_value_states
-            # XXX: check we aren't inserting random garbage for the uneven last batch
+            # deal with unpredictable potential last short batch
+            real_chunks = 0
+            for i in range(self.pipeline_chunks):
+                if not present_key_value_states[0][i] == 0:
+                    real_chunks += 1
             for block in present_key_value_states:
                 new_y = ()
                 for j in (0, 1, 2, 3):
-                    entries = tuple(block[i][j].to(0) for i in range(self.pipeline_chunks))
+                    entries = tuple(block[i][j].to(0) for i in range(real_chunks))
                     new_y += (torch.cat(entries, 0),)
-                    # new_y += (torch.cat((block[0][j].to(0),
-                    #                      block[1][j].to(0),
-                    #                      block[2][j].to(0),
-                    # ), 0),)
                 new_x += (new_y,)
             present_key_value_states = new_x
 
