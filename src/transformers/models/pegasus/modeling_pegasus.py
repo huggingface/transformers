@@ -1443,10 +1443,10 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MartianTokenizer, MartianForCausalLM
+            >>> from transformers import PegasusTokenizer, PegasusForCausalLM
 
-            >>> tokenizer = MartianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
-            >>> model = MartianForCausalLM.from_pretrained('Helsinki-NLP/opus-mt-en-de', add_cross_attention=False)
+            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
+            >>> model = PegasusForCausalLM.from_pretrained('google/pegasus-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
