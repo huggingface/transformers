@@ -687,15 +687,17 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
             if model_class in list_lm_models:
-                x = model.get_output_layer_with_bias()
+                x = model.get_output_embeddings()
                 assert isinstance(x, tf.keras.layers.Layer)
-                name = model.get_prefix_bias_name()
-                assert isinstance(name, str)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
             else:
-                x = model.get_output_layer_with_bias()
+                x = model.get_output_embeddings()
                 assert x is None
-                name = model.get_prefix_bias_name()
-                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI

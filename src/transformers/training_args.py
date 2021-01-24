@@ -16,7 +16,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
 from .trainer_utils import EvaluationStrategy, SchedulerType
@@ -104,15 +104,16 @@ class TrainingArguments:
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
-            The initial learning rate for Adam.
+            The initial learning rate for :class:`~transformers.AdamW` optimizer.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
-            The weight decay to apply (if not zero).
+            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in
+            :class:`~transformers.AdamW` optimizer.
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 hyperparameter for the Adam optimizer.
+            The beta1 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 hyperparameter for the Adam optimizer.
+            The beta2 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            The epsilon hyperparameter for the Adam optimizer.
+            The epsilon hyperparameter for the :class:`~transformers.AdamW` optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -210,9 +211,6 @@ class TrainingArguments:
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
-        model_parallel (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If the model supports model parallelism and there is more than one device, whether to use model parallelism
-            to distribute the model's modules across devices or not.
         ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
@@ -220,6 +218,9 @@ class TrainingArguments:
         sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
+        deepspeed (:obj:`str`, `optional`):
+            Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
+            evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
         label_smoothing_factor (:obj:`float`, `optional`, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
@@ -227,6 +228,12 @@ class TrainingArguments:
         adafactor (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
+        group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
+            padding applied and be more efficient). Only useful if applying dynamic padding.
+        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+            The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
     """
 
     output_dir: str = field(
@@ -245,15 +252,6 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    model_parallel: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "If there are more than one devices, whether to use model parallelism to distribute the "
-                "model's modules across devices."
-            )
-        },
-    )
     evaluation_strategy: EvaluationStrategy = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},
@@ -294,11 +292,11 @@ class TrainingArguments:
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
-    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
-    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
-    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for Adam optimizer"})
-    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for Adam optimizer"})
-    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
@@ -406,10 +404,22 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
+    deepspeed: Optional[str] = field(
+        default=None,
+        metadata={"help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json)"},
+    )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    group_by_length: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
+    )
+    report_to: Optional[List[str]] = field(
+        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+    )
+    _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
         if self.disable_tqdm is None:
@@ -430,6 +440,11 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if self.report_to is None:
+            # Import at runtime to avoid a circular import.
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -451,10 +466,7 @@ class TrainingArguments:
                 "version. Using `--per_device_train_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_train_batch_size or self.per_device_train_batch_size
-        if not self.model_parallel:
-            train_batch_size = per_device_batch_size * max(1, self.n_gpu)
-        else:
-            train_batch_size = per_device_batch_size
+        train_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return train_batch_size
 
     @property
@@ -468,22 +480,19 @@ class TrainingArguments:
                 "version. Using `--per_device_eval_batch_size` is preferred."
             )
         per_device_batch_size = self.per_gpu_eval_batch_size or self.per_device_eval_batch_size
-        if not self.model_parallel:
-            eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
-        else:
-            eval_batch_size = per_device_batch_size
+        eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
     @cached_property
     @torch_required
-    def _setup_devices(self) -> Tuple["torch.device", int]:
+    def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
         if self.no_cuda:
             device = torch.device("cpu")
-            n_gpu = 0
+            self._n_gpu = 0
         elif is_torch_tpu_available():
             device = xm.xla_device()
-            n_gpu = 0
+            self._n_gpu = 0
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -492,18 +501,34 @@ class TrainingArguments:
             # GPUs available in the environment, so `CUDA_VISIBLE_DEVICES=1,2` with `cuda:0`
             # will use the first GPU in that env, i.e. GPU#1
             device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-            n_gpu = torch.cuda.device_count()
+            # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
+            # the default value.
+            self._n_gpu = torch.cuda.device_count()
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            torch.distributed.init_process_group(backend="nccl")
+            #
+            # deepspeed performs its own DDP internally, and requires the program to be started with:
+            # deepspeed  ./program.py
+            # rather than:
+            # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
+            if self.deepspeed:
+                from .integrations import is_deepspeed_available
+
+                if not is_deepspeed_available():
+                    raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
+                import deepspeed
+
+                deepspeed.init_distributed()
+            else:
+                torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
-            n_gpu = 1
+            self._n_gpu = 1
 
         if device.type == "cuda":
             torch.cuda.set_device(device)
 
-        return device, n_gpu
+        return device
 
     @property
     @torch_required
@@ -511,7 +536,7 @@ class TrainingArguments:
         """
         The device used by this process.
         """
-        return self._setup_devices[0]
+        return self._setup_devices
 
     @property
     @torch_required
@@ -523,7 +548,9 @@ class TrainingArguments:
             This will only be greater than one when you have multiple GPUs available but are not using distributed
             training. For distributed training, it will always be 1.
         """
-        return self._setup_devices[1]
+        # Make sure `self._n_gpu` is properly setup.
+        _ = self._setup_devices
+        return self._n_gpu
 
     @property
     @torch_required

@@ -15,6 +15,7 @@
 # limitations under the License.
 """ TF 2.0 MobileBERT model. """
 
+import warnings
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -106,30 +107,150 @@ class TFNoNorm(tf.keras.layers.Layer):
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
+class TFMobileBertWordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
+class TFMobileBertTokenTypeEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.type_vocab_size = type_vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.token_type_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.type_vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "type_vocab_size": self.type_vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, token_type_ids):
+        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
+        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
+        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
+class TFMobileBertPositionEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.position_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "max_position_embeddings": self.max_position_embeddings,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, position_ids):
+        input_shape = shape_list(tensor=position_ids)
+        position_embeddings = self.position_embeddings[: input_shape[1], :]
+
+        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
+
+
 class TFMobileBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
-        self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
-
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
+        self.word_embeddings = TFMobileBertWordEmbeddings(
+            vocab_size=config.vocab_size,
+            hidden_size=config.embedding_size,
+            initializer_range=config.initializer_range,
+            name="word_embeddings",
+        )
+        self.position_embeddings = TFMobileBertPositionEmbeddings(
+            max_position_embeddings=config.max_position_embeddings,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
             name="position_embeddings",
         )
-        self.token_type_embeddings = tf.keras.layers.Embedding(
-            config.type_vocab_size,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
+        self.token_type_embeddings = TFMobileBertTokenTypeEmbeddings(
+            type_vocab_size=config.type_vocab_size,
+            hidden_size=config.hidden_size,
+            initializer_range=config.initializer_range,
             name="token_type_embeddings",
         )
-
+        self.embeddings_sum = tf.keras.layers.Add()
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -137,71 +258,23 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape):
-        """Build shared word embedding layer """
-        with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight",
-                shape=[self.vocab_size, self.embedding_size],
-                initializer=get_initializer(self.initializer_range),
-            )
-        super().build(input_shape)
-
-    def call(
-        self,
-        input_ids=None,
-        position_ids=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        mode="embedding",
-        training=False,
-    ):
+    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
-        Get token embeddings of inputs.
-
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        if mode == "embedding":
-            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
-        """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            input_shape = shape_list(input_ids)
-        else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            inputs_embeds = self.word_embeddings(input_ids=input_ids)
 
-        seq_length = input_shape[1]
-        if position_ids is None:
-            position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
-
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
+            input_shape = shape_list(tensor=inputs_embeds)[:-1]
+            token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if self.trigram_input:
             # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
@@ -223,32 +296,17 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         if self.trigram_input or self.embedding_size != self.hidden_size:
             inputs_embeds = self.embedding_transformation(inputs_embeds)
 
-        position_embeddings = self.position_embeddings(position_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        if position_ids is None:
+            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
+        else:
+            position_embeds = self.position_embeddings(position_ids=position_ids)
 
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings, training=training)
+        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
+        final_embeddings = self.LayerNorm(inputs=final_embeddings)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-        return embeddings
-
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer.
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
 class TFMobileBertSelfAttention(tf.keras.layers.Layer):
@@ -665,6 +723,20 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self
+
+    def set_output_embeddings(self, value):
+        self.decoder = value
+        self.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = tf.matmul(hidden_states, tf.concat([tf.transpose(self.decoder), self.dense], axis=0))
@@ -700,14 +772,11 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         self.pooler = TFMobileBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
-        return self.embeddings
+        return self.embeddings.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.word_embeddings.weight = value
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -1012,6 +1081,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
@@ -1038,13 +1108,11 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
-    def get_output_embeddings(self):
-        return self.predictions.predictions
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.predictions.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1148,13 +1216,11 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
         self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
 
-    def get_output_embeddings(self):
-        return self.mlm.predictions
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.mlm.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1229,15 +1295,12 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
@@ -1346,15 +1409,12 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForNextSentencePrediction.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFNextSentencePredictorOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1458,15 +1518,12 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1582,15 +1639,13 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits,
-            end_logits=output.end_logits,
-            hidden_states=hs,
-            attentions=attns,
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )
 
 
@@ -1743,15 +1798,12 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
 
         return self.serving_output(output)
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMultipleChoiceModelOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -1855,12 +1907,9 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFTokenClassifierOutput(
-            logits=output.logits,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

@@ -24,6 +24,7 @@ from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
 from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
+from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
@@ -58,6 +59,7 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -197,11 +199,11 @@ TOKENIZER_MAPPING = OrderedDict(
         (AlbertConfig, (AlbertTokenizer, AlbertTokenizerFast)),
         (CamembertConfig, (CamembertTokenizer, CamembertTokenizerFast)),
         (PegasusConfig, (PegasusTokenizer, PegasusTokenizerFast)),
-        (MBartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (MBartConfig, (MBartTokenizer, MBartTokenizerFast)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)),
         (MarianConfig, (MarianTokenizer, None)),
-        (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
+        (BlenderbotSmallConfig, (BlenderbotSmallTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
@@ -240,6 +242,7 @@ NO_CONFIG_TOKENIZER = [
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
+    BarthezTokenizer,
 ]
 
 

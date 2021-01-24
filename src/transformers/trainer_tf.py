@@ -135,7 +135,7 @@ class TFTrainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         self.total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps
-        self.num_train_examples = self.train_dataset.cardinality(self.train_dataset).numpy()
+        self.num_train_examples = self.train_dataset.cardinality().numpy()
 
         if self.num_train_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -167,7 +167,7 @@ class TFTrainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        num_examples = eval_dataset.cardinality(eval_dataset).numpy()
+        num_examples = eval_dataset.cardinality().numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -197,7 +197,7 @@ class TFTrainer:
         Subclass and override this method if you want to inject some custom behavior.
         """
 
-        num_examples = test_dataset.cardinality(test_dataset).numpy()
+        num_examples = test_dataset.cardinality().numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -638,7 +638,15 @@ class TFTrainer:
                 reduced_features = {
                     k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
                 }
-                reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
+
+                if tf.is_tensor(labels):
+                    reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
+                elif isinstance(labels, dict):
+                    reduced_labels = {
+                        k: lbl[: self.args.train_batch_size // self.args.n_replicas] for k, lbl in labels.items()
+                    }
+                else:
+                    raise ValueError("The labels must be either a tf.Tensor or a dict.")
 
                 self.training_step(reduced_features, reduced_labels, nb_instances_in_global_batch)
 
@@ -650,9 +658,20 @@ class TFTrainer:
                     for k, ft in features.items()
                 }
 
-                labels = tf.concat(
-                    [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
-                )
+                if tf.is_tensor(labels):
+                    labels = tf.concat(
+                        [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
+                    )
+                elif isinstance(labels, dict):
+                    labels = {
+                        k: tf.concat(
+                            [lbl[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]],
+                            axis=0,
+                        )
+                        for k, lbl in labels.items()
+                    }
+                else:
+                    raise ValueError("The labels must be either a tf.Tensor or a dict.")
 
             gradients = self.gradient_accumulator.gradients
             gradients = [

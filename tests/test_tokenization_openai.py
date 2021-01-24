@@ -31,6 +31,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = OpenAIGPTTokenizer
     rust_tokenizer_class = OpenAIGPTTokenizerFast
     test_rust_tokenizer = True
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()

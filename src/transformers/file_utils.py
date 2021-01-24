@@ -89,8 +89,20 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
             try:
                 _tf_version = importlib_metadata.version("tensorflow-cpu")
             except importlib_metadata.PackageNotFoundError:
-                _tf_version = None
-                _tf_available = False
+                try:
+                    _tf_version = importlib_metadata.version("tensorflow-gpu")
+                except importlib_metadata.PackageNotFoundError:
+                    try:
+                        _tf_version = importlib_metadata.version("tf-nightly")
+                    except importlib_metadata.PackageNotFoundError:
+                        try:
+                            _tf_version = importlib_metadata.version("tf-nightly-cpu")
+                        except importlib_metadata.PackageNotFoundError:
+                            try:
+                                _tf_version = importlib_metadata.version("tf-nightly-gpu")
+                            except importlib_metadata.PackageNotFoundError:
+                                _tf_version = None
+                                _tf_available = False
     if _tf_available:
         if version.parse(_tf_version) < version.parse("2"):
             logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")

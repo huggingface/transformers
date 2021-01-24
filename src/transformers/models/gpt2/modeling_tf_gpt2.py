@@ -243,7 +243,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value):
         self.wte.weight = value
-        self.wte.vocab_size = self.wte.weight.shape[0]
+        self.wte.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -636,10 +636,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
+            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns
         )
 
 
@@ -656,7 +653,10 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
-        return self.transformer.wte
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
     def prepare_inputs_for_generation(self, inputs, past, **kwargs):
         # only last token for inputs_ids if past is defined in kwargs
@@ -753,12 +753,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFCausalLMOutputWithPast(
-            logits=output.logits,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFCausalLMOutputWithPast(logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -778,9 +773,6 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         self.multiple_choice_head = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
-
-    def get_output_embeddings(self):
-        return self.transformer.wte
 
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFGPT2DoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -953,9 +945,6 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         )
         self.transformer = TFGPT2MainLayer(config, name="transformer")
 
-    def get_output_embeddings(self):
-        return self.transformer.wte
-
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1086,8 +1075,5 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutputWithPast(
-            logits=output.logits,
-            past_key_values=pkv,
-            hidden_states=hs,
-            attentions=attns,
+            logits=output.logits, past_key_values=pkv, hidden_states=hs, attentions=attns
         )
