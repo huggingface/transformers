@@ -670,7 +670,6 @@ class RagModel(RagPreTrainedModel):
             generator_enc_attentions=gen_outputs.encoder_attentions,
             generator_dec_hidden_states=gen_outputs.decoder_hidden_states,
             generator_dec_attentions=gen_outputs.decoder_attentions,
-            generator_dec_attentions=gen_outputs.decoder_attentions,
             generator_cross_attentions=gen_outputs.cross_attentions,
         )
 
