@@ -18,7 +18,13 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from .file_utils import (
+    cached_property,
+    is_sagemaker_distributed_available,
+    is_torch_available,
+    is_torch_tpu_available,
+    torch_required,
+)
 from .trainer_utils import EvaluationStrategy, SchedulerType
 from .utils import logging
 
@@ -504,6 +510,10 @@ class TrainingArguments:
             # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
             # the default value.
             self._n_gpu = torch.cuda.device_count()
+        elif is_sagemaker_distributed_available():
+            import smdistributed.dataparallel.torch.distributed as dist
+
+            dist.init_process_group()
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
@@ -566,6 +576,8 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
+        elif is_sagemaker_distributed_available():
+            return ParallelMode.SAGEMAKER_DISTRIBUTED
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -607,4 +619,5 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
+    SAGEMAKER_DISTRIBUTED = "sm_distributed"
     TPU = "tpu"
