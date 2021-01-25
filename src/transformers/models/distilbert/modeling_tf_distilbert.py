@@ -17,6 +17,7 @@
 """
 
 import warnings
+from typing import Any, Dict
 
 import tensorflow as tf
 
@@ -76,7 +77,7 @@ class TFDistilBertWordEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
@@ -85,7 +86,7 @@ class TFDistilBertWordEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape=input_shape)
 
-    def get_config(self):
+    def get_config(self) -> Dict[str, Any]:
         config = {
             "vocab_size": self.vocab_size,
             "hidden_size": self.hidden_size,
@@ -95,7 +96,7 @@ class TFDistilBertWordEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, input_ids):
+    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
@@ -116,16 +117,16 @@ class TFDistilBertPositionEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.position_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.max_position_embeddings, self.hidden_size],
             initializer=get_initializer(initializer_range=self.initializer_range),
         )
 
-        super().build(input_shape)
+        super().build(input_shape=input_shape)
 
-    def get_config(self):
+    def get_config(self) -> Dict[str, Any]:
         config = {
             "max_position_embeddings": self.max_position_embeddings,
             "hidden_size": self.hidden_size,
@@ -135,7 +136,7 @@ class TFDistilBertPositionEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, position_ids):
+    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
         input_shape = shape_list(tensor=position_ids)
         position_embeddings = self.position_embeddings[: input_shape[1], :]
 
@@ -793,9 +794,9 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -894,9 +895,9 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -985,9 +986,9 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1128,9 +1129,9 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
         return self.serving_output(output)
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1235,9 +1236,9 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
             start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns

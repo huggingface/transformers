@@ -18,6 +18,7 @@
 
 import math
 import warnings
+from typing import Any, Dict
 
 import tensorflow as tf
 
@@ -95,7 +96,7 @@ class TFMPNetWordEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
@@ -104,7 +105,7 @@ class TFMPNetWordEmbeddings(tf.keras.layers.Layer):
 
         super().build(input_shape=input_shape)
 
-    def get_config(self):
+    def get_config(self) -> Dict[str, Any]:
         config = {
             "vocab_size": self.vocab_size,
             "hidden_size": self.hidden_size,
@@ -114,7 +115,7 @@ class TFMPNetWordEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, input_ids):
+    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
@@ -253,23 +254,23 @@ class TFMPNetEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->MPNet
 class TFMPNetPooler(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: MPNetConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
             activation="tanh",
             name="dense",
         )
 
-    def call(self, hidden_states):
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
 
@@ -368,9 +369,9 @@ class TFMPNetAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->MPNet
 class TFMPNetIntermediate(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: MPNetConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
@@ -386,29 +387,29 @@ class TFMPNetIntermediate(tf.keras.layers.Layer):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def call(self, hidden_states):
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.intermediate_act_fn(x=hidden_states)
 
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->MPNet
 class TFMPNetOutput(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: MPNetConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
             equation="abc,cd->abd",
             bias_axes="d",
             output_shape=(None, config.hidden_size),
-            kernel_initializer=get_initializer(config.initializer_range),
+            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
             name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states, input_tensor, training=False):
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
@@ -563,13 +564,13 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         self.embeddings = TFMPNetEmbeddings(config, name="embeddings")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings.word_embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
-    def set_input_embeddings(self, value):
+    def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.word_embeddings.vocab_size = shape_list(tensor=value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -817,9 +818,9 @@ class TFMPNetModel(TFMPNetPreTrainedModel):
         return outputs
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
@@ -970,9 +971,9 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1092,9 +1093,9 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1230,9 +1231,9 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
         return self.serving_output(output)
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1330,9 +1331,9 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1443,9 +1444,9 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
             start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
