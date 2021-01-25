@@ -737,7 +737,6 @@ class GenerationTesterMixin:
                 # only relevant if model has "use_cache"
                 return
 
-            config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
