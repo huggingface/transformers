@@ -22,9 +22,6 @@ than be loaded using the ``from_pretrained`` methods of the library.
 
     The documentation below reflects the **transformers-cli convert** command format.
 
-    Since 4.0.0-rc-1 the architecture of the repository has been updated so that each model resides in its folder. The
-    link in the documentation reflects the newer position of each scripts.
-
 BERT
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
