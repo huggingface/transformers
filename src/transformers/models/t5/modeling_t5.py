@@ -687,7 +687,12 @@ class T5Block(nn.Module):
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
         outputs = (hidden_states,)
 
-        outputs = outputs + (present_key_value_state,) + attention_outputs
+        if use_cache:
+            outputs += (present_key_value_state,)
+
+        if output_attentions:
+            outputs += attention_outputs
+
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
@@ -988,22 +993,29 @@ class T5Stack(T5PreTrainedModel):
                 )
             # layer_outputs is a tuple with:
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            hidden_states, present_key_value_state = layer_outputs[:2]
+            hidden_states = layer_outputs[0]
 
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention weights),
             # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
-            position_bias = layer_outputs[2]
-            if self.is_decoder and encoder_hidden_states is not None:
-                encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+            if use_cache:
+                present_key_value_state = layer_outputs[1]
+                position_bias = layer_outputs[2]
+                if self.is_decoder and encoder_hidden_states is not None:
+                    encoder_decoder_position_bias = layer_outputs[4 if output_attentions else 3]
+            else:
+                position_bias = layer_outputs[1]
+                if self.is_decoder and encoder_hidden_states is not None:
+                    encoder_decoder_position_bias = layer_outputs[3 if output_attentions else 2]
+
             # append next layer key value states
             if use_cache:
                 present_key_value_states = present_key_value_states + (present_key_value_state,)
 
             if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[3],)
+                all_attentions = all_attentions + (layer_outputs[3 if use_cache else 2],)
                 if self.is_decoder:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[5],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[5 if use_cache else 4],)
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
