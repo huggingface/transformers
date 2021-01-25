@@ -1223,6 +1223,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
             )
         return reordered_past
 
+
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Pegasus
 class PegasusDecoderWrapper(PegasusPreTrainedModel):
     """
