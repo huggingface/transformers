@@ -22,25 +22,25 @@ from .test_pipelines_common import MonoInputPipelineCommonMixin
 
 EXPECTED_FILL_MASK_RESULT = [
     [
-        {"sequence": "<s>My name is John</s>", "score": 0.00782308354973793, "token": 610, "token_str": "ĠJohn"},
-        {"sequence": "<s>My name is Chris</s>", "score": 0.007475061342120171, "token": 1573, "token_str": "ĠChris"},
+        {"sequence": "My name is John", "score": 0.00782308354973793, "token": 610, "token_str": "ĠJohn"},
+        {"sequence": "My name is Chris", "score": 0.007475061342120171, "token": 1573, "token_str": "ĠChris"},
     ],
     [
-        {"sequence": "<s>The largest city in France is Paris</s>", "score": 0.3185044229030609, "token": 2201},
-        {"sequence": "<s>The largest city in France is Lyon</s>", "score": 0.21112334728240967, "token": 12790},
+        {"sequence": "The largest city in France is Paris", "score": 0.3185044229030609, "token": 2201},
+        {"sequence": "The largest city in France is Lyon", "score": 0.21112334728240967, "token": 12790},
     ],
 ]
 
 EXPECTED_FILL_MASK_TARGET_RESULT = [
     [
         {
-            "sequence": "<s>My name is Patrick</s>",
+            "sequence": "My name is Patrick",
             "score": 0.004992353264242411,
             "token": 3499,
             "token_str": "ĠPatrick",
         },
         {
-            "sequence": "<s>My name is Clara</s>",
+            "sequence": "My name is Clara",
             "score": 0.00019297805556561798,
             "token": 13606,
             "token_str": "ĠClara",
