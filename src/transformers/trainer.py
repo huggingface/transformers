@@ -132,7 +132,7 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
-if is_sagemaker_distributed_available:
+if is_sagemaker_distributed_available():
     import smdistributed.dataparallel.torch.distributed as dist
     from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
 else:
@@ -758,7 +758,7 @@ class Trainer:
         # Distributed training (should be after apex fp16 initialization)
         if self.sharded_dpp:
             model = ShardedDDP(model, self.optimizer)
-        elif is_sagemaker_distributed_available:
+        elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
             model = torch.nn.parallel.DistributedDataParallel(
@@ -1307,7 +1307,7 @@ class Trainer:
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
-        elif is_sagemaker_distributed_available:
+        elif is_sagemaker_distributed_available():
             return dist.get_local_rank() == 0
         else:
             return self.args.local_rank in [-1, 0]
