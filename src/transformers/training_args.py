@@ -499,6 +499,10 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
+        elif is_sagemaker_distributed_available():
+            import smdistributed.dataparallel.torch.distributed as dist
+
+            dist.init_process_group()
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -510,10 +514,6 @@ class TrainingArguments:
             # Sometimes the line in the postinit has not been run before we end up here, so just checking we're not at
             # the default value.
             self._n_gpu = torch.cuda.device_count()
-        elif is_sagemaker_distributed_available():
-            import smdistributed.dataparallel.torch.distributed as dist
-
-            dist.init_process_group()
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
