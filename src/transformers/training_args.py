@@ -503,6 +503,8 @@ class TrainingArguments:
             import smdistributed.dataparallel.torch.distributed as dist
 
             dist.init_process_group()
+            device = torch.device("cuda", self.local_rank)
+            self._n_gpu = 1
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
