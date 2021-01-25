@@ -627,9 +627,9 @@ class TFModelTesterMixin:
         if not self.test_head_masking:
             return
 
-        global_rng.seed(42)
+        random.Random().seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        global_rng.seed()
+        random.Random().seed()
 
         inputs_dict["output_attentions"] = True
         config.output_hidden_states = True
@@ -1117,13 +1117,10 @@ class TFModelTesterMixin:
         return False
 
 
-global_rng = random.Random()
-
-
 def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     """Creates a random int32 tensor of the shape within the vocab size."""
     if rng is None:
-        rng = global_rng
+        rng = random.Random()
 
     total_dims = 1
     for dim in shape:
