@@ -503,6 +503,7 @@ class TrainingArguments:
             import smdistributed.dataparallel.torch.distributed as dist
 
             dist.init_process_group()
+            self.local_rank = dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.local_rank == -1:
