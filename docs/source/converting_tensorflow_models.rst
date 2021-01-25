@@ -22,23 +22,23 @@ than be loaded using the ``from_pretrained`` methods of the library.
 
     The documentation below reflects the **transformers-cli convert** command format.
 
+    Since 4.0.0-rc-1 the architecture of the repository has been updated so that each model resides in its folder. The
+    link in the documentation reflects the newer position of each scripts.
+
 BERT
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 You can convert any TensorFlow checkpoint for BERT (in particular `the pre-trained models released by Google
 <https://github.com/google-research/bert#pre-trained-models>`_\ ) in a PyTorch save file by using the
 :prefix_link:`convert_bert_original_tf_checkpoint_to_pytorch.py
-<src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
+<src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
 
 This CLI takes as input a TensorFlow checkpoint (three files starting with ``bert_model.ckpt``\ ) and the associated
 configuration file (\ ``bert_config.json``\ ), and creates a PyTorch model for this configuration, loads the weights
 from the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that
-can be imported using ``torch.load()`` (see examples in `run_bert_extract_features.py
-<https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_extract_features.py>`_\ ,
-`run_bert_classifier.py
-<https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_classifier.py>`_ and
-`run_bert_squad.py <https://github.com/huggingface/pytorch-pretrained-BERT/tree/master/examples/run_bert_squad.py>`_\
-).
+can be imported using ``from_pretrained()`` (see example in `Quick tour
+<https://huggingface.co/transformers/master/quicktour.html>`_\ , `run_glue.py
+<https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue.py>`_\ ).
 
 You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow
 checkpoint (the three files starting with ``bert_model.ckpt``\ ) but be sure to keep the configuration file (\
@@ -66,7 +66,7 @@ ALBERT
 
 Convert TensorFlow model checkpoints of ALBERT to PyTorch using the
 :prefix_link:`convert_albert_original_tf_checkpoint_to_pytorch.py
-<src/transformers/convert_bert_original_tf_checkpoint_to_pytorch.py>` script.
+<src/transformers/models/albert/convert_albert_original_tf_checkpoint_to_pytorch.py>` script.
 
 The CLI takes as input a TensorFlow checkpoint (three files starting with ``model.ckpt-best``\ ) and the accompanying
 configuration file (\ ``albert_config.json``\ ), then creates and saves a PyTorch model. To run this conversion you
