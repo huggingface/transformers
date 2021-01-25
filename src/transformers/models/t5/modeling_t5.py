@@ -781,14 +781,15 @@ class T5PreTrainedModel(PreTrainedModel):
 
 
 class T5StackPipeSegment(nn.Module):
-    def __init__(self, idx, n_layers, layer_module, is_decoder, head_mask, output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add):
+    def __init__(self, idx, n_layers, layer_module, is_decoder, layer_head_mask, encoder_layer_head_mask, output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add):
         super().__init__()
         self.batch_id = -1
         self.idx = idx
         self.n_layers = n_layers
         self.layer_module = layer_module
         self.is_decoder = is_decoder
-        self.head_mask = head_mask
+        self.layer_head_mask = layer_head_mask
+        self.encoder_layer_head_mask = encoder_layer_head_mask
         #self.past_key_value = past_key_value
         self.output_hidden_states = output_hidden_states
         self.use_cache = use_cache
@@ -806,7 +807,8 @@ class T5StackPipeSegment(nn.Module):
         idx = self.idx
 
         #self.past_key_value = recursive_to(inputs[0].device, self.past_key_value)
-        self.head_mask = recursive_to(inputs[0].device, self.head_mask)
+        self.layer_head_mask = recursive_to(inputs[0].device, self.layer_head_mask)
+        self.encoder_layer_head_mask = recursive_to(inputs[0].device, self.encoder_layer_head_mask)
 
         # crazy restore: XXX: fix hardcoded numbers - self.n_layers for number of blocks - 2+2 should always be there
         if past_key_values_p1 is not None and past_key_values_p2 is not None:
@@ -841,7 +843,8 @@ class T5StackPipeSegment(nn.Module):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
-                head_mask=self.head_mask,
+                layer_head_mask=self.layer_head_mask,
+                encoder_layer_head_mask=self.encoder_layer_head_mask,
                 past_key_value=past_key_value,
                 use_cache=self.use_cache,
                 output_attentions=self.output_attentions)
@@ -1063,7 +1066,7 @@ class T5Stack(T5PreTrainedModel):
         present_key_values_p2 = torch.empty(batch_size, n_layers*2).to(0)
 
         # rewrite the model after pre-trained weights were loaded
-        layers = [T5StackPipeSegment(idx, n_layers, layer_module, self.is_decoder, head_mask[idx], output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add) for idx, layer_module in enumerate(self.block)]
+        layers = [T5StackPipeSegment(idx, n_layers, layer_module, self.is_decoder, head_mask[idx], encoder_head_mask[idx], output_hidden_states, use_cache, output_attentions, all_hidden_states_add, present_key_value_states_add, all_attentions_add, all_cross_attentions_add) for idx, layer_module in enumerate(self.block)]
         #block_sequential = nn.Sequential(*layers)
 
         # for now don't enable the pipe
