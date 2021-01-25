@@ -40,7 +40,7 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import is_main_process
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
 logger = logging.getLogger(__name__)
@@ -136,10 +136,10 @@ class DataTrainingArguments:
         },
     )
     val_max_target_length: Optional[int] = field(
-        default=142,
+        default=None,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. "
+            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
             "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
             "during ``evaluate`` and ``predict``."
         },
@@ -175,6 +175,9 @@ class DataTrainingArguments:
             "help": "Whether to ignore the tokens corresponding to padded labels in the loss computation or not."
         },
     )
+    source_prefix: Optional[str] = field(
+        default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -190,11 +193,22 @@ class DataTrainingArguments:
             raise ValueError(
                 "`task` should be summarization, summarization_{dataset}, translation or translation_{xx}_to_{yy}."
             )
+        if self.val_max_target_length is None:
+            self.val_max_target_length = self.max_target_length
 
 
 summarization_name_mapping = {
+    "amazon_reviews_multi": ("review_body", "review_title"),
+    "big_patent": ("description", "abstract"),
     "cnn_dailymail": ("article", "highlights"),
+    "orange_sum": ("text", "summary"),
+    "pn_summary": ("article", "summary"),
+    "psc": ("extract_text", "summary_text"),
+    "samsum": ("dialogue", "summary"),
+    "thaisum": ("body", "summary"),
+    "xglue": ("news_body", "news_title"),
     "xsum": ("document", "summary"),
+    "wiki_summary": ("article", "highlights"),
 }
 
 
@@ -211,16 +225,20 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
-            "Use --overwrite_output_dir to overcome."
-        )
+    # Detecting last checkpoint.
+    last_checkpoint = None
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif last_checkpoint is not None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
 
     # Setup logging
     logging.basicConfig(
@@ -302,6 +320,16 @@ def main():
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
+    # Get the default prefix if None is passed.
+    if data_args.source_prefix is None:
+        task_specific_params = model.config.task_specific_params
+        if task_specific_params is not None:
+            prefix = task_specific_params.get("prefix", "")
+        else:
+            prefix = ""
+    else:
+        prefix = data_args.source_prefix
+
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     if training_args.do_train:
@@ -362,6 +390,7 @@ def main():
         else:
             inputs = examples[text_column]
             targets = examples[summary_column]
+        inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
 
         # Setup the tokenizer for targets
@@ -456,9 +485,13 @@ def main():
 
     # Training
     if training_args.do_train:
-        train_result = trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        )
+        if last_checkpoint is not None:
+            model_path = last_checkpoint
+        elif os.path.isdir(model_args.model_name_or_path):
+            model_path = model_args.model_name_or_path
+        else:
+            model_path = None
+        train_result = trainer.train(model_path=model_path)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
