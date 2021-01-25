@@ -214,6 +214,19 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
+    def test_export_to_onnx(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = FSMTModel(config).to(torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            torch.onnx.export(
+                model,
+                (inputs_dict["input_ids"], inputs_dict["attention_mask"]),
+                f"{tmpdirname}/fsmt_test.onnx",
+                export_params=True,
+                opset_version=12,
+                input_names=["input_ids", "attention_mask"],
+            )
+
     @unittest.skip("can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):
         pass
