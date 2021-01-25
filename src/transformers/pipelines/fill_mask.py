@@ -182,7 +182,7 @@ class FillMaskPipeline(Pipeline):
                         "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
                         "score": v,
                         "token": p,
-                        "token_str": self.tokenizer.convert_ids_to_tokens(p),
+                        "token_str": self.tokenizer.decode(p),
                     }
                 )
 
