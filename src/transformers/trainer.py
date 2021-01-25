@@ -490,7 +490,7 @@ class Trainer:
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
         if is_torch_tpu_available():
             return SequentialDistributedSampler(eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
-        elif self.args.local_rank != -1 or is_sagemaker_distributed_available():
+        elif self.args.local_rank != -1:
             return SequentialDistributedSampler(eval_dataset)
         else:
             return SequentialSampler(eval_dataset)
@@ -785,7 +785,7 @@ class Trainer:
         # Train!
         if is_torch_tpu_available():
             world_size = xm.xrt_world_size()
-        elif self.args.local_rank != -1 or is_sagemaker_distributed_available():
+        elif self.args.local_rank != -1:
             world_size = dist.get_world_size()
         else:
             world_size = 1
@@ -1307,8 +1307,6 @@ class Trainer:
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
-        elif is_sagemaker_distributed_available():
-            return dist.get_local_rank() == 0
         else:
             return self.args.local_rank in [-1, 0]
 
@@ -1375,7 +1373,7 @@ class Trainer:
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self._total_flos is not None:
-            if self.args.local_rank != -1 or is_sagemaker_distributed_available():
+            if self.args.local_rank != -1:
                 self.state.total_flos = distributed_broadcast_scalars([self._total_flos]).sum().item()
             else:
                 self.state.total_flos = self._total_flos
@@ -1559,7 +1557,7 @@ class Trainer:
         world_size = 1
         if is_torch_tpu_available():
             world_size = xm.xrt_world_size()
-        elif is_sagemaker_distributed_available() or self.args.local_rank != -1:
+        elif self.args.local_rank != -1:
             world_size = dist.get_world_size()
         world_size = max(1, world_size)
 
@@ -1637,7 +1635,7 @@ class Trainer:
             return
         if is_torch_tpu_available():
             tensors = nested_xla_mesh_reduce(tensors, name)
-        elif self.args.local_rank != -1 or is_sagemaker_distributed_available():
+        elif self.args.local_rank != -1:
             tensors = distributed_concat(tensors)
 
         return nested_numpify(tensors)
