@@ -628,7 +628,7 @@ class GenerationTesterMixin:
 
             # It is important set set the eos_token_id to None to ensure that no sequences
             # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_beams` are all shorter than the longest beam
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
@@ -682,7 +682,7 @@ class GenerationTesterMixin:
 
             # It is important set set the eos_token_id to None to ensure that no sequences
             # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_beams` are all shorter than the longest beam
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
@@ -779,7 +779,7 @@ class GenerationTesterMixin:
 
             # It is important set set the eos_token_id to None to ensure that no sequences
             # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_beams` are all shorter than the longest beam
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
 
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
@@ -818,7 +818,7 @@ class GenerationTesterMixin:
 
             # It is important set set the eos_token_id to None to ensure that no sequences
             # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_beams` are all shorter than the longest beam
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
@@ -891,7 +891,7 @@ class GenerationTesterMixin:
 
             # It is important set set the eos_token_id to None to ensure that no sequences
             # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_beams` are all shorter than the longest beam
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
@@ -942,7 +942,7 @@ class GenerationTesterMixin:
 
             # It is important set set the eos_token_id to None to ensure that no sequences
             # shorter than `max_length` can be generated which could lead to flaky circle ci
-            # failures if the top `num_beams` are all shorter than the longest beam
+            # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
