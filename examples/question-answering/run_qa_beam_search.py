@@ -448,8 +448,7 @@ def main():
         default_data_collator
         if data_args.pad_to_max_length
         else DataCollatorWithPadding(
-            tokenizer,
-            pad_to_multiple_of=8 if training_args.fp16 else None,
+            tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None,
         )
     )
 
