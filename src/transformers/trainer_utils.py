@@ -17,7 +17,9 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import os
 import random
+import re
 import time
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
@@ -75,6 +77,15 @@ class TrainOutput(NamedTuple):
 
 
 PREFIX_CHECKPOINT_DIR = "checkpoint"
+_re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d)+$")
+
+
+def get_last_checkpoint(folder):
+    content = os.listdir(folder)
+    checkpoints = [path for path in content if _re_checkpoint.search(path) is not None and os.path.isdir(path)]
+    if len(checkpoints) == 0:
+        return
+    return max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0]))
 
 
 class EvaluationStrategy(ExplicitEnum):
