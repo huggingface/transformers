@@ -495,7 +495,7 @@ class TFBertLayer(tf.keras.layers.Layer):
 
         self.attention = TFBertAttention(config=config, name="attention")
         self.intermediate = TFBertIntermediate(config=config, name="intermediate")
-        self.output = TFBertOutput(config=config, name="output")
+        self.bert_output = TFBertOutput(config=config, name="output")
 
     def call(
         self,
@@ -514,7 +514,7 @@ class TFBertLayer(tf.keras.layers.Layer):
         )
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.output(hidden_states=intermediate_output, input_tensor=attention_output, training=training)
+        layer_output = self.bert_output(hidden_states=intermediate_output, input_tensor=attention_output, training=training)
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
