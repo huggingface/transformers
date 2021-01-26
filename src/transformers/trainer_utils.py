@@ -25,7 +25,7 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import is_tf_available, is_torch_available, is_torch_tpu_available
+from .file_utils import is_sagemaker_distributed_available, is_tf_available, is_torch_available, is_torch_tpu_available
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -187,6 +187,10 @@ def total_processes_number(local_rank):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
+    elif is_sagemaker_distributed_available():
+        import smdistributed.dataparallel.torch.distributed as dist
+
+        return dist.get_world_size()
     elif local_rank != -1 and is_torch_available():
         import torch
 
