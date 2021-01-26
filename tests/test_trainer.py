@@ -660,7 +660,7 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize traine
+            # Reinitialize trainer
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
                 train_len=128,
