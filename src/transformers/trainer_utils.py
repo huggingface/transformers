@@ -230,3 +230,10 @@ class SchedulerType(ExplicitEnum):
     POLYNOMIAL = "polynomial"
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
+
+    @staticmethod
+    def get_arg_names():
+        """
+        Return the scheduler names that can be fed to the HF Trainer --lr_scheduler_type cl arg
+        """
+        return [x.value for x in SchedulerType]
