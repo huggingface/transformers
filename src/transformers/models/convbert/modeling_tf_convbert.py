@@ -96,7 +96,7 @@ class TFConvBertWordEmbeddings(tf.keras.layers.Layer):
             tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=shape_list(input_ids) + [self.hidden_size])
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -136,7 +136,7 @@ class TFConvBertTokenTypeEmbeddings(tf.keras.layers.Layer):
             tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=shape_list(token_type_ids) + [self.hidden_size])
+        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
