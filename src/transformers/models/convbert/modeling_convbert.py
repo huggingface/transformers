@@ -81,8 +81,8 @@ def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
 
     param_mapping = fetch_mapping(config)
 
-    for p in model.named_parameters():
-        param_name = p[0]
+    for param in model.named_parameters():
+        param_name = param[0]
         retriever = attrgetter(param_name)
         result = retriever(model)
         tf_name = param_mapping[param_name]
