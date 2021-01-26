@@ -983,7 +983,7 @@ class LEDDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask
+            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1205,8 +1205,8 @@ class LEDSeq2SeqModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    head_mask: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_head_mask: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1285,8 +1285,8 @@ class LEDSeq2SeqLMOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    head_mask: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_head_mask: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1365,8 +1365,8 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    head_mask: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_head_mask: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1448,8 +1448,8 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    head_mask: Optional[Tuple[torch.FloatTensor]] = None
-    decoder_head_mask: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 LED_START_DOCSTRING = r"""
@@ -1809,6 +1809,7 @@ class LEDEncoder(LEDPreTrainedModel):
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
                         is_index_masked,
                         is_index_global_attn,
                     )
@@ -2155,10 +2156,10 @@ class LEDModel(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        encoder_outputs=None,
+        global_attention_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -2281,10 +2282,10 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        encoder_outputs=None,
+        global_attention_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
@@ -2368,7 +2369,14 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
@@ -2380,6 +2388,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
@@ -2427,10 +2436,10 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        encoder_outputs=None,
+        global_attention_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         labels=None,
@@ -2535,10 +2544,10 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
-        encoder_outputs=None,
-        global_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        encoder_outputs=None,
+        global_attention_mask=None,
         start_positions=None,
         end_positions=None,
         inputs_embeds=None,
