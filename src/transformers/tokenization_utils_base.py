@@ -1760,7 +1760,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if len(unresolved_files) > 0:
             logger.info(
                 f"Can't load following files from cache: {unresolved_files} and cannot check if these "
-                f"files are necessary for the tokenizer to operate."
+                "files are necessary for the tokenizer to operate."
             )
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
