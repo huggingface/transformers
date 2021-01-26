@@ -236,13 +236,13 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
-        dk = tf.cast(x=self.attention_head_size, dtype=query_layer.dtype)
-        query_layer = tf.multiply(x=query_layer, y=tf.math.rsqrt(x=dk))
+        dk = tf.cast(self.attention_head_size, dtype=query_layer.dtype)
+        query_layer = tf.multiply(query_layer, tf.math.rsqrt(dk))
         attention_scores = tf.einsum("aecd,abcd->acbe", key_layer, query_layer)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFElectraModel call() function)
-            attention_scores = tf.add(x=attention_scores, y=attention_mask)
+            attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
@@ -253,7 +253,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_scores = tf.multiply(x=attention_scores, y=head_mask)
+            attention_scores = tf.multiply(attention_scores, head_mask)
 
         attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
@@ -347,7 +347,7 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.intermediate_act_fn(x=hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 

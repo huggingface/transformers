@@ -39,6 +39,7 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -237,8 +238,8 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
                 tensor=input_ids, shape=(input_ids_shape[0] * input_ids_shape[1], input_ids_shape[2])
             )
 
-        mask = tf.cast(x=tf.math.not_equal(x=input_ids, y=self.padding_idx), dtype=input_ids.dtype)
-        incremental_indices = tf.math.cumsum(x=mask, axis=1) * mask
+        mask = tf.cast(tf.math.not_equal(input_ids, self.padding_idx), dtype=input_ids.dtype)
+        incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
 
@@ -359,13 +360,13 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
-        dk = tf.cast(x=self.attention_head_size, dtype=query_layer.dtype)
-        query_layer = tf.multiply(x=query_layer, y=tf.math.rsqrt(x=dk))
+        dk = tf.cast(self.attention_head_size, dtype=query_layer.dtype)
+        query_layer = tf.multiply(query_layer, tf.math.rsqrt(dk))
         attention_scores = tf.einsum("aecd,abcd->acbe", key_layer, query_layer)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFRobertaModel call() function)
-            attention_scores = tf.add(x=attention_scores, y=attention_mask)
+            attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
         attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
@@ -376,7 +377,7 @@ class TFRobertaSelfAttention(tf.keras.layers.Layer):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_scores = tf.multiply(x=attention_scores, y=head_mask)
+            attention_scores = tf.multiply(attention_scores, head_mask)
 
         attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
@@ -470,7 +471,7 @@ class TFRobertaIntermediate(tf.keras.layers.Layer):
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.intermediate_act_fn(x=hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 
@@ -618,11 +619,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
-        input_ids: Optional[
-            Union[
-                List[tf.Tensor], List[np.ndarray], Dict[str, tf.Tensor], Dict[str, np.ndarray], np.ndarray, tf.Tensor
-            ]
-        ] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -685,8 +682,8 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(x=extended_attention_mask, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(x=tf.subtract(x=1.0, y=extended_attention_mask), y=-10000.0)
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(1.0, extended_attention_mask), -10000.0)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

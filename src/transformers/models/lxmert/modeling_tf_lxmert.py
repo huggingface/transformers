@@ -1147,7 +1147,7 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.transform_act_fn(x=hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(inputs=hidden_states)
 
         return hidden_states
