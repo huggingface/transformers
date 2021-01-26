@@ -196,6 +196,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         sequence_output, pooled_output = outputs[:2]
@@ -271,6 +272,7 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         sequence_output = outputs[0]
 
@@ -339,6 +341,7 @@ class TFDPRSpanPredictor(TFPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         return outputs
@@ -385,6 +388,7 @@ class TFDPREncoder(TFPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         return outputs
 
@@ -649,6 +653,7 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         if not inputs["return_dict"]:
@@ -747,6 +752,7 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         if not inputs["return_dict"]:
@@ -844,6 +850,7 @@ class TFDPRReader(TFDPRPretrainedReader):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
     def serving_output(self, output):
