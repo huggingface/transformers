@@ -516,7 +516,8 @@ class WandbCallback(TrainerCallback):
             else:
                 self._wandb = wandb
         self._initialized = False
-        self._log_model = False
+        # log outputs
+        self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def setup(self, args, state, model, reinit, **kwargs):
         """
@@ -569,9 +570,6 @@ class WandbCallback(TrainerCallback):
                 self._wandb.watch(
                     model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps)
                 )
-
-            # log outputs
-            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
