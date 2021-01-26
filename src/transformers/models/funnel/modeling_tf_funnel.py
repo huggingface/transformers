@@ -87,10 +87,10 @@ class TFFunnelWordEmbeddings(tf.keras.layers.Layer):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_config(self) -> Dict[str, Any]:
         config = {
@@ -106,10 +106,10 @@ class TFFunnelWordEmbeddings(tf.keras.layers.Layer):
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -1434,8 +1434,8 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1524,8 +1524,8 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1660,8 +1660,8 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1753,8 +1753,8 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1858,8 +1858,8 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
             start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns

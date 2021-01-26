@@ -16,7 +16,7 @@
 
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -41,7 +41,7 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
-    TFModelInputType
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -81,10 +81,10 @@ class TF{{cookiecutter.camelcase_modelname}}WordEmbeddings(tf.keras.layers.Layer
         self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_config(self) -> Dict[str, Any]:
         config = {
@@ -100,10 +100,10 @@ class TF{{cookiecutter.camelcase_modelname}}WordEmbeddings(tf.keras.layers.Layer
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -121,10 +121,10 @@ class TF{{cookiecutter.camelcase_modelname}}TokenTypeEmbeddings(tf.keras.layers.
         self.token_type_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_config(self) -> Dict[str, Any]:
         config = {
@@ -141,10 +141,10 @@ class TF{{cookiecutter.camelcase_modelname}}TokenTypeEmbeddings(tf.keras.layers.
         one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
         embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -162,10 +162,10 @@ class TF{{cookiecutter.camelcase_modelname}}PositionEmbeddings(tf.keras.layers.L
         self.position_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_config(self) -> Dict[str, Any]:
         config = {
@@ -178,7 +178,7 @@ class TF{{cookiecutter.camelcase_modelname}}PositionEmbeddings(tf.keras.layers.L
         return dict(list(base_config.items()) + list(config.items()))
 
     def call(self, position_ids: tf.Tensor) -> tf.Tensor:
-        input_shape = shape_list(tensor=position_ids)
+        input_shape = shape_list(position_ids)
         position_embeddings = self.position_embeddings[: input_shape[1], :]
 
         return tf.broadcast_to(input=position_embeddings, shape=input_shape)
@@ -230,18 +230,18 @@ class TF{{cookiecutter.camelcase_modelname}}Embeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
 
         if token_type_ids is None:
-            input_shape = shape_list(tensor=inputs_embeds)[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
+            position_embeds = self.position_embeddings(inputs_embeds)
         else:
-            position_embeds = self.position_embeddings(position_ids=position_ids)
+            position_embeds = self.position_embeddings(position_ids)
 
-        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        token_type_embeds = self.token_type_embeddings(token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -267,21 +267,21 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
             equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
             bias_axes="de",
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="query",
         )
         self.key = tf.keras.layers.experimental.EinsumDense(
             equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
             bias_axes="de",
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="key",
         )
         self.value = tf.keras.layers.experimental.EinsumDense(
             equation="abc,cde->abde",
             output_shape=(None, config.num_attention_heads, self.attention_head_size),
             bias_axes="de",
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="value",
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
@@ -343,7 +343,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfOutput(tf.keras.layers.Layer):
             equation="abcd,cde->abe",
             output_shape=(None, self.all_head_size),
             bias_axes="e",
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -362,8 +362,8 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.self_attention = TF{{cookiecutter.camelcase_modelname}}SelfAttention(config=config, name="self")
-        self.dense_output = TF{{cookiecutter.camelcase_modelname}}SelfOutput(config=config, name="output")
+        self.self_attention = TF{{cookiecutter.camelcase_modelname}}SelfAttention(config, name="self")
+        self.dense_output = TF{{cookiecutter.camelcase_modelname}}SelfOutput(config, name="output")
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -393,19 +393,19 @@ class TF{{cookiecutter.camelcase_modelname}}Attention(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->{{cookiecutter.camelcase_modelname}}
 class TF{{cookiecutter.camelcase_modelname}}Intermediate(tf.keras.layers.Layer):
-    def __init__(self, config: {{cookiecutter.camelcase_modelname}}onfig, **kwargs):
+    def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.experimental.EinsumDense(
             equation="abc,cd->abd",
             output_shape=(None, config.intermediate_size),
             bias_axes="d",
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
 
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(activation_string=config.hidden_act)
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
 
@@ -425,7 +425,7 @@ class TF{{cookiecutter.camelcase_modelname}}Output(tf.keras.layers.Layer):
             equation="abc,cd->abd",
             bias_axes="d",
             output_shape=(None, config.hidden_size),
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -443,9 +443,9 @@ class TF{{cookiecutter.camelcase_modelname}}Layer(tf.keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, **kwargs):
         super().__init__(**kwargs)
 
-        self.attention = TF{{cookiecutter.camelcase_modelname}}Attention(config=config, name="attention")
-        self.intermediate = TF{{cookiecutter.camelcase_modelname}}Intermediate(config=config, name="intermediate")
-        self.bert_output = TF{{cookiecutter.camelcase_modelname}}Output(config=config, name="output")
+        self.attention = TF{{cookiecutter.camelcase_modelname}}Attention(config, name="attention")
+        self.intermediate = TF{{cookiecutter.camelcase_modelname}}Intermediate(config, name="intermediate")
+        self.bert_output = TF{{cookiecutter.camelcase_modelname}}Output(config, name="output")
 
     def call(
         self,
@@ -524,12 +524,12 @@ class TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(tf.keras.lay
 
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
 
         if isinstance(config.hidden_act, str):
-            self.transform_act_fn = get_tf_activation(activation_string=config.hidden_act)
+            self.transform_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.transform_act_fn = config.hidden_act
 
@@ -551,7 +551,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
 
-        self.transform = TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(config=config, name="transform")
+        self.transform = TF{{cookiecutter.camelcase_modelname}}PredictionHeadTransform(config, name="transform")
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -567,18 +567,18 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
 
     def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(tensor=value)[0]
+        self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
     def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
-        self.vocab_size = shape_list(tensor=value["bias"])[0]
+        self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(tensor=hidden_states)[1]
+        seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -592,7 +592,7 @@ class TF{{cookiecutter.camelcase_modelname}}MLMHead(tf.keras.layers.Layer):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
-        self.predictions = TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(config, input_embeddings=input_embeddings, name="predictions")
+        self.predictions = TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(config, input_embeddings, name="predictions")
 
     def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
         prediction_scores = self.predictions(hidden_states=sequence_output)
@@ -609,8 +609,8 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
 
         self.config = config
 
-        self.embeddings = TF{{cookiecutter.camelcase_modelname}}Embeddings(config=config, name="embeddings")
-        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config=config, name="encoder")
+        self.embeddings = TF{{cookiecutter.camelcase_modelname}}Embeddings(config, name="embeddings")
+        self.encoder = TF{{cookiecutter.camelcase_modelname}}Encoder(config, name="encoder")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
@@ -619,7 +619,7 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value: tf.Variable):
         self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = shape_list(tensor=value)[0]
+        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -662,9 +662,9 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
-            input_shape = shape_list(tensor=inputs["input_ids"])
+            input_shape = shape_list(inputs["input_ids"])
         elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(tensor=inputs["inputs_embeds"])[:-1]
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -836,9 +836,9 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 )
 class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -893,8 +893,8 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
     
     # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutput(
             last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns,
@@ -905,7 +905,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
 class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMaskedLanguageModelingLoss):
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         if config.is_decoder:
             logger.warning(
@@ -913,8 +913,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
                 "bi-directional self-attention."
             )
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
-        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config=config, inputs_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
+        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, inputs_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
     
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
@@ -994,8 +994,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
     
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1005,13 +1005,13 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
 class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFCausalLanguageModelingLoss):
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         if not config.is_decoder:
             logger.warning("If you want to use `TF{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
-        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config=config, inputs_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
+        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, inputs_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
@@ -1093,8 +1093,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
     
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1103,18 +1103,18 @@ class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.L
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(initializer_range=config.initializer_range), name="dense"
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.out_proj = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(initializer_range=config.initializer_range), name="out_proj"
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
         )
 
         if isinstance(config.hidden_act, str):
-            self.classifier_act_fn = get_tf_activation(activation_string=config.hidden_act)
+            self.classifier_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.classifier_act_fn = config.hidden_act
 
@@ -1136,11 +1136,12 @@ class TF{{cookiecutter.camelcase_modelname}}ClassificationHead(tf.keras.layers.L
 )
 class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
-        self.classifier = TF{{cookiecutter.camelcase_modelname}}ClassificationHead(config=config, name="classifier")
+
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
+        self.classifier = TF{{cookiecutter.camelcase_modelname}}ClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1215,8 +1216,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
     
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1228,14 +1229,14 @@ class TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification(TF{{cookie
 )
 class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.sequence_summary = TFSequenceSummary(
-            config=config, initializer_range=config.initializer_range, name="sequence_summary"
+            config, config.initializer_range, name="sequence_summary"
         )
         self.classifier = tf.keras.layers.Dense(
-            units=1, kernel_initializer=get_initializer(initializere_range=config.initializer_range), name="classifier"
+            units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @property
@@ -1246,7 +1247,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         Returns:
             tf.Tensor with dummy inputs
         """
-        return {"input_ids": tf.constant(value=MULTIPLE_CHOICE_DUMMY_INPUTS)}
+        return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1294,11 +1295,11 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         )
 
         if inputs["input_ids"] is not None:
-            num_choices = shape_list(tensor=inputs["input_ids"])[1]
-            seq_length = shape_list(tensor=inputs["input_ids"])[2]
+            num_choices = shape_list(inputs["input_ids"])[1]
+            seq_length = shape_list(inputs["input_ids"])[2]
         else:
-            num_choices = shape_list(tensor=inputs["inputs_embeds"])[1]
-            seq_length = shape_list(tensor=inputs["inputs_embeds"])[2]
+            num_choices = shape_list(inputs["inputs_embeds"])[1]
+            seq_length = shape_list(inputs["inputs_embeds"])[2]
 
         flat_input_ids = (
             tf.reshape(tensor=inputs["input_ids"], shape=(-1, seq_length)) if inputs["input_ids"] is not None else None
@@ -1320,7 +1321,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
         )
         flat_inputs_embeds = (
             tf.reshape(
-                tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(tensor=inputs["inputs_embeds"])[3])
+                tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3])
             )
             if inputs["inputs_embeds"] is not None
             else None
@@ -1363,12 +1364,12 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
     def serving(self, inputs: Dict[str, tf.Tensor]):
         output = self.call(input_ids=inputs)
 
-        return self.serving_output(output=output)
+        return self.serving_output(output)
     
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1381,13 +1382,14 @@ class TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice(TF{{cookiecutter.c
 class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFTokenClassificationLoss):
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
+
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(initializer_range=config.initializer_range), name="classifier"
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1463,8 +1465,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
     
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
@@ -1477,12 +1479,13 @@ class TF{{cookiecutter.camelcase_modelname}}ForTokenClassification(TF{{cookiecut
 class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutter.camelcase_modelname}}PreTrainedModel, TFQuestionAnsweringLoss):
 
     def __init__(self, config: {{cookiecutter.camelcase_modelname}}Config, *inputs, **kwargs):
-        super().__init__(config=config, *inputs, **kwargs)
+        super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config=config, name="{{cookiecutter.lowercase_modelname}}")
+
+        self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
         self.qa_outputs = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(initializer_range=config.initializer_range), name="qa_outputs"
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1573,8 +1576,8 @@ class TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering(TF{{cookiecutte
     
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(value=output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(value=output.attentions) if self.config.output_attentions else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFQuestionAnsweringModelOutput(
             start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns

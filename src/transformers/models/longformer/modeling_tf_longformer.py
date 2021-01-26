@@ -428,10 +428,10 @@ class TFLongformerWordEmbeddings(tf.keras.layers.Layer):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_config(self) -> Dict[str, Any]:
         config = {
@@ -447,10 +447,10 @@ class TFLongformerWordEmbeddings(tf.keras.layers.Layer):
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -468,10 +468,10 @@ class TFLongformerTokenTypeEmbeddings(tf.keras.layers.Layer):
         self.token_type_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_config(self) -> Dict[str, Any]:
         config = {
@@ -488,10 +488,10 @@ class TFLongformerTokenTypeEmbeddings(tf.keras.layers.Layer):
         one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
         embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -508,7 +508,7 @@ class TFLongformerPositionEmbeddings(tf.keras.layers.Layer):
         self.position_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
         super().build(input_shape)
@@ -527,10 +527,10 @@ class TFLongformerPositionEmbeddings(tf.keras.layers.Layer):
         flat_position_ids = tf.reshape(tensor=position_ids, shape=[-1])
         embeddings = tf.gather(params=self.position_embeddings, indices=flat_position_ids)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=position_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(position_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=position_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(position_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -698,12 +698,12 @@ class TFLongformerIntermediate(tf.keras.layers.Layer):
             equation="abc,cd->abd",
             output_shape=(None, config.intermediate_size),
             bias_axes="d",
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
 
         if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = get_tf_activation(activation_string=config.hidden_act)
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
 
@@ -723,7 +723,7 @@ class TFLongformerOutput(tf.keras.layers.Layer):
             equation="abc,cd->abd",
             bias_axes="d",
             output_shape=(None, config.hidden_size),
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             name="dense",
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -744,7 +744,7 @@ class TFLongformerPooler(tf.keras.layers.Layer):
 
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
-            kernel_initializer=get_initializer(initializer_range=config.initializer_range),
+            kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
