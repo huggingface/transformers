@@ -184,8 +184,8 @@ class SeparableConv1D(nn.Module):
         self.pointwise = nn.Conv1d(input_filters, output_filters, kernel_size=1, bias=False)
         self.bias = nn.Parameter(torch.zeros(output_filters, 1))
 
-        self.depthwise.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        self.pointwise.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        self.depthwise.weight.data.normal_(mean=0.0, std=config.initializer_range)
+        self.pointwise.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
     def forward(self, x):
         x = self.depthwise(x)
