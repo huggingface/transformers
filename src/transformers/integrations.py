@@ -516,6 +516,7 @@ class WandbCallback(TrainerCallback):
             else:
                 self._wandb = wandb
         self._initialized = False
+        self._log_model = False
 
     def setup(self, args, state, model, reinit, **kwargs):
         """
@@ -583,7 +584,8 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         # commit last step
-        self._wandb.log({})
+        if state.is_world_process_zero:
+            self._wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
