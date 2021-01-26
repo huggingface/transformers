@@ -41,8 +41,7 @@ class ConvBertConfig(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the ConvBERT model. Defines the number of different tokens that can be represented by
             the :obj:`inputs_ids` passed when calling :class:`~transformers.ConvBertModel` or
-            :class:`~transformers.TFConvBertModel`. Vocabulary size of the model. Defines the different tokens that can
-            be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ConvBertModel`.
+            :class:`~transformers.TFConvBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
