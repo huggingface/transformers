@@ -242,8 +242,8 @@ class TrainingArguments:
             :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
         ddp_find_unused_parameters (:obj:`bool`, `optional`):
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
-            :obj:`DistributedDataParallel`. Will defaut to :obj:`True` if gradient checkpointing is not used,
-            :obj:`False` otherwise.
+            :obj:`DistributedDataParallel`. Will defaut to :obj:`False` if gradient checkpointing is used, :obj:`True`
+            otherwise.
     """
 
     output_dir: str = field(
