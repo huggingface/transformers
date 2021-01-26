@@ -303,7 +303,7 @@ def is_sagemaker_distributed_available():
     try:
         # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
         sagemaker_params = json.loads(sagemaker_params)
-        if not sagemaker_params["sagemaker_distributed_dataparallel_enabled"]:
+        if not sagemaker_params.get("sagemaker_distributed_dataparallel_enabled", False):
             return False
     except json.JSONDecodeError:
         return False
