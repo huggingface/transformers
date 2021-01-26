@@ -1758,7 +1758,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         raise err
 
         if len(unresolved_files) > 0:
-            logger.warning(
+            logger.info(
                 f"Can't load following files from cache: {unresolved_files} and cannot check if these "
                 f"files are necessary for the tokenizer to operate."
             )
