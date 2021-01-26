@@ -202,6 +202,7 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFOpenAIGPTLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFOpenAIGPTModelTester(self)

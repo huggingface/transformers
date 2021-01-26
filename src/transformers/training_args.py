@@ -18,7 +18,13 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from .file_utils import (
+    cached_property,
+    is_sagemaker_distributed_available,
+    is_torch_available,
+    is_torch_tpu_available,
+    torch_required,
+)
 from .trainer_utils import EvaluationStrategy, SchedulerType
 from .utils import logging
 
@@ -231,6 +237,9 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+            The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
     """
 
     output_dir: str = field(
@@ -413,6 +422,9 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
     )
+    report_to: Optional[List[str]] = field(
+        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
@@ -434,6 +446,11 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if self.report_to is None:
+            # Import at runtime to avoid a circular import.
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -482,6 +499,13 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
+        elif is_sagemaker_distributed_available():
+            import smdistributed.dataparallel.torch.distributed as dist
+
+            dist.init_process_group()
+            self.local_rank = dist.get_local_rank()
+            device = torch.device("cuda", self.local_rank)
+            self._n_gpu = 1
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -555,6 +579,8 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
+        elif is_sagemaker_distributed_available():
+            return ParallelMode.SAGEMAKER_DISTRIBUTED
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -596,4 +622,5 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
+    SAGEMAKER_DISTRIBUTED = "sm_distributed"
     TPU = "tpu"

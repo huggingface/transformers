@@ -31,15 +31,11 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 # Integrations must be imported before ML frameworks:
 from .integrations import (  # isort: split
     default_hp_search_backend,
+    get_reporting_integration_callbacks,
     hp_params,
-    is_azureml_available,
-    is_comet_available,
     is_fairscale_available,
-    is_mlflow_available,
     is_optuna_available,
     is_ray_tune_available,
-    is_tensorboard_available,
-    is_wandb_available,
     run_hp_search_optuna,
     run_hp_search_ray,
     init_deepspeed,
@@ -55,7 +51,14 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import WEIGHTS_NAME, is_apex_available, is_datasets_available, is_in_notebook, is_torch_tpu_available
+from .file_utils import (
+    WEIGHTS_NAME,
+    is_apex_available,
+    is_datasets_available,
+    is_in_notebook,
+    is_sagemaker_distributed_available,
+    is_torch_tpu_available,
+)
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import Adafactor, AdamW, get_scheduler
@@ -124,37 +127,16 @@ if is_torch_tpu_available():
     import torch_xla.debug.metrics as met
     import torch_xla.distributed.parallel_loader as pl
 
-if is_tensorboard_available():
-    from .integrations import TensorBoardCallback
-
-    DEFAULT_CALLBACKS.append(TensorBoardCallback)
-
-
-if is_wandb_available():
-    from .integrations import WandbCallback
-
-    DEFAULT_CALLBACKS.append(WandbCallback)
-
-if is_comet_available():
-    from .integrations import CometCallback
-
-    DEFAULT_CALLBACKS.append(CometCallback)
-
-if is_mlflow_available():
-    from .integrations import MLflowCallback
-
-    DEFAULT_CALLBACKS.append(MLflowCallback)
-
-if is_azureml_available():
-    from .integrations import AzureMLCallback
-
-    DEFAULT_CALLBACKS.append(AzureMLCallback)
-
 if is_fairscale_available():
     from fairscale.nn.data_parallel import ShardedDataParallel as ShardedDDP
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
+if is_sagemaker_distributed_available():
+    import smdistributed.dataparallel.torch.distributed as dist
+    from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
+else:
+    import torch.distributed as dist
 
 if TYPE_CHECKING:
     import optuna
@@ -300,7 +282,8 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument."
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
-        callbacks = DEFAULT_CALLBACKS if callbacks is None else DEFAULT_CALLBACKS + callbacks
+        default_callbacks = DEFAULT_CALLBACKS + get_reporting_integration_callbacks(self.args.report_to)
+        callbacks = default_callbacks if callbacks is None else default_callbacks + callbacks
         self.callback_handler = CallbackHandler(
             callbacks, self.model, self.tokenizer, self.optimizer, self.lr_scheduler
         )
@@ -457,9 +440,12 @@ class Trainer:
         if self.args.parallel_mode == ParallelMode.TPU:
             num_processes = xm.xrt_world_size()
             process_index = xm.get_ordinal()
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-            num_processes = torch.distributed.get_world_size()
-            process_index = torch.distributed.get_rank()
+        elif (
+            self.args.parallel_mode == ParallelMode.DISTRIBUTED
+            or self.args.parallel_mode == ParallelMode.SAGEMAKER_DISTRIBUTED
+        ):
+            num_processes = dist.get_world_size()
+            process_index = dist.get_rank()
         else:
             num_processes = 1
             process_index = 0
@@ -772,6 +758,8 @@ class Trainer:
         # Distributed training (should be after apex fp16 initialization)
         if self.sharded_dpp:
             model = ShardedDDP(model, self.optimizer)
+        elif is_sagemaker_distributed_available():
+            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
@@ -796,14 +784,13 @@ class Trainer:
 
         # Train!
         if is_torch_tpu_available():
-            total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
+            world_size = xm.xrt_world_size()
+        elif self.args.local_rank != -1:
+            world_size = dist.get_world_size()
         else:
-            total_train_batch_size = (
-                self.args.train_batch_size
-                * self.args.gradient_accumulation_steps
-                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
-            )
+            world_size = 1
 
+        total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps * world_size
         num_examples = (
             self.num_examples(train_dataloader)
             if train_dataset_is_sized
@@ -1144,8 +1131,8 @@ class Trainer:
     ) -> BestRun:
         """
         Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
-        :obj:`compute_objectie`, which defaults to a function returning the evaluation loss when no metric is provided,
-        the sum of all metrics otherwise.
+        :obj:`compute_objective`, which defaults to a function returning the evaluation loss when no metric is
+        provided, the sum of all metrics otherwise.
 
         .. warning::
 
@@ -1331,7 +1318,7 @@ class Trainer:
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
         else:
-            return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
+            return self.args.local_rank == -1 or dist.get_rank() == 0
 
     def save_model(self, output_dir: Optional[str] = None):
         """
@@ -1571,7 +1558,7 @@ class Trainer:
         if is_torch_tpu_available():
             world_size = xm.xrt_world_size()
         elif self.args.local_rank != -1:
-            world_size = torch.distributed.get_world_size()
+            world_size = dist.get_world_size()
         world_size = max(1, world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
