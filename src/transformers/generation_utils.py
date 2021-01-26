@@ -611,6 +611,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        prefix_token: Optional[int] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -945,6 +946,7 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                prefix_token=prefix_token,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -983,6 +985,7 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                prefix_token=prefix_token,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -1021,6 +1024,7 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
+                prefix_token=prefix_token,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -1438,6 +1442,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        prefix_token: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1589,7 +1594,10 @@ class GenerationMixin:
 
             # adjust tokens for Bart, *e.g.*
             next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits, cur_len=cur_len, max_length=max_length
+                next_token_logits,
+                cur_len=cur_len,
+                max_length=max_length,
+                lang_token=prefix_token,
             )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
@@ -1686,6 +1694,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        prefix_token: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1843,7 +1852,10 @@ class GenerationMixin:
 
             # adjust token scores (a no-op by default)
             next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits, cur_len=cur_len, max_length=max_length
+                next_token_logits,
+                cur_len=cur_len,
+                max_length=max_length,
+                lang_token=prefix_token,
             )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
@@ -1943,6 +1955,7 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        prefix_token: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2127,7 +2140,7 @@ class GenerationMixin:
 
                 # adjust tokens for Bart, *e.g.*
                 next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=max_length
+                    next_token_logits, cur_len=cur_len, max_length=max_length, lang_token=prefix_token
                 )
 
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)

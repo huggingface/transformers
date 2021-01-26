@@ -1301,7 +1301,7 @@ class MarianMTModel(MarianPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+    def adjust_logits_during_generation(self, logits, cur_len, max_length, **kwargs):
         logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
             self._force_token_id_to_be_generated(logits, self.config.eos_token_id)
