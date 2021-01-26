@@ -71,7 +71,7 @@ It should download a pretrained model then print something like
 
 (Note that TensorFlow will print additional stuff before that last statement.)
 
-## Installing from  source
+## Installing from source
 
 To install from source, clone the repository and install with the following commands:
 

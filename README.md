@@ -183,7 +183,7 @@ Follow the installation pages of TensorFlow, PyTorch or Flax to see how to insta
 
 ### master version
 
-In some situations a fix has been applied to the bleeding edge of the code (`master`) and you can't wait for the new release to use it. In such situation you may want to install `transformers` directly from `master`, by doing the following:
+In some situations where a fix has been applied to the bleeding edge of the code (`master`) and you can't wait for the new release to use it you can install `transformers` directly from `master`, by doing the following:
 
 ```
 pip install git+https://github.com/huggingface/transformers
