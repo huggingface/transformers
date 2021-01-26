@@ -167,7 +167,7 @@ When TensorFlow 2.0 and/or PyTorch has been installed, 🤗 Transformers can be 
 pip install transformers
 ```
 
-If you'd like to play with the examples, you must [install the library from source](https://huggingface.co/transformers/installation.html#installing-from-source).
+If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/transformers/installation.html#installing-from-source).
 
 ### With conda
 
@@ -180,15 +180,6 @@ conda install -c huggingface transformers
 ```
 
 Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda.
-
-### master version
-
-In some situations where a fix has been applied to the bleeding edge of the code (`master`) and you can't wait for the new release to use it you can install `transformers` directly from `master`, by doing the following:
-
-```
-pip install git+https://github.com/huggingface/transformers
-```
-
 
 ## Models architectures
 

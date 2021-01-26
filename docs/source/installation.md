@@ -73,30 +73,11 @@ It should download a pretrained model then print something like
 
 ## Installing from source
 
-To install from source, clone the repository and install with the following commands:
-
-``` bash
-git clone https://github.com/huggingface/transformers.git
-cd transformers
-pip install -e .
-```
-
-This will install not the latest released version, but the bleeding edge `master` version, which may be not-quite ready for normal usage, but you may want to use it in case a bug has been fixed since the last official release and a new release hasn't yet been rolled out.
-
-Do note that you have to keep that folder around and not delete it to continue using `transfomers`. You can also run:
-```
-git pull
-```
-inside this folder to update it to the latest version.
-
-If you just need to do it once and you aren't planning to update it to the latest bleeding edge version, you can just do:
+Note that the following will will install not the latest released version, but the bleeding edge `master` version, which may be not-quite ready for normal usage, but you may want to use it in case a bug has been fixed since the last official release and a new release hasn't yet been rolled out.
 
 ```
 pip install git+https://github.com/huggingface/transformers
 ```
-
-and then you don't need to worry about keeping any folders around. `pip` will clone the repository and install it directly into your python environment.
-
 
 Again, you can run
 
@@ -105,6 +86,33 @@ python -c "from transformers import pipeline; print(pipeline('sentiment-analysis
 ```
 
 to check 🤗 Transformers is properly installed.
+
+## Editable install
+
+If you are an advanced user who wants to constantly use the bleeding edge `master` version of the source code, the easiest way to do it is via an editable install. This is done by cloning the repository and installing with the following commands:
+
+``` bash
+git clone https://github.com/huggingface/transformers.git
+cd transformers
+pip install -e .
+```
+
+This command performs a magical link between the folder you cloned the repository to and your python library paths, so it'll look inside this folder in addition to the normal library-wide paths. So if normally your python packages get installed into:
+```
+~/anaconda3/envs/main/lib/python3.7/site-packages/
+```
+now this editable install will reside where you clone the folder to, e.g. `~/transformers/` and python will search it too.
+
+Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transfomers` library.
+
+Now, let's get to the real benefit of this installation approach. Say, you saw some new feature has been just committed into `master`. If you have already performed all the steps above, to update your transformers to include all the latest commits, all you need to do is to `cd` into that cloned repository folder and update the clone to the latest version:
+
+```
+cd ~/transformers/
+git pull
+```
+
+There is nothing else to do. Your python environment will find the bleeding edge version of `transformers` on the next run.
 
 
 ## With conda
