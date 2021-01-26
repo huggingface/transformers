@@ -338,6 +338,7 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFFunnelModelTester(self)
@@ -376,6 +377,7 @@ class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFFunnelBaseModel, TFFunnelForMultipleChoice, TFFunnelForSequenceClassification) if is_tf_available() else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFFunnelModelTester(self, base=True)

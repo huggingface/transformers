@@ -109,10 +109,11 @@ class TFMarianModelTester:
 
         input_ids = input_ids[:1, :]
         attention_mask = inputs_dict["attention_mask"][:1, :]
+        head_mask = inputs_dict["head_mask"]
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
         past_key_values = past_key_values[1]
@@ -145,6 +146,8 @@ def prepare_marian_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
@@ -156,11 +159,17 @@ def prepare_marian_inputs_dict(
             ],
             axis=-1,
         )
+    if head_mask is None:
+        head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
+    if decoder_head_mask is None:
+        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": decoder_head_mask,
     }
 
 
@@ -170,6 +179,7 @@ class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_head_masking = True
 
     def setUp(self):
         self.model_tester = TFMarianModelTester(self)

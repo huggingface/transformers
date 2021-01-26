@@ -240,6 +240,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFAlbertModelTester(self)
