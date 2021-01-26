@@ -995,6 +995,15 @@ class T5Stack(T5PreTrainedModel):
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states = layer_outputs[0]
 
+            # with use_cache
+            # hidden-states, key-value-states, (self-attention position bias), (self-attention weights),  (cross-attention position bias), (cross-attention weights)
+            # hidden-states, key-value-states, (self-attention position bias), (cross-attention position bias)
+
+            # without use_cache
+            # hidden-states, (self-attention position bias), (self-attention weights),  (cross-attention position bias), (cross-attention weights)
+            # hidden-states, (self-attention position bias), (cross-attention position bias)
+
+
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention weights),
             # (self-attention position bias), (cross-attention weights), (cross-attention position bias)
