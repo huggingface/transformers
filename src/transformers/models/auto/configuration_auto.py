@@ -162,7 +162,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("convbert", "ConvBert"),
+        ("convbert", "ConvBERT"),
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),
         ("retribert", "RetriBERT"),

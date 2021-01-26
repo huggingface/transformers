@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,8 +41,7 @@ class ConvBertConfig(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the ConvBERT model. Defines the number of different tokens that can be represented by
             the :obj:`inputs_ids` passed when calling :class:`~transformers.ConvBertModel` or
-            :class:`~transformers.TFConvBertModel`. Vocabulary size of the model. Defines the different tokens that can
-            be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.ConvBertModel`.
+            :class:`~transformers.TFConvBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
