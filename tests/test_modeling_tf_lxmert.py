@@ -361,6 +361,7 @@ class TFLxmertModelTester(object):
 class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFLxmertModel, TFLxmertForPreTraining) if is_tf_available() else ()
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFLxmertModelTester(self)
