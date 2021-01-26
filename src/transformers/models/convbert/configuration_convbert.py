@@ -68,11 +68,11 @@ class ConvBertConfig(PretrainedConfig):
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         head_ratio (:obj:`int`, `optional`, defaults to 2):
-            The head ratio for ConvBert model
+            Ratio gamma to reduce the number of attention heads.
         num_groups (:obj:`int`, `optional`, defaults to 1):
             The number of groups for grouped linear layers for ConvBert model
         conv_kernel_size (:obj:`int`, `optional`, defaults to 9):
-            The size of convolutional kernel
+            The size of the convolutional kernel.
 
 
     Example::

@@ -96,7 +96,7 @@ class TFConvBertWordEmbeddings(tf.keras.layers.Layer):
             tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(shape=shape_list(input_ids) + [self.hidden_size])
 
         return embeddings
 
@@ -136,7 +136,7 @@ class TFConvBertTokenTypeEmbeddings(tf.keras.layers.Layer):
             tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(shape=shape_list(token_type_ids) + [self.hidden_size])
 
         return embeddings
 
@@ -253,9 +253,11 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         self.num_attention_heads = num_attention_heads
         self.conv_kernel_size = config.conv_kernel_size
 
-        assert config.hidden_size % self.num_attention_heads == 0
+        assert (
+            config.hidden_size % self.num_attention_heads == 0
+        ), "hidden_size should be divisible by num_attention_heads"
 
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query = tf.keras.layers.Dense(
             self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
@@ -432,8 +434,8 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
             "bias", shape=[self.output_size], initializer=self.kernel_initializer, dtype=self.dtype, trainable=True
         )
 
-    def call(self, x):
-        batch_size = shape_list(tensor=x)[1]
+    def call(self, hidden_states):
+        batch_size = shape_list(tensor=hidden_states)[1]
         x = tf.reshape(x, [-1, self.num_groups, self.group_in_dim])
         x = tf.matmul(a=x, b=self.kernel, transpose_b=True)
         x = tf.reshape(x, [batch_size, -1, self.output_size])
@@ -1054,8 +1056,8 @@ class TFConvBertClassificationHead(tf.keras.layers.Layer):
 
         self.config = config
 
-    def call(self, inputs, **kwargs):
-        x = inputs[:, 0, :]  # take <s> token (equiv. to [CLS])
+    def call(self, hidden_states, **kwargs):
+        x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
         x = get_tf_activation(self.config.hidden_act)(x)

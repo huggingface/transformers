@@ -18,7 +18,7 @@
 import math
 import os
 from operator import attrgetter
-
+import logging
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -43,7 +43,6 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_convbert import ConvBertConfig
-from .param_mapping import fetch_mapping
 
 
 logger = logging.get_logger(__name__)
@@ -57,6 +56,8 @@ CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "YituTech/conv-bert-small",
     # See all ConvBERT models at https://huggingface.co/models?filter=convbert
 ]
+
+logger = logging.get_logger(__name__)
 
 
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
@@ -79,7 +80,88 @@ def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
         array = tf.train.load_variable(tf_path, name)
         tf_data[name] = array
 
-    param_mapping = fetch_mapping(config)
+    param_mapping = {
+        "embeddings.word_embeddings.weight": "electra/embeddings/word_embeddings",
+        "embeddings.position_embeddings.weight": "electra/embeddings/position_embeddings",
+        "embeddings.token_type_embeddings.weight": "electra/embeddings/token_type_embeddings",
+        "embeddings.LayerNorm.weight": "electra/embeddings/LayerNorm/gamma",
+        "embeddings.LayerNorm.bias": "electra/embeddings/LayerNorm/beta",
+        "embeddings_project.weight": "electra/embeddings_project/kernel",
+        "embeddings_project.bias": "electra/embeddings_project/bias",
+    }
+    if config.num_groups > 1:
+        group_dense_name = "g_dense"
+    else:
+        group_dense_name = "dense"
+
+    for j in range(config.num_hidden_layers):
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.query.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/query/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.query.bias"
+        ] = f"electra/encoder/layer_{j}/attention/self/query/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.key.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/key/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.key.bias"
+        ] = f"electra/encoder/layer_{j}/attention/self/key/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.value.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/value/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.value.bias"
+        ] = f"electra/encoder/layer_{j}/attention/self/value/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.depthwise.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/depthwise_kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.pointwise.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/pointwise_kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.key_conv_attn_layer.bias"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_key/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.conv_kernel_layer.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.conv_kernel_layer.bias"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_kernel/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.conv_out_layer.weight"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_point/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.self.conv_out_layer.bias"
+        ] = f"electra/encoder/layer_{j}/attention/self/conv_attn_point/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.output.dense.weight"
+        ] = f"electra/encoder/layer_{j}/attention/output/dense/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.attention.output.LayerNorm.weight"
+        ] = f"electra/encoder/layer_{j}/attention/output/LayerNorm/gamma"
+        param_mapping[
+            f"encoder.layer.{j}.attention.output.dense.bias"
+        ] = f"electra/encoder/layer_{j}/attention/output/dense/bias"
+        param_mapping[
+            f"encoder.layer.{j}.attention.output.LayerNorm.bias"
+        ] = f"electra/encoder/layer_{j}/attention/output/LayerNorm/beta"
+        param_mapping[
+            f"encoder.layer.{j}.intermediate.dense.weight"
+        ] = f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.intermediate.dense.bias"
+        ] = f"electra/encoder/layer_{j}/intermediate/{group_dense_name}/bias"
+        param_mapping[
+            f"encoder.layer.{j}.output.dense.weight"
+        ] = f"electra/encoder/layer_{j}/output/{group_dense_name}/kernel"
+        param_mapping[
+            f"encoder.layer.{j}.output.dense.bias"
+        ] = f"electra/encoder/layer_{j}/output/{group_dense_name}/bias"
+        param_mapping[
+            f"encoder.layer.{j}.output.LayerNorm.weight"
+        ] = f"electra/encoder/layer_{j}/output/LayerNorm/gamma"
+        param_mapping[f"encoder.layer.{j}.output.LayerNorm.bias"] = f"electra/encoder/layer_{j}/output/LayerNorm/beta"
 
     for param in model.named_parameters():
         param_name = param[0]
@@ -87,6 +169,7 @@ def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
         result = retriever(model)
         tf_name = param_mapping[param_name]
         value = torch.from_numpy(tf_data[tf_name])
+        logger.info(f"TF: {tf_name}, PT: {param_name} ")
         if tf_name.endswith("/kernel"):
             if not tf_name.endswith("/intermediate/g_dense/kernel"):
                 if not tf_name.endswith("/output/g_dense/kernel"):
@@ -187,8 +270,8 @@ class SeparableConv1D(nn.Module):
         self.depthwise.weight.data.normal_(mean=0.0, std=config.initializer_range)
         self.pointwise.weight.data.normal_(mean=0.0, std=config.initializer_range)
 
-    def forward(self, x):
-        x = self.depthwise(x)
+    def forward(self, hidden_states):
+        x = self.depthwise(hidden_states)
         x = self.pointwise(x)
         x += self.bias
         return x
@@ -203,20 +286,20 @@ class ConvBertSelfAttention(nn.Module):
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
 
-        new_num_attention_heads = int(config.num_attention_heads / config.head_ratio)
+        new_num_attention_heads = config.num_attention_heads // config.head_ratio
         if new_num_attention_heads < 1:
             self.head_ratio = config.num_attention_heads
-            num_attention_heads = 1
+            self.num_attention_heads = 1
         else:
-            num_attention_heads = new_num_attention_heads
+            self.num_attention_heads = new_num_attention_heads
             self.head_ratio = config.head_ratio
 
-        self.num_attention_heads = num_attention_heads
         self.conv_kernel_size = config.conv_kernel_size
+        assert (
+            config.hidden_size % self.num_attention_heads == 0
+        ), "hidden_size should be divisible by num_attention_heads"
 
-        assert config.hidden_size % self.num_attention_heads == 0
-
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.attention_head_size = config.hidden_size // config.num_attention_heads
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         self.query = nn.Linear(config.hidden_size, self.all_head_size)
@@ -246,7 +329,6 @@ class ConvBertSelfAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
@@ -257,7 +339,6 @@ class ConvBertSelfAttention(nn.Module):
         if encoder_hidden_states is not None:
             mixed_key_layer = self.key(encoder_hidden_states)
             mixed_value_layer = self.value(encoder_hidden_states)
-            attention_mask = encoder_attention_mask
         else:
             mixed_key_layer = self.key(hidden_states)
             mixed_value_layer = self.value(hidden_states)
@@ -299,7 +380,7 @@ class ConvBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = torch.nn.functional.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -367,7 +448,6 @@ class ConvBertAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
@@ -375,7 +455,6 @@ class ConvBertAttention(nn.Module):
             attention_mask,
             head_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -394,9 +473,9 @@ class GroupedLinearLayer(nn.Module):
         self.weight = nn.Parameter(torch.Tensor(self.num_groups, self.group_in_dim, self.group_out_dim))
         self.bias = nn.Parameter(torch.Tensor(output_size))
 
-    def forward(self, x):
-        batch_size = list(x.size())[0]
-        x = torch.reshape(x, [-1, self.num_groups, self.group_in_dim])
+    def forward(self, hidden_states):
+        batch_size = list(hidden_states.size())[0]
+        x = torch.reshape(hidden_states, [-1, self.num_groups, self.group_in_dim])
         x = x.permute(1, 0, 2)
         x = torch.matmul(x, self.weight)
         x = x.permute(1, 0, 2)
@@ -482,10 +561,9 @@ class ConvBertLayer(nn.Module):
             ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
+                encoder_attention_mask,
                 head_mask,
                 encoder_hidden_states,
-                encoder_attention_mask,
                 output_attentions,
             )
             attention_output = cross_attention_outputs[0]
@@ -860,8 +938,8 @@ class ConvBertClassificationHead(nn.Module):
 
         self.config = config
 
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
+    def forward(self, hidden_states, **kwargs):
+        x = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
         x = self.dropout(x)
         x = self.dense(x)
         x = ACT2FN[self.config.hidden_act](x)
