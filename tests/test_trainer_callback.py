@@ -129,10 +129,7 @@ class TrainerCallbackTest(unittest.TestCase):
                 expected_events += ["on_step_begin", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
-                if (
-                    trainer.args.evaluation_strategy == "steps"
-                    and step % trainer.args.eval_steps == 0
-                ):
+                if trainer.args.evaluation_strategy == "steps" and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0:
                     expected_events.append("on_save")
