@@ -16,8 +16,9 @@
 
 import argparse
 
-from .modeling_convbert import ConvBertConfig, ConvBertModel, load_tf_weights_in_convbert
 from ...utils import logging
+from .modeling_convbert import ConvBertConfig, ConvBertModel, load_tf_weights_in_convbert
+
 
 logging.set_verbosity_info()
 
