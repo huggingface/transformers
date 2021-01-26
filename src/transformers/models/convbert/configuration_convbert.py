@@ -33,7 +33,7 @@ class ConvBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.ConvBertModel`. It is used to
     instantiate an ConvBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ConvBERT `conv-bert-base
-    <https://huggingface.co/conv-bert-base>`__ architecture. Configuration objects inherit from
+    <https://huggingface.co/YituTech/conv-bert-base>`__ architecture. Configuration objects inherit from
     :class:`~transformers.PretrainedConfig` and can be used to control the model outputs. Read the documentation from
     :class:`~transformers.PretrainedConfig` for more information.
 
