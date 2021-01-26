@@ -89,7 +89,7 @@ to check 🤗 Transformers is properly installed.
 
 ## Editable install
 
-If you are an advanced user who wants to constantly use the bleeding edge `master` version of the source code, the easiest way to do it is via an editable install. This is done by cloning the repository and installing with the following commands:
+If you want to constantly use the bleeding edge `master` version of the source code, or if you want to contribute to the library and need to test the changes in the code you're making, you will need an editable install. This is done by cloning the repository and installing with the following commands:
 
 ``` bash
 git clone https://github.com/huggingface/transformers.git
@@ -97,7 +97,7 @@ cd transformers
 pip install -e .
 ```
 
-This command performs a magical link between the folder you cloned the repository to and your python library paths, so it'll look inside this folder in addition to the normal library-wide paths. So if normally your python packages get installed into:
+This command performs a magical link between the folder you cloned the repository to and your python library paths, and it'll look inside this folder in addition to the normal library-wide paths. So if normally your python packages get installed into:
 ```
 ~/anaconda3/envs/main/lib/python3.7/site-packages/
 ```
