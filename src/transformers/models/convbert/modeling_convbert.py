@@ -15,10 +15,11 @@
 """ PyTorch ConvBERT model. """
 
 
+import logging
 import math
 import os
 from operator import attrgetter
-import logging
+
 import torch
 import torch.utils.checkpoint
 from torch import nn
