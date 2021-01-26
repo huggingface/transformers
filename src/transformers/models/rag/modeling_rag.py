@@ -106,8 +106,8 @@ class RetrievAugLMMarginOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
-            Cross-attentions weights of the generator decoder, after the attention softmax, used to compute
-            the weighted average in the cross-attention heads.
+            Cross-attentions weights of the generator decoder, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -197,8 +197,8 @@ class RetrievAugLMOutput(ModelOutput):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
 
-            Cross-attentions weights of the generator decoder, after the attention softmax, used to compute
-            the weighted average in the cross-attention heads.
+            Cross-attentions weights of the generator decoder, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
     """
 
     logits: torch.FloatTensor = None
