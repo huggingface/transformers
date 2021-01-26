@@ -19,7 +19,7 @@ limitations under the License.
 🤗 Transformers is tested on Python 3.6+, and PyTorch 1.1.0+ or TensorFlow 2.0+.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're
-unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going 
+unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
 to use and activate it.
 
 Now, if you want to use 🤗 Transformers, you can install it with pip. If you'd like to play with the examples, you
@@ -28,8 +28,8 @@ must install it from source.
 ## Installation with pip
 
 First you need to install one of, or both, TensorFlow 2.0 and PyTorch.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available), 
-[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or 
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available),
+[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or
 [Flax installation page](https://github.com/google/flax#quick-install)
 regarding the specific install command for your platform.
 
@@ -71,7 +71,7 @@ It should download a pretrained model then print something like
 
 (Note that TensorFlow will print additional stuff before that last statement.)
 
-## Installing from source
+## Installing from  source
 
 To install from source, clone the repository and install with the following commands:
 
@@ -81,13 +81,32 @@ cd transformers
 pip install -e .
 ```
 
-Again, you can run 
+This will install not the latest released version, but the bleeding edge `master` version, which may be not-quite ready for normal usage, but you may want to use it in case a bug has been fixed since the last official release and a new release hasn't yet been rolled out.
+
+Do note that you have to keep that folder around and not delete it to continue using `transfomers`. You can also run:
+```
+git pull
+```
+inside this folder to update it to the latest version.
+
+If you just need to do it once and you aren't planning to update it to the latest bleeding edge version, you can just do:
+
+```
+pip install git+https://github.com/huggingface/transformers
+```
+
+and then you don't need to worry about keeping any folders around. `pip` will clone the repository and install it directly into your python environment.
+
+
+Again, you can run
 
 ```bash
 python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('I hate you'))"
 ```
 
 to check 🤗 Transformers is properly installed.
+
+
 
 
 ## With conda
@@ -100,7 +119,7 @@ Since Transformers version v4.0.0, we now have a conda channel: `huggingface`.
 conda install -c huggingface transformers
 ```
 
-Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda. 
+Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda.
 
 ## Caching models
 
@@ -109,7 +128,7 @@ This library provides pretrained models that will be downloaded and cached local
 folder given by the shell environment variable ``TRANSFORMERS_CACHE``. The default value for it will be the Hugging
 Face cache home followed by ``/transformers/``. This is (by order of priority):
 
-  * shell environment variable ``HF_HOME`` 
+  * shell environment variable ``HF_HOME``
   * shell environment variable ``XDG_CACHE_HOME`` + ``/huggingface/``
   * default: ``~/.cache/huggingface/``
 
@@ -130,7 +149,7 @@ faster, and cheaper. Feel free to contact us privately if you need any help.
 
 You should check out our [swift-coreml-transformers](https://github.com/huggingface/swift-coreml-transformers) repo.
 
-It contains a set of tools to convert PyTorch or TensorFlow 2.0 trained Transformer models (currently contains `GPT-2`, 
+It contains a set of tools to convert PyTorch or TensorFlow 2.0 trained Transformer models (currently contains `GPT-2`,
 `DistilGPT-2`, `BERT`, and `DistilBERT`) to CoreML models that run on iOS devices.
 
 At some point in the future, you'll be able to seamlessly move from pretraining or fine-tuning models in PyTorch or
