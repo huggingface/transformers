@@ -437,7 +437,11 @@ def main():
     if data_args.pad_to_max_length:
         data_collator = default_data_collator
     else:
-        data_collator = DataCollatorForSeq2Seq(tokenizer, label_pad_token_id=label_pad_token_id)
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer,
+            label_pad_token_id=label_pad_token_id,
+            pad_to_multiple_of=8 if training_args.fp16 else None,
+        )
 
     # Metric
     metric_name = "rouge" if data_args.task.startswith("summarization") else "sacrebleu"

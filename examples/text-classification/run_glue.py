@@ -30,6 +30,7 @@ from transformers import (
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    DataCollatorWithPadding,
     EvalPrediction,
     HfArgumentParser,
     PretrainedConfig,
@@ -375,6 +376,14 @@ def main():
         else:
             return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
+    # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
+    if data_args.pad_to_max_length:
+        data_collator = default_data_collator
+    elif training_args.fp16:
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
+    else:
+        data_collator = None
+
     # Initialize our Trainer
     trainer = Trainer(
         model=model,
@@ -383,8 +392,7 @@ def main():
         eval_dataset=eval_dataset if training_args.do_eval else None,
         compute_metrics=compute_metrics,
         tokenizer=tokenizer,
-        # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
-        data_collator=default_data_collator if data_args.pad_to_max_length else None,
+        data_collator=data_collator,
     )
 
     # Training

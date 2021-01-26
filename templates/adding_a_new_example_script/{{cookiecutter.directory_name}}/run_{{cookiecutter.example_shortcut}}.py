@@ -33,6 +33,7 @@ from transformers import (
     AutoConfig,
     {{cookiecutter.model_class}},
     AutoTokenizer,
+    DataCollatorWithPadding,
     HfArgumentParser,
     Trainer,
     TrainingArguments,
@@ -323,7 +324,7 @@ def main():
     )
 
     # Data collator
-    data_collator=default_data_collator
+    data_collator=default_data_collator if not training_args.fp16 else DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
 
     # Initialize our Trainer
     trainer = Trainer(
