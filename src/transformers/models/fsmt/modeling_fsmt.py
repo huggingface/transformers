@@ -395,8 +395,8 @@ class EncoderLayer(nn.Module):
     def forward(self, x, encoder_padding_mask, layer_head_mask, output_attentions=False):
         """
         Args:
-            x (Tensor): input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_padding_mask (ByteTensor): binary ByteTensor of shape
+            x (:obj:`torch.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_padding_mask (:obj:`torch.ByteTensor`): binary ByteTensor of shape
                 `(batch, src_len)` where padding elements are indicated by ``1``.
             for t_tgt, t_src is excluded (or masked out), =0 means it is
             included in attention
@@ -463,9 +463,9 @@ class FSMTEncoder(nn.Module):
     ):
         """
         Args:
-            input_ids (LongTensor): tokens in the source language of shape
+            input_ids (:obj:`torch.LongTensor`): tokens in the source language of shape
                 `(batch, src_len)`
-            attention_mask (torch.LongTensor): indicating which indices are padding tokens
+            attention_mask (:obj:`torch.LongTensor`): indicating which indices are padding tokens
             head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
@@ -475,10 +475,10 @@ class FSMTEncoder(nn.Module):
         Returns:
             BaseModelOutput or Tuple comprised of:
 
-                - **x** (Tensor): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (tuple(torch.FloatTensor)): all intermediate hidden states of shape `(src_len,
-                  batch, embed_dim)`. Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (tuple(torch.FloatTensor)): Attention weights for each layer.
+                - **x** (:obj:`torch.Tensor`): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
+                - **encoder_states** (:obj:`Tuple(torch.FloatTensor`)): all intermediate hidden states of shape
+                  `(src_len, batch, embed_dim)`. Only populated if *output_hidden_states:* is True.
+                - **all_attentions** (:obj:`Tuple(torch.FloatTensor`)): Attention weights for each layer.
                 During training might not be of length n_layers because of layer dropout.
         """
         # check attention mask and invert
@@ -670,8 +670,8 @@ class FSMTDecoder(nn.Module):
         EMNLP 2019).
 
         Args:
-            input_ids (LongTensor): previous decoder outputs of shape
-                `(batch, tgt_len)`, for teacher forcing
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch, tgt_len)`):
+                previous decoder outputs for teacher forcing
             encoder_hidden_states: output from the encoder, used for
                 encoder-side attention
             encoder_padding_mask: for ignoring pad tokens
@@ -1056,8 +1056,8 @@ class FSMTModel(PretrainedFSMTModel):
             attention_mask,
             decoder_padding_mask,
             decoder_causal_mask=causal_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
+            head_mask=decoder_head_mask,
+            encoder_head_mask=head_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
