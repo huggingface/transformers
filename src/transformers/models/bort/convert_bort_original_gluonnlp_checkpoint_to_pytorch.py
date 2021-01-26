@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert BORT checkpoint."""
+"""Convert Bort checkpoint."""
 
 
 import argparse
@@ -53,10 +53,10 @@ SAMPLE_TEXT = "The Nymphenburg Palace is a beautiful palace in Munich!"
 
 def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_folder_path: str):
     """
-    Convert the original BORT checkpoint (based on MXNET and Gluonnlp) to our BERT structure-
+    Convert the original Bort checkpoint (based on MXNET and Gluonnlp) to our BERT structure-
     """
 
-    # Original BORT configuration
+    # Original Bort configuration
     bort_4_8_768_1024_hparams = {
         "attention_cell": "multi_head",
         "num_layers": 4,
@@ -76,7 +76,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
 
     predefined_args = bort_4_8_768_1024_hparams
 
-    # Let's construct the original BORT model here
+    # Let's construct the original Bort model here
     # Taken from official BERT implementation, see:
     # https://github.com/alexa/bort/blob/master/bort/bort.py
     encoder = BERTEncoder(
@@ -199,7 +199,7 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
         hf_bort_model.bert.embeddings.LayerNorm.weight, "encoder.layer_norm.gamma"
     )
 
-    # Inspired by RoBERTa conversion script, we just zero them out (BORT does not use them)
+    # Inspired by RoBERTa conversion script, we just zero them out (Bort does not use them)
     hf_bort_model.bert.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
         hf_bort_model.bert.embeddings.token_type_embeddings.weight.data
     )
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--bort_checkpoint_path", default=None, type=str, required=True, help="Path the official BORT params file."
+        "--bort_checkpoint_path", default=None, type=str, required=True, help="Path the official Bort params file."
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
