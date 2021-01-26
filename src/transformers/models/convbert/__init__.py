@@ -21,15 +21,15 @@ from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_availa
 
 
 _import_structure = {
-    "configuration_conv_bert": ["CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig"],
-    "tokenization_conv_bert": ["ConvBertTokenizer"],
+    "configuration_convbert": ["CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig"],
+    "tokenization_convbert": ["ConvBertTokenizer"],
 }
 
 if is_tokenizers_available():
-    _import_structure["tokenization_conv_bert_fast"] = ["ConvBertTokenizerFast"]
+    _import_structure["tokenization_convbert_fast"] = ["ConvBertTokenizerFast"]
 
 if is_torch_available():
-    _import_structure["modeling_conv_bert"] = [
+    _import_structure["modeling_convbert"] = [
         "CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ConvBertForMaskedLM",
         "ConvBertForMultipleChoice",
@@ -39,12 +39,12 @@ if is_torch_available():
         "ConvBertLayer",
         "ConvBertModel",
         "ConvBertPreTrainedModel",
-        "load_tf_weights_in_conv_bert",
+        "load_tf_weights_in_convbert",
     ]
 
 
 if is_tf_available():
-    _import_structure["modeling_tf_conv_bert"] = [
+    _import_structure["modeling_tf_convbert"] = [
         "TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFConvBertForMaskedLM",
         "TFConvBertForMultipleChoice",
@@ -58,14 +58,14 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_conv_bert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
-    from .tokenization_conv_bert import ConvBertTokenizer
+    from .configuration_convbert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
+    from .tokenization_convbert import ConvBertTokenizer
 
     if is_tokenizers_available():
-        from .tokenization_conv_bert_fast import ConvBertTokenizerFast
+        from .tokenization_convbert_fast import ConvBertTokenizerFast
 
     if is_torch_available():
-        from .modeling_conv_bert import (
+        from .modeling_convbert import (
             CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
             ConvBertForMultipleChoice,
@@ -75,11 +75,11 @@ if TYPE_CHECKING:
             ConvBertLayer,
             ConvBertModel,
             ConvBertPreTrainedModel,
-            load_tf_weights_in_conv_bert,
+            load_tf_weights_in_convbert,
         )
 
     if is_tf_available():
-        from .modeling_tf_conv_bert import (
+        from .modeling_tf_convbert import (
             TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFConvBertForMaskedLM,
             TFConvBertForMultipleChoice,

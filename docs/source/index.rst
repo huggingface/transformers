@@ -373,7 +373,7 @@ TensorFlow and/or Flax.
     model_doc/blenderbot
     model_doc/blenderbot_small
     model_doc/camembert
-    model_doc/conv_bert
+    model_doc/convbert
     model_doc/ctrl
     model_doc/deberta
     model_doc/dialogpt

@@ -22,9 +22,9 @@ logger = logging.get_logger(__name__)
 
 CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "YituTech/conv-bert-base": "https://huggingface.co/YituTech/conv-bert-base/resolve/main/config.json",
-    "conv-bert-medium-small": "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/config.json",
-    "conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/config.json",
-    # See all ConvBERT models at https://huggingface.co/models?filter=conv_bert
+    "YituTech/conv-bert-medium-small": "https://huggingface.co/YituTech/conv-bert-medium-small/resolve/main/config.json",
+    "YituTech/conv-bert-small": "https://huggingface.co/YituTech/conv-bert-small/resolve/main/config.json",
+    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
 }
 
 
@@ -85,7 +85,7 @@ class ConvBertConfig(PretrainedConfig):
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "conv_bert"
+    model_type = "convbert"
 
     def __init__(
         self,

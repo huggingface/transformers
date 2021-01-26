@@ -38,7 +38,7 @@ if is_torch_available():
         ConvBertForTokenClassification,
         ConvBertModel,
     )
-    from transformers.models.conv_bert.modeling_conv_bert import CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.convbert.modeling_convbert import CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ConvBertModelTester:

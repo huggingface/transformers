@@ -46,7 +46,7 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
-from .configuration_conv_bert import ConvBertConfig
+from .configuration_convbert import ConvBertConfig
 
 
 logger = logging.get_logger(__name__)
@@ -58,7 +58,7 @@ TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "YituTech/conv-bert-base",
     "YituTech/conv-bert-medium-small",
     "YituTech/conv-bert-small",
-    # See all ConvBERT models at https://huggingface.co/models?filter=conv_bert
+    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
 ]
 
 
@@ -780,7 +780,7 @@ class TFConvBertPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = ConvBertConfig
-    base_model_prefix = "conv_bert"
+    base_model_prefix = "convbert"
 
 
 CONV_BERT_START_DOCSTRING = r"""
@@ -881,7 +881,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
+        self.convbert = TFConvBertMainLayer(config, name="convbert")
 
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -919,7 +919,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
@@ -999,7 +999,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
         super().__init__(config, **kwargs)
 
         self.vocab_size = config.vocab_size
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
+        self.convbert = TFConvBertMainLayer(config, name="convbert")
         self.generator_predictions = TFConvBertGeneratorPredictions(config, name="generator_predictions")
 
         if isinstance(config.hidden_act, str):
@@ -1008,7 +1008,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             self.activation = config.hidden_act
 
         self.generator_lm_head = TFConvBertMaskedLMHead(
-            config, self.conv_bert.embeddings.word_embeddings, name="generator_lm_head"
+            config, self.convbert.embeddings.word_embeddings, name="generator_lm_head"
         )
 
     def get_lm_head(self):
@@ -1061,7 +1061,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
             training=training,
             kwargs_call=kwargs,
         )
-        generator_hidden_states = self.conv_bert(
+        generator_hidden_states = self.convbert(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
@@ -1135,7 +1135,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
+        self.convbert = TFConvBertMainLayer(config, name="convbert")
         self.classifier = TFConvBertClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1182,7 +1182,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
@@ -1227,7 +1227,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
+        self.convbert = TFConvBertMainLayer(config, name="convbert")
         self.sequence_summary = TFSequenceSummary(
             config, initializer_range=config.initializer_range, name="sequence_summary"
         )
@@ -1314,7 +1314,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
             if inputs["inputs_embeds"] is not None
             else None
         )
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
@@ -1376,7 +1376,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
+        self.convbert = TFConvBertMainLayer(config, name="convbert")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1425,7 +1425,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],
@@ -1472,7 +1472,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
-        self.conv_bert = TFConvBertMainLayer(config, name="conv_bert")
+        self.convbert = TFConvBertMainLayer(config, name="convbert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1527,7 +1527,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             token_type_ids=inputs["token_type_ids"],

@@ -57,7 +57,7 @@ from ..camembert.modeling_tf_camembert import (
     TFCamembertForTokenClassification,
     TFCamembertModel,
 )
-from ..conv_bert.modeling_tf_conv_bert import (
+from ..convbert.modeling_tf_convbert import (
     TFConvBertForMaskedLM,
     TFConvBertForMultipleChoice,
     TFConvBertForQuestionAnswering,

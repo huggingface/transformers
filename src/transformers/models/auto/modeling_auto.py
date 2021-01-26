@@ -63,7 +63,7 @@ from ..camembert.modeling_camembert import (
 )
 
 # Add modeling imports here
-from ..conv_bert.modeling_conv_bert import (
+from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
     ConvBertForMultipleChoice,
     ConvBertForQuestionAnswering,

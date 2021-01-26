@@ -42,7 +42,7 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_conv_bert import ConvBertConfig
+from .configuration_convbert import ConvBertConfig
 from .param_mapping import fetch_mapping
 
 
@@ -55,11 +55,11 @@ CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "YituTech/conv-bert-base",
     "YituTech/conv-bert-medium-small",
     "YituTech/conv-bert-small",
-    # See all ConvBERT models at https://huggingface.co/models?filter=conv_bert
+    # See all ConvBERT models at https://huggingface.co/models?filter=convbert
 ]
 
 
-def load_tf_weights_in_conv_bert(model, config, tf_checkpoint_path):
+def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
         import tensorflow as tf
@@ -150,10 +150,10 @@ class ConvBertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = ConvBertConfig
-    load_tf_weights = load_tf_weights_in_conv_bert
-    base_model_prefix = "conv_bert"
+    load_tf_weights = load_tf_weights_in_convbert
+    base_model_prefix = "convbert"
     authorized_missing_keys = [r"position_ids"]
-    authorized_unexpected_keys = [r"conv_bert\.embeddings_project\.weight", r"conv_bert\.embeddings_project\.bias"]
+    authorized_unexpected_keys = [r"convbert\.embeddings_project\.weight", r"convbert\.embeddings_project\.bias"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -803,7 +803,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.conv_bert = ConvBertModel(config)
+        self.convbert = ConvBertModel(config)
         self.generator_predictions = ConvBertGeneratorPredictions(config)
 
         self.generator_lm_head = nn.Linear(config.embedding_size, config.vocab_size)
@@ -843,7 +843,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        generator_hidden_states = self.conv_bert(
+        generator_hidden_states = self.convbert(
             input_ids,
             attention_mask,
             token_type_ids,
@@ -909,7 +909,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.conv_bert = ConvBertModel(config)
+        self.convbert = ConvBertModel(config)
         self.classifier = ConvBertClassificationHead(config)
 
         self.init_weights()
@@ -942,7 +942,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -990,7 +990,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.conv_bert = ConvBertModel(config)
+        self.convbert = ConvBertModel(config)
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1037,7 +1037,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             else None
         )
 
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1084,7 +1084,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.conv_bert = ConvBertModel(config)
+        self.convbert = ConvBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -1117,7 +1117,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1174,7 +1174,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.conv_bert = ConvBertModel(config)
+        self.convbert = ConvBertModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1212,7 +1212,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.conv_bert(
+        outputs = self.convbert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

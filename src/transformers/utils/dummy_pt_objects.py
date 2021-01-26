@@ -768,8 +768,8 @@ class ConvBertPreTrainedModel:
         requires_pytorch(self)
 
 
-def load_tf_weights_in_conv_bert(*args, **kwargs):
-    requires_pytorch(load_tf_weights_in_conv_bert)
+def load_tf_weights_in_convbert(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_convbert)
 
 
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None

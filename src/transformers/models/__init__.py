@@ -28,7 +28,7 @@ from . import (
     blenderbot,
     blenderbot_small,
     camembert,
-    conv_bert,
+    convbert,
     ctrl,
     deberta,
     dialogpt,

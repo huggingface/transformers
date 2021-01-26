@@ -15,7 +15,7 @@
 """Tokenization classes for ConvBERT."""
 from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
-from .tokenization_conv_bert import ConvBertTokenizer
+from .tokenization_convbert import ConvBertTokenizer
 
 
 logger = logging.get_logger(__name__)
