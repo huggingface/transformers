@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConvBertConfig"
 _TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
-TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "YituTech/conv-bert-base",
     "YituTech/conv-bert-medium-small",
     "YituTech/conv-bert-small",
@@ -583,62 +583,6 @@ class TFConvBertPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
-class TFConvBertLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-        self.embedding_size = config.embedding_size
-
-        self.transform = TFConvBertPredictionHeadTransform(config, name="transform")
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
-
-    def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-
-        super().build(input_shape)
-
-    def get_output_embeddings(self):
-        return self.input_embeddings
-
-    def set_output_embeddings(self, value):
-        self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
-
-    def get_bias(self):
-        return {"bias": self.bias}
-
-    def set_bias(self, value):
-        self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
-
-    def call(self, hidden_states):
-        hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(tensor=hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.embedding_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
-        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
-
-        return hidden_states
-
-
-class TFConvBertMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(**kwargs)
-
-        self.predictions = TFConvBertLMPredictionHead(config, input_embeddings, name="predictions")
-
-    def call(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-
-        return prediction_scores
-
-
 @keras_serializable
 class TFConvBertMainLayer(tf.keras.layers.Layer):
     config_class = ConvBertConfig
@@ -660,9 +604,6 @@ class TFConvBertMainLayer(tf.keras.layers.Layer):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings.weight = value
         self.embeddings.word_embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -783,7 +724,7 @@ class TFConvBertPreTrainedModel(TFPreTrainedModel):
     base_model_prefix = "convbert"
 
 
-CONV_BERT_START_DOCSTRING = r"""
+CONVBERT_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
@@ -819,7 +760,7 @@ CONV_BERT_START_DOCSTRING = r"""
             weights.
 """
 
-CONV_BERT_INPUTS_DOCSTRING = r"""
+CONVBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -875,7 +816,7 @@ CONV_BERT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare ConvBERT Model transformer outputing raw hidden-states without any specific head on top.",
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class TFConvBertModel(TFConvBertPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
@@ -883,7 +824,7 @@ class TFConvBertModel(TFConvBertPreTrainedModel):
 
         self.convbert = TFConvBertMainLayer(config, name="convbert")
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -993,7 +934,7 @@ class TFConvBertGeneratorPredictions(tf.keras.layers.Layer):
         return hidden_states
 
 
-@add_start_docstrings("""ConvBERT Model with a `language modeling` head on top. """, CONV_BERT_START_DOCSTRING)
+@add_start_docstrings("""ConvBERT Model with a `language modeling` head on top. """, CONVBERT_START_DOCSTRING)
 class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, **kwargs)
@@ -1017,7 +958,7 @@ class TFConvBertForMaskedLM(TFConvBertPreTrainedModel, TFMaskedLanguageModelingL
     def get_prefix_bias_name(self):
         return self.name + "/" + self.generator_lm_head.name
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -1129,7 +1070,7 @@ class TFConvBertClassificationHead(tf.keras.layers.Layer):
     """
     ConvBERT Model transformer with a sequence classification/regression head on top e.g., for GLUE tasks.
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1138,7 +1079,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
         self.convbert = TFConvBertMainLayer(config, name="convbert")
         self.classifier = TFConvBertClassificationHead(config, name="classifier")
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -1221,7 +1162,7 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
     ConvBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1246,7 +1187,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
         return {"input_ids": tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @add_start_docstrings_to_model_forward(
-        CONV_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+        CONVBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1369,7 +1310,7 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
     ConvBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1382,7 +1323,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -1465,7 +1406,7 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
     ConvBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1477,7 +1418,7 @@ class TFConvBertForQuestionAnswering(TFConvBertPreTrainedModel, TFQuestionAnswer
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",

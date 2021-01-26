@@ -453,7 +453,7 @@ class TFCamembertModel:
         requires_tf(self)
 
 
-TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class TFConvBertForMaskedLM:

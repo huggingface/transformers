@@ -38,7 +38,7 @@ if is_torch_available():
         ConvBertForTokenClassification,
         ConvBertModel,
     )
-    from transformers.models.convbert.modeling_convbert import CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.convbert.modeling_convbert import CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ConvBertModelTester:
@@ -293,7 +293,7 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ConvBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

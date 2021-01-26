@@ -697,7 +697,7 @@ class CamembertModel:
         requires_pytorch(self)
 
 
-CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class ConvBertForMaskedLM:

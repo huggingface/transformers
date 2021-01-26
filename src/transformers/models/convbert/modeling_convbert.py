@@ -51,7 +51,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "ConvBertConfig"
 _TOKENIZER_FOR_DOC = "ConvBertTokenizer"
 
-CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "YituTech/conv-bert-base",
     "YituTech/conv-bert-medium-small",
     "YituTech/conv-bert-small",
@@ -592,37 +592,7 @@ class ConvBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-class ConvBertLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = ConvBertPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-class ConvBertOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = ConvBertLMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
-
-
-CONV_BERT_START_DOCSTRING = r"""
+CONVBERT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
@@ -634,7 +604,7 @@ CONV_BERT_START_DOCSTRING = r"""
             weights.
 """
 
-CONV_BERT_INPUTS_DOCSTRING = r"""
+CONVBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
@@ -690,7 +660,7 @@ CONV_BERT_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare ConvBERT Model transformer outputting raw hidden-states without any specific head on top.",
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class ConvBertModel(ConvBertPreTrainedModel):
     def __init__(self, config):
@@ -718,7 +688,7 @@ class ConvBertModel(ConvBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -798,7 +768,7 @@ class ConvBertGeneratorPredictions(nn.Module):
         return hidden_states
 
 
-@add_start_docstrings("""ConvBERT Model with a `language modeling` head on top. """, CONV_BERT_START_DOCSTRING)
+@add_start_docstrings("""ConvBERT Model with a `language modeling` head on top. """, CONVBERT_START_DOCSTRING)
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -815,7 +785,7 @@ class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     def set_output_embeddings(self, word_embeddings):
         self.generator_lm_head = word_embeddings
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -903,7 +873,7 @@ class ConvBertClassificationHead(nn.Module):
     ConvBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
@@ -914,7 +884,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -984,7 +954,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
     ConvBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     def __init__(self, config):
@@ -997,7 +967,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(
-        CONV_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+        CONVBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1077,7 +1047,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
     ConvBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     def __init__(self, config):
@@ -1090,7 +1060,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",
@@ -1165,7 +1135,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
     ConvBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    CONV_BERT_START_DOCSTRING,
+    CONVBERT_START_DOCSTRING,
 )
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
     def __init__(self, config):
@@ -1179,7 +1149,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CONV_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(CONVBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="YituTech/conv-bert-base",

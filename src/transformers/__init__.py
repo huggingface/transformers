@@ -125,7 +125,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.convbert": ["CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -365,7 +365,7 @@ if is_torch_available():
 
     _import_structure["models.convbert"].extend(
         [
-            "CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ConvBertForMaskedLM",
             "ConvBertForMultipleChoice",
             "ConvBertForQuestionAnswering",
@@ -836,7 +836,7 @@ if is_tf_available():
 
     _import_structure["models.convbert"].extend(
         [
-            "TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFConvBertForMaskedLM",
             "TFConvBertForMultipleChoice",
             "TFConvBertForQuestionAnswering",
@@ -1266,7 +1266,7 @@ if TYPE_CHECKING:
         BlenderbotSmallTokenizer,
     )
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
-    from .models.convbert import CONV_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
@@ -1555,7 +1555,7 @@ if TYPE_CHECKING:
             CamembertModel,
         )
         from .models.convbert import (
-            CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConvBertForMaskedLM,
             ConvBertForMultipleChoice,
             ConvBertForQuestionAnswering,
@@ -1925,7 +1925,7 @@ if TYPE_CHECKING:
             TFCamembertModel,
         )
         from .models.convbert import (
-            TF_CONV_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFConvBertForMaskedLM,
             TFConvBertForMultipleChoice,
             TFConvBertForQuestionAnswering,
