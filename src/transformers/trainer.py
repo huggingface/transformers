@@ -702,6 +702,18 @@ class Trainer:
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
 
+        if model_path is not None and os.path.isfile(os.path.join(model_path, WEIGHTS_NAME)):
+            logger.info(f"Loading model from {model_path}).")
+            if isinstance(self.model, PreTrainedModel):
+                self.model = self.model.from_pretrained(model_path)
+                if not self.is_model_parallel:
+                    self.model = self.model.to(self.args.device)
+            else:
+                state_dict = torch.load(os.path.join(model_path, WEIGHTS_NAME))
+                self.model.load_state_dict(state_dict)
+
+            self.model_wrapped = self.model
+
         # Keeping track whether we can can len() on the dataset or not
         train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
 
