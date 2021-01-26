@@ -314,9 +314,9 @@ class TrainingArguments:
         default=-1,
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
-    lr_scheduler_type: str = field(
+    lr_scheduler_type: SchedulerType = field(
         default="linear",
-        metadata={"help": "The scheduler type to use.", "choices": SchedulerType.get_arg_names()},
+        metadata={"help": "The scheduler type to use."},
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 

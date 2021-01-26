@@ -94,7 +94,7 @@ class HfArgumentParser(ArgumentParser):
                     field.type = prim_type
 
             if isinstance(field.type, type) and issubclass(field.type, Enum):
-                kwargs["choices"] = list(field.type)
+                kwargs["choices"] = [x.value for x in field.type]
                 kwargs["type"] = field.type
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
