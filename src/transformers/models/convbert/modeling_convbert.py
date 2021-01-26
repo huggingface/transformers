@@ -15,7 +15,6 @@
 """ PyTorch ConvBERT model. """
 
 
-import logging
 import math
 import os
 from operator import attrgetter
@@ -57,8 +56,6 @@ CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "YituTech/conv-bert-small",
     # See all ConvBERT models at https://huggingface.co/models?filter=convbert
 ]
-
-logger = logging.get_logger(__name__)
 
 
 def load_tf_weights_in_convbert(model, config, tf_checkpoint_path):

@@ -436,7 +436,7 @@ class GroupedLinearLayer(tf.keras.layers.Layer):
 
     def call(self, hidden_states):
         batch_size = shape_list(tensor=hidden_states)[1]
-        x = tf.reshape(x, [-1, self.num_groups, self.group_in_dim])
+        x = tf.reshape(hidden_states, [-1, self.num_groups, self.group_in_dim])
         x = tf.matmul(a=x, b=self.kernel, transpose_b=True)
         x = tf.reshape(x, [batch_size, -1, self.output_size])
         x = tf.nn.bias_add(value=x, bias=self.bias)
