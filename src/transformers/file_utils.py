@@ -305,7 +305,7 @@ def is_sagemaker_distributed_available():
         sagemaker_params = json.loads(sagemaker_params)
         if not sagemaker_params["sagemaker_distributed_dataparallel_enabled"]:
             return False
-    except:
+    except json.JSONDecodeError:
         return False
     # Lastly, check if the `smdistributed` module is present.
     return importlib.util.find_spec("smdistributed") is not None
