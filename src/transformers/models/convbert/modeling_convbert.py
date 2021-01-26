@@ -157,22 +157,22 @@ class ConvBertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Embedding)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
+        if isinstance(module, (nn.Linear)) and module.bias is not None:
             module.bias.data.zero_()
 
 
-class SeparableConv1D(ConvBertPreTrainedModel):
+class SeparableConv1D(nn.Module):
     """This class implements separable convolution, i.e. a depthwise and a pointwise layer"""
 
     def __init__(self, config, input_filters, output_filters, kernel_size, **kwargs):
-        super().__init__(config)
+        super().__init__()
         self.depthwise = nn.Conv1d(
             input_filters,
             input_filters,
@@ -183,7 +183,9 @@ class SeparableConv1D(ConvBertPreTrainedModel):
         )
         self.pointwise = nn.Conv1d(input_filters, output_filters, kernel_size=1, bias=False)
         self.bias = nn.Parameter(torch.zeros(output_filters, 1))
-        self.init_weights()
+
+        self.depthwise.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        self.pointwise.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
 
     def forward(self, x):
         x = self.depthwise(x)
@@ -1141,9 +1143,7 @@ class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        config.num_labels = 2
         self.num_labels = config.num_labels
-
         self.convbert = ConvBertModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
