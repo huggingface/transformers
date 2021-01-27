@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Testing suite for the PyTorch PEGASUS model. """
 
-
+import copy
 import tempfile
 import unittest
 
