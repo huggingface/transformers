@@ -95,7 +95,7 @@ class HfArgumentParser(ArgumentParser):
 
             if isinstance(field.type, type) and issubclass(field.type, Enum):
                 kwargs["choices"] = [x.value for x in field.type]
-                kwargs["type"] = field.type
+                kwargs["type"] = type(kwargs["choices"][0])
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
             elif field.type is bool or field.type is Optional[bool]:
@@ -174,8 +174,15 @@ class HfArgumentParser(ArgumentParser):
         outputs = []
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
+            keys_to_enum_types = {
+                f.name: f.type
+                for f in dataclasses.fields(dtype)
+                if isinstance(f.type, type) and issubclass(f.type, Enum)
+            }
             inputs = {k: v for k, v in vars(namespace).items() if k in keys}
             for k in keys:
+                if k in keys_to_enum_types:
+                    inputs[k] = keys_to_enum_types[k](inputs[k])
                 delattr(namespace, k)
             obj = dtype(**inputs)
             outputs.append(obj)
@@ -198,8 +205,16 @@ class HfArgumentParser(ArgumentParser):
         data = json.loads(Path(json_file).read_text())
         outputs = []
         for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype)}
+            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
+            keys_to_enum_types = {
+                f.name: f.type
+                for f in dataclasses.fields(dtype)
+                if isinstance(f.type, type) and issubclass(f.type, Enum)
+            }
             inputs = {k: v for k, v in data.items() if k in keys}
+            for k in keys:
+                if k in keys_to_enum_types:
+                    inputs[k] = keys_to_enum_types[k](inputs[k])
             obj = dtype(**inputs)
             outputs.append(obj)
         return (*outputs,)
@@ -211,8 +226,16 @@ class HfArgumentParser(ArgumentParser):
         """
         outputs = []
         for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype)}
+            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
+            keys_to_enum_types = {
+                f.name: f.type
+                for f in dataclasses.fields(dtype)
+                if isinstance(f.type, type) and issubclass(f.type, Enum)
+            }
             inputs = {k: v for k, v in args.items() if k in keys}
+            for k in keys:
+                if k in keys_to_enum_types:
+                    inputs[k] = keys_to_enum_types[k](inputs[k])
             obj = dtype(**inputs)
             outputs.append(obj)
         return (*outputs,)
