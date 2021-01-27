@@ -924,20 +924,20 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
                 kwargs_call=kwargs,
             )
         inputs = {
-                "input_ids": input_ids,
-                "attention_mask": attention_mask,
-                "encoder_hidden_states": encoder_hidden_states,
-                "encoder_attention_mask": encoder_attention_mask,
-                "head_mask": head_mask,
-                "encoder_head_mask": encoder_head_mask,
-                "inputs_embeds": inputs_embeds,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "output_attentions": output_attentions,
-                "output_hidden_states": output_hidden_states,
-                "return_dict": return_dict,
-                "training": training,
-            }
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "encoder_hidden_states": encoder_hidden_states,
+            "encoder_attention_mask": encoder_attention_mask,
+            "head_mask": head_mask,
+            "encoder_head_mask": encoder_head_mask,
+            "inputs_embeds": inputs_embeds,
+            "past_key_values": past_key_values,
+            "use_cache": use_cache,
+            "output_attentions": output_attentions,
+            "output_hidden_states": output_hidden_states,
+            "return_dict": return_dict,
+            "training": training,
+        }
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")

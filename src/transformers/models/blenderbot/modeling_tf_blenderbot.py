@@ -1071,6 +1071,8 @@ class TFBlenderbotMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs
     ):
+        already_processed = kwargs.pop("already_processed", False)
+
         if not already_processed:
             inputs = input_processing(
                 func=self.call,
