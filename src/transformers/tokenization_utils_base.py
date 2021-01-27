@@ -1746,9 +1746,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                             local_files_only=local_files_only,
                             use_auth_token=use_auth_token,
                         )
-                    except FileNotFoundError:
+                    except FileNotFoundError as error:
                         if local_files_only:
                             unresolved_files.append(file_id)
+                        else:
+                            raise error
 
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
