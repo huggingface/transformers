@@ -1059,12 +1059,11 @@ class LongformerSelfAttention(nn.Module):
             assert layer_head_mask.size() == (
                 self.num_heads,
             ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
-            global_attn_probs_float = (
-                layer_head_mask.view(1, -1, 1, 1)
-                * global_attn_probs_float.view(batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
+            global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
+                batch_size, self.num_heads, max_num_global_attn_indices, seq_len
             )
-            global_attn_probs_float = (
-                global_attn_probs_float.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
+            global_attn_probs_float = global_attn_probs_float.view(
+                batch_size * self.num_heads, max_num_global_attn_indices, seq_len
             )
 
         global_attn_probs = F.dropout(
@@ -1757,6 +1756,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
