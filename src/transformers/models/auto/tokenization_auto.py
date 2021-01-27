@@ -170,6 +170,7 @@ else:
     GPT2TokenizerFast = None
     HerbertTokenizerFast = None
     LayoutLMTokenizerFast = None
+    LEDTokenizerFast = None
     LongformerTokenizerFast = None
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
