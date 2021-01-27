@@ -18,7 +18,7 @@
 
 import warnings
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 import tensorflow as tf
 
@@ -186,16 +186,16 @@ class TFLxmertWordEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.weight = self.add_weight(
             name="weight",
             shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
-    def get_config(self):
+    def get_config(self) -> Dict[str, Any]:
         config = {
             "vocab_size": self.vocab_size,
             "hidden_size": self.hidden_size,
@@ -205,14 +205,14 @@ class TFLxmertWordEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, input_ids):
+    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
         flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
         embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -226,16 +226,16 @@ class TFLxmertTokenTypeEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.token_type_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
-    def get_config(self):
+    def get_config(self) -> Dict[str, Any]:
         config = {
             "type_vocab_size": self.type_vocab_size,
             "hidden_size": self.hidden_size,
@@ -245,15 +245,15 @@ class TFLxmertTokenTypeEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, token_type_ids):
+    def call(self, token_type_ids: tf.Tensor) -> tf.Tensor:
         flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
         one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
         embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
         embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
+            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
         )
 
-        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
 
         return embeddings
 
@@ -267,16 +267,16 @@ class TFLxmertPositionEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.position_embeddings = self.add_weight(
             name="embeddings",
             shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(initializer_range=self.initializer_range),
+            initializer=get_initializer(self.initializer_range),
         )
 
         super().build(input_shape)
 
-    def get_config(self):
+    def get_config(self) -> Dict[str, Any]:
         config = {
             "max_position_embeddings": self.max_position_embeddings,
             "hidden_size": self.hidden_size,
@@ -286,8 +286,8 @@ class TFLxmertPositionEmbeddings(tf.keras.layers.Layer):
 
         return dict(list(base_config.items()) + list(config.items()))
 
-    def call(self, position_ids):
-        input_shape = shape_list(tensor=position_ids)
+    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
+        input_shape = shape_list(position_ids)
         position_embeddings = self.position_embeddings[: input_shape[1], :]
 
         return tf.broadcast_to(input=position_embeddings, shape=input_shape)
@@ -1132,11 +1132,13 @@ class TFLxmertPooler(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->Lxmert
 class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: LxmertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -1146,17 +1148,17 @@ class TFLxmertPredictionHeadTransform(tf.keras.layers.Layer):
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
-    def call(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.LayerNorm(inputs=hidden_states)
 
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->Lxmert
 class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
+    def __init__(self, config: LxmertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
@@ -1168,28 +1170,28 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
         # an output-only bias for each token.
         self.input_embeddings = input_embeddings
 
-    def build(self, input_shape):
+    def build(self, input_shape: tf.TensorShape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
         super().build(input_shape)
 
-    def get_output_embeddings(self):
+    def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
 
-    def set_output_embeddings(self, value):
+    def set_output_embeddings(self, value: tf.Variable):
         self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
-    def get_bias(self):
+    def get_bias(self) -> Dict[str, tf.Variable]:
         return {"bias": self.bias}
 
-    def set_bias(self, value):
+    def set_bias(self, value: tf.Variable):
         self.bias = value["bias"]
         self.vocab_size = shape_list(value["bias"])[0]
 
-    def call(self, hidden_states):
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(tensor=hidden_states)[1]
+        seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
         hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
@@ -1200,13 +1202,13 @@ class TFLxmertLMPredictionHead(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->Lxmert
 class TFLxmertMLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
+    def __init__(self, config: LxmertConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
 
         self.predictions = TFLxmertLMPredictionHead(config, input_embeddings, name="predictions")
 
-    def call(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
+    def call(self, sequence_output: tf.Tensor) -> tf.Tensor:
+        prediction_scores = self.predictions(hidden_states=sequence_output)
 
         return prediction_scores
 

@@ -19,7 +19,7 @@
 import itertools
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import tensorflow as tf
@@ -1019,7 +1019,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1180,13 +1180,14 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
             }
         ]
     )
-    def serving(self, inputs):
-        output = self.call(inputs)
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
+    def serving(self, inputs: Dict[str, tf.Tensor]):
+        output = self.call(input_ids=inputs)
 
         return self.serving_output(output)
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1294,7 +1295,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1413,7 +1414,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
