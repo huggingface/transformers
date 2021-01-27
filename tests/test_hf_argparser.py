@@ -57,6 +57,9 @@ class BasicEnum(Enum):
 class EnumExample:
     foo: BasicEnum = "toto"
 
+    def __post_init__(self):
+        self.foo = BasicEnum(self.foo)
+
 
 @dataclass
 class OptionalExample:
