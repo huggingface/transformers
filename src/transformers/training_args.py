@@ -240,6 +240,10 @@ class TrainingArguments:
         report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
             The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
             :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
+        ddp_find_unused_parameters (:obj:`bool`, `optional`):
+            When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
+            :obj:`DistributedDataParallel`. Will defaut to :obj:`False` if gradient checkpointing is used, :obj:`True`
+            otherwise.
     """
 
     output_dir: str = field(
@@ -424,6 +428,13 @@ class TrainingArguments:
     )
     report_to: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
+    )
+    ddp_find_unused_parameters: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "When using distributed training, the value of the flag `find_unused_parameters` passed to "
+            "`DistributedDataParallel`."
+        },
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
