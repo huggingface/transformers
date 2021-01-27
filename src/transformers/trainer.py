@@ -860,7 +860,7 @@ class Trainer:
         tr_loss = torch.tensor(0.0).to(self.args.device)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
-        self._globalstep_last_logged = 0
+        self._globalstep_last_logged = self.state.global_step
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
