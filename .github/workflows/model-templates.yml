@@ -7,6 +7,8 @@ on:
       - "tests/**"
       - ".github/**"
       - "templates/**"
+  pull_request_target:
+    types: [labeled]
 
 jobs:
   run_tests_templates:
