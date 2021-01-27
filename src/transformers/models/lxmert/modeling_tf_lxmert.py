@@ -814,6 +814,7 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
                 "visual_pos": visual_pos,
                 "attention_mask": attention_mask,
                 "visual_attention_mask": visual_attention_mask,
+                "token_type_ids": token_type_ids,
                 "inputs_embeds": inputs_embeds,
                 "output_attentions": output_attentions,
                 "output_hidden_states": output_hidden_states,
