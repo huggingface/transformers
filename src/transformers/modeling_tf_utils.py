@@ -46,6 +46,10 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 tf_logger = tf.get_logger()
 
+TFModelInputType = Union[
+    List[tf.Tensor], List[np.ndarray], Dict[str, tf.Tensor], Dict[str, np.ndarray], np.ndarray, tf.Tensor
+]
+
 
 class TFModelUtilsMixin:
     """
