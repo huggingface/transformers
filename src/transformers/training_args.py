@@ -245,7 +245,7 @@ class TrainingArguments:
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
         pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
-            Whether you want to pin memory in data loaders for PyTorch or not.
+            Whether you want to pin memory in data loaders for PyTorch or not.  Will default to :obj:`True`.
     """
 
     output_dir: str = field(
