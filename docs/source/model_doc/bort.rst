@@ -34,8 +34,8 @@ absolute, with respect to BERT-large, on multiple public natural language unders
 
 Tips:
 
-- BORT's model architecture is based on BERT, so one can refer to :doc:`BERT's documentation page <bert>` for
-  the model's API as well as usage examples.
+- BORT's model architecture is based on BERT, so one can refer to :doc:`BERT's documentation page <bert>` for the
+  model's API as well as usage examples.
 - BORT uses the RoBERTa tokenizer instead of the BERT tokenizer, so one can refer to :doc:`RoBERTa's documentation page
   <roberta>` for the tokenizer's API as well as usage examples.
 - BORT requires a specific fine-tuning algorithm, called `Agora
