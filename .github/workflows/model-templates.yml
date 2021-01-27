@@ -8,7 +8,8 @@ on:
       - ".github/**"
       - "templates/**"
   pull_request_target:
-    types: [labeled]
+    branches:
+      - master
 
 jobs:
   run_tests_templates:
