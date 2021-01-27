@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelForSeq2SeqLM, PegasusConfig, PegasusForConditionalGeneration, PegasusModel
-    from transformers.models.pegasus.modeling_pegasus import PegasusDecoder, PegasusEncoder
+    from transformers.models.pegasus.modeling_pegasus import PegasusDecoder, PegasusEncoder, PegasusForCausalLM
 
 
 def prepare_pegasus_inputs_dict(
@@ -300,6 +300,7 @@ class PegasusXSUMIntegrationTest(AbstractSeq2SeqIntegrationTest):
             "California's largest electricity provider has begun",
             "N-Dubz have revealed they were",
         ]
+
 
 class PegasusStandaloneDecoderModelTester:
     def __init__(

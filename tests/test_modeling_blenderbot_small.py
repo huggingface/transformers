@@ -39,6 +39,7 @@ if is_torch_available():
     from transformers.models.blenderbot_small.modeling_blenderbot_small import (
         BlenderbotSmallDecoder,
         BlenderbotSmallEncoder,
+        BlenderbotSmallForCausalLM,
     )
 
 
@@ -309,6 +310,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
             "have you ever been to a sam club? it's a great club in the south.",
             "have you ever heard of sam harris? he's an american singer, songwriter, and actor.",
         )
+
 
 class BlenderbotSmallStandaloneDecoderModelTester:
     def __init__(

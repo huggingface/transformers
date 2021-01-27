@@ -48,8 +48,8 @@ if is_torch_available():
     from transformers.models.marian.modeling_marian import (
         MarianDecoder,
         MarianEncoder,
-        shift_tokens_right,
         MartianForCausalLM,
+        shift_tokens_right,
     )
 
 
