@@ -1,4 +1,4 @@
-# How to add a model to 🤗 Transformers
+# How to add a model to 🤗 Transformers ?
 
 Adding a new model is often difficult and requires an in-depth knowledge of the 
 🤗 Transformers library and ideally also of the model's original repository.
@@ -31,24 +31,37 @@ To start with let's try to get a general overview of the Transformers library.
 
 ## General overview of 🤗 Transformers
 
-TODO(PVP)
+First, you should get a general overview of 🤗 Transformers. 🤗 Transformers is a very 
+opinated library, so there is a chance that you don't agree with some of the libraries'
+philosophies or design choices. From our experience however, we found that the fundamental design choices and philosophies 
+of the library are crucial to efficiently scale 🤗 Transformers while keeping maintenance cost 
+at a reasonable level.
 
-	- Mention some general design principles
-	- Mention the single file policy
-	- Mention the copy over abstraction policy
-	- ...
+A good first starting point to better understand the library, recommend that you read the :doc:`documenation of our philosophy <philosophy>`.
+As a result of this philosophy, there are some design choices that we try to apply to all models:
+
+- Composition is generally favored over abstraction
+- Duplicating code is not always bad if it strongly improves the readability or accesability of a model
+- Model files are as self-contained as possible so that when you read the code of a specific model, you ideally only have to look into the respective `..._modeling.py` file.
+
+In our opinion the libraries' code is not just a means to provide a product, *e.g.* ability to use BERT in inference, 
+but as the very product that we want to improve. Hence, when adding a model, the user is not only the person that will 
+use your model, but also everybody that will read, try to understand, and possibly tweak your code.
+
+With this in mind, let's go a bit deeper about the general library design.
 
 ### Overview of models
 
-TODO(PVP)
+In order to succesfully add a model, it is important to understand the interaction your model 
+will have with its config, :class:`~transformers.PreTrainedModel`, and :class:`~transformers.PreTrainedConfig`.
 
-	- Add graphic
+Let's take a look:
+
+.. image:: ./imgs/transformers_overview.png
 
 ### Overview of tokenizers
 
-TODO(PVP)
-
-	- Add graphic
+Not quite ready yet :-( This section will be added soon!
 
 ## Step-by-step recipe to add a model to 🤗 Transformers
 
