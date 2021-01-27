@@ -109,17 +109,17 @@ Step-by-step recipe to add a model to 🤗 Transformers
 Everyone has different preferences of how to port a model so it can be very helpful for you to take a look at summaries
 of how other contributors ported models to Hugging Face. Here is a list of community blog posts on how to port a model:
 
-1. (Porting GPT2 Model)[https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28] by `Thomas
+1. `Porting GPT2 Model <https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28>`__ by `Thomas
    <https://huggingface.co/thomwolf>`__
-2. (Porting WMT19 MT Model)[https://huggingface.co/blog/porting-fsmt] by `Stas <https://huggingface.co/stas>`__
+2. `Porting WMT19 MT Model <https://huggingface.co/blog/porting-fsmt>`__ by `Stas <https://huggingface.co/stas>`__
 3. TODO(PVP): ADD TAPAS blog post by Niels?
 
 From experience, the most important things to keep in mind when adding a model are:
 
 -  Don’t reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exists
    somewhere in 🤗 Transformers. Take some time to find similar, already existing models and tokenizers you can copy
-   from. ```grep`` <https://www.gnu.org/software/grep/>`__ and ```rg`` <https://github.com/BurntSushi/ripgrep>`__ are
-   your friends.
+   from. `grep <https://www.gnu.org/software/grep/>`__ and `rg <https://github.com/BurntSushi/ripgrep>`__ are your
+   friends.
 -  It’s more of an engineering challenge than a scientific challenge. You should spend more time on creating an
    efficient debugging environment than trying to understand all theoretical aspects of the model in the paper.
 -  Ask for help, when you’re stuck! Models are the core component of 🤗 Transformers so that we at Hugging Face are more
@@ -168,9 +168,9 @@ the practical ones, namely:
 -  What type of tokenizer is used? A sentencepiece tokenizer? Word piece tokenizer? Is it the same tokenizer as used
    for BERT or BART?
 
-After you feel like you have gotten a good overview of the architecture of the model, you might want to write [name of
-hugging face teacher] for any questions you might have. This might include questions regarding the model’s
-architecture, its attention layer, etc. [name of hugging face teacher] will be more than happy to help you.
+After you feel like you have gotten a good overview of the architecture of the model, you might want to write the
+Hugging Face team for any questions you might have. This might include questions regarding the model’s architecture,
+its attention layer, etc. We will be more than happy to help you.
 
 Next prepare your environment
 -----------------------------------------------------------------------------------------------------------------------
@@ -209,8 +209,8 @@ and return to the parent directory
 
 .. code:: bash
 
-   git clone https://github.com/*brand_new_bert*_org/*brand_new_bert*.git 
-   cd *brand_new_bert*
+   git clone https://github.com/brand_new_bert_org/brand_new_bert.git 
+   cd brand_new_bert
    pip install -e .
 
 Now you have set up a development environment to port *brand_new_bert* to 🤗 Transformers.
@@ -253,8 +253,8 @@ also works as expected on GPU.
 
 In general, there are two possible debugging environments for running the original model
 
--  [Jupyther notebooks](https://jupyter.org/), *e.g.* the [google
-   colab](https://colab.research.google.com/notebooks/intro.ipynb)
+-  `Jupyther notebooks <https://jupyter.org/>`_, *e.g.* the `google colab
+   <https://colab.research.google.com/notebooks/intro.ipynb>`_
 -  Local python scripts.
 
 Jupyther notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
@@ -351,7 +351,7 @@ is some advice is to make your debugging environment as efficient as possible.
    retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on
    TensorFlow print operations like https://www.tensorflow.org/api_docs/python/tf/print to output intermediate values.
    Is the original repository written in Jax? Then make sure that the model is **not jitted** when running the forward
-   pass, *e.g.* check-out [this link](https://github.com/google/jax/issues/196).
+   pass, *e.g.* check-out `this link <https://github.com/google/jax/issues/196>`_.
 -  Use the smallest pretrained checkpoint you can find. The smaller the checkpoint, the faster your debug cycle
    becomes. It is not efficient if your pretrained model is so big that your forward pass takes more than 10 seconds.
    In case only very large checkpoints are available, it might make more sense to create a dummy model in the new
@@ -372,7 +372,7 @@ is some advice is to make your debugging environment as efficient as possible.
 
 The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
 
-Implement *brand_new_bert* into 🤗 Transformers
+Implement BrandNewBert into 🤗 Transformers
 -----------------------------------------------------------------------------------------------------------------------
 
 Next, you can finally add code to 🤗 Transformers. Go into the clone of your 🤗 Transformers’ fork:
@@ -454,12 +454,12 @@ Hugging Face team by Slack or mail.
 **Adapt the generated models code for brand_new_bert**
 
 At first, we will focus only on the model itself and not care about the tokenizer. All the relevant code should be
-found in the generated files ``src/transformers/models/*brand_new_bert*/modeling_*brand_new_bert*.py`` and
-``src/transformers/models/*brand_new_bert*/configuration_*brand_new_bert*.py``.
+found in the generated files ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` and
+``src/transformers/models/brand_new_bert/configuration_brand_new_bert.py``.
 
 Now you can finally start coding :). The generated code in
-``src/transformers/models/*brand_new_bert*/modeling_*brand_new_bert*.py`` will either has the same architecture as BERT
-if it’s an encoder-only model or BART if it’s an encoder-decoder model. At this point, you should remind yourself what
+``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` will either has the same architecture as BERT if
+it’s an encoder-only model or BART if it’s an encoder-decoder model. At this point, you should remind yourself what
 you’ve learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
 BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization
 layer, etc… Again, it is often useful to look at the similar architecture of already existing models in Transformers to
@@ -467,7 +467,7 @@ get a better feeling of how your model should be implemented.
 
 **Note** that at this point, you don’t have to be very sure that your code is fully correct or clean. Rather, it is
 advised to add a first *unclean*, copy-pasted version of the original code to
-``src/transformers/models/*brand_new_bert*/modeling_*brand_new_bert*.py`` until you feel like all the necessary code is
+``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` until you feel like all the necessary code is
 added. From our experience, it is much more efficient to quickly add a first version of the required code and
 improve/correct the code iteratively with the conversion script as described in the next section. The only thing that
 has to work at this point is that you can instantiate the 🤗 Transformers implementation of *brand_new_bert*, *i.e.* the
@@ -621,7 +621,7 @@ instead of the original one. It should look as follows:
 
 .. code:: python
 
-   model = *brand_new_bert*Model.from_pretrained(/path/to/converted/checkpoint/folder)
+   model = BrandNewBertModel.from_pretrained(/path/to/converted/checkpoint/folder)
    input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
    output = model(input_ids).last_hidden_states
 
@@ -642,8 +642,8 @@ parts of adding a new model. Common mistakes why the outputs are not identical a
 -  The word embedding matrix was not tied
 -  The wrong positional embeddings are used because the original implementation uses on offset
 -  Dropout is applied during the forward pass. To fix this make sure `model.training is False` and that no dropout
-   layer is falsely activated during the forward pass, *i.e.* pass `self.training` to [PyTorch's functional
-   dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout)
+   layer is falsely activated during the forward pass, *i.e.* pass `self.training` to `PyTorch's functional dropout
+   <https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout>`_
 
 The best way to fix the problem is usually to look at the forward pass of the original implementation and the 🤗
 Transformers implementation side-by-side and check if there are any differences. Ideally, you should debug/print out
@@ -665,11 +665,11 @@ work left to be done should be a cakewalk 😊.
 At this point, you have successfully added a new model. However, it is very much possible that the model does not yet
 fully comply with the required design. To make sure, the implementation is fully compatible with 🤗 Transformers, all
 common tests should pass. The Cookiecutter should have automatically added a test file for your model, probably under
-the same ``tests/test_modeling_*brand_new_bert*.py``. Run this test file to verify that all common tests pass:
+the same ``tests/test_modeling_brand_new_bert.py``. Run this test file to verify that all common tests pass:
 
 .. code:: python
 
-   pytest tests/test_modeling_*brand_new_bert*.py
+   pytest tests/test_modeling_brand_new_bert.py
 
 Having fixed all common tests, it is now crucial to ensure that all the nice work you have done is well tested, so that
 
@@ -688,7 +688,7 @@ tests are passing, run
 
 .. code:: python
 
-   RUN_SLOW=1 pytest tests/test_modeling_*brand_new_bert*.py::BrandNewBertModelIntegrationTests
+   RUN_SLOW=1 pytest tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 
 Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
 ``BrandNewBertModelTester``/``BrandNewBertModelTest``. This part is often forgotten, but is extremely useful in two
@@ -712,7 +712,7 @@ original repository that inputs a string and returns the ``input_ids``. It could
 .. code:: bash
 
    input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-   model = *brand_new_bert*Model.load_pretrained_checkpoint(/path/to/checkpoint/)
+   model = BrandNewBertModel.load_pretrained_checkpoint(/path/to/checkpoint/)
    input_ids = model.tokenize(input_str)
 
 You might have to take a deeper look again into the original repository to find the correct tokenizer function or you
@@ -737,7 +737,7 @@ contain a couple of hard-coded integration tests.
 **Run End-to-end integration tests**
 
 Having added the tokenizer, you should also add a couple of end-to-end integration tests using both the model and the
-tokenizer to ``tests/test_modeling_*brand_new_bert*.py`` in 🤗 Transformers. Such a test should show on a meaningful
+tokenizer to ``tests/test_modeling_brand_new_bert.py`` in 🤗 Transformers. Such a test should show on a meaningful
 text-to-text sample that the 🤗 Transformers implementation works as expected. A meaningful text-to-text sample can
 include *e.g.* a source-to-target-translation pair, an article-to-summary pair, a question-to-answer pair, etc… If none
 of the ported checkpoints has been fine-tuned on a downstream task it is enough to simply rely on the model tests. In a
@@ -749,15 +749,15 @@ an error.
 
 Now, all the necessary functionality for *brand_new_bert* is added - you’re almost done! The only thing left to add is
 a nice docstring and a doc page. The Cookiecutter should have added a template file called
-``docs/source/model_doc/*brand_new_bert*.rst`` that you should fill out. Users of your model will usually first look at
+``docs/source/model_doc/brand_new_bert.rst`` that you should fill out. Users of your model will usually first look at
 this page before using your model. Hence, the documentation must be understandable and concise. It is very useful for
 the community to add some *Tips* to show how the model should be used. Don’t hesitate to ping the Hugging Face team
 regarding the docstrings.
 
-Next, make sure that the docstring added to ``src/transformers/models/*brand_new_bert*/modeling_*brand_new_bert*.py``
-is correct and included all necessary inputs and outputs. It is always to good to remind oneself that documentation
-should be treated at least as carefully as the code in 🤗 Transformers since the documentation is usually the first
-contact point of the community with the model.
+Next, make sure that the docstring added to ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` is
+correct and included all necessary inputs and outputs. It is always to good to remind oneself that documentation should
+be treated at least as carefully as the code in 🤗 Transformers since the documentation is usually the first contact
+point of the community with the model.
 
 **Code refactor**
 
