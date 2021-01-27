@@ -1314,7 +1314,7 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->BlenderbotSmall
-class BlenderbotSmallDecoderWrapper(PegasusPreTrainedModel):
+class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
     """
     This is a wrapper class, so that :class:`~transformers.BlenderbotSmallForCausalLM` can correctly be loaded from pretrained
     BlenderbotSmall classes.
@@ -1329,7 +1329,7 @@ class BlenderbotSmallDecoderWrapper(PegasusPreTrainedModel):
 
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->BlenderbotSmall
-class BlenderbotSmallForCausalLM(PegasusPreTrainedModel):
+class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
