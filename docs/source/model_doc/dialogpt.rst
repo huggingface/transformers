@@ -49,6 +49,6 @@ sequence length), ended by the end-of-text token.* For more information please c
 
 
 DialoGPT's architecture is based on the GPT2 model, so one can refer to :doc:`GPT2's documentation page
-<model_doc/gpt2>`_.
+<model_doc/gpt2>`.
 
 The original code can be found `here <https://github.com/microsoft/DialoGPT>`_.
