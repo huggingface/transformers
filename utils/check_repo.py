@@ -52,6 +52,7 @@ IGNORE_NON_TESTED = [
     "TFDPRSpanPredictor",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "SeparableConv1D",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -116,6 +117,7 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "XLMProphetNetDecoder",
     "XLMProphetNetEncoder",
     "XLNetForQuestionAnswering",
+    "SeparableConv1D",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.
