@@ -724,7 +724,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
         **kwargs,
-    ): -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         already_processed = kwargs.pop("already_processed", False)
 
         if not already_processed:
