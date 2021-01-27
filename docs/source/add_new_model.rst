@@ -9,7 +9,7 @@
     Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-How to add a model to 🤗 Transformers ?
+How to add a model to 🤗 Transformers?
 =======================================================================================================================
 
 Adding a new model is often difficult and requires an in-depth knowledge of the 🤗 Transformers library and ideally also
@@ -44,47 +44,47 @@ To start with let’s try to get a general overview of the Transformers library.
 General overview of 🤗 Transformers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-First, you should get a general overview of 🤗 Transformers. 🤗 Transformers is a very opinated library, so there is a
-chance that you don’t agree with some of the libraries’ philosophies or design choices. From our experience however, we
-found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
-Transformers while keeping maintenance cost at a reasonable level.
+First, you should get a general overview of 🤗 Transformers. 🤗 Transformers is a very opinionated library, so there is a
+chance that you don’t agree with some of the libraries’ philosophies or design choices. From our experience, however,
+we found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
+Transformers while keeping maintenance costs at a reasonable level.
 
 A good first starting point to better understand the library, recommend that you read the :doc:`documenation of our
 philosophy <philosophy>`. As a result of this philosophy, there are some design choices that we try to apply to all
 models:
 
--  Composition is generally favored over abstraction
--  Duplicating code is not always bad if it strongly improves the readability or accesability of a model
+-  Composition is generally favored over-abstraction
+-  Duplicating code is not always bad if it strongly improves the readability or accessibility of a model
 -  Model files are as self-contained as possible so that when you read the code of a specific model, you ideally only
    have to look into the respective ``..._modeling.py`` file.
 
-In our opinion the libraries’ code is not just a means to provide a product, *e.g.* ability to use BERT in inference,
-but as the very product that we want to improve. Hence, when adding a model, the user is not only the person that will
-use your model, but also everybody that will read, try to understand, and possibly tweak your code.
+In our opinion, the libraries’ code is not just a means to provide a product, *e.g.* the ability to use BERT in
+inference, but as the very product that we want to improve. Hence, when adding a model, the user is not only the person
+that will use your model, but also everybody that will read, try to understand, and possibly tweak your code.
 
 With this in mind, let’s go a bit deeper about the general library design.
 
 Overview of models
 -----------------------------------------------------------------------------------------------------------------------
 
-In order to succesfully add a model, it is important to understand the interaction your model will have with its
-config, :class:`~transformers.PreTrainedModel`, and :class:`~transformers.PretrainedConfig`.
+To successfully add a model, it is important to understand the interaction your model will have with its config,
+:class:`~transformers.PreTrainedModel`, and :class:`~transformers.PretrainedConfig`.
 
 Let’s take a look:
 
 .. image:: ./imgs/transformers_overview.png
 
-As you can see, we actually do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an
-absolute minimum. In fact, there are never more than two levels of absracttion for any model in the library.
-:obj:`BrandNewBertModel` inherits from :obj:`BrandNewBertPreTrainedModel` which in turn inherits from
-:class:`~transformres.PreTrainedModel` and that's it. As a general rule, we want to make sure that the only existing
-class a new model depends on is :class:`~transformers.PreTrainedModel`. The important functionalities that are
-automatically provided to every new model are :meth:`~transformres.PreTrainedModel.from_pretrained` and
+As you can see, we do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an absolute
+minimum. There are never more than two levels of abstraction for any model in the library. :obj:`BrandNewBertModel`
+inherits from :obj:`BrandNewBertPreTrainedModel` which in turn inherits from :class:`~transformres.PreTrainedModel` and
+that's it. As a general rule, we want to make sure that the only existing class a new model depends on is
+:class:`~transformers.PreTrainedModel`. The important functionalities that are automatically provided to every new
+model are :meth:`~transformres.PreTrainedModel.from_pretrained` and
 :meth:`~transformers.PreTrainedModel.save_pretrained`, which are used for serialization and deserialization. All of the
 other important functionalities, such as :meth:`BrandNewBertModelforward` should be more or less completely be defined
 in the new ``modeling_brand_new_bert.py`` script. Next, we want to make sure that a model with a specific head layer,
 such as :obj:`BrandNewBertForMaskedLM` does not inherit from :obj:`BrandNewBertModel`, but rather uses
-:obj:`BrandNewBertModel` as a component that can be called in its own forward pass. Every new model requires its own
+:obj:`BrandNewBertModel` as a component that can be called in its forward pass. Every new model requires its
 configuration class, called :obj:`BrandNewBertConfig`. This configuration is always stored as an attribute in the
 model, and thus can be accessed the ``config`` attribute:
 
@@ -203,7 +203,7 @@ and return to the parent directory
 4. We recommend adding the PyTorch version of *brand_new_bert* to Transformers. To install PyTorch, please follow the
    instructions on https://pytorch.org/.
 
-**Note:** You don’t need to have CUDA installed. It is sufficient to just be working on CPU.
+**Note:** You don’t need to have CUDA installed. It is sufficient to just be working on the CPU.
 
 5. To port *brand_new_bert*, you will also need access to its original repository:
 
@@ -234,8 +234,8 @@ find out
 -  Where to find the pretrained weights?
 -  How to load the pretrained weights into the corresponding model?
 -  How to run the tokenizer independently from the model?
--  Trace one forward pass so that you know which classes and functions are required for a simple forward pass? .
-   Usually, you only have to reimplement those functions.
+-  Trace one forward pass so that you know which classes and functions are required for a simple forward pass. Usually,
+   you only have to reimplement those functions.
 -  Be able to locate the important components of the model: Where is the model class? Are there submodel classes,
    *e.g.* EncoderModel, DecoderModel? Where is the self-attention layer? Are there multiple different attention layers,
    *e.g.* *self-attention*, *cross-attention*...?
@@ -257,16 +257,16 @@ In general, there are two possible debugging environments for running the origin
    <https://colab.research.google.com/notebooks/intro.ipynb>`_
 -  Local python scripts.
 
-Jupyther notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
+Jupiter notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
 logical components from one another and to have faster debugging cycles as intermediate results can be stored. Also,
 notebooks are often easier to share with other contributors, which might be very helpful if you want to ask the Hugging
-Face team for help. If you are familiar with Jupyther notebooks, we strongly recommend you to work with them.
+Face team for help. If you are familiar with Jupiter notebooks, we strongly recommend you to work with them.
 
 The obvious disadvantage of Jupyther notebooks is that if you are not used to working with them you will have to spend
 some time adjusting to the new programming environment and that you might not be able to use your known debugging tools
 anymore, like ``ipdb``.
 
-For each code-base a good first step is always to load a **small** pretrained checkpoint and to be able to reproduce a
+For each code-base, a good first step is always to load a **small** pretrained checkpoint and to be able to reproduce a
 single forward pass using a dummy integer vector of input IDs as an input. Such a script could look like this (in
 pseudocode):
 
@@ -286,9 +286,9 @@ Next, regarding the debugging strategy, there are generally from which to choose
 Again, it is up to you which strategy to choose. Often, one or the other is advantageous depending on the original code
 base.
 
-If the original code base allows you to decompose the model into smaller subcomponents, *e.g.* if the original code
-base can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages to
-taking the more difficult road in the beginning:
+If the original code base allows you to decompose the model into smaller subcomponents, *e.g.* if the original codebase
+can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages to taking
+the more difficult road in the beginning:
 
 -  at a later stage when comparing the original model to the hugging face implementation, you can verify automatically
    for each component individually that the corresponding component of the 🤗 Transformers implementation matches
@@ -383,7 +383,7 @@ Next, you can finally add code to 🤗 Transformers. Go into the clone of your �
 
 In the special case that you are adding a model whose architecture exactly matches the model architecture of an
 existing model you only have to add a conversion script as described in `this section <#write-a-conversion-script>`__.
-In this case you can just re-use the whole model architecture of the already existing model.
+In this case, you can just re-use the whole model architecture of the already existing model.
 
 Otherwise, let’s start generating a new model with the amazing Cookiecutter!
 
@@ -425,7 +425,8 @@ You should do the following:
    git push -u origin a-descriptive-name-for-my-changes
 
 4. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
-   GitHub handle of the Hugging Face team as reviewer, so that the Hugging Face team gets notified for future changes.
+   GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
+   future changes.
 
 5. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
 
@@ -444,7 +445,7 @@ if you have a question. It is often very helpful to point the Hugging Face team 
 Face team can efficiently understand your problem or question.
 
 To do so, you can go to the “Files changed” tab where you see all of your changes, go to a line regarding which you
-want to ask a question and click on the “+” symbol to add a comment. Whenever a question or problem has been solved,
+want to ask a question, and click on the “+” symbol to add a comment. Whenever a question or problem has been solved,
 you can click on the “Resolve” button of the created comment.
 
 In the same way, the Hugging Face team will open comments when reviewing your code. We recommend asking most questions
@@ -458,7 +459,7 @@ found in the generated files ``src/transformers/models/brand_new_bert/modeling_b
 ``src/transformers/models/brand_new_bert/configuration_brand_new_bert.py``.
 
 Now you can finally start coding :). The generated code in
-``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` will either has the same architecture as BERT if
+``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` will either have the same architecture as BERT if
 it’s an encoder-only model or BART if it’s an encoder-decoder model. At this point, you should remind yourself what
 you’ve learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
 BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization
@@ -586,7 +587,7 @@ statements for the shape and print out the names of the checkpoints weights. E.g
         model_pointer.weight.shape == pretrained_weight.shape
    ), f"Pointer shape of random weight {model_pointer.shape} and array shape of checkpoint weight {pretrained_weight.shape} mismatched"
 
-In addition, you should also print out the names of both weights to make sure they match, *e.g.*
+Besides, you should also print out the names of both weights to make sure they match, *e.g.*
 
 .. code:: python
 
@@ -691,11 +692,11 @@ tests are passing, run
    RUN_SLOW=1 pytest tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 
 Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
-``BrandNewBertModelTester``/``BrandNewBertModelTest``. This part is often forgotten, but is extremely useful in two
+``BrandNewBertModelTester``/``BrandNewBertModelTest``. This part is often forgotten but is extremely useful in two
 ways:
 
 -  It helps to transfer the knowledge you have acquired during the model addition to the community by showing how the
-   special feature of *brand_new_bert* should work.
+   special features of *brand_new_bert* should work.
 -  Future contributors can quickly test changes to the model by running those special tests.
 
 **Implement the tokenizer**
@@ -707,7 +708,7 @@ It is very important to find/extract the original tokenizer file and to manage t
 Transformers’ implementation of the tokenizer.
 
 To ensure that the tokenizer works correctly, it is recommend to analogous to the model, first create a script in the
-original repository that inputs a string and returns the ``input_ids``. It could look similar to this (in pseudo code):
+original repository that inputs a string and returns the ``input_ids``. It could look similar to this (in pseudo-code):
 
 .. code:: bash
 
@@ -798,7 +799,7 @@ correctly use the model.
 **(Optional) Add notebook**
 
 It is very helpful to add a notebook that showcases in-detail how *brand_new_bert* can be used for inference and/or
-fine-tuned on a down-stream task. This is not mandatory to merge your PR, but very useful for the community.
+fine-tuned on a downstream task. This is not mandatory to merge your PR, but very useful for the community.
 
 Share your work!!
 -----------------------------------------------------------------------------------------------------------------------
