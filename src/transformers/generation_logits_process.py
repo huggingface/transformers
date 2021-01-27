@@ -155,13 +155,12 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.penalty = penalty
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        ranges = torch.arange(scores.shape[0])
-        score = scores[ranges[:, None], input_ids]
+        score = torch.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
-        scores[ranges[:, None], input_ids] = score
+        scores.scatter_(1, input_ids, score)
         return scores
 
 
@@ -440,8 +439,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             raise ValueError("`num_beam_groups` should be an integer strictly larger than 1.")
         if num_beam_groups > num_beams:
             raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`.")
-        if num_beam_groups > num_beams:
-            raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`")
         self._num_sub_beams = num_beams // num_beam_groups
 
     def __call__(

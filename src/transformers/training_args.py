@@ -18,7 +18,13 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from .file_utils import cached_property, is_torch_available, is_torch_tpu_available, torch_required
+from .file_utils import (
+    cached_property,
+    is_sagemaker_distributed_available,
+    is_torch_available,
+    is_torch_tpu_available,
+    torch_required,
+)
 from .trainer_utils import EvaluationStrategy, SchedulerType
 from .utils import logging
 
@@ -104,15 +110,16 @@ class TrainingArguments:
             left unset, the whole predictions are accumulated on GPU/TPU before being moved to the CPU (faster but
             requires more memory).
         learning_rate (:obj:`float`, `optional`, defaults to 5e-5):
-            The initial learning rate for Adam.
+            The initial learning rate for :class:`~transformers.AdamW` optimizer.
         weight_decay (:obj:`float`, `optional`, defaults to 0):
-            The weight decay to apply (if not zero).
+            The weight decay to apply (if not zero) to all layers except all bias and LayerNorm weights in
+            :class:`~transformers.AdamW` optimizer.
         adam_beta1 (:obj:`float`, `optional`, defaults to 0.9):
-            The beta1 hyperparameter for the Adam optimizer.
+            The beta1 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_beta2 (:obj:`float`, `optional`, defaults to 0.999):
-            The beta2 hyperparameter for the Adam optimizer.
+            The beta2 hyperparameter for the :class:`~transformers.AdamW` optimizer.
         adam_epsilon (:obj:`float`, `optional`, defaults to 1e-8):
-            The epsilon hyperparameter for the Adam optimizer.
+            The epsilon hyperparameter for the :class:`~transformers.AdamW` optimizer.
         max_grad_norm (:obj:`float`, `optional`, defaults to 1.0):
             Maximum gradient norm (for gradient clipping).
         num_train_epochs(:obj:`float`, `optional`, defaults to 3.0):
@@ -230,6 +237,9 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+            The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
     """
 
     output_dir: str = field(
@@ -288,11 +298,11 @@ class TrainingArguments:
         metadata={"help": "Number of predictions steps to accumulate before moving the tensors to the CPU."},
     )
 
-    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for Adam."})
-    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay if we apply some."})
-    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for Adam optimizer"})
-    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for Adam optimizer"})
-    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for Adam optimizer."})
+    learning_rate: float = field(default=5e-5, metadata={"help": "The initial learning rate for AdamW."})
+    weight_decay: float = field(default=0.0, metadata={"help": "Weight decay for AdamW if we apply some."})
+    adam_beta1: float = field(default=0.9, metadata={"help": "Beta1 for AdamW optimizer"})
+    adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
+    adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
@@ -407,10 +417,13 @@ class TrainingArguments:
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
-    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace Adam by Adafactor."})
+    adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
+    )
+    report_to: Optional[List[str]] = field(
+        default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
@@ -433,6 +446,11 @@ class TrainingArguments:
 
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if self.report_to is None:
+            # Import at runtime to avoid a circular import.
+            from .integrations import get_available_reporting_integrations
+
+            self.report_to = get_available_reporting_integrations()
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -481,6 +499,13 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
+        elif is_sagemaker_distributed_available():
+            import smdistributed.dataparallel.torch.distributed as dist
+
+            dist.init_process_group()
+            self.local_rank = dist.get_local_rank()
+            device = torch.device("cuda", self.local_rank)
+            self._n_gpu = 1
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -554,6 +579,8 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
+        elif is_sagemaker_distributed_available():
+            return ParallelMode.SAGEMAKER_DISTRIBUTED
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -595,4 +622,5 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
+    SAGEMAKER_DISTRIBUTED = "sm_distributed"
     TPU = "tpu"
