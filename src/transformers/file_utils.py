@@ -297,6 +297,20 @@ def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
 
 
+def is_sagemaker_distributed_available():
+    # Get the sagemaker specific env variable.
+    sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
+    try:
+        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
+        sagemaker_params = json.loads(sagemaker_params)
+        if not sagemaker_params.get("sagemaker_distributed_dataparallel_enabled", False):
+            return False
+    except json.JSONDecodeError:
+        return False
+    # Lastly, check if the `smdistributed` module is present.
+    return importlib.util.find_spec("smdistributed") is not None
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:

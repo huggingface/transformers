@@ -240,6 +240,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFAlbertModelTester(self)
@@ -292,6 +293,10 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
                 assert x is None
                 name = model.get_bias()
                 assert name is None
+
+    def test_mixed_precision(self):
+        # TODO JP: Make ALBERT float16 compliant
+        pass
 
     @slow
     def test_model_from_pretrained(self):
