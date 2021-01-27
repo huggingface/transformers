@@ -189,9 +189,9 @@ class TFTrainingArguments(TrainingArguments):
         else:
             try:
                 if self.tpu_name:
-                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(self.tpu_name,
-                                                                            zone=self.tpu_zone,
-                                                                            project=self.gcp_project)
+                    tpu = tf.distribute.cluster_resolver.TPUClusterResolver(
+                        self.tpu_name, zone=self.tpu_zone, project=self.gcp_project
+                    )
                 else:
                     tpu = tf.distribute.cluster_resolver.TPUClusterResolver()
             except ValueError:
