@@ -34,12 +34,14 @@ absolute, with respect to BERT-large, on multiple public natural language unders
 
 Tips:
 
-- This implementation is the same as BERT. Refer to the :doc:`documentation of BERT <bert>` for usage examples as well
-  as the information relative to the inputs and outputs.
-- The RoBERTa tokenizer is used instead of BERT tokenizer.
-
-BORT's architecture is based on the BERT model, so one can refer to BERT's `docstring
-<https://huggingface.co/transformers/model_doc/bert.html>`_.
+- BORT's model architecture is based on BERT, so one can refer to BERT's `docstring
+  <https://huggingface.co/transformers/model_doc/bert.html>`_ for the model's API as well as usage examples.
+- BORT uses the RoBERTa tokenizer instead of the BERT tokenizer, so one can refer to to RoBERTa's `docstring
+  <https://huggingface.co/transformers/model_doc/roberta.html>`_ for the tokenizer's API as well as usage examples
+- BORT requires a specific fine-tuning algorithm, called `Agora
+  <https://adewynter.github.io/notes/bort_algorithms_and_applications.html#fine-tuning-with-algebraic-topology>`__ ,
+  that is sadly not open-sourced yet. It would be very useful for the community, if someone tries to implement the
+  algorithm to make BORT fine-tuning work.
 
 The original code can be found `here <https://github.com/alexa/bort/>`__.
 
