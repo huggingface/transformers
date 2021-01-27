@@ -26,6 +26,7 @@ from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
+from torch import nn
 
 import transformers
 from transformers import (
@@ -243,13 +244,6 @@ def freeze_embeds(model):
             freeze_params(d.embed_tokens)
 
 
-def assert_all_frozen(model):
-    model_grads: List[bool] = list(grad_status(model))
-    n_require_grad = sum(lmap(int, model_grads))
-    npars = len(model_grads)
-    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -358,7 +352,6 @@ def main():
         freeze_embeds(model)
     if model_args.freeze_encoder:
         freeze_params(model.get_encoder())
-        assert_all_frozen(model.get_encoder())
 
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
