@@ -15,6 +15,7 @@
 """ PyTorch Blenderbot model. """
 
 
+import copy
 import math
 import os
 import random

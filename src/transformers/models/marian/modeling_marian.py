@@ -15,6 +15,7 @@
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
 
+import copy
 import math
 import random
 from typing import Optional, Tuple

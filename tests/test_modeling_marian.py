@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch Marian model. """
 
-import copy
 import tempfile
 import unittest
 

@@ -15,6 +15,7 @@
 """ PyTorch BlenderbotSmall model. """
 
 
+import copy
 import math
 import random
 from typing import Optional, Tuple
