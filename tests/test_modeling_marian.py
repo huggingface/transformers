@@ -45,7 +45,12 @@ if is_torch_available():
         convert_hf_name_to_opus_name,
         convert_opus_name_to_hf_name,
     )
-    from transformers.models.marian.modeling_marian import MarianDecoder, MarianEncoder, shift_tokens_right, MartianForCausalLM
+    from transformers.models.marian.modeling_marian import (
+        MarianDecoder,
+        MarianEncoder,
+        shift_tokens_right,
+        MartianForCausalLM,
+    )
 
 
 def prepare_marian_inputs_dict(
@@ -539,7 +544,8 @@ class TestConversionUtils(unittest.TestCase):
         ]
         self.assertListEqual(expected_opus_names, converted_opus_names)
 
-class MBartStandaloneDecoderModelTester:
+
+class MarianStandaloneDecoderModelTester:
     def __init__(
         self,
         parent,
@@ -727,9 +733,9 @@ class MBartStandaloneDecoderModelTester:
 
 
 @require_torch
-class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class MarianStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MarianDecoder, MarianForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (MBartForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (MarianForCausalLM,) if is_torch_available() else ()
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
