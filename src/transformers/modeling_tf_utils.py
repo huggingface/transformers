@@ -44,6 +44,7 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+tf_logger = tf.get_logger()
 
 
 class TFModelUtilsMixin:
@@ -285,7 +286,7 @@ def booleans_processing(config, **kwargs):
             or kwargs["output_hidden_states"] is not None
             or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
         ):
-            tf.print(
+            tf_logger.warn(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
@@ -294,7 +295,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs["return_dict"] is not None:
-            tf.print("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
+            tf_logger.warn("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
