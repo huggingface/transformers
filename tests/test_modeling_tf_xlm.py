@@ -326,6 +326,10 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
+    def test_mixed_precision(self):
+        # TODO JP: Make XLM float16 compliant
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

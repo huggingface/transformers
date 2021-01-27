@@ -86,7 +86,7 @@ else:
         def __getattr__(self, name):
             if name == "MT5Tokenizer":
                 return MT5Tokenizer
-            elif name == name == "MT5TokenizerFast":
+            elif name == "MT5TokenizerFast":
                 return MT5TokenizerFast
             else:
                 return super().__getattr__(name)
