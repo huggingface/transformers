@@ -34,7 +34,9 @@ def string_to_bool(v):
     elif v.lower() in ("no", "false", "f", "n", "0"):
         return False
     else:
-        raise ArgumentTypeError("Boolean value expected.")
+        raise ArgumentTypeError(
+            f"Truthy value expected: got {v} but expected one of yes/no, true/false, t/f, y/n, 1/0 (case insensitive)."
+        )
 
 
 class HfArgumentParser(ArgumentParser):
