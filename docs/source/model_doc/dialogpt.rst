@@ -48,7 +48,6 @@ modeling. We first concatenate all dialog turns within a dialogue session into a
 sequence length), ended by the end-of-text token.* For more information please confer to the original paper.
 
 
-DialoGPT's architecture is based on the GPT2 model, so one can refer to GPT2's `docstring
-<https://huggingface.co/transformers/model_doc/gpt2.html>`_.
+DialoGPT's architecture is based on the GPT2 model, so one can refer to :doc:`GPT2's documentation page <gpt2>`.
 
 The original code can be found `here <https://github.com/microsoft/DialoGPT>`_.
