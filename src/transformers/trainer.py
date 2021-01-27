@@ -688,19 +688,30 @@ class Trainer:
         self._hp_search_setup(trial)
 
         # Model re-init
+        model_reloaded = False
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
             set_seed(self.args.seed)
-
-            model = self.call_model_init(trial)
-            if not self.is_model_parallel:
-                model = model.to(self.args.device)
-
-            self.model = model
-            self.model_wrapped = model
-
+            self.model = self.call_model_init(trial)
+            model_reloaded = True
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
+
+        # Load potential model checkpoint
+        if model_path is not None and os.path.isfile(os.path.join(model_path, WEIGHTS_NAME)):
+            logger.info(f"Loading model from {model_path}).")
+            if isinstance(self.model, PreTrainedModel):
+                self.model = self.model.from_pretrained(model_path)
+                model_reloaded = True
+            else:
+                state_dict = torch.load(os.path.join(model_path, WEIGHTS_NAME))
+                self.model.load_state_dict(state_dict)
+
+        # If model was re-initialized, put it on the right device and update self.model_wrapped
+        if model_reloaded:
+            if not self.is_model_parallel:
+                self.model = self.model.to(self.args.device)
+            self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
         train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
@@ -849,7 +860,7 @@ class Trainer:
         tr_loss = torch.tensor(0.0).to(self.args.device)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
-        self._globalstep_last_logged = 0
+        self._globalstep_last_logged = self.state.global_step
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
