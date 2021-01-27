@@ -78,8 +78,8 @@ python examples/seq2seq/run_seq2seq.py \
     --task translation_en_to_ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
-    --source_lang en-XX \
-    --target_lang ro-RO\
+    --source_lang en_XX \
+    --target_lang ro_RO\
     --output_dir ~/tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
@@ -96,8 +96,8 @@ python examples/seq2seq/run_seq2seq.py \
     --task translation_en_to_ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
-    --source_lang en-XX \
-    --target_lang ro-RO\
+    --source_lang en_XX \
+    --target_lang ro_RO\
     --train_file path_to_json_file \
     --validation_file path_to_json_file \
     --output_dir ~/tmp/tst-translation \
