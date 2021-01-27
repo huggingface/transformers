@@ -306,6 +306,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
+    def test_mixed_precision(self):
+        # TODO JP: Make T5 float16 compliant
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")
@@ -433,6 +437,10 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # is not able to be part of a pipeline
     def test_train_pipeline_custom_model(self):
+        pass
+
+    def test_mixed_precision(self):
+        # TODO JP: Make T5 float16 compliant
         pass
 
 
