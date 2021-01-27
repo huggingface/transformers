@@ -330,6 +330,36 @@ the same probabilities as the larger model. The actual objective is a combinatio
 The library provides a version of the model for masked language modeling, token classification, sentence classification
 and question answering.
 
+ConvBERT
+-----------------------------------------------------------------------------------------------------------------------
+
+.. raw:: html
+
+   <a href="https://huggingface.co/models?filter=convbert">
+       <img alt="Models" src="https://img.shields.io/badge/All_model_pages-convbert-blueviolet">
+   </a>
+   <a href="model_doc/convbert.html">
+       <img alt="Doc" src="https://img.shields.io/badge/Model_documentation-convbert-blueviolet">
+   </a>
+
+`ConvBERT: Improving BERT with Span-based Dynamic Convolution <https://arxiv.org/abs/1910.01108>`_, Zihang Jiang,
+Weihao Yu, Daquan Zhou, Yunpeng Chen, Jiashi Feng, Shuicheng Yan.
+
+Pre-trained language models like BERT and its variants have recently achieved impressive performance in various natural
+language understanding tasks. However, BERT heavily relies on the global self-attention block and thus suffers large
+memory footprint and computation cost. Although all its attention heads query on the whole input sequence for
+generating the attention map from a global perspective, we observe some heads only need to learn local dependencies,
+which means the existence of computation redundancy. We therefore propose a novel span-based dynamic convolution to
+replace these self-attention heads to directly model local dependencies. The novel convolution heads, together with the
+rest self-attention heads, form a new mixed attention block that is more efficient at both global and local context
+learning. We equip BERT with this mixed attention design and build a ConvBERT model. Experiments have shown that
+ConvBERT significantly outperforms BERT and its variants in various downstream tasks, with lower training cost and
+fewer model parameters. Remarkably, ConvBERTbase model achieves 86.4 GLUE score, 0.7 higher than ELECTRAbase, while
+using less than 1/4 training cost.
+
+The library provides a version of the model for masked language modeling, token classification, sentence classification
+and question answering.
+
 XLM
 -----------------------------------------------------------------------------------------------------------------------
 

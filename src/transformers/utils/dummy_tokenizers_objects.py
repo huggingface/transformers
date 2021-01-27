@@ -47,6 +47,15 @@ class CamembertTokenizerFast:
         requires_tokenizers(self)
 
 
+class ConvBertTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class DistilBertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
