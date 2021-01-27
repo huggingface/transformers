@@ -16,7 +16,7 @@ deps = {
     "ipadic": "ipadic>=1.0.0,<2.0",
     "isort": "isort>=5.5.4",
     "jax": "jax>=0.2.0",
-    "jaxlib": "jaxlib==0.1.55",
+    "jaxlib": "jaxlib>=0.1.59",
     "keras2onnx": "keras2onnx",
     "numpy": "numpy",
     "onnxconverter-common": "onnxconverter-common",
