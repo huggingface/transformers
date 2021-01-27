@@ -704,6 +704,10 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
+    def test_mixed_precision(self):
+        # TODO JP: Make Lxmert float16 compliant
+        pass
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
