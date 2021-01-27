@@ -279,6 +279,20 @@ class TFModelTesterMixin:
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    def test_mixed_precision(self):
+        tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            outputs = model(class_inputs_dict)
+
+            self.assertIsNotNone(outputs)
+
+        tf.keras.mixed_precision.experimental.set_policy("float32")
+
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

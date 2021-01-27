@@ -3,7 +3,7 @@ import collections
 import numpy as np
 
 from ..file_utils import add_end_docstrings, is_torch_available, requires_pandas
-from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
+from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline, PipelineException
 
 
 if is_torch_available():
@@ -239,6 +239,10 @@ class TableQuestionAnsweringPipeline(Pipeline):
         batched_answers = []
         for pipeline_input in pipeline_inputs:
             table, query = pipeline_input["table"], pipeline_input["query"]
+            if table.empty:
+                raise ValueError("table is empty")
+            if not query:
+                raise ValueError("query is empty")
             inputs = self.tokenizer(
                 table, query, return_tensors=self.framework, truncation="drop_rows_to_fit", padding=padding
             )
@@ -276,5 +280,7 @@ class TableQuestionAnsweringPipeline(Pipeline):
                     answer["aggregator"] = aggregator
 
                 answers.append(answer)
+            if len(answer) == 0:
+                raise PipelineException("Empty answer")
             batched_answers.append(answers if len(answers) > 1 else answers[0])
         return batched_answers if len(batched_answers) > 1 else batched_answers[0]
