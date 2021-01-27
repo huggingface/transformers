@@ -34,9 +34,9 @@ absolute, with respect to BERT-large, on multiple public natural language unders
 
 Tips:
 
-- BORT's model architecture is based on BERT, so one can refer to BERT's `docstring
+- BORT's model architecture is based on BERT, so one can refer to `BERT's docstring
   <https://huggingface.co/transformers/model_doc/bert.html>`_ for the model's API as well as usage examples.
-- BORT uses the RoBERTa tokenizer instead of the BERT tokenizer, so one can refer to to RoBERTa's `docstring
+- BORT uses the RoBERTa tokenizer instead of the BERT tokenizer, so one can refer to to `RoBERTa's docstring
   <https://huggingface.co/transformers/model_doc/roberta.html>`_ for the tokenizer's API as well as usage examples
 - BORT requires a specific fine-tuning algorithm, called `Agora
   <https://adewynter.github.io/notes/bort_algorithms_and_applications.html#fine-tuning-with-algebraic-topology>`__ ,
