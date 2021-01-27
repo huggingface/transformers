@@ -1597,7 +1597,7 @@ class GenerationMixin:
                 next_token_logits,
                 cur_len=cur_len,
                 max_length=max_length,
-                lang_token=prefix_token,
+                prefix_token=prefix_token,
             )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
@@ -1855,7 +1855,7 @@ class GenerationMixin:
                 next_token_logits,
                 cur_len=cur_len,
                 max_length=max_length,
-                lang_token=prefix_token,
+                prefix_token=prefix_token,
             )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
@@ -2140,7 +2140,7 @@ class GenerationMixin:
 
                 # adjust tokens for Bart, *e.g.*
                 next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=max_length, lang_token=prefix_token
+                    next_token_logits, cur_len=cur_len, max_length=max_length, prefix_token=prefix_token
                 )
 
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
