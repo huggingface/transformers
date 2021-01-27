@@ -80,6 +80,12 @@ class ModelArguments:
             "with private models)."
         },
     )
+    freeze_encoder: bool = field(
+        default=False, metadata={"help": "Whether tp freeze the encoder for faster training."}
+    )
+    freeze_embeds: bool = field(
+        default=False, metadata={"help": "Whether  to freeze the embeddings for faster training."}
+    )
 
 
 @dataclass
@@ -212,6 +218,38 @@ summarization_name_mapping = {
 }
 
 
+def freeze_params(model: nn.Module):
+    """Set requires_grad=False for each of model.parameters()"""
+    for par in model.parameters():
+        par.requires_grad = False
+
+
+def freeze_embeds(model):
+    """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
+    model_type = model.config.model_type
+
+    if model_type == "t5":
+        freeze_params(model.shared)
+        for d in [model.encoder, model.decoder]:
+            freeze_params(d.embed_tokens)
+    elif model_type == "fsmt":
+        for d in [model.model.encoder, model.model.decoder]:
+            freeze_params(d.embed_positions)
+            freeze_params(d.embed_tokens)
+    else:
+        freeze_params(model.model.shared)
+        for d in [model.model.encoder, model.model.decoder]:
+            freeze_params(d.embed_positions)
+            freeze_params(d.embed_tokens)
+
+
+def assert_all_frozen(model):
+    model_grads: List[bool] = list(grad_status(model))
+    n_require_grad = sum(lmap(int, model_grads))
+    npars = len(model_grads)
+    assert not any(model_grads), f"{n_require_grad/npars:.1%} of {npars} weights require grad"
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -315,6 +353,13 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
+    # freeze encoder or embedddings
+    if model_args.freeze_embeds:
+        freeze_embeds(model)
+    if model_args.freeze_encoder:
+        freeze_params(model.get_encoder())
+        assert_all_frozen(model.get_encoder())
+
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
         model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
@@ -406,6 +451,14 @@ def main():
             ]
 
         model_inputs["labels"] = labels["input_ids"]
+
+        # prepare decoder_input_ids
+        if hasattr(model, "prepare_decoder_input_ids_from_labels"):
+            decoder_input_ids = model.prepare_decoder_input_ids_from_labels(
+                labels=model_inputs["labels"], pad_token_id=tokenizer.pad_token_id
+            )
+            model["decoder_input_ids"] = decoder_input_ids
+
         return model_inputs
 
     if training_args.do_train:
