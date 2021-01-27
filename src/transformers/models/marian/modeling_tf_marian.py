@@ -690,19 +690,33 @@ class TFMarianEncoder(tf.keras.layers.Layer):
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "head_mask": head_mask,
+                "inputs_embeds": inputs_embeds,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -879,24 +893,43 @@ class TFMarianDecoder(tf.keras.layers.Layer):
             return_dict (:obj:`bool`, `optional`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            encoder_head_mask=encoder_head_mask,
-            inputs_embeds=inputs_embeds,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                head_mask=head_mask,
+                encoder_head_mask=encoder_head_mask,
+                inputs_embeds=inputs_embeds,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "encoder_hidden_states": encoder_hidden_states,
+                "encoder_attention_mask": encoder_attention_mask,
+                "head_mask": head_mask,
+                "encoder_head_mask": encoder_head_mask,
+                "inputs_embeds": inputs_embeds,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -1053,26 +1086,47 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs
     ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            encoder_outputs=encoder_outputs,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                decoder_input_ids=decoder_input_ids,
+                decoder_attention_mask=decoder_attention_mask,
+                head_mask=head_mask,
+                decoder_head_mask=decoder_head_mask,
+                encoder_outputs=encoder_outputs,
+                past_key_values=past_key_values,
+                inputs_embeds=inputs_embeds,
+                decoder_inputs_embeds=decoder_inputs_embeds,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "decoder_input_ids": decoder_input_ids,
+                "decoder_attention_mask": decoder_attention_mask,
+                "head_mask": head_mask,
+                "decoder_head_mask": decoder_head_mask,
+                "encoder_outputs": encoder_outputs,
+                "past_key_values": past_key_values,
+                "inputs_embeds": inputs_embeds,
+                "decoder_inputs_embeds": decoder_inputs_embeds,
+                "use_cache": use_cache,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         if inputs["decoder_input_ids"] is None and inputs["decoder_inputs_embeds"] is None:
             inputs["use_cache"] = False
@@ -1093,6 +1147,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
                 output_hidden_states=inputs["output_hidden_states"],
                 return_dict=inputs["return_dict"],
                 training=inputs["training"],
+                already_processed=True,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
         elif inputs["return_dict"] and not isinstance(inputs["encoder_outputs"], TFBaseModelOutput):
@@ -1119,6 +1174,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         if not inputs["return_dict"]:
@@ -1214,6 +1270,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         return outputs
@@ -1351,6 +1408,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
         lm_logits = lm_logits + self.final_logits_bias

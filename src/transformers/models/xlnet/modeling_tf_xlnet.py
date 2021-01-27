@@ -602,27 +602,47 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            mems=mems,
-            perm_mask=perm_mask,
-            target_mapping=target_mapping,
-            token_type_ids=token_type_ids,
-            input_mask=input_mask,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            use_mems=use_mems,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
 
-        if training and inputs["use_mems"] is None:
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                mems=mems,
+                perm_mask=perm_mask,
+                target_mapping=target_mapping,
+                token_type_ids=token_type_ids,
+                input_mask=input_mask,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                use_mems=use_mems,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "mems": mems,
+                "perm_mask": perm_mask,
+                "target_mapping": target_mapping,
+                "token_type_ids": token_type_ids,
+                "input_mask": input_mask,
+                "head_mask": head_mask,
+                "inputs_embeds": inputs_embeds,
+                "use_mems": use_mems,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
+
+        if inputs["training"] and inputs["use_mems"] is None:
             inputs["use_mems"] = self.use_mems_train
         else:
             inputs["use_mems"] = self.use_mems_eval
@@ -1213,6 +1233,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         return outputs
@@ -1372,6 +1393,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         hidden_state = transformer_outputs[0]
         logits = self.lm_loss(hidden_state, training=inputs["training"])
@@ -1488,8 +1510,9 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
             use_mems=inputs["use_mems"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         output = transformer_outputs[0]
 
@@ -1640,6 +1663,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
             inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         output = transformer_outputs[0]
         logits = self.sequence_summary(output)
@@ -1765,6 +1789,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         output = transformer_outputs[0]
         logits = self.classifier(output)
@@ -1878,6 +1903,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         sequence_output = transformer_outputs[0]
 

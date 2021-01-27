@@ -591,21 +591,37 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+                "position_ids": position_ids,
+                "head_mask": head_mask,
+                "inputs_embeds": inputs_embeds,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -852,6 +868,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         return outputs
@@ -994,6 +1011,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         sequence_output = outputs[0]
@@ -1118,6 +1136,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output, training=inputs["training"])
@@ -1247,6 +1266,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         pooled_output = outputs[1]
         pooled_output = self.dropout(pooled_output, training=inputs["training"])
@@ -1363,6 +1383,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         sequence_output = outputs[0]
 
@@ -1471,6 +1492,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         sequence_output = outputs[0]
 

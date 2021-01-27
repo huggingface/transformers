@@ -520,19 +520,33 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            mems=mems,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                mems=mems,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "mems": mems,
+                "head_mask": head_mask,
+                "inputs_embeds": inputs_embeds,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         # the original code for Transformer-XL used shapes [len, bsz] but we want a unified interface in the library
         # so we transpose here from shape [bsz, len] to shape [len, bsz]
@@ -890,6 +904,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         return outputs
@@ -989,6 +1004,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             inputs["output_hidden_states"],
             inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         last_hidden = transformer_outputs[0]
@@ -1106,6 +1122,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         hidden_states = transformer_outputs[0]

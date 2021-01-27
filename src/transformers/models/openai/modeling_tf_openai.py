@@ -241,21 +241,37 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ):
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                head_mask=head_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "token_type_ids": token_type_ids,
+                "position_ids": position_ids,
+                "head_mask": head_mask,
+                "inputs_embeds": inputs_embeds,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -553,6 +569,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         return outputs
 
@@ -636,6 +653,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         hidden_states = transformer_outputs[0]
 
@@ -774,6 +792,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
         hidden_states = transformer_outputs[0]
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
@@ -896,6 +915,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         hidden_states = transformer_outputs[0]

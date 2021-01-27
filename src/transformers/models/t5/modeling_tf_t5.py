@@ -595,24 +595,43 @@ class TFT5MainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs,
     ) -> Tuple:
-        inputs = input_processing(
-            func=self.call,
-            config=self.config,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            inputs_embeds=inputs_embeds,
-            head_mask=head_mask,
-            encoder_head_mask=encoder_head_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
-            kwargs_call=kwargs,
-        )
+        already_processed = kwargs.pop("already_processed", False)
+
+        if not already_processed:
+            inputs = input_processing(
+                func=self.call,
+                config=self.config,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                inputs_embeds=inputs_embeds,
+                head_mask=head_mask,
+                encoder_head_mask=encoder_head_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                kwargs_call=kwargs,
+            )
+        else:
+            inputs = {
+                "input_ids": input_ids,
+                "attention_mask": attention_mask,
+                "encoder_hidden_states": encoder_hidden_states,
+                "encoder_attention_mask": encoder_attention_mask,
+                "inputs_embeds": inputs_embeds,
+                "head_mask": head_mask,
+                "encoder_head_mask": encoder_head_mask,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "output_attentions": output_attentions,
+                "output_hidden_states": output_hidden_states,
+                "return_dict": return_dict,
+                "training": training,
+            }
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
@@ -1167,6 +1186,7 @@ class TFT5Model(TFT5PreTrainedModel):
                 output_hidden_states=inputs["output_hidden_states"],
                 return_dict=inputs["return_dict"],
                 training=inputs["training"],
+                already_processed=True,
             )
 
         hidden_states = inputs["encoder_outputs"][0]
@@ -1186,6 +1206,7 @@ class TFT5Model(TFT5PreTrainedModel):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         if not inputs["return_dict"]:
@@ -1358,6 +1379,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
                 output_hidden_states=inputs["output_hidden_states"],
                 return_dict=inputs["return_dict"],
                 training=inputs["training"],
+                already_processed=True,
             )
 
         hidden_states = inputs["encoder_outputs"][0]
@@ -1384,6 +1406,7 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1568,18 +1591,19 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         )
 
         encoder_outputs = self.encoder(
-            input_ids,
+            inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             encoder_hidden_states=None,
             encoder_attention_mask=None,
             inputs_embeds=inputs["inputs_embeds"],
-            head_mask=head_mask,
+            head_mask=inputs["head_mask"],
             past_key_values=None,
             use_cache=False,
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+            already_processed=True,
         )
 
         if not inputs["return_dict"]:
