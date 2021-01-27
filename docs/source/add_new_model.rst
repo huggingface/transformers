@@ -231,17 +231,16 @@ Successfully running the official pretrained model in the original repository is
 From our experience, it is very important to spend some time getting familiar with the original codebase. You should
 find out
 
-::
-
-   - Where to find the pretrained weights?
-   - How to load the pretrained weights into the corresponding model?
-   - How to run the tokenizer independently from the model?
-   - Trace one forward pass so that you know which classes and functions are required for a simple forward pass?
-       . Usually, you only have to reimplement those functions.
-   - Be able to locate the important components of the model: Where is the model class? Are there submodel 
-       classes, *e.g.* EncoderModel, DecoderModel? Where is the self-attention layer? 
-       Are there multiple different attention layers, *e.g.* *self-attention*, *cross-attention*...?
-   - How can you debug the model in the original environment of the repo? Do you have to set `print` statements, can you work with an interactive debugger like `ipdb`, or should you use an efficient IDE to debug the model, like PyCharm?
+-  Where to find the pretrained weights?
+-  How to load the pretrained weights into the corresponding model?
+-  How to run the tokenizer independently from the model?
+-  Trace one forward pass so that you know which classes and functions are required for a simple forward pass? .
+   Usually, you only have to reimplement those functions.
+-  Be able to locate the important components of the model: Where is the model class? Are there submodel classes,
+   *e.g.* EncoderModel, DecoderModel? Where is the self-attention layer? Are there multiple different attention layers,
+   *e.g.* *self-attention*, *cross-attention*...?
+-  How can you debug the model in the original environment of the repo? Do you have to set `print` statements, can you
+   work with an interactive debugger like `ipdb`, or should you use an efficient IDE to debug the model, like PyCharm?
 
 It is very important that before you start opening a PR in 🤗 Transformers that you can **efficiently** debug code in
 the original repository!
@@ -254,10 +253,9 @@ also works as expected on GPU.
 
 In general, there are two possible debugging environments for running the original model
 
-::
-
-   - [Jupyther notebooks](https://jupyter.org/), *e.g.* the [google colab](https://colab.research.google.com/notebooks/intro.ipynb)
-   - Local python scripts.
+-  [Jupyther notebooks](https://jupyter.org/), *e.g.* the [google
+   colab](https://colab.research.google.com/notebooks/intro.ipynb)
+-  Local python scripts.
 
 Jupyther notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
 logical components from one another and to have faster debugging cycles as intermediate results can be stored. Also,
@@ -280,10 +278,10 @@ pseudocode):
 
 Next, regarding the debugging strategy, there are generally from which to choose from:
 
-::
-
-   - Decompose the original model into many small testable components and run a forward pass on each of those for verification
-   - Decompose the original model only into the original *tokenizer* and the original *model*, run a forward pass on those, and use intermediate print statements or breakpoints for verification
+-  Decompose the original model into many small testable components and run a forward pass on each of those for
+   verification
+-  Decompose the original model only into the original *tokenizer* and the original *model*, run a forward pass on
+   those, and use intermediate print statements or breakpoints for verification
 
 Again, it is up to you which strategy to choose. Often, one or the other is advantageous depending on the original code
 base.
@@ -292,17 +290,18 @@ If the original code base allows you to decompose the model into smaller subcomp
 base can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages to
 taking the more difficult road in the beginning:
 
-::
+-  at a later stage when comparing the original model to the hugging face implementation, you can verify automatically
+   for each component individually that the corresponding component of the 🤗 Transformers implementation matches
+   instead of relying on visual comparison via print statements
+-  it can give you some rope to decompose the big problem of porting a model into smaller problems of just porting
+   individual components and thus structure your work better
+-  separating the model into logical meaningful components will help you to get a better overview of the model design
+   and thus to better understand the model
+- at a later stage those component-by-component tests help you to ensure that no regression occurs as you continue
+  changing your 🤗 Transformers
 
-   - at a later stage when comparing the original model to the hugging face implementation, you
-   can verify automatically for each component individually that the corresponding component of the 🤗 Transformers implementation matches instead of relying on visual comparison via print statements
-   - it can give you some rope to decompose the big problem of porting a model into smaller problems of just porting individual components and thus structure your work better
-   - separating the model into logical meaningful components will help you to get a better overview 
-   of the model design and thus to better understand the model
-   - at a later stage those component-by-component tests help you to ensure that no regression occurs as you continue changing your 🤗 Transformers 
-
-[TODO(PVP)] Link to `Lysandre’s <https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed>`__ with
-explanation and [TODO(PVP)] Link to Sylvain’s Funnel if existing.
+`Lysandre’s <https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed>`__ integration checks for ELECTRA
+gives a nice example of how this can be done.
 
 However, if the original code base is very complex or only allows intermediate components to be run in a compiled mode,
 it might be too time-consuming or even impossible to separate the model into smaller testable subcomponents. A good
@@ -316,14 +315,12 @@ starting layers at first and the ending layers at last.
 It is recommended that you retrieve the output, either by print statements or subcomponent functions, of the following
 layers in the following order:
 
-::
-
-   1. Retrieve the input IDs passed to the model
-   2. Retrieve the word embeddings
-   3. Retrieve the input of the first Transformer layer
-   4. Retrieve the output of the first Transformer layer
-   5. Retrieve the output of the following n - 1 Transformer layers
-   6. Retrieve the output of the whole BrandNewBert Model
+1.  Retrieve the input IDs passed to the model
+2.  Retrieve the word embeddings
+3.  Retrieve the input of the first Transformer layer
+4.  Retrieve the output of the first Transformer layer
+5.  Retrieve the output of the following n - 1 Transformer layers
+6.  Retrieve the output of the whole BrandNewBert Model
 
 Input IDs should thereby consists of an array of integers, *e.g.* ``input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]``
 
@@ -349,19 +346,29 @@ outputs of the 🤗 Transformers version multiple times against the intermediate
 *brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolute key. Here
 is some advice is to make your debugging environment as efficient as possible.
 
-::
-
-   - Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should probably take the time to write a longer script that decomposes the original model into smaller subcomponents to retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on TensorFlow print operations like 
-       https://www.tensorflow.org/api_docs/python/tf/print to output intermediate values. Is the original repository written in Jax? Then make sure that the model is **not jitted** when running the forward pass, 
-       *e.g.* check-out [this link](https://github.com/google/jax/issues/196).
-   - Use the smallest pretrained checkpoint you can find. The smaller the checkpoint, the faster your debug cycle becomes. It is not efficient if your pretrained model is so big that your forward pass takes more than 10 seconds. In case only very large checkpoints 
-       are available, it might make more sense to create a dummy model in the new environment with randomly initialized weights 
-       and save those weights for comparison with the 🤗 Transformers version of your model
-   - Make sure you are using the easiest way of calling a forward pass in the original repository. Ideally, you want to find the function
-       in the original repository that **only** calls a single forward pass, *i.e.* that is often called `predict`, `evaluate`, `forward` or `__call__`. 
-       You don't want to debug a function that calls `forward` multiple times, *e.g.* to generate text, like `autoregressive_sample`, `generate`.
-   - Try to separate the tokenization from the model's `forward` pass. If the original repository shows examples where you have to input a string, then try to find out where in the forward call the string input is changed to input ids and start from this point. This might mean that you have to possibly write a small script yourself or change the original code so that you can directly input the ids instead of an input string.
-   - Make sure that the model in your debugging setup is **not** in training mode, which often causes the model to yield random outputs due to multiple dropout layers in the model. Make sure that the forward pass in your debugging environment is **deterministic** so that the dropout layers are not used. Or use `transformers.file_utils.set_seed` if the old and new implementations are in the same framework.
+-  Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
+   probably take the time to write a longer script that decomposes the original model into smaller subcomponents to
+   retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on
+   TensorFlow print operations like https://www.tensorflow.org/api_docs/python/tf/print to output intermediate values.
+   Is the original repository written in Jax? Then make sure that the model is **not jitted** when running the forward
+   pass, *e.g.* check-out [this link](https://github.com/google/jax/issues/196).
+-  Use the smallest pretrained checkpoint you can find. The smaller the checkpoint, the faster your debug cycle
+   becomes. It is not efficient if your pretrained model is so big that your forward pass takes more than 10 seconds.
+   In case only very large checkpoints are available, it might make more sense to create a dummy model in the new
+   environment with randomly initialized weights and save those weights for comparison with the 🤗 Transformers version
+   of your model
+-  Make sure you are using the easiest way of calling a forward pass in the original repository. Ideally, you want to
+   find the function in the original repository that **only** calls a single forward pass, *i.e.* that is often called
+   `predict`, `evaluate`, `forward` or `__call__`. You don't want to debug a function that calls `forward` multiple
+   times, *e.g.* to generate text, like `autoregressive_sample`, `generate`.
+-  Try to separate the tokenization from the model's `forward` pass. If the original repository shows examples where
+   you have to input a string, then try to find out where in the forward call the string input is changed to input ids
+   and start from this point. This might mean that you have to possibly write a small script yourself or change the
+   original code so that you can directly input the ids instead of an input string.
+-  Make sure that the model in your debugging setup is **not** in training mode, which often causes the model to yield
+   random outputs due to multiple dropout layers in the model. Make sure that the forward pass in your debugging
+   environment is **deterministic** so that the dropout layers are not used. Or use `transformers.file_utils.set_seed`
+   if the old and new implementations are in the same framework.
 
 The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
 
@@ -631,12 +638,12 @@ equivalent to a precision of ``1e-3``. First, you should ensure that the output 
 implementation. Next, you should make sure that the output values are identical as well. This one of the most difficult
 parts of adding a new model. Common mistakes why the outputs are not identical are:
 
-::
-
-   - Some layers were not added, *i.e.* an `activation` layer was not added, or the residual connection was forgotten
-   - The word embedding matrix was not tied
-   - The wrong positional embeddings are used because the original implementation uses on offset
-   - Dropout is applied during the forward pass. To fix this make sure `model.training is False` and that no dropout layer is falsely activated during the forward pass, *i.e.* pass `self.training` to [PyTorch's functional dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout)
+-  Some layers were not added, *i.e.* an `activation` layer was not added, or the residual connection was forgotten
+-  The word embedding matrix was not tied
+-  The wrong positional embeddings are used because the original implementation uses on offset
+-  Dropout is applied during the forward pass. To fix this make sure `model.training is False` and that no dropout
+   layer is falsely activated during the forward pass, *i.e.* pass `self.training` to [PyTorch's functional
+   dropout](https://pytorch.org/docs/stable/nn.functional.html?highlight=dropout#torch.nn.functional.dropout)
 
 The best way to fix the problem is usually to look at the forward pass of the original implementation and the 🤗
 Transformers implementation side-by-side and check if there are any differences. Ideally, you should debug/print out
