@@ -571,12 +571,15 @@ BLENDERBOT_INPUTS_DOCSTRING = r"""
             decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -661,12 +664,18 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
                 into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
+                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
+                in the config will be used instead.
             output_hidden_states (:obj:`bool`, `optional`):
                 Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
+                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
+                will be used instead.
             return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+                argument can be used in eager mode, in graph mode the value will always be set to True.
+            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the model in training mode (some modules like dropout modules have different
+                behaviors between training and evaluation).
         """
         inputs = input_processing(
             func=self.call,
@@ -854,12 +863,18 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
                 into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
+                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
+                in the config will be used instead.
             output_hidden_states (:obj:`bool`, `optional`):
                 Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
+                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
+                will be used instead.
             return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+                argument can be used in eager mode, in graph mode the value will always be set to True.
+            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the model in training mode (some modules like dropout modules have different
+                behaviors between training and evaluation).
         """
         inputs = input_processing(
             func=self.call,
