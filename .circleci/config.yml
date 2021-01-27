@@ -1,87 +1,404 @@
-version: 2
+version: 2.1
+orbs:
+    gcp-gke: circleci/gcp-gke@1.0.4
+    go: circleci/go@1.3.0
+
+
+# TPU REFERENCES
+references:
+    checkout_ml_testing: &checkout_ml_testing
+        run:
+            name: Checkout ml-testing-accelerators
+            command: |
+                git clone https://github.com/GoogleCloudPlatform/ml-testing-accelerators.git
+                cd ml-testing-accelerators
+                git fetch origin 5e88ac24f631c27045e62f0e8d5dfcf34e425e25:stable
+                git checkout stable
+    build_push_docker: &build_push_docker
+        run:
+            name: Configure Docker
+            command: |
+                gcloud --quiet auth configure-docker
+                cd docker/transformers-pytorch-tpu
+                if [ -z "$CIRCLE_PR_NUMBER" ]; then docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" . ; else docker build --tag "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" -f Dockerfile --build-arg "TEST_IMAGE=1" --build-arg "GITHUB_REF=pull/$CIRCLE_PR_NUMBER/head" . ; fi
+                docker push "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID"
+    deploy_cluster: &deploy_cluster
+        run:
+            name: Deploy the job on the kubernetes cluster
+            command: |
+                go get github.com/google/go-jsonnet/cmd/jsonnet && \
+                export PATH=$PATH:$HOME/go/bin && \
+                kubectl create -f docker/transformers-pytorch-tpu/dataset.yaml || true && \
+                job_name=$(jsonnet -J ml-testing-accelerators/ docker/transformers-pytorch-tpu/bert-base-cased.jsonnet --ext-str image=$GCR_IMAGE_PATH --ext-str image-tag=$CIRCLE_WORKFLOW_JOB_ID | kubectl create -f -) && \
+                job_name=${job_name#job.batch/} && \
+                job_name=${job_name% created} && \
+                echo "Waiting on kubernetes job: $job_name" && \
+                i=0 && \
+                # 30 checks spaced 30s apart = 900s total.
+                max_checks=30 && \
+                status_code=2 && \
+                # Check on the job periodically. Set the status code depending on what
+                # happened to the job in Kubernetes. If we try max_checks times and
+                # still the job hasn't finished, give up and return the starting
+                # non-zero status code.
+                while [ $i -lt $max_checks ]; do ((i++)); if kubectl get jobs $job_name -o jsonpath='Failed:{.status.failed}' | grep "Failed:1"; then status_code=1 && break; elif kubectl get jobs $job_name -o jsonpath='Succeeded:{.status.succeeded}' | grep "Succeeded:1" ; then status_code=0 && break; else echo "Job not finished yet"; fi; sleep 30; done && \
+                echo "Done waiting. Job status code: $status_code" && \
+                pod_name=$(kubectl get po -l controller-uid=`kubectl get job $job_name -o "jsonpath={.metadata.labels.controller-uid}"` | awk 'match($0,!/NAME/) {print $1}') && \
+                echo "GKE pod name: $pod_name" && \
+                kubectl logs -f $pod_name --container=train
+                echo "Done with log retrieval attempt." && \
+                gcloud container images delete "$GCR_IMAGE_PATH:$CIRCLE_WORKFLOW_JOB_ID" --force-delete-tags && \
+                exit $status_code
+    delete_gke_jobs: &delete_gke_jobs
+        run:
+            name: Delete GKE Jobs
+            command: |
+                # Match jobs whose age matches patterns like '1h' or '1d', i.e. any job
+                # that has been around longer than 1hr. First print all columns for
+                # matches, then execute the delete.
+                kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $0}'
+                kubectl delete job $(kubectl get job | awk 'match($4,/[0-9]+[dh]/) {print $1}')
+
+
+
+
 jobs:
-    build_py3_torch_and_tf:
+    run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install tensorflow
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: codecov
-    build_py3_torch:
+            - restore_cache:
+                  keys:
+                      - v0.4-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
+            - save_cache:
+                key: v0.4-{{ checksum "setup.py" }}
+                paths:
+                    - '~/.cache/pip'
+            - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf ./tests/ -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_torch:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: python -m pytest -sv ./examples/
-            - run: codecov
-    build_py3_tf:
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
+            - save_cache:
+                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_tf:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
         resource_class: xlarge
         parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install tensorflow
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: sudo pip install tensorboardX scikit-learn
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: codecov
-    build_py2_torch:
+            - restore_cache:
+                  keys:
+                      - v0.4-tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_tf ./tests/ | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_flax:
         working_directory: ~/transformers
-        resource_class: large
-        parallelism: 1
         docker:
-            - image: circleci/python:2.7
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install torch
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: codecov
-    build_py2_tf:
+            - restore_cache:
+                keys:
+                    - v0.4-flax-{{ checksum "setup.py" }}
+                    - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: sudo pip install .[flax,sklearn,torch,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-flax-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_flax ./tests/ | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_pipelines_torch:
         working_directory: ~/transformers
-        resource_class: large
-        parallelism: 1
         docker:
-            - image: circleci/python:2.7
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
         steps:
             - checkout
-            - run: sudo pip install tensorflow
-            - run: sudo pip install --progress-bar off .
-            - run: sudo pip install pytest codecov pytest-cov
-            - run: python -m pytest -sv ./transformers/tests/ --cov
-            - run: codecov
+            - restore_cache:
+                  keys:
+                      - v0.4-torch-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
+            - save_cache:
+                  key: v0.4-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_pipelines_tf:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-tf-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
+            - save_cache:
+                  key: v0.4-tf-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_custom_tokenizers:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        environment:
+            RUN_CUSTOM_TOKENIZERS: yes
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[ja,testing,sentencepiece]
+            - run: python -m unidic download
+            - save_cache:
+                  key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_examples_torch:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch_examples-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,torch,sentencepiece,testing]
+            - run: pip install -r examples/_tests_requirements.txt
+            - save_cache:
+                  key: v0.4-torch_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/ | tee examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_git_lfs:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo apt-get install git-lfs
+            - run: |
+                git config --global user.email "ci@dummy.com"
+                git config --global user.name "ci"
+            - run: pip install --upgrade pip
+            - run: pip install .[testing]
+            - run: RUN_GIT_LFS_TESTS=1 python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
+
+    build_doc:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-build_doc-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install ."[all, docs]"
+            - save_cache:
+                  key: v0.4-build_doc-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: cd docs && make html SPHINXOPTS="-W"
+            - store_artifacts:
+                path: ./docs/_build
+
     deploy_doc:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.5
+            - image: circleci/python:3.6
         steps:
             - add_ssh_keys:
-                  fingerprints:
-                      - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
+                fingerprints:
+                    - "5b:7a:95:18:07:8c:aa:76:4c:60:35:88:ad:60:56:71"
             - checkout
-            - run: sudo pip install --progress-bar off -r docs/requirements.txt
-            - run: sudo pip install --progress-bar off -r requirements.txt
+            - restore_cache:
+                  keys:
+                      - v0.4-deploy_doc-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install ."[all,docs]"
+            - save_cache:
+                  key: v0.4-deploy_doc-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
             - run: ./.circleci/deploy.sh
+
+    check_code_quality:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: medium
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-code_quality-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install isort
+            - run: pip install .[all,quality]
+            - save_cache:
+                  key: v0.4-code_quality-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: black --check examples tests src utils
+            - run: isort --check-only examples tests src utils
+            - run: flake8 examples tests src utils
+            - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
+            - run: python utils/check_copies.py
+            - run: python utils/check_table.py
+            - run: python utils/check_dummies.py
+            - run: python utils/check_repo.py
+
+    check_repository_consistency:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        resource_class: small
+        parallelism: 1
+        steps:
+            - checkout
+            - run: pip install requests
+            - run: python ./utils/link_tester.py
+
+# TPU JOBS
+    run_examples_tpu:
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - go/install
+            - *checkout_ml_testing
+            - gcp-gke/install
+            - gcp-gke/update-kubeconfig-with-credentials:
+                  cluster: $GKE_CLUSTER
+                  perform-login: true
+            - setup_remote_docker
+            - *build_push_docker
+            - *deploy_cluster
+
+    cleanup-gke-jobs:
+        docker:
+            - image: circleci/python:3.6
+        steps:
+            - gcp-gke/install
+            - gcp-gke/update-kubeconfig-with-credentials:
+                  cluster: $GKE_CLUSTER
+                  perform-login: true
+            - *delete_gke_jobs
+
 workflow_filters: &workflow_filters
     filters:
         branches:
@@ -91,9 +408,28 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - build_py3_torch_and_tf
-            - build_py3_torch
-            - build_py3_tf
-            - build_py2_torch
-            - build_py2_tf
+            - check_code_quality
+            - check_repository_consistency
+            - run_examples_torch
+            - run_tests_custom_tokenizers
+            - run_tests_torch_and_tf
+            - run_tests_torch
+            - run_tests_tf
+            - run_tests_flax
+            - run_tests_pipelines_torch
+            - run_tests_pipelines_tf
+            - run_tests_git_lfs
+            - build_doc
             - deploy_doc: *workflow_filters
+#    tpu_testing_jobs:
+#        triggers:
+#            - schedule:
+#                # Set to run at the first minute of every hour.
+#                cron: "0 8 * * *"
+#                filters:
+#                    branches:
+#                        only:
+#                            - master
+#        jobs:
+#            - cleanup-gke-jobs
+#            - run_examples_tpu

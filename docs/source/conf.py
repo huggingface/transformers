@@ -14,20 +14,23 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath('../../src'))
 
 
 # -- Project information -----------------------------------------------------
 
 project = u'transformers'
-copyright = u'2019, huggingface'
+copyright = u'2020, The Hugging Face Team, Licenced under the Apache License, Version 2.0'
 author = u'huggingface'
 
 # The short X.Y version
 version = u''
 # The full version, including alpha/beta/rc tags
-release = u'2.1.1'
-
+release = u'4.2.0'
+# Prefix link to point to master, comment this during version release and uncomment below line
+extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/master/%s', '')}
+# Prefix link to always point to corresponding version, uncomment this during version release
+# extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/v'+ release + '/%s', '')}
 
 # -- General configuration ---------------------------------------------------
 
@@ -40,11 +43,13 @@ release = u'2.1.1'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.extlinks',
     'sphinx.ext.coverage',
     'sphinx.ext.napoleon',
     'recommonmark',
     'sphinx.ext.viewcode',
-    'sphinx_markdown_tables'
+    'sphinx_markdown_tables',
+    'sphinx_copybutton'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -74,6 +79,9 @@ exclude_patterns = [u'_build', 'Thumbs.db', '.DS_Store']
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = None
 
+# Remove the prompt when copying examples
+copybutton_prompt_text = r">>> |\.\.\. "
+copybutton_prompt_is_regexp = True
 
 # -- Options for HTML output -------------------------------------------------
 
@@ -104,6 +112,12 @@ html_static_path = ['_static']
 # 'searchbox.html']``.
 #
 # html_sidebars = {}
+
+# This must be the name of an image file (path relative to the configuration 
+# directory) that is the favicon of the docs. Modern browsers use this as 
+# the icon for tabs, windows and bookmarks. It should be a Windows-style 
+# icon file (.ico).
+html_favicon = 'favicon.ico'
 
 
 # -- Options for HTMLHelp output ---------------------------------------------
@@ -181,8 +195,8 @@ epub_title = project
 epub_exclude_files = ['search.html']
 
 def setup(app):
-    app.add_stylesheet('css/huggingface.css')
-    app.add_stylesheet('css/code-snippets.css')
+    app.add_css_file('css/huggingface.css')
+    app.add_css_file('css/code-snippets.css')
     app.add_js_file('js/custom.js')
 
 # -- Extension configuration -------------------------------------------------

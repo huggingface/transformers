@@ -1,190 +1,270 @@
-Loading Google AI or OpenAI pre-trained weights or PyTorch dump
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
 
-``from_pretrained()`` method
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
 
-To load one of Google AI's, OpenAI's pre-trained models or a PyTorch saved model (an instance of ``BertForPreTraining`` saved with ``torch.save()``\ ), the PyTorch model classes and the tokenizer can be instantiated using the ``from_pretrained()`` method:
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
+Exporting transformers models
+***********************************************************************************************************************
+
+ONNX / ONNXRuntime
+=======================================================================================================================
+
+Projects `ONNX (Open Neural Network eXchange) <http://onnx.ai>`_ and `ONNXRuntime (ORT)
+<https://microsoft.github.io/onnxruntime/>`_ are part of an effort from leading industries in the AI field to provide a
+unified and community-driven format to store and, by extension, efficiently execute neural network leveraging a variety
+of hardware and dedicated optimizations.
+
+Starting from transformers v2.10.0 we partnered with ONNX Runtime to provide an easy export of transformers models to
+the ONNX format. You can have a look at the effort by looking at our joint blog post `Accelerate your NLP pipelines
+using Hugging Face Transformers and ONNX Runtime
+<https://medium.com/microsoftazure/accelerate-your-nlp-pipelines-using-hugging-face-transformers-and-onnx-runtime-2443578f4333>`_.
+
+Exporting a model is done through the script `convert_graph_to_onnx.py` at the root of the transformers sources. The
+following command shows how easy it is to export a BERT model from the library, simply run:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased bert-base-cased.onnx
+
+The conversion tool works for both PyTorch and Tensorflow models and ensures:
+
+* The model and its weights are correctly initialized from the Hugging Face model hub or a local checkpoint.
+* The inputs and outputs are correctly generated to their ONNX counterpart.
+* The generated model can be correctly loaded through onnxruntime.
+
+.. note::
+    Currently, inputs and outputs are always exported with dynamic sequence axes preventing some optimizations on the
+    ONNX Runtime. If you would like to see such support for fixed-length inputs/outputs, please open up an issue on
+    transformers.
+
+
+Also, the conversion tool supports different options which let you tune the behavior of the generated model:
+
+* **Change the target opset version of the generated model.** (More recent opset generally supports more operators and
+  enables faster inference)
+
+* **Export pipeline-specific prediction heads.** (Allow to export model along with its task-specific prediction
+  head(s))
+
+* **Use the external data format (PyTorch only).** (Lets you export model which size is above 2Gb (`More info
+  <https://github.com/pytorch/pytorch/pull/33062>`_))
+
+
+Optimizations
+-----------------------------------------------------------------------------------------------------------------------
+
+ONNXRuntime includes some transformers-specific transformations to leverage optimized operations in the graph. Below
+are some of the operators which can be enabled to speed up inference through ONNXRuntime (*see note below*):
+
+* Constant folding
+* Attention Layer fusing
+* Skip connection LayerNormalization fusing
+* FastGeLU approximation
+
+Some of the optimizations performed by ONNX runtime can be hardware specific and thus lead to different performances if
+used on another machine with a different hardware configuration than the one used for exporting the model. For this
+reason, when using ``convert_graph_to_onnx.py`` optimizations are not enabled, ensuring the model can be easily
+exported to various hardware. Optimizations can then be enabled when loading the model through ONNX runtime for
+inference.
+
+
+.. note::
+    When quantization is enabled (see below), ``convert_graph_to_onnx.py`` script will enable optimizations on the
+    model because quantization would modify the underlying graph making it impossible for ONNX runtime to do the
+    optimizations afterwards.
+
+.. note::
+    For more information about the optimizations enabled by ONNXRuntime, please have a look at the `ONNXRuntime Github
+    <https://github.com/microsoft/onnxruntime/tree/master/onnxruntime/python/tools/transformers>`_.
+
+Quantization
+-----------------------------------------------------------------------------------------------------------------------
+
+ONNX exporter supports generating a quantized version of the model to allow efficient inference.
+
+Quantization works by converting the memory representation of the parameters in the neural network to a compact integer
+format. By default, weights of a neural network are stored as single-precision float (`float32`) which can express a
+wide-range of floating-point numbers with decent precision. These properties are especially interesting at training
+where you want fine-grained representation.
+
+On the other hand, after the training phase, it has been shown one can greatly reduce the range and the precision of
+`float32` numbers without changing the performances of the neural network.
+
+More technically, `float32` parameters are converted to a type requiring fewer bits to represent each number, thus
+reducing the overall size of the model. Here, we are enabling `float32` mapping to `int8` values (a non-floating,
+single byte, number representation) according to the following formula:
+
+.. math::
+    y_{float32} = scale * x_{int8} - zero\_point
+
+.. note::
+    The quantization process will infer the parameter `scale` and `zero_point` from the neural network parameters
+
+Leveraging tiny-integers has numerous advantages when it comes to inference:
+
+* Storing fewer bits instead of 32 bits for the `float32` reduces the size of the model and makes it load faster.
+* Integer operations execute a magnitude faster on modern hardware
+* Integer operations require less power to do the computations
+
+In order to convert a transformers model to ONNX IR with quantized weights you just need to specify ``--quantize`` when
+using ``convert_graph_to_onnx.py``. Also, you can have a look at the ``quantize()`` utility-method in this same script
+file.
+
+Example of quantized BERT model export:
+
+.. code-block:: bash
+
+    python convert_graph_to_onnx.py --framework <pt, tf> --model bert-base-cased --quantize bert-base-cased.onnx
+
+.. note::
+    Quantization support requires ONNX Runtime >= 1.4.0
+
+.. note::
+    When exporting quantized model you will end up with two different ONNX files. The one specified at the end of the
+    above command will contain the original ONNX model storing `float32` weights. The second one, with ``-quantized``
+    suffix, will hold the quantized parameters.
+
+
+TorchScript
+=======================================================================================================================
+
+.. note::
+    This is the very beginning of our experiments with TorchScript and we are still exploring its capabilities with
+    variable-input-size models. It is a focus of interest to us and we will deepen our analysis in upcoming releases,
+    with more code examples, a more flexible implementation, and benchmarks comparing python-based codes with compiled
+    TorchScript.
+
+
+According to Pytorch's documentation: "TorchScript is a way to create serializable and optimizable models from PyTorch
+code". Pytorch's two modules `JIT and TRACE <https://pytorch.org/docs/stable/jit.html>`_ allow the developer to export
+their model to be re-used in other programs, such as efficiency-oriented C++ programs.
+
+We have provided an interface that allows the export of 🤗 Transformers models to TorchScript so that they can be reused
+in a different environment than a Pytorch-based python program. Here we explain how to export and use our models using
+TorchScript.
+
+Exporting a model requires two things:
+
+* a forward pass with dummy inputs.
+* model instantiation with the ``torchscript`` flag.
+
+These necessities imply several things developers should be careful about. These are detailed below.
+
+
+Implications
+-----------------------------------------------------------------------------------------------------------------------
+
+TorchScript flag and tied weights
+-----------------------------------------------------------------------------------------------------------------------
+
+This flag is necessary because most of the language models in this repository have tied weights between their
+``Embedding`` layer and their ``Decoding`` layer. TorchScript does not allow the export of models that have tied
+weights, therefore it is necessary to untie and clone the weights beforehand.
+
+This implies that models instantiated with the ``torchscript`` flag have their ``Embedding`` layer and ``Decoding``
+layer separate, which means that they should not be trained down the line. Training would de-synchronize the two
+layers, leading to unexpected results.
+
+This is not the case for models that do not have a Language Model head, as those do not have tied weights. These models
+can be safely exported without the ``torchscript`` flag.
+
+Dummy inputs and standard lengths
+-----------------------------------------------------------------------------------------------------------------------
+
+The dummy inputs are used to do a model forward pass. While the inputs' values are propagating through the layers,
+Pytorch keeps track of the different operations executed on each tensor. These recorded operations are then used to
+create the "trace" of the model.
+
+The trace is created relatively to the inputs' dimensions. It is therefore constrained by the dimensions of the dummy
+input, and will not work for any other sequence length or batch size. When trying with a different size, an error such
+as:
+
+``The expanded size of the tensor (3) must match the existing size (7) at non-singleton dimension 2``
+
+will be raised. It is therefore recommended to trace the model with a dummy input size at least as large as the largest
+input that will be fed to the model during inference. Padding can be performed to fill the missing values. As the model
+will have been traced with a large input size however, the dimensions of the different matrix will be large as well,
+resulting in more calculations.
+
+It is recommended to be careful of the total number of operations done on each input and to follow performance closely
+when exporting varying sequence-length models.
+
+Using TorchScript in Python
+-----------------------------------------------------------------------------------------------------------------------
+
+Below is an example, showing how to save, load models as well as how to use the trace for inference.
+
+Saving a model
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+This snippet shows how to use TorchScript to export a ``BertModel``. Here the ``BertModel`` is instantiated according
+to a ``BertConfig`` class and then saved to disk under the filename ``traced_bert.pt``
 
 .. code-block:: python
 
-   model = BERT_CLASS.from_pretrained(PRE_TRAINED_MODEL_NAME_OR_PATH, cache_dir=None, from_tf=False, state_dict=None, *input, **kwargs)
+    from transformers import BertModel, BertTokenizer, BertConfig
+    import torch
 
-where
+    enc = BertTokenizer.from_pretrained("bert-base-uncased")
 
+    # Tokenizing input text
+    text = "[CLS] Who was Jim Henson ? [SEP] Jim Henson was a puppeteer [SEP]"
+    tokenized_text = enc.tokenize(text)
 
-* ``BERT_CLASS`` is either a tokenizer to load the vocabulary (\ ``BertTokenizer`` or ``OpenAIGPTTokenizer`` classes) or one of the eight BERT or three OpenAI GPT PyTorch model classes (to load the pre-trained weights): ``BertModel``\ , ``BertForMaskedLM``\ , ``BertForNextSentencePrediction``\ , ``BertForPreTraining``\ , ``BertForSequenceClassification``\ , ``BertForTokenClassification``\ , ``BertForMultipleChoice``\ , ``BertForQuestionAnswering``\ , ``OpenAIGPTModel``\ , ``OpenAIGPTLMHeadModel`` or ``OpenAIGPTDoubleHeadsModel``\ , and
-*
-  ``PRE_TRAINED_MODEL_NAME_OR_PATH`` is either:
+    # Masking one of the input tokens
+    masked_index = 8
+    tokenized_text[masked_index] = '[MASK]'
+    indexed_tokens = enc.convert_tokens_to_ids(tokenized_text)
+    segments_ids = [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1]
 
+    # Creating a dummy input
+    tokens_tensor = torch.tensor([indexed_tokens])
+    segments_tensors = torch.tensor([segments_ids])
+    dummy_input = [tokens_tensor, segments_tensors]
 
-  *
-    the shortcut name of a Google AI's or OpenAI's pre-trained model selected in the list:
+    # Initializing the model with the torchscript flag
+    # Flag set to True even though it is not necessary as this model does not have an LM Head.
+    config = BertConfig(vocab_size_or_config_json_file=32000, hidden_size=768,
+        num_hidden_layers=12, num_attention_heads=12, intermediate_size=3072, torchscript=True)
 
+    # Instantiating the model
+    model = BertModel(config)
 
-    * ``bert-base-uncased``: 12-layer, 768-hidden, 12-heads, 110M parameters
-    * ``bert-large-uncased``: 24-layer, 1024-hidden, 16-heads, 340M parameters
-    * ``bert-base-cased``: 12-layer, 768-hidden, 12-heads , 110M parameters
-    * ``bert-large-cased``: 24-layer, 1024-hidden, 16-heads, 340M parameters
-    * ``bert-base-multilingual-uncased``: (Orig, not recommended) 102 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
-    * ``bert-base-multilingual-cased``: **(New, recommended)** 104 languages, 12-layer, 768-hidden, 12-heads, 110M parameters
-    * ``bert-base-chinese``: Chinese Simplified and Traditional, 12-layer, 768-hidden, 12-heads, 110M parameters
-    * ``bert-base-german-cased``: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://deepset.ai/german-bert>`__
-    * ``bert-large-uncased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
-    * ``bert-large-cased-whole-word-masking``: 24-layer, 1024-hidden, 16-heads, 340M parameters - Trained with Whole Word Masking (mask all of the the tokens corresponding to a word at once)
-    * ``bert-large-uncased-whole-word-masking-finetuned-squad``: The ``bert-large-uncased-whole-word-masking`` model finetuned on SQuAD (using the ``run_bert_squad.py`` examples). Results: *exact_match: 86.91579943235573, f1: 93.1532499015869*
-    * ``bert-base-german-dbmdz-cased``: Trained on German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://github.com/dbmdz/german-bert>`__
-    * ``bert-base-german-dbmdz-uncased``: Trained on (uncased) German data only, 12-layer, 768-hidden, 12-heads, 110M parameters `Performance Evaluation <https://github.com/dbmdz/german-bert>`__
-    * ``openai-gpt``: OpenAI GPT English model, 12-layer, 768-hidden, 12-heads, 110M parameters
-    * ``gpt2``: OpenAI GPT-2 English model, 12-layer, 768-hidden, 12-heads, 117M parameters
-    * ``gpt2-medium``: OpenAI GPT-2 English model, 24-layer, 1024-hidden, 16-heads, 345M parameters
-    * ``transfo-xl-wt103``: Transformer-XL English model trained on wikitext-103, 18-layer, 1024-hidden, 16-heads, 257M parameters
+    # The model needs to be in evaluation mode
+    model.eval()
 
-  *
-    a path or url to a pretrained model archive containing:
+    # If you are instantiating the model with `from_pretrained` you can also easily set the TorchScript flag
+    model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
 
+    # Creating the trace
+    traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])
+    torch.jit.save(traced_model, "traced_bert.pt")
 
-    * ``bert_config.json`` or ``openai_gpt_config.json`` a configuration file for the model, and
-    * ``pytorch_model.bin`` a PyTorch dump of a pre-trained instance of ``BertForPreTraining``\ , ``OpenAIGPTModel``\ , ``TransfoXLModel``\ , ``GPT2LMHeadModel`` (saved with the usual ``torch.save()``\ )
+Loading a model
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  If ``PRE_TRAINED_MODEL_NAME_OR_PATH`` is a shortcut name, the pre-trained weights will be downloaded from AWS S3 (see the links `here <https://github.com/huggingface/transformers/blob/master/transformers/modeling_bert.py>`__\ ) and stored in a cache folder to avoid future download (the cache folder can be found at ``~/.pytorch_pretrained_bert/``\ ).
-
-*
-  ``cache_dir`` can be an optional path to a specific directory to download and cache the pre-trained model weights. This option is useful in particular when you are using distributed training: to avoid concurrent access to the same weights you can set for example ``cache_dir='./pretrained_model_{}'.format(args.local_rank)`` (see the section on distributed training for more information).
-
-* ``from_tf``\ : should we load the weights from a locally saved TensorFlow checkpoint
-* ``state_dict``\ : an optional state dictionary (collections.OrderedDict object) to use instead of Google pre-trained models
-* ``*inputs``\ , `**kwargs`: additional input for the specific Bert class (ex: num_labels for BertForSequenceClassification)
-
-``Uncased`` means that the text has been lowercased before WordPiece tokenization, e.g., ``John Smith`` becomes ``john smith``. The Uncased model also strips out any accent markers. ``Cased`` means that the true case and accent markers are preserved. Typically, the Uncased model is better unless you know that case information is important for your task (e.g., Named Entity Recognition or Part-of-Speech tagging). For information about the Multilingual and Chinese model, see the `Multilingual README <https://github.com/google-research/bert/blob/master/multilingual.md>`__ or the original TensorFlow repository.
-
-When using an ``uncased model``\ , make sure to pass ``--do_lower_case`` to the example training scripts (or pass ``do_lower_case=True`` to FullTokenizer if you're using your own script and loading the tokenizer your-self.).
-
-Examples:
+This snippet shows how to load the ``BertModel`` that was previously saved to disk under the name ``traced_bert.pt``.
+We are re-using the previously initialised ``dummy_input``.
 
 .. code-block:: python
 
-   # BERT
-   tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True, do_basic_tokenize=True)
-   model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
+    loaded_model = torch.jit.load("traced_bert.pt")
+    loaded_model.eval()
 
-   # OpenAI GPT
-   tokenizer = OpenAIGPTTokenizer.from_pretrained('openai-gpt')
-   model = OpenAIGPTModel.from_pretrained('openai-gpt')
+    all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 
-   # Transformer-XL
-   tokenizer = TransfoXLTokenizer.from_pretrained('transfo-xl-wt103')
-   model = TransfoXLModel.from_pretrained('transfo-xl-wt103')
+Using a traced model for inference
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-   # OpenAI GPT-2
-   tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
-   model = GPT2Model.from_pretrained('gpt2')
-
-Cache directory
-~~~~~~~~~~~~~~~
-
-``pytorch_pretrained_bert`` save the pretrained weights in a cache directory which is located at (in this order of priority):
-
-
-* ``cache_dir`` optional arguments to the ``from_pretrained()`` method (see above),
-* shell environment variable ``PYTORCH_PRETRAINED_BERT_CACHE``\ ,
-* PyTorch cache home + ``/pytorch_pretrained_bert/``
-  where PyTorch cache home is defined by (in this order):
-
-  * shell environment variable ``ENV_TORCH_HOME``
-  * shell environment variable ``ENV_XDG_CACHE_HOME`` + ``/torch/``\ )
-  * default: ``~/.cache/torch/``
-
-Usually, if you don't set any specific environment variable, ``pytorch_pretrained_bert`` cache will be at ``~/.cache/torch/pytorch_pretrained_bert/``.
-
-You can alsways safely delete ``pytorch_pretrained_bert`` cache but the pretrained model weights and vocabulary files wil have to be re-downloaded from our S3.
-
-Serialization best-practices
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-This section explain how you can save and re-load a fine-tuned model (BERT, GPT, GPT-2 and Transformer-XL).
-There are three types of files you need to save to be able to reload a fine-tuned model:
-
-
-* the model itself which should be saved following PyTorch serialization `best practices <https://pytorch.org/docs/stable/notes/serialization.html#best-practices>`__\ ,
-* the configuration file of the model which is saved as a JSON file, and
-* the vocabulary (and the merges for the BPE-based models GPT and GPT-2).
-
-The *default filenames* of these files are as follow:
-
-
-* the model weights file: ``pytorch_model.bin``\ ,
-* the configuration file: ``config.json``\ ,
-* the vocabulary file: ``vocab.txt`` for BERT and Transformer-XL, ``vocab.json`` for GPT/GPT-2 (BPE vocabulary),
-* for GPT/GPT-2 (BPE vocabulary) the additional merges file: ``merges.txt``.
-
-**If you save a model using these *default filenames*\ , you can then re-load the model and tokenizer using the ``from_pretrained()`` method.**
-
-Here is the recommended way of saving the model, configuration and vocabulary to an ``output_dir`` directory and reloading the model and tokenizer afterwards:
+Using the traced model for inference is as simple as using its ``__call__`` dunder method:
 
 .. code-block:: python
 
-   from transformers import WEIGHTS_NAME, CONFIG_NAME
-
-   output_dir = "./models/"
-
-   # Step 1: Save a model, configuration and vocabulary that you have fine-tuned
-
-   # If we have a distributed model, save only the encapsulated model
-   # (it was wrapped in PyTorch DistributedDataParallel or DataParallel)
-   model_to_save = model.module if hasattr(model, 'module') else model
-
-   # If we save using the predefined names, we can load using `from_pretrained`
-   output_model_file = os.path.join(output_dir, WEIGHTS_NAME)
-   output_config_file = os.path.join(output_dir, CONFIG_NAME)
-
-   torch.save(model_to_save.state_dict(), output_model_file)
-   model_to_save.config.to_json_file(output_config_file)
-   tokenizer.save_vocabulary(output_dir)
-
-   # Step 2: Re-load the saved model and vocabulary
-
-   # Example for a Bert model
-   model = BertForQuestionAnswering.from_pretrained(output_dir)
-   tokenizer = BertTokenizer.from_pretrained(output_dir, do_lower_case=args.do_lower_case)  # Add specific options if needed
-   # Example for a GPT model
-   model = OpenAIGPTDoubleHeadsModel.from_pretrained(output_dir)
-   tokenizer = OpenAIGPTTokenizer.from_pretrained(output_dir)
-
-Here is another way you can save and reload the model if you want to use specific paths for each type of files:
-
-.. code-block:: python
-
-   output_model_file = "./models/my_own_model_file.bin"
-   output_config_file = "./models/my_own_config_file.bin"
-   output_vocab_file = "./models/my_own_vocab_file.bin"
-
-   # Step 1: Save a model, configuration and vocabulary that you have fine-tuned
-
-   # If we have a distributed model, save only the encapsulated model
-   # (it was wrapped in PyTorch DistributedDataParallel or DataParallel)
-   model_to_save = model.module if hasattr(model, 'module') else model
-
-   torch.save(model_to_save.state_dict(), output_model_file)
-   model_to_save.config.to_json_file(output_config_file)
-   tokenizer.save_vocabulary(output_vocab_file)
-
-   # Step 2: Re-load the saved model and vocabulary
-
-   # We didn't save using the predefined WEIGHTS_NAME, CONFIG_NAME names, we cannot load using `from_pretrained`.
-   # Here is how to do it in this situation:
-
-   # Example for a Bert model
-   config = BertConfig.from_json_file(output_config_file)
-   model = BertForQuestionAnswering(config)
-   state_dict = torch.load(output_model_file)
-   model.load_state_dict(state_dict)
-   tokenizer = BertTokenizer(output_vocab_file, do_lower_case=args.do_lower_case)
-
-   # Example for a GPT model
-   config = OpenAIGPTConfig.from_json_file(output_config_file)
-   model = OpenAIGPTDoubleHeadsModel(config)
-   state_dict = torch.load(output_model_file)
-   model.load_state_dict(state_dict)
-   tokenizer = OpenAIGPTTokenizer(output_vocab_file)
-
+    traced_model(tokens_tensor, segments_tensors)

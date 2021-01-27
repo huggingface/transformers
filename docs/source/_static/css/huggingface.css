@@ -1,3 +1,112 @@
+/* Our DOM objects */
+
+/* Colab dropdown */
+
+table.center-aligned-table td {
+    text-align: center;
+}
+
+table.center-aligned-table th {
+    text-align: center;
+    vertical-align: middle;
+}
+
+.colab-dropdown {
+    position: relative;
+    display: inline-block;
+}
+  
+.colab-dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #f9f9f9;
+    min-width: 117px;
+    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+    z-index: 1;
+}
+  
+.colab-dropdown-content button {
+    color: #6670FF;
+    background-color: #f9f9f9;
+    font-size: 12px;
+    border: none;
+    min-width: 117px;
+    padding: 5px 5px;
+    text-decoration: none;
+    display: block;
+}
+  
+.colab-dropdown-content button:hover {background-color: #eee;}
+  
+.colab-dropdown:hover .colab-dropdown-content {display: block;}
+
+/* Version control */
+
+.version-button {
+    background-color: #6670FF;
+    color: white;
+    border: none;
+    padding: 5px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.version-button:hover, .version-button:focus {
+    background-color: #A6B0FF;
+}
+ 
+.version-dropdown {
+    display: none;
+    background-color: #6670FF;
+    min-width: 160px;
+    overflow: auto;
+    font-size: 15px;
+}
+  
+.version-dropdown a {
+    color: white;
+    padding: 3px 4px;
+    text-decoration: none;
+    display: block;
+}
+  
+.version-dropdown a:hover {
+    background-color: #A6B0FF;
+}
+  
+.version-show {
+    display: block;
+}
+
+/* Framework selector */
+
+.framework-selector {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-right: 30px;
+}
+
+.framework-selector > button {
+    background-color: white;
+    color: #6670FF;
+    border: 1px solid #6670FF;
+    padding: 5px;
+}
+
+.framework-selector > button.selected{
+    background-color: #6670FF;
+    color: white;
+    border: 1px solid #6670FF;
+    padding: 5px;
+}
+
+/* Copy button */
+
+a.copybtn {
+    margin: 3px;
+}
+
 /* The literal code blocks */
 .rst-content tt.literal, .rst-content tt.literal, .rst-content code.literal {
     color: #6670FF;
@@ -16,12 +125,19 @@
 
 /* The research field on top of the toc tree */
 .wy-side-nav-search{
+    padding-top: 0;
     background-color: #6670FF;
 }
 
 /* The toc tree */
 .wy-nav-side{
     background-color: #6670FF;
+}
+
+/* The section headers in the toc tree */
+.wy-menu-vertical p.caption{
+    background-color: #4d59ff;
+    line-height: 40px;
 }
 
 /* The selected items in the toc tree */
@@ -193,4 +309,42 @@ h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend{
     font-family: Calibre-Thin;
     src: url(./Calibre-Thin.otf);
     font-weight:400;
+}
+
+
+/**
+ * Nav Links to other parts of huggingface.co
+ */
+ div.menu {
+    position: absolute;
+    top: 0;
+    right: 0;
+    padding-top: 20px;
+    padding-right: 20px;
+    z-index: 1000;
+}
+div.menu a {
+    font-size: 14px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: white;
+    -webkit-font-smoothing: antialiased;
+    background: linear-gradient(0deg, #6671ffb8, #9a66ffb8 50%);
+    padding: 10px 16px 6px 16px;
+    border-radius: 3px;
+    margin-left: 12px;
+    position: relative;
+}
+div.menu a:active {
+    top: 1px;
+}
+@media (min-width: 768px) and (max-width: 1750px) {
+    .wy-breadcrumbs {
+        margin-top: 32px;
+    }
+}
+@media (max-width: 768px) {
+    div.menu {
+        display: none;
+    }
 }

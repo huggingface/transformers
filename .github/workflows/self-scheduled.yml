@@ -1,0 +1,356 @@
+# configuration notes:
+#
+# - `source .env/bin/activate` is currently needed to be run first thing first in each step. Otherwise
+# the step uses the system-wide python interpreter.
+
+name: Self-hosted runner (scheduled)
+
+on:
+  repository_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  run_all_tests_torch_gpu:
+    runs-on: [self-hosted, gpu, single-gpu]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v  1.1-slow_tests_torch_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+          pip list
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+
+      - name: Run all tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_gpu_failures_short.txt
+        
+      - name: Run examples tests on GPU
+        if: ${{ always() }}
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          pip install -r examples/_tests_requirements.txt
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=examples_torch_gpu examples
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/examples_torch_gpu_failures_short.txt
+
+      - name: Run all pipeline tests on GPU
+        if: ${{ always() }}
+        env:
+          TF_FORCE_GPU_ALLOW_GROWTH: "true"
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+          RUN_PIPELINE_TESTS: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_pipeline_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_torch_gpu_test_reports
+          path: reports
+
+
+  run_all_tests_tf_gpu:
+    runs-on: [self-hosted, gpu, single-gpu]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-slow_tests_tf_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+          pip list
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+
+      - name: Run all tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_tf_gpu tests
+          
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_gpu_failures_short.txt
+
+      - name: Run all pipeline tests on GPU
+        if: ${{ always() }}
+        env:
+          TF_FORCE_GPU_ALLOW_GROWTH: "true"
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+          RUN_PIPELINE_TESTS: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipelines_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_pipelines_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_tf_gpu_test_reports
+          path: reports
+          
+  run_all_tests_torch_multi_gpu:
+    runs-on: [self-hosted, gpu, multi-gpu]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-slow_tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+          pip list
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+
+      - name: Run all tests on multi-GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_multi_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_multi_gpu_failures_short.txt
+
+      - name: Run examples tests on multi-GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_examples_multi_gpu examples
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_examples_multi_gpu_failures_short.txt
+
+      - name: Run all pipeline tests on multi-GPU
+        if: ${{ always() }}
+        env:
+          TF_FORCE_GPU_ALLOW_GROWTH: "true"
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+          RUN_PIPELINE_TESTS: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_pipeline_multi_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_torch_multi_gpu_test_reports
+          path: reports
+
+  run_all_tests_tf_multi_gpu:
+    runs-on: [self-hosted, gpu, multi-gpu]
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-slow_tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+          pip list
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+
+      - name: Run all tests on multi-GPU
+        env:
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_tf_multi_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_multi_gpu_failures_short.txt
+
+      - name: Run all pipeline tests on multi-GPU
+        if: ${{ always() }}
+        env:
+          TF_FORCE_GPU_ALLOW_GROWTH: "true"
+          OMP_NUM_THREADS: 1
+          RUN_SLOW: yes
+          RUN_PIPELINE_TESTS: yes
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
+          
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_tf_multi_gpu_test_reports
+          path: reports
+          

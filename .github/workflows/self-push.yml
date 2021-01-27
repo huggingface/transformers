@@ -1,0 +1,275 @@
+name: Self-hosted runner (push)
+
+on:
+  push:
+    branches:
+      - master
+      - ci_*
+    paths:
+      - "src/**"
+      - "tests/**"
+      - ".github/**"
+      - "templates/**"
+  # pull_request:
+  repository_dispatch:
+
+
+jobs:
+  run_tests_torch_gpu:
+    runs-on: [self-hosted, gpu, single-gpu]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-tests_torch_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cu102.html
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+
+#      - name: Create model files
+#        run: |
+#          source .env/bin/activate
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+
+      - name: Run all non-slow tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+          CUDA_VISIBLE_DEVICES: 0
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_torch_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_gpu_failures_short.txt
+        
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_torch_gpu_test_reports
+          path: reports
+                  
+
+  run_tests_tf_gpu:
+    runs-on: [self-hosted, gpu, single-gpu]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-tests_tf_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+
+      - name: Create model files
+        run: |
+          source .env/bin/activate
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
+#          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
+
+      - name: Run all non-slow tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+          CUDA_VISIBLE_DEVICES: 0
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_tf_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_gpu_failures_short.txt
+        
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_tf_gpu_test_reports
+          path: reports
+
+  run_tests_torch_multi_gpu:
+    runs-on: [self-hosted, gpu, multi-gpu]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cu102.html
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+          python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
+
+      - name: Run all non-slow tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_torch_multi_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_torch_multi_gpu_failures_short.txt          
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_torch_multi_gpu_test_reports
+          path: reports
+
+  run_tests_tf_multi_gpu:
+    runs-on: [self-hosted, gpu, multi-gpu]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Python version
+        run: |
+          which python
+          python --version
+          pip --version
+
+      - name: Current dir
+        run: pwd
+      - run: nvidia-smi
+
+      - name: Loading cache.
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: .env
+          key: v1.1-tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
+
+      - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
+        run: |
+          python -m venv .env
+          source .env/bin/activate
+          which python
+          python --version
+          pip --version
+      - name: Install dependencies
+        run: |
+          source .env/bin/activate
+          pip install --upgrade pip
+          pip install .[tf,sklearn,testing,onnxruntime,sentencepiece]
+          pip install git+https://github.com/huggingface/datasets
+
+      - name: Are GPUs recognized by our DL frameworks
+        run: |
+          source .env/bin/activate
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
+          TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
+
+      - name: Run all non-slow tests on GPU
+        env:
+          OMP_NUM_THREADS: 1
+        run: |
+          source .env/bin/activate
+          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_tf_multi_gpu tests
+
+      - name: Failure short reports
+        if: ${{ always() }}
+        run: cat reports/tests_tf_multi_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_all_tests_tf_multi_gpu_test_reports
+          path: reports
+          

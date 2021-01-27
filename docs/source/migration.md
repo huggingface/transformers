@@ -1,17 +1,211 @@
-# Migrating from pytorch-pretrained-bert
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# Migrating from previous packages
+
+## Migrating from transformers `v3.x` to `v4.x`
+
+A couple of changes were introduced when the switch from version 3 to version 4 was done. Below is a summary of the
+expected changes:
+
+#### 1. AutoTokenizers and pipelines now use fast (rust) tokenizers by default.
+
+The python and rust tokenizers have roughly the same API, but the rust tokenizers have a more complete feature set. 
+
+This introduces two breaking changes:
+- The handling of overflowing tokens between the python and rust tokenizers is different.
+- The rust tokenizers do not accept integers in the encoding methods.
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+- The pipelines now contain additional features out of the box. See the [token-classification pipeline with the `grouped_entities` flag](https://huggingface.co/transformers/main_classes/pipelines.html?highlight=textclassification#tokenclassificationpipeline).
+- The auto-tokenizers now return rust tokenizers. In order to obtain the python tokenizers instead, the user may use the `use_fast` flag by setting it to `False`:
+
+In version `v3.x`:
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+```
+to obtain the same in version `v4.x`:
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
+```
+
+#### 2. SentencePiece is removed from the required dependencies
+
+The requirement on the SentencePiece dependency has been lifted from the `setup.py`. This is done so that we may have a channel on anaconda cloud without relying on `conda-forge`. This means that the tokenizers that depend on the SentencePiece library will not be available with a standard `transformers` installation.
+
+This includes the **slow** versions of:
+- `XLNetTokenizer`
+- `AlbertTokenizer`
+- `CamembertTokenizer`
+- `MBartTokenizer`
+- `PegasusTokenizer`
+- `T5Tokenizer`
+- `ReformerTokenizer`
+- `XLMRobertaTokenizer`
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+In order to obtain the same behavior as version `v3.x`, you should install `sentencepiece` additionally:
+
+In version `v3.x`:
+```bash
+pip install transformers
+```
+to obtain the same in version `v4.x`:
+```bash
+pip install transformers[sentencepiece]
+```
+or
+```bash
+pip install transformers sentencepiece
+```
+#### 3. The architecture of the repo has been updated so that each model resides in its folder
+
+The past and foreseeable addition of new models means that the number of files in the directory `src/transformers` keeps growing and becomes harder to navigate and understand. We made the choice to put each model and the files accompanying it in their own sub-directories.
+
+This is a breaking change as importing intermediary layers using a model's module directly needs to be done via a different path.
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+In order to obtain the same behavior as version `v3.x`, you should update the path used to access the layers. 
+
+In version `v3.x`:
+```bash
+from transformers.modeling_bert import BertLayer
+```
+to obtain the same in version `v4.x`:
+```bash
+from transformers.models.bert.modeling_bert import BertLayer
+```
+
+#### 4. Switching the `return_dict` argument to `True` by default
+
+The [`return_dict` argument](https://huggingface.co/transformers/main_classes/output.html) enables the return of dict-like python objects containing the model outputs, instead of the standard tuples. This object is self-documented as keys can be used to retrieve values, while also behaving as a tuple as users may retrieve objects by index or by slice.
+
+This is a breaking change as the limitation of that tuple is that it cannot be unpacked: `value0, value1 = outputs` will not work.
+
+##### How to obtain the same behavior as v3.x in v4.x
+
+In order to obtain the same behavior as version `v3.x`, you should specify the `return_dict` argument to `False`, either in the model configuration or during the forward pass.
+
+In version `v3.x`:
+```bash
+model = BertModel.from_pretrained("bert-base-cased")
+outputs = model(**inputs)
+```
+to obtain the same in version `v4.x`:
+```bash
+model = BertModel.from_pretrained("bert-base-cased")
+outputs = model(**inputs, return_dict=False)
+```
+or
+```bash
+model = BertModel.from_pretrained("bert-base-cased", return_dict=False)
+outputs = model(**inputs)
+```
+
+#### 5. Removed some deprecated attributes
+
+Attributes that were deprecated have been removed if they had been deprecated for at least a month. The full list of deprecated attributes can be found in [#8604](https://github.com/huggingface/transformers/pull/8604).
+
+Here is a list of these attributes/methods/arguments and what their replacements should be:
+
+In several models, the labels become consistent with the other models:
+- `masked_lm_labels` becomes `labels` in `AlbertForMaskedLM` and `AlbertForPreTraining`.
+- `masked_lm_labels` becomes `labels` in `BertForMaskedLM` and `BertForPreTraining`.
+- `masked_lm_labels` becomes `labels` in `DistilBertForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `ElectraForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `LongformerForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `MobileBertForMaskedLM`.
+- `masked_lm_labels` becomes `labels` in `RobertaForMaskedLM`.
+- `lm_labels` becomes `labels` in `BartForConditionalGeneration`.
+- `lm_labels` becomes `labels` in `GPT2DoubleHeadsModel`.
+- `lm_labels` becomes `labels` in `OpenAIGPTDoubleHeadsModel`.
+- `lm_labels` becomes `labels` in `T5ForConditionalGeneration`.
+
+In several models, the caching mechanism becomes consistent with the other models:
+- `decoder_cached_states` becomes `past_key_values` in all BART-like, FSMT and T5 models.
+- `decoder_past_key_values` becomes `past_key_values` in all BART-like, FSMT and T5 models.
+- `past` becomes `past_key_values` in all CTRL models.
+- `past` becomes `past_key_values` in all GPT-2 models.
+
+Regarding the tokenizer classes:
+- The tokenizer attribute `max_len` becomes `model_max_length`.
+- The tokenizer attribute `return_lengths` becomes `return_length`.
+- The tokenizer encoding argument `is_pretokenized` becomes `is_split_into_words`.
+
+Regarding the `Trainer` class:
+- The `Trainer` argument `tb_writer` is removed in favor of the callback `TensorBoardCallback(tb_writer=...)`.
+- The `Trainer` argument `prediction_loss_only` is removed in favor of the class argument `args.prediction_loss_only`.
+- The `Trainer` attribute `data_collator` should be a callable.
+- The `Trainer` method `_log` is deprecated in favor of `log`.
+- The `Trainer` method `_training_step` is deprecated in favor of `training_step`.
+- The `Trainer` method `_prediction_loop` is deprecated in favor of `prediction_loop`.
+- The `Trainer` method `is_local_master` is deprecated in favor of `is_local_process_zero`.
+- The `Trainer` method `is_world_master` is deprecated in favor of `is_world_process_zero`.
+
+Regarding the `TFTrainer` class:
+- The `TFTrainer` argument `prediction_loss_only` is removed in favor of the class argument `args.prediction_loss_only`.
+- The `Trainer` method `_log` is deprecated in favor of `log`.
+- The `TFTrainer` method `_prediction_loop` is deprecated in favor of `prediction_loop`.
+- The `TFTrainer` method `_setup_wandb` is deprecated in favor of `setup_wandb`.
+- The `TFTrainer` method `_run_model` is deprecated in favor of `run_model`.
+
+Regarding the `TrainerArgument` class:
+- The `TrainerArgument` argument `evaluate_during_training` is deprecated in favor of `evaluation_strategy`.
+
+Regarding the Transfo-XL model:
+- The Transfo-XL configuration attribute `tie_weight` becomes `tie_words_embeddings`.
+- The Transfo-XL modeling method `reset_length` becomes `reset_memory_length`.
+
+Regarding pipelines:
+- The `FillMaskPipeline` argument `topk` becomes `top_k`.
 
 
-Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to `transformers`
+
+## Migrating from pytorch-transformers to 🤗 Transformers
+
+Here is a quick summary of what you should take care of when migrating from `pytorch-transformers` to 🤗 Transformers.
+
+### Positional order of some models' keywords inputs (`attention_mask`, `token_type_ids`...) changed
+
+To be able to use Torchscript (see #1010, #1204 and #1195) the specific order of some models **keywords inputs** (`attention_mask`, `token_type_ids`...) has been changed.
+
+If you used to call the models with keyword names for keyword arguments, e.g. `model(inputs_ids, attention_mask=attention_mask, token_type_ids=token_type_ids)`, this should not cause any change.
+
+If you used to call the models with positional inputs for keyword arguments, e.g. `model(inputs_ids, attention_mask, token_type_ids)`, you may have to double check the exact order of input arguments.
+
+## Migrating from pytorch-pretrained-bert
+
+Here is a quick summary of what you should take care of when migrating from `pytorch-pretrained-bert` to 🤗 Transformers
 
 ### Models always output `tuples`
 
-The main breaking change when migrating from `pytorch-pretrained-bert` to `transformers` is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
+The main breaking change when migrating from `pytorch-pretrained-bert` to 🤗 Transformers is that the models forward method always outputs a `tuple` with various elements depending on the model and the configuration parameters.
 
-The exact content of the tuples for each model are detailled in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
+The exact content of the tuples for each model are detailed in the models' docstrings and the [documentation](https://huggingface.co/transformers/).
 
 In pretty much every case, you will be fine by taking the first element of the output as the output you previously used in `pytorch-pretrained-bert`.
 
-Here is a `pytorch-pretrained-bert` to `transformers` conversion example for a `BertForSequenceClassification` classification model:
+Here is a `pytorch-pretrained-bert` to 🤗 Transformers conversion example for a `BertForSequenceClassification` classification model:
 
 ```python
 # Let's load our model
@@ -20,14 +214,14 @@ model = BertForSequenceClassification.from_pretrained('bert-base-uncased')
 # If you used to have this line in pytorch-pretrained-bert:
 loss = model(input_ids, labels=labels)
 
-# Now just use this line in transformers to extract the loss from the output tuple:
+# Now just use this line in 🤗 Transformers to extract the loss from the output tuple:
 outputs = model(input_ids, labels=labels)
 loss = outputs[0]
 
-# In transformers you can also have access to the logits:
+# In 🤗 Transformers you can also have access to the logits:
 loss, logits = outputs[:2]
 
-# And even the attention weigths if you configure the model to output them (and other outputs too, see the docstrings and documentation)
+# And even the attention weights if you configure the model to output them (and other outputs too, see the docstrings and documentation)
 model = BertForSequenceClassification.from_pretrained('bert-base-uncased', output_attentions=True)
 outputs = model(input_ids, labels=labels)
 loss, logits, attentions = outputs
@@ -96,7 +290,7 @@ for batch in train_data:
     loss.backward()
     optimizer.step()
 
-### In Transformers, optimizer and schedules are splitted and instantiated like this:
+### In 🤗 Transformers, optimizer and schedules are split and instantiated like this:
 optimizer = AdamW(model.parameters(), lr=lr, correct_bias=False)  # To reproduce BertAdam specific behavior set correct_bias=False
 scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps)  # PyTorch scheduler
 ### and used like this:
@@ -104,6 +298,6 @@ for batch in train_data:
     loss = model(batch)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
-    scheduler.step()
     optimizer.step()
+    scheduler.step()
 ```

@@ -1,5 +1,49 @@
+// These two things need to be updated at each release for the version selector.
+// Last stable version
+const stableVersion = "v4.2.0"
+// Dictionary doc folder to label. The last stable version should have an empty key.
+const versionMapping = {
+    "master": "master",
+    "": "v4.2.0/v4.2.1 (stable)",
+    "v4.1.1": "v4.1.0/v4.1.1",
+    "v4.0.1": "v4.0.0/v4.0.1",
+    "v3.5.1": "v3.5.0/v3.5.1",
+    "v3.4.0": "v3.4.0",
+    "v3.3.1": "v3.3.0/v3.3.1",
+    "v3.2.0": "v3.2.0",
+    "v3.1.0": "v3.1.0",
+    "v3.0.2": "v3.0.0/v3.0.1/v3.0.2",
+    "v2.11.0": "v2.11.0",
+    "v2.10.0": "v2.10.0",
+    "v2.9.1": "v2.9.0/v2.9.1",
+    "v2.8.0": "v2.8.0",
+    "v2.7.0": "v2.7.0",
+    "v2.6.0": "v2.6.0",
+    "v2.5.1": "v2.5.0/v2.5.1",
+    "v2.4.0": "v2.4.0/v2.4.1",
+    "v2.3.0": "v2.3.0",
+    "v2.2.0": "v2.2.0/v2.2.1/v2.2.2",
+    "v2.1.1": "v2.1.1",
+    "v2.0.0": "v2.0.0",
+    "v1.2.0": "v1.2.0",
+    "v1.1.0": "v1.1.0",
+    "v1.0.0": "v1.0.0"
+}
+// The page that have a notebook and therefore should have the open in colab badge.
+const hasNotebook = [
+    "benchmarks",
+    "custom_datasets",
+    "multilingual",
+    "perplexity",
+    "preprocessing",
+    "quicktour",
+    "task_summary",
+    "tokenizer_summary",
+    "training"
+];
+
 function addIcon() {
-    const huggingFaceLogo = "https://huggingface.co/assets/transformers-docs/huggingface_logo.svg";
+    const huggingFaceLogo = "https://huggingface.co/landing/assets/transformers-docs/huggingface_logo.svg";
     const image = document.createElement("img");
     image.setAttribute("src", huggingFaceLogo);
 
@@ -24,10 +68,10 @@ function addCustomFooter() {
     social.classList.add("footer__Social");
 
     const imageDetails = [
-        { link: "https://huggingface.co", imageLink: "https://huggingface.co/assets/transformers-docs/website.svg" },
-        { link: "https://twitter.com/huggingface", imageLink: "https://huggingface.co/assets/transformers-docs/twitter.svg" },
-        { link: "https://github.com/huggingface", imageLink: "https://huggingface.co/assets/transformers-docs/github.svg" },
-        { link: "https://www.linkedin.com/company/huggingface/", imageLink: "https://huggingface.co/assets/transformers-docs/linkedin.svg" }
+        { link: "https://huggingface.co", imageLink: "https://huggingface.co/landing/assets/transformers-docs/website.svg" },
+        { link: "https://twitter.com/huggingface", imageLink: "https://huggingface.co/landing/assets/transformers-docs/twitter.svg" },
+        { link: "https://github.com/huggingface", imageLink: "https://huggingface.co/landing/assets/transformers-docs/github.svg" },
+        { link: "https://www.linkedin.com/company/huggingface/", imageLink: "https://huggingface.co/landing/assets/transformers-docs/linkedin.svg" }
     ];
 
     imageDetails.forEach(imageLinks => {
@@ -58,6 +102,197 @@ function addGithubButton() {
     document.querySelector(".wy-side-nav-search .icon-home").insertAdjacentHTML('afterend', div);
 }
 
+function addColabLink() {
+    const parts = location.toString().split('/');
+    const pageName = parts[parts.length - 1].split(".")[0];
+
+    if (hasNotebook.includes(pageName)) {
+        const baseURL = "https://colab.research.google.com/github/huggingface/notebooks/blob/master/transformers_doc/"
+        const linksColab = `
+        <div class="colab-dropdown">
+            <img alt="Open In Colab" src="https://colab.research.google.com/assets/colab-badge.svg">
+            <div class="colab-dropdown-content">
+                <button onclick=" window.open('${baseURL}${pageName}.ipynb')">Mixed</button>
+                <button onclick=" window.open('${baseURL}pytorch/${pageName}.ipynb')">PyTorch</button>
+                <button onclick=" window.open('${baseURL}tensorflow/${pageName}.ipynb')">TensorFlow</button>
+            </div>
+        </div>`
+        const leftMenu = document.querySelector(".wy-breadcrumbs-aside")
+        leftMenu.innerHTML = linksColab + '\n' + leftMenu.innerHTML
+    }
+}
+
+function addVersionControl() {
+    // To grab the version currently in view, we parse the url
+    const parts = location.toString().split('/');
+    let versionIndex = parts.length - 2;
+    // Index page may not have a last part with filename.html so we need to go up
+    if (parts[parts.length - 1] != "" && ! parts[parts.length - 1].match(/\.html$|^search.html?/)) {
+        versionIndex = parts.length - 1;
+    }
+    // Main classes and models are nested so we need to go deeper
+    else if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
+        versionIndex = versionIndex - 1;
+    } 
+    const version = parts[versionIndex];
+
+    // Menu with all the links,
+    const versionMenu = document.createElement("div");
+
+    const htmlLines = [];
+    for (const [key, value] of Object.entries(versionMapping)) {
+        let baseUrlIndex = (version == "transformers") ? versionIndex + 1: versionIndex;
+        var urlParts = parts.slice(0, baseUrlIndex);
+        if (key != "") {
+            urlParts = urlParts.concat([key]);
+        }
+        urlParts = urlParts.concat(parts.slice(versionIndex+1));
+        htmlLines.push(`<a href="${urlParts.join('/')}">${value}</a>`);
+    }
+
+    versionMenu.classList.add("version-dropdown");
+    versionMenu.innerHTML = htmlLines.join('\n');
+    
+    // Button for version selection
+    const versionButton = document.createElement("div");
+    versionButton.classList.add("version-button");
+    let label = (version == "transformers") ? stableVersion : version
+    versionButton.innerText = label.concat(" ▼");
+
+    // Toggle the menu when we click on the button
+    versionButton.addEventListener("click", () => {
+        versionMenu.classList.toggle("version-show");
+    });
+
+    // Hide the menu when we click elsewhere
+    window.addEventListener("click", (event) => {
+        if (event.target != versionButton){
+            versionMenu.classList.remove('version-show');
+        }
+    });
+
+    // Container
+    const div = document.createElement("div");
+    div.appendChild(versionButton);
+    div.appendChild(versionMenu);
+    div.style.paddingTop = '25px';
+    div.style.backgroundColor = '#6670FF';
+    div.style.display = 'block';
+    div.style.textAlign = 'center';
+
+    const scrollDiv = document.querySelector(".wy-side-scroll");
+    scrollDiv.insertBefore(div, scrollDiv.children[1]);
+}
+
+function addHfMenu() {
+    const div = `
+    <div class="menu">
+        <a href="/welcome">🔥 Sign in</a>
+        <a href="/models">🚀 Models</a>
+        <a href="http://discuss.huggingface.co">💬 Forum</a>
+    </div>
+    `;
+    document.body.insertAdjacentHTML('afterbegin', div);
+}
+
+function platformToggle() {
+    const codeBlocks = Array.from(document.getElementsByClassName("highlight"));
+    const pytorchIdentifier = "## PYTORCH CODE";
+    const tensorflowIdentifier = "## TENSORFLOW CODE";
+
+    const promptSpanIdentifier = `<span class="gp">&gt;&gt;&gt; </span>`
+    const pytorchSpanIdentifier = `<span class="c1">${pytorchIdentifier}</span>`;
+    const tensorflowSpanIdentifier = `<span class="c1">${tensorflowIdentifier}</span>`;
+
+    const getFrameworkSpans = filteredCodeBlock => {
+        const spans = filteredCodeBlock.element.innerHTML;
+        const pytorchSpanPosition = spans.indexOf(pytorchSpanIdentifier);
+        const tensorflowSpanPosition = spans.indexOf(tensorflowSpanIdentifier);
+
+        let pytorchSpans;
+        let tensorflowSpans;
+
+        if(pytorchSpanPosition < tensorflowSpanPosition){
+            const isPrompt = spans.slice(
+                spans.indexOf(tensorflowSpanIdentifier) - promptSpanIdentifier.length,
+                spans.indexOf(tensorflowSpanIdentifier)
+            ) == promptSpanIdentifier;
+            const finalTensorflowSpanPosition = isPrompt ? tensorflowSpanPosition - promptSpanIdentifier.length : tensorflowSpanPosition;
+
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, finalTensorflowSpanPosition);
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, spans.length);
+        }else{
+            const isPrompt = spans.slice(
+                spans.indexOf(pytorchSpanIdentifier) - promptSpanIdentifier.length,
+                spans.indexOf(pytorchSpanIdentifier)
+            ) == promptSpanIdentifier;
+            const finalPytorchSpanPosition = isPrompt ? pytorchSpanPosition - promptSpanIdentifier.length : pytorchSpanPosition;
+
+            tensorflowSpans = spans.slice(tensorflowSpanPosition + tensorflowSpanIdentifier.length + 1, finalPytorchSpanPosition);
+            pytorchSpans = spans.slice(pytorchSpanPosition + pytorchSpanIdentifier.length + 1, spans.length);
+        }
+
+        return {
+            ...filteredCodeBlock,
+            pytorchSample: pytorchSpans ,
+            tensorflowSample: tensorflowSpans
+        }
+    };
+
+    const createFrameworkButtons = sample => {
+            const pytorchButton = document.createElement("button");
+            pytorchButton.classList.add('pytorch-button')
+            pytorchButton.innerText = "PyTorch";
+
+            const tensorflowButton = document.createElement("button");
+            tensorflowButton.classList.add('tensorflow-button')
+            tensorflowButton.innerText = "TensorFlow";
+
+            const selectorDiv = document.createElement("div");
+            selectorDiv.classList.add("framework-selector");
+            selectorDiv.appendChild(pytorchButton);
+            selectorDiv.appendChild(tensorflowButton);
+            sample.element.parentElement.prepend(selectorDiv);
+
+            // Init on PyTorch
+            sample.element.innerHTML = sample.pytorchSample;
+            pytorchButton.classList.add("selected");
+            tensorflowButton.classList.remove("selected");
+
+            pytorchButton.addEventListener("click", () => {
+                for(const codeBlock of updatedCodeBlocks){
+                    codeBlock.element.innerHTML = codeBlock.pytorchSample;
+                }
+                Array.from(document.getElementsByClassName('pytorch-button')).forEach(button => {
+                    button.classList.add("selected");
+                })
+                Array.from(document.getElementsByClassName('tensorflow-button')).forEach(button => {
+                    button.classList.remove("selected");
+                })
+            });
+            tensorflowButton.addEventListener("click", () => {
+                for(const codeBlock of updatedCodeBlocks){
+                    codeBlock.element.innerHTML = codeBlock.tensorflowSample;
+                }
+                Array.from(document.getElementsByClassName('tensorflow-button')).forEach(button => {
+                    button.classList.add("selected");
+                })
+                Array.from(document.getElementsByClassName('pytorch-button')).forEach(button => {
+                    button.classList.remove("selected");
+                })
+            });
+        };
+
+    const updatedCodeBlocks = codeBlocks
+        .map(element => {return {element: element.firstChild, innerText: element.innerText}})
+        .filter(codeBlock => codeBlock.innerText.includes(pytorchIdentifier) && codeBlock.innerText.includes(tensorflowIdentifier))
+        .map(getFrameworkSpans)
+
+    updatedCodeBlocks
+        .forEach(createFrameworkButtons)
+}
+
+
 /*!
  * github-buttons v2.2.10
  * (c) 2019 なつき
@@ -71,9 +306,13 @@ function parseGithubButtons (){"use strict";var e=window.document,t=e.location,o
 
 function onLoad() {
     addIcon();
+    addVersionControl();
     addCustomFooter();
     addGithubButton();
     parseGithubButtons();
+    addHfMenu();
+    addColabLink();
+    platformToggle();
 }
 
 window.addEventListener("load", onLoad);
