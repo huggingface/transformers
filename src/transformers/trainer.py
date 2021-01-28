@@ -253,15 +253,15 @@ class Trainer:
             self.is_model_parallel = True
 
             chunks_str, *device_map_str = self.args.pipeline.split()
-            chunks = int(chunks_str.split('=')[1])
+            chunks = int(chunks_str.split("=")[1])
             device_map = None
             if len(device_map_str):
-                device_map_range = device_map_str[0].split('=')[1]
-                device_map_range_str = device_map_range.split(',')
+                device_map_range = device_map_str[0].split("=")[1]
+                device_map_range_str = device_map_range.split(",")
                 device_map = {}
                 for x in device_map_range_str:
-                    device_id, layers = x.split(':')
-                    device_map[int(device_id)] = list(range(*map(int, layers.split('-'))))
+                    device_id, layers = x.split(":")
+                    device_map[int(device_id)] = list(range(*map(int, layers.split("-"))))
 
             model.pipeline_enable(chunks=chunks, device_map=device_map)
 
@@ -280,7 +280,6 @@ class Trainer:
 
         if len(self.args.pipeline):
             model = model.to(args.device)
-
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model

@@ -354,7 +354,12 @@ class TrainingArguments:
     )
     debug: bool = field(default=False, metadata={"help": "Whether to print debug metrics on TPU"})
 
-    pipeline: str = field(default="", metadata={"help": "Whether to enable Pipeline Parallelism and the value is pipeline params: 'chunks=5; device_map=0:1-10,1:11-20'"})
+    pipeline: str = field(
+        default="",
+        metadata={
+            "help": "Whether to enable Pipeline Parallelism and the value is pipeline params: 'chunks=5; device_map=0:1-10,1:11-20'"
+        },
+    )
 
     dataloader_drop_last: bool = field(
         default=False, metadata={"help": "Drop the last incomplete batch if it is not divisible by the batch size."}
