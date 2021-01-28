@@ -439,7 +439,7 @@ class TrainingArguments:
         },
     )
     dataloader_pin_memory: bool = field(
-        default=True, metadata={"help": "Whether or not to pin memory for data loaders."}
+        default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
