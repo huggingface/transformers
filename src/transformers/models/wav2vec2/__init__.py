@@ -25,9 +25,6 @@ _import_structure = {
     "tokenization_wav2vec2": ["Wav2Vec2Tokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_wav2vec2_fast"] = ["Wav2Vec2TokenizerFast"]
-
 if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -40,9 +37,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
     from .tokenization_wav2vec2 import Wav2Vec2Tokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_wav2vec2_fast import Wav2Vec2TokenizerFast
 
     if is_torch_available():
         from .modeling_wav2vec2 import (

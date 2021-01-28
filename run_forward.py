@@ -10,13 +10,13 @@ import torch
 from transformers import Wav2Vec2ForMaskedLM
 
 
-hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
 wav2vec_path = "../add_wav2vec/data/wav2vec_small_960h.pt"
 
 model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
     [wav2vec_path], arg_overrides={"data": "../add_wav2vec/data/"}
 )
 
+hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
 model = model[0]
 model.eval()
 

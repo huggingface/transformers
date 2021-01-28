@@ -276,7 +276,6 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.wav2vec2"].append("Wav2Vec2TokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
     _import_structure["models.barthez"].append("BarthezTokenizerFast")
@@ -1388,7 +1387,6 @@ if TYPE_CHECKING:
         from .models.roberta import RobertaTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
-        from .models.wav2vec2 import Wav2Vec2TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
