@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-from itertools import groupby
-
 import datasets
 import fairseq
-import numpy as np
 import torch
+import soundfile as sf
 
-from transformers import Wav2Vec2ForMaskedLM
+from transformers import Wav2Vec2ForMaskedLM, Wav2Vec2Tokenizer
 
 
 wav2vec_path = "../add_wav2vec/data/wav2vec_small_960h.pt"
@@ -14,12 +12,11 @@ wav2vec_path = "../add_wav2vec/data/wav2vec_small_960h.pt"
 model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
     [wav2vec_path], arg_overrides={"data": "../add_wav2vec/data/"}
 )
-
-hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
 model = model[0]
 model.eval()
 
-hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
+hf_model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
 
 
 class DummyEncoder(torch.nn.Module):
@@ -108,63 +105,23 @@ def test_all(example_wav):
 
 
 dummy_speech_data = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-input_wav = torch.tensor(dummy_speech_data[0]["speech"])[None, :]
+
+
+def map_to_array(batch):
+    speech_array, _ = sf.read(batch["file"])
+    batch["speech"] = speech_array
+    return batch
+
+
+def test_real_example(input_wav):
+    hf_output = hf_model(input_wav)
+    argmax_logits = torch.argmax(hf_output[0], axis=-1)
+    prediction = tokenizer.batch_decode(argmax_logits)
+    print(prediction)
+
+
+dummy_speech_data = dummy_speech_data.map(map_to_array, remove_columns=["file"])
+input_wav = tokenizer(dummy_speech_data[0]["speech"], return_tensors="pt").input_ids
 
 test_all(input_wav)
-
-json_dict = {
-    "<s>": 0,
-    "<pad>": 1,
-    "</s>": 2,
-    "<unk>": 3,
-    "|": 4,
-    "E": 5,
-    "T": 6,
-    "A": 7,
-    "O": 8,
-    "N": 9,
-    "I": 10,
-    "H": 11,
-    "S": 12,
-    "R": 13,
-    "D": 14,
-    "L": 15,
-    "U": 16,
-    "M": 17,
-    "W": 18,
-    "C": 19,
-    "F": 20,
-    "G": 21,
-    "Y": 22,
-    "P": 23,
-    "B": 24,
-    "V": 25,
-    "K": 26,
-    "'": 27,
-    "X": 28,
-    "J": 29,
-    "Q": 30,
-    "Z": 31,
-}
-
-
-class Decoder:
-    def __init__(self, json_dict):
-        self.dict = json_dict
-        self.look_up = np.asarray(list(self.dict.keys()))
-
-    def decode(self, ids):
-        converted_tokens = self.look_up[ids]
-        fused_tokens = [tok[0] for tok in groupby(converted_tokens)]
-        output = " ".join("".join("".join(fused_tokens).split("<s>")).split("|"))
-        return output
-
-
-fsq_output = model(source=input_wav, padding_mask=None)["encoder_out"]
-hf_output = hf_model(input_wav)
-argmax_logits = torch.argmax(hf_output[0], axis=-1)
-
-decoder = Decoder(json_dict)
-prediction = decoder.decode(argmax_logits)
-
-print(prediction)
+test_real_example(input_wav)
