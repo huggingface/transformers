@@ -15,14 +15,12 @@
 """ PyTorch Wav2Vec2 model. """
 
 
-import math
 from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -397,6 +395,31 @@ class Wav2Vec2EncoderLayer(nn.Module):
         return hidden_states, attn_weights
 
 
+class Wav2Vec2EncoderLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.attention = Wav2Vec2Attention(
+            embed_dim=config.hidden_size,
+            num_heads=config.num_attention_heads,
+            dropout=config.hidden_dropout_prob,
+            is_decoder=False,
+        )
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.feed_forward = Wav2Vec2FeedForward(config)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        attn_residual = hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states, attn_weights, _ = self.attention(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = attn_residual + hidden_states
+        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+
+        return hidden_states, attn_weights
+
+
 class Wav2Vec2Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -415,6 +438,29 @@ class Wav2Vec2Encoder(nn.Module):
 
         for layer in self.layers:
             hidden_states, attn_weights = layer(hidden_states)
+
+        return hidden_states
+
+
+class Wav2Vec2EncoderStableLayerNorm(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # IMPORTANT: the param for dropout is probs wrong
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.layers = nn.ModuleList([Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)])
+
+    def forward(self, hidden_states):
+        position_embeddings = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + position_embeddings
+        hidden_states = self.dropout(hidden_states)
+
+        for layer in self.layers:
+            hidden_states, attn_weights = layer(hidden_states)
+
+        hidden_states = self.layer_norm(hidden_states)
 
         return hidden_states
 
