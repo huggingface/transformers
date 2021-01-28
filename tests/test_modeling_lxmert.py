@@ -527,10 +527,6 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
 
-    test_head_masking = False
-    test_pruning = False
-    test_torchscript = False
-
     # overwrite function because qa models takes different input label shape
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
