@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
+# Copyright 2021 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,15 +16,25 @@
 from contextlib import contextmanager
 from typing import List, Optional
 
+from tokenizers import processors
+
+from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils import BatchEncoding
 from ...utils import logging
-from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
+from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
+
+
+if is_sentencepiece_available():
+    from .tokenization_mbart50 import MBart50Tokenizer
+else:
+    MBart50Tokenizer = None
 
 
 logger = logging.get_logger(__name__)
 
 _all_mbart_models = ["facebook/mbart-50-large-one-to-many"]
 SPM_URL = "https://huggingface.co/facebook/mbart-50-large-one-to-many/resolve/main/sentencepiece.bpe.model"
+tokenizer_URL = "https://huggingface.co/facebook/mbart-50-large-one-to-many/resolve/main/tokenizer.json"
 
 FAIRSEQ_LANGUAGE_CODES = [
     "ar_AR",
@@ -82,18 +92,18 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class MBart50Tokenizer(XLMRobertaTokenizer):
+class MBart50TokenizerFast(XLMRobertaTokenizerFast):
     """
-    Construct an MBART tokenizer for mbart-50 models.
+    Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's `tokenizers` library). Based on `BPE
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    :class:`~transformers.MBart50Tokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer` and adds a new
-    :meth:`~transformers.MBart50Tokenizer.prepare_seq2seq_batch`
+    :class:`~transformers.MBart50TokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and
+    adds a new :meth:`~transformers.MBart50TokenizerFast.prepare_seq2seq_batch`.
 
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    Refer to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning
+    the initialization parameters and other methods.
 
     .. warning::
-
         ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
         properly.
 
@@ -103,19 +113,19 @@ class MBart50Tokenizer(XLMRobertaTokenizer):
 
     Examples::
 
-        >>> from transformers import MBart50Tokenizer
-        >>> tokenizer = MBart50Tokenizer.from_pretrained('facebook/mbart-50-large-one-to-many')
+        >>> from transformers import MBart50TokenizerFast
+        >>> tokenizer = MBart50TokenizerFast.from_pretrained('facebook/mbart-50-large-one-to-many')
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> batch: dict = tokenizer.prepare_seq2seq_batch(
         ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
         ... )
-
     """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    slow_tokenizer_class = MBart50Tokenizer
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
@@ -123,33 +133,21 @@ class MBart50Tokenizer(XLMRobertaTokenizer):
     def __init__(self, *args, tokenizer_file=None, **kwargs):
         super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
 
-        self.sp_model_size = len(self.sp_model)
-        self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
-        }
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.cur_lang_code = self.lang_code_to_id["en_XX"]
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
-
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+        self.cur_lang_code = self.convert_tokens_to_ids("en_XX")
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
 
-    @property
-    def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer ``prepare_for_model`` method.
 
         Args:
             token_ids_0 (:obj:`List[int]`):
-                List of IDs.
+                List of ids.
             token_ids_1 (:obj:`List[int]`, `optional`):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
@@ -177,10 +175,12 @@ class MBart50Tokenizer(XLMRobertaTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An MBART sequence has the following format, where ``X`` represents the sequence:
+        adding special tokens. The special tokens depend on calling set_lang.
 
-        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
-        - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
+        An MBART-50 sequence has the following format, where ``X`` represents the sequence:
+
+        - ``input_ids`` (for encoder) ``[src_lang_code] X [eos]``
+        - ``labels``: (for decoder) ``[tgt_lang_code] X [eos]``
 
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.
@@ -192,7 +192,7 @@ class MBart50Tokenizer(XLMRobertaTokenizer):
                 Optional second list of IDs for sequence pairs.
 
         Returns:
-            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+            :obj:`List[int]`: list of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
         """
         if token_ids_1 is None:
             return self.prefix_tokens + token_ids_0 + self.suffix_tokens
@@ -223,13 +223,31 @@ class MBart50Tokenizer(XLMRobertaTokenizer):
         self.set_src_lang_special_tokens(self.src_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
-        """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
+        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
 
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )
+
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
-        """Reset the special tokens to the target language setting. prefix=[tgt_lang_code] and suffix=[eos]."""
-        self.cur_lang_code = self.lang_code_to_id[lang]
+        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        self.cur_lang_code = self.convert_tokens_to_ids(lang)
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
+
+        prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
+        suffix_tokens_str = self.convert_ids_to_tokens(self.suffix_tokens)
+
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=prefix_tokens_str + ["$A"] + suffix_tokens_str,
+            pair=prefix_tokens_str + ["$A", "$B"] + suffix_tokens_str,
+            special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
+        )

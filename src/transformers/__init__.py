@@ -296,6 +296,7 @@ if is_tokenizers_available():
     _import_structure["models.longformer"].append("LongformerTokenizerFast")
     _import_structure["models.lxmert"].append("LxmertTokenizerFast")
     _import_structure["models.mbart"].append("MBartTokenizerFast")
+    _import_structure["models.mbart"].append("MBart50TokenizerFast")
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
@@ -1403,7 +1404,7 @@ if TYPE_CHECKING:
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
-        from .models.mbart import MBartTokenizerFast
+        from .models.mbart import MBart50TokenizerFast, MBartTokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast

@@ -90,6 +90,13 @@ MBartTokenizer
     :members: build_inputs_with_special_tokens, prepare_seq2seq_batch
 
 
+MBartTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MBartTokenizerFast
+    :members:
+
+
 MBart50Tokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -97,10 +104,10 @@ MBart50Tokenizer
     :members:
 
 
-MBartTokenizerFast
+MBart50TokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MBartTokenizerFast
+.. autoclass:: transformers.MBart50TokenizerFast
     :members:
 
 

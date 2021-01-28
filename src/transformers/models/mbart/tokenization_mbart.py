@@ -53,60 +53,6 @@ FAIRSEQ_LANGUAGE_CODES = [
     "vi_VN",
     "zh_CN",
 ]
-FAIRSEQ_LANGUAGE_CODES_ML50 = [
-    "ar_AR",
-    "cs_CZ",
-    "de_DE",
-    "en_XX",
-    "es_XX",
-    "et_EE",
-    "fi_FI",
-    "fr_XX",
-    "gu_IN",
-    "hi_IN",
-    "it_IT",
-    "ja_XX",
-    "kk_KZ",
-    "ko_KR",
-    "lt_LT",
-    "lv_LV",
-    "my_MM",
-    "ne_NP",
-    "nl_XX",
-    "ro_RO",
-    "ru_RU",
-    "si_LK",
-    "tr_TR",
-    "vi_VN",
-    "zh_CN",
-    "af_ZA",
-    "az_AZ",
-    "bn_IN",
-    "fa_IR",
-    "he_IL",
-    "hr_HR",
-    "id_ID",
-    "ka_GE",
-    "km_KH",
-    "mk_MK",
-    "ml_IN",
-    "mn_MN",
-    "mr_IN",
-    "pl_PL",
-    "ps_AF",
-    "pt_XX",
-    "sv_SE",
-    "sw_KE",
-    "ta_IN",
-    "te_IN",
-    "th_TH",
-    "tl_XX",
-    "uk_UA",
-    "ur_PK",
-    "xh_ZA",
-    "gl_ES",
-    "sl_SI",
-]
 
 
 class MBartTokenizer(XLMRobertaTokenizer):
@@ -150,10 +96,8 @@ class MBartTokenizer(XLMRobertaTokenizer):
         super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
 
         self.sp_model_size = len(self.sp_model)
-        language_codes = kwargs.get("language_codes", "CC25")
-        fairseq_language_codes = FAIRSEQ_LANGUAGE_CODES if language_codes == "CC25" else FAIRSEQ_LANGUAGE_CODES_ML50
         self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(fairseq_language_codes)
+            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
         self.cur_lang_code = self.lang_code_to_id["en_XX"]
