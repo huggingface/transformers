@@ -7,7 +7,7 @@ import soundfile as sf
 from transformers import Wav2Vec2ForMaskedLM, Wav2Vec2Tokenizer
 
 
-wav2vec_path = "../add_wav2vec/data/wav2vec_small_960h.pt"
+wav2vec_path = "../add_wav2vec/data/wav2vec_big_960h.pt"
 
 model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
     [wav2vec_path], arg_overrides={"data": "../add_wav2vec/data/"}
@@ -15,7 +15,8 @@ model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
 model = model[0]
 model.eval()
 
-hf_model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+# hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2-large-960h-lv60")
+hf_model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-large-960h")
 tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
 
 
@@ -36,7 +37,7 @@ def test_feature_extractor(hf_feat_extractor, fsq_feat_extract, example_wav):
     assert (
         hf_output.shape == fsq_output.shape
     ), f"Shapes don't match. Got {hf_output.shape} for HF and {fsq_output.shape} for fsq"
-    torch.allclose(hf_output, fsq_output, atol=1e-3)
+    assert torch.allclose(hf_output, fsq_output, atol=1e-3)
 
 
 def test_full_feature_extractor(hf_model, fsq_model, example_wav):
@@ -52,7 +53,7 @@ def test_full_feature_extractor(hf_model, fsq_model, example_wav):
     assert (
         hf_output.shape == fsq_output.shape
     ), f"Shapes don't match. Got {hf_output.shape} for HF and {fsq_output.shape} for fsq"
-    torch.allclose(hf_output, fsq_output, atol=1e-3)
+    assert torch.allclose(hf_output, fsq_output, atol=1e-3)
 
     fsq_model.encoder = temp_fsq
     hf_model.encoder = temp_hf
@@ -65,7 +66,7 @@ def test_full_encoder(hf_model, fsq_model, example_wav):
     assert (
         hf_output.shape == fsq_output.shape
     ), f"Shapes don't match. Got {hf_output.shape} for HF and {fsq_output.shape} for fsq"
-    torch.allclose(hf_output, fsq_output, atol=1e-3)
+    assert torch.allclose(hf_output, fsq_output, atol=1e-3)
 
 
 def test_full_model(hf_model, fsq_model, example_wav):
@@ -75,7 +76,7 @@ def test_full_model(hf_model, fsq_model, example_wav):
     assert (
         hf_output.shape == fsq_output.shape
     ), f"Shapes don't match. Got {hf_output.shape} for HF and {fsq_output.shape} for fsq"
-    torch.allclose(hf_output, fsq_output, atol=1e-3)
+    assert torch.allclose(hf_output, fsq_output, atol=1e-3)
 
 
 def test_all(example_wav):

@@ -92,7 +92,7 @@ class Wav2Vec2Config(PretrainedConfig):
     def __init__(
         self,
         hidden_size=1024,  # encoder_embed_dim
-        feat_extract_layer_norm="group_norm",  # extractor_mode default => group_norm
+        feat_extract_norm="group",  # extractor_mode default => group_norm
         feat_extract_dropout=0.0,  # hard-coded
         feat_extract_activation="gelu",  # hard-coded
         conv_dim=(512, 512, 512, 512, 512, 512, 512),  # conv_feature_layers [0]
@@ -114,7 +114,7 @@ class Wav2Vec2Config(PretrainedConfig):
     ):
         super().__init__(**kwargs)
         self.hidden_size = hidden_size
-        self.feat_extract_layer_norm = feat_extract_layer_norm
+        self.feat_extract_norm = feat_extract_norm
         self.feat_extract_dropout = feat_extract_dropout
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = list(conv_dim)

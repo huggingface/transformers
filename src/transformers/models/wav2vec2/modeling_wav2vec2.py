@@ -80,11 +80,16 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
         self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
-    def forward(
-        self,
-        hidden_states=None,  # ...
-    ):
-        pass
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        hidden_states = hidden_states.transpose(-2, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(-2, -1)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class Wav2Vec2GroupNormConvLayer(nn.Module):
@@ -155,7 +160,7 @@ class Wav2Vec2FeatureExtractor(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        if config.feat_extract_layer_norm == "group_norm":
+        if config.feat_extract_norm == "group":
             self.conv_layers = nn.ModuleList(
                 [Wav2Vec2GroupNormConvLayer(config, layer_id=0)]
                 + [
@@ -163,7 +168,7 @@ class Wav2Vec2FeatureExtractor(nn.Module):
                     for i in range(config.num_feat_extract_layers - 1)
                 ]
             )
-        elif config.feat_extract_layer_norm == "layer_norm":
+        elif config.feat_extract_norm == "layer":
             self.conv_layers = nn.ModuleList(
                 [Wav2Vec2LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
             )
