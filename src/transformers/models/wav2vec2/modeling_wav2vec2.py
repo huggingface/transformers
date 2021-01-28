@@ -395,7 +395,7 @@ class Wav2Vec2EncoderLayer(nn.Module):
         return hidden_states, attn_weights
 
 
-class Wav2Vec2EncoderLayer(nn.Module):
+class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.attention = Wav2Vec2Attention(
@@ -450,7 +450,9 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # IMPORTANT: the param for dropout is probs wrong
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.layers = nn.ModuleList([Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+        )
 
     def forward(self, hidden_states):
         position_embeddings = self.pos_conv_embed(hidden_states)
@@ -517,8 +519,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.config = config
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
-        #        self.quantizer = Wav2Vec2Quantizer(config) TODO(PVP): is this only required for Training?
-        self.encoder = Wav2Vec2Encoder(config)
+
+        if config.do_stable_layer_norm:
+            self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
+        else:
+            self.encoder = Wav2Vec2Encoder(config)
 
         self.init_weights()
 

@@ -109,6 +109,7 @@ class Wav2Vec2Config(PretrainedConfig):
         hidden_act="gelu",
         initializer_range=0.02,
         vocab_size=32,
+        do_stable_layer_norm=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -131,6 +132,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
+        self.do_stable_layer_norm = do_stable_layer_norm
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)

@@ -2,8 +2,8 @@
 import datasets
 import fairseq
 import torch
-import soundfile as sf
 
+import soundfile as sf
 from transformers import Wav2Vec2ForMaskedLM, Wav2Vec2Tokenizer
 
 
@@ -104,9 +104,6 @@ def test_all(example_wav):
     print("Succeded full model test")
 
 
-dummy_speech_data = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-
 def map_to_array(batch):
     speech_array, _ = sf.read(batch["file"])
     batch["speech"] = speech_array
@@ -115,13 +112,14 @@ def map_to_array(batch):
 
 def test_real_example(input_wav):
     hf_output = hf_model(input_wav)
-    argmax_logits = torch.argmax(hf_output[0], axis=-1)
+    argmax_logits = torch.argmax(hf_output, axis=-1)
     prediction = tokenizer.batch_decode(argmax_logits)
     print(prediction)
 
 
+dummy_speech_data = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
 dummy_speech_data = dummy_speech_data.map(map_to_array, remove_columns=["file"])
-input_wav = tokenizer(dummy_speech_data[0]["speech"], return_tensors="pt").input_ids
+input_wav = tokenizer(dummy_speech_data[3]["speech"], return_tensors="pt").input_ids
 
 test_all(input_wav)
 test_real_example(input_wav)
