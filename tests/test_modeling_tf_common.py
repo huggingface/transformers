@@ -75,6 +75,7 @@ class TFModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     test_resize_embeddings = True
+    test_head_masking = True
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:

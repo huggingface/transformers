@@ -209,7 +209,6 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True
-    test_head_masking = True
 
     def setUp(self):
         self.model_tester = DistilBertModelTester(self)
