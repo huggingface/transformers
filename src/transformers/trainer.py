@@ -676,17 +676,33 @@ class Trainer:
 
         return model
 
-    def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
+    def train(
+        self,
+        resume_from_checkpoint: Optional[str] = None,
+        trial: Union["optuna.Trial", Dict[str, Any]] = None,
+        **kwargs
+    ):
         """
         Main training entry point.
 
         Args:
-            model_path (:obj:`str`, `optional`):
-                Local path to the model if the model to train has been instantiated from a local path. If present,
-                training will resume from the optimizer/scheduler states loaded here.
+            resume_from_checkpoint (:obj:`str`, `optional`):
+                Local path to a saved checkpoint as saved by a previous instance of :class:`~transformers.Trainer`. If
+                present, training will resume from the model/optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
+            kwargs:
+                Additional keyword arguments used to hide deprecated arguments
         """
+        if "model_path" in kwargs:
+            resume_from_checkpoint = kwargs.pop("model_path")
+            warnings.warn(
+                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
+                "instead.",
+                FutureWarning,
+            )
+        if len(kwargs) > 0:
+            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
@@ -701,13 +717,13 @@ class Trainer:
             self.optimizer, self.lr_scheduler = None, None
 
         # Load potential model checkpoint
-        if model_path is not None and os.path.isfile(os.path.join(model_path, WEIGHTS_NAME)):
-            logger.info(f"Loading model from {model_path}).")
+        if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+            logger.info(f"Loading model from {resume_from_checkpoint}).")
             if isinstance(self.model, PreTrainedModel):
-                self.model = self.model.from_pretrained(model_path)
+                self.model = self.model.from_pretrained(resume_from_checkpoint)
                 model_reloaded = True
             else:
-                state_dict = torch.load(os.path.join(model_path, WEIGHTS_NAME))
+                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
                 self.model.load_state_dict(state_dict)
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
@@ -757,7 +773,7 @@ class Trainer:
         self.state.is_hyper_param_search = trial is not None
 
         # Check if saved optimizer or scheduler states exist
-        self._load_optimizer_and_scheduler(model_path)
+        self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         model = self.model_wrapped
 
@@ -827,8 +843,10 @@ class Trainer:
         steps_trained_in_current_epoch = 0
 
         # Check if continuing training from a checkpoint
-        if model_path and os.path.isfile(os.path.join(model_path, "trainer_state.json")):
-            self.state = TrainerState.load_from_json(os.path.join(model_path, "trainer_state.json"))
+        if resume_from_checkpoint is not None and os.path.isfile(
+            os.path.join(resume_from_checkpoint, "trainer_state.json")
+        ):
+            self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, "trainer_state.json"))
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not self.args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
@@ -1102,20 +1120,20 @@ class Trainer:
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True)
 
-    def _load_optimizer_and_scheduler(self, model_path):
+    def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
-        if model_path is None:
+        if checkpoint is None:
             return
 
-        if os.path.isfile(os.path.join(model_path, "optimizer.pt")) and os.path.isfile(
-            os.path.join(model_path, "scheduler.pt")
+        if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
+            os.path.join(checkpoint, "scheduler.pt")
         ):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
-                optimizer_state = torch.load(os.path.join(model_path, "optimizer.pt"), map_location="cpu")
+                optimizer_state = torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location="cpu")
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    lr_scheduler_state = torch.load(os.path.join(model_path, "scheduler.pt"), map_location="cpu")
+                    lr_scheduler_state = torch.load(os.path.join(checkpoint, "scheduler.pt"), map_location="cpu")
                 reissue_pt_warnings(caught_warnings)
 
                 xm.send_cpu_data_to_device(optimizer_state, self.args.device)
@@ -1125,15 +1143,15 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 self.optimizer.load_state_dict(
-                    torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
+                    torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location=self.args.device)
                 )
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
 
         if self.deepspeed:
             # Not sure how to check if there is a saved deepspeed checkpoint, but since it just return None if it fails to find a deepspeed checkpoint this is sort of a check-n-load function
-            self.deepspeed.load_checkpoint(model_path, load_optimizer_states=True, load_lr_scheduler_states=True)
+            self.deepspeed.load_checkpoint(checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True)
 
     def hyperparameter_search(
         self,
