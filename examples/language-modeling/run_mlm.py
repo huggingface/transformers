@@ -92,6 +92,10 @@ class ModelArguments:
             "with private models)."
         },
     )
+    do_lower_case: Optional[bool] = field(
+        default=True,
+        metadata={"help": "Whether or not to lowercase the input when tokenizing."},
+    )
 
 
 @dataclass
@@ -268,6 +272,7 @@ def main():
         "use_fast": model_args.use_fast_tokenizer,
         "revision": model_args.model_revision,
         "use_auth_token": True if model_args.use_auth_token else None,
+        "do_lower_case": model_args.do_lower_case,
     }
     if model_args.tokenizer_name:
         tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
