@@ -82,8 +82,8 @@ class TextGenerationPipeline(Pipeline):
             return_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to include the decoded texts in the outputs.
             return_full_text (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                If set to :obj:`False` only added text is returned, otherwise the full text is returned
-                Only meaningful if `return_text` is set to True.
+                If set to :obj:`False` only added text is returned, otherwise the full text is returned Only meaningful
+                if `return_text` is set to True.
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             prefix (:obj:`str`, `optional`):
