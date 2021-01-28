@@ -91,7 +91,7 @@ class Wav2Vec2Config(PretrainedConfig):
 
     def __init__(
         self,
-        hidden_size=768,  # encoder_embed_dim
+        hidden_size=1024,  # encoder_embed_dim
         feat_extract_layer_norm="group_norm",  # extractor_mode default => group_norm
         feat_extract_dropout=0.0,  # hard-coded
         feat_extract_activation="gelu",  # hard-coded
@@ -101,10 +101,10 @@ class Wav2Vec2Config(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,  # conv_pos
         num_conv_pos_embedding_groups=16,  # conv_pos_groups
-        num_hidden_layers=12,
-        num_attention_heads=12,
+        num_hidden_layers=24,
+        num_attention_heads=16,
         hidden_dropout_prob=0.1,
-        intermediate_size=3072,
+        intermediate_size=4096,
         layer_norm_eps=1e-5,
         hidden_act="gelu",
         initializer_range=0.02,

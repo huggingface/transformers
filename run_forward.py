@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import json
 from itertools import groupby
 
 import datasets
@@ -19,6 +18,8 @@ model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
 hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
 model = model[0]
 model.eval()
+
+hf_model = Wav2Vec2ForMaskedLM.from_pretrained("../add_wav2vec/hf/wav2vec2")
 
 
 class DummyEncoder(torch.nn.Module):
@@ -109,12 +110,47 @@ def test_all(example_wav):
 dummy_speech_data = datasets.load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
 input_wav = torch.tensor(dummy_speech_data[0]["speech"])[None, :]
 
-# test(input_wav)
+test_all(input_wav)
+
+json_dict = {
+    "<s>": 0,
+    "<pad>": 1,
+    "</s>": 2,
+    "<unk>": 3,
+    "|": 4,
+    "E": 5,
+    "T": 6,
+    "A": 7,
+    "O": 8,
+    "N": 9,
+    "I": 10,
+    "H": 11,
+    "S": 12,
+    "R": 13,
+    "D": 14,
+    "L": 15,
+    "U": 16,
+    "M": 17,
+    "W": 18,
+    "C": 19,
+    "F": 20,
+    "G": 21,
+    "Y": 22,
+    "P": 23,
+    "B": 24,
+    "V": 25,
+    "K": 26,
+    "'": 27,
+    "X": 28,
+    "J": 29,
+    "Q": 30,
+    "Z": 31,
+}
 
 
 class Decoder:
-    def __init__(self, path_to_dict):
-        self.dict = json.load(open(path_to_dict))
+    def __init__(self, json_dict):
+        self.dict = json_dict
         self.look_up = np.asarray(list(self.dict.keys()))
 
     def decode(self, ids):
@@ -128,10 +164,7 @@ fsq_output = model(source=input_wav, padding_mask=None)["encoder_out"]
 hf_output = hf_model(input_wav)
 argmax_logits = torch.argmax(hf_output[0], axis=-1)
 
-decoder = Decoder("../add_wav2vec/data/hf_dict.json")
+decoder = Decoder(json_dict)
 prediction = decoder.decode(argmax_logits)
 
-import ipdb
-
-
-ipdb.set_trace()
+print(prediction)
