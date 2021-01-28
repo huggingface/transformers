@@ -253,7 +253,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_scores = tf.multiply(attention_scores, head_mask)
+            attention_probs = tf.multiply(attention_probs, head_mask)
 
         attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
