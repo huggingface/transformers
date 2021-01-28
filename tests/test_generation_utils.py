@@ -198,6 +198,8 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        if model.config.is_encoder_decoder:
+            max_length = 4
         logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
             input_ids.shape[-1],
             model.config.eos_token_id,
@@ -207,8 +209,6 @@ class GenerationTesterMixin:
         )
 
         kwargs = {}
-        if model.config.is_encoder_decoder:
-            max_length = 4
 
         output_generate = model.generate(
             input_ids,
@@ -564,6 +564,10 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
+
+            if model.config.is_encoder_decoder:
+                max_length = 4
+
             process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 model.config.eos_token_id,
@@ -572,9 +576,6 @@ class GenerationTesterMixin:
                 max_length,
             )
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
-            if model.config.is_encoder_decoder:
-                max_length = 4
 
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
@@ -610,6 +611,9 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
+
             process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 model.config.eos_token_id,
@@ -618,9 +622,6 @@ class GenerationTesterMixin:
                 max_length,
             )
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
-            if model.config.is_encoder_decoder:
-                max_length = 4
 
             output_sample, output_generate = self._sample_generate(
                 model=model,
@@ -661,13 +662,16 @@ class GenerationTesterMixin:
             config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
             )
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             # check `generate()` and `beam_search()` are equal
@@ -717,16 +721,16 @@ class GenerationTesterMixin:
             config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
+
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 config.eos_token_id,
-                model.config.eos_token_id,
-                model.config.forced_bos_token_id,
-                model.config.forced_eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
                 max_length,
             )
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
             output_generate, output_beam_search = self._beam_search_generate(
                 model=model,
@@ -775,18 +779,17 @@ class GenerationTesterMixin:
                 return
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 config.eos_token_id,
-                model.config.eos_token_id,
-                model.config.forced_bos_token_id,
-                model.config.forced_eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
                 max_length,
             )
 
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             config.use_cache = True
@@ -939,20 +942,19 @@ class GenerationTesterMixin:
             config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 config.eos_token_id,
-                model.config.eos_token_id,
-                model.config.forced_bos_token_id,
-                model.config.forced_eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
                 max_length,
                 diversity_penalty=2.0,
             )
 
             # check `generate()` and `group_beam_search()` are equal
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
             output_generate, output_group_beam_search = self._group_beam_search_generate(
                 model=model,
@@ -997,20 +999,19 @@ class GenerationTesterMixin:
             config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 config.eos_token_id,
-                model.config.eos_token_id,
-                model.config.forced_bos_token_id,
-                model.config.forced_eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
                 max_length,
                 diversity_penalty=2.0,
             )
 
             num_return_sequences = 1
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(
                 input_ids.shape[0], max_length, num_return_sequences=num_return_sequences
             )
