@@ -127,7 +127,6 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        force_bos_token_to_be_generated=False,
         use_cache=True,
         num_labels=3,
         pad_token_id=1,
@@ -135,6 +134,8 @@ class BartConfig(PretrainedConfig):
         eos_token_id=2,
         is_encoder_decoder=True,
         decoder_start_token_id=2,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
         **kwargs
     ):
         super().__init__(
@@ -168,7 +169,12 @@ class BartConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.force_bos_token_to_be_generated = force_bos_token_to_be_generated  # only relevant for CNN
+
+        # ensure backward compatibilty for BART CNN models
+        self.forced_bos_token_id = (
+            bos_token_id if kwargs.get("force_bos_token_to_be_generated", False) else forced_bos_token_id
+        )
+        self.forced_eos_token_id = forced_eos_token_id if forced_eos_token_id is None else eos_token_id
 
     @property
     def num_attention_heads(self) -> int:

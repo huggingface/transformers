@@ -16,7 +16,7 @@
 import inspect
 import math
 from abc import ABC
-from typing import Callable, Dict, Iterable, List
+from typing import Callable, Iterable, List
 
 import numpy as np
 import torch
@@ -472,14 +472,28 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
         return scores
 
 
-class ForceTokenLogitsProcessor(LogitsProcessor):
-    def __init__(self, pos_id_pairs: Dict):
-        self.pos_id_pairs = pos_id_pairs
+class ForcedBosTokenLogitsProcessor(LogitsProcessor):
+    def __init__(self, bos_token_id: int):
+        self.bos_token_id = bos_token_id
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        next_token_id = input_ids.shape[-1] + 1
-        if next_token_id in self.pos_id_pairs:
+        cur_len = input_ids.shape[-1]
+        if cur_len == 1:
             mask = torch.full_like(scores, -math.inf)
-            mask[:, self.pos_id_pairs[next_token_id]] = 0
+            mask[:, self.bos_token_id] = 0
+            scores += mask
+        return scores
+
+
+class ForcedEosTokenLogitsProcessor(LogitsProcessor):
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == self.max_length - 1:
+            mask = torch.full_like(scores, -math.inf)
+            mask[:, self.eos_token_id] = 0
             scores += mask
         return scores

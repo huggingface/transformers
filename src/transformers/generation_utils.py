@@ -23,7 +23,8 @@ from torch.nn import functional as F
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
 from .generation_logits_process import (
-    ForceTokenLogitsProcessor,
+    ForcedBosTokenLogitsProcessor,
+    ForcedEosTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -540,12 +541,14 @@ class GenerationMixin:
         no_repeat_ngram_size: int,
         bad_words_ids: List[List[int]],
         min_length: int,
+        max_length: int,
         eos_token_id: int,
+        forced_bos_token_id: int,
+        forced_eos_token_id: int,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
         num_beam_groups: int,
         diversity_penalty: float,
-        forced_pos_id_pairs: Dict[int, int],
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -559,6 +562,7 @@ class GenerationMixin:
         )
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         min_length = min_length if min_length is not None else self.config.min_length
+        max_length = max_length if max_length is not None else self.config.max_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         diversity_penalty = diversity_penalty if diversity_penalty is not None else self.config.diversity_penalty
         # instantiate processors list
@@ -582,8 +586,10 @@ class GenerationMixin:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
-        if forced_pos_id_pairs is not None:
-            processors.append(ForceTokenLogitsProcessor(forced_pos_id_pairs))
+        if forced_bos_token_id is not None:
+            processors.append(ForcedBosTokenLogitsProcessor(forced_bos_token_id))
+        if forced_eos_token_id is not None:
+            processors.append(ForcedEosTokenLogitsProcessor(max_length, forced_eos_token_id))
         return processors
 
     @torch.no_grad()
@@ -615,7 +621,8 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
-        prefix_token: Optional[int] = None,
+        forced_bos_token_id: Optional[int] = None,
+        forced_eos_token_id: Optional[int] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -797,18 +804,12 @@ class GenerationMixin:
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
-
-        # init forced_pos_id_pairs if needed
-        force_bos_token = getattr(self.config, "force_bos_token_to_be_generated", False)
-        force_lang_token = getattr(self.config, "force_lang_token_to_be_generated", False)
-        force_prefix_and_eos = force_bos_token or force_lang_token
-        # set prefix_token
-        if prefix_token is None and force_lang_token:
-            raise ValueError(
-                "``prefix_token`` should not be ``None`` when ``config.force_lang_token_to_be_generated`` is ``True``. Make sure to set ``prefix_token`` to `target_lang_token`"
-            )
-        prefix_token = bos_token_id if force_bos_token else prefix_token
-        forced_pos_id_pairs = {2: prefix_token, max_length: eos_token_id} if force_prefix_and_eos else None
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -882,6 +883,8 @@ class GenerationMixin:
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             eos_token_id=eos_token_id,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
