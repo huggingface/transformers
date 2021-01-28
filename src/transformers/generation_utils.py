@@ -23,6 +23,7 @@ from torch.nn import functional as F
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
 from .generation_logits_process import (
+    ForceTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -544,6 +545,7 @@ class GenerationMixin:
         num_beams: int,
         num_beam_groups: int,
         diversity_penalty: float,
+        forced_pos_id_pairs: Dict[int, int],
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -580,6 +582,8 @@ class GenerationMixin:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
+        if forced_pos_id_pairs is not None:
+            processors.append(ForceTokenLogitsProcessor(forced_pos_id_pairs))
         return processors
 
     @torch.no_grad()
@@ -794,6 +798,18 @@ class GenerationMixin:
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
 
+        # init forced_pos_id_pairs if needed
+        force_bos_token = getattr(self.config, "force_bos_token_to_be_generated", False)
+        force_lang_token = getattr(self.config, "force_lang_token_to_be_generated", False)
+        force_prefix_and_eos = force_bos_token or force_lang_token
+        # set prefix_token
+        if prefix_token is None and force_lang_token:
+            raise ValueError(
+                "``prefix_token`` should not be ``None`` when ``config.force_lang_token_to_be_generated`` is ``True``. Make sure to set ``prefix_token`` to `target_lang_token`"
+            )
+        prefix_token = bos_token_id if force_bos_token else prefix_token
+        forced_pos_id_pairs = {2: prefix_token, max_length: eos_token_id} if force_prefix_and_eos else None
+
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -946,7 +962,6 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                prefix_token=prefix_token,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -985,7 +1000,6 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                prefix_token=prefix_token,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -1024,7 +1038,6 @@ class GenerationMixin:
                 max_length=max_length,
                 pad_token_id=pad_token_id,
                 eos_token_id=eos_token_id,
-                prefix_token=prefix_token,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **model_kwargs,
@@ -1442,7 +1455,6 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        prefix_token: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1592,14 +1604,6 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
-            # adjust tokens for Bart, *e.g.*
-            next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits,
-                cur_len=cur_len,
-                max_length=max_length,
-                prefix_token=prefix_token,
-            )
-
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -1694,7 +1698,6 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        prefix_token: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -1850,14 +1853,6 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
-            # adjust token scores (a no-op by default)
-            next_token_logits = self.adjust_logits_during_generation(
-                next_token_logits,
-                cur_len=cur_len,
-                max_length=max_length,
-                prefix_token=prefix_token,
-            )
-
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -1955,7 +1950,6 @@ class GenerationMixin:
         max_length: Optional[int] = None,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
-        prefix_token: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
@@ -2137,11 +2131,6 @@ class GenerationMixin:
 
                 # select outputs of beams of current group only
                 next_token_logits = outputs.logits[batch_group_indices, -1, :]
-
-                # adjust tokens for Bart, *e.g.*
-                next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=max_length, prefix_token=prefix_token
-                )
 
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]

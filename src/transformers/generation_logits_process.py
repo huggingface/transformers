@@ -16,7 +16,7 @@
 import inspect
 import math
 from abc import ABC
-from typing import Callable, Iterable, List
+from typing import Callable, Dict, Iterable, List
 
 import numpy as np
 import torch
@@ -469,4 +469,17 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(scores.device)
             scores[batch_idx * group_size : (batch_idx + 1) * group_size] -= self._diversity_penalty * token_frequency
 
+        return scores
+
+
+class ForceTokenLogitsProcessor(LogitsProcessor):
+    def __init__(self, pos_id_pairs: Dict):
+        self.pos_id_pairs = pos_id_pairs
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        next_token_id = input_ids.shape[-1] + 1
+        if next_token_id in self.pos_id_pairs:
+            mask = torch.full_like(scores, -math.inf)
+            mask[:, self.pos_id_pairs[next_token_id]] = 0
+            scores += mask
         return scores
