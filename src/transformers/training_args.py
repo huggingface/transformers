@@ -244,7 +244,7 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
-        pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
+        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
     """
 
@@ -438,7 +438,9 @@ class TrainingArguments:
             "`DistributedDataParallel`."
         },
     )
-    pin_memory: bool = field(default=True, metadata={"help": "Whether or not to pin memory for data loaders."})
+    dataloader_pin_memory: bool = field(
+        default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
