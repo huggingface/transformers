@@ -155,6 +155,8 @@ class FSMTConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        forced_bos_token_id=None,
+        forced_eos_token_id=2,
         **common_kwargs
     ):
         if "hidden_size" in common_kwargs:
@@ -166,6 +168,8 @@ class FSMTConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             is_encoder_decoder=is_encoder_decoder,
             tie_word_embeddings=tie_word_embeddings,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             **common_kwargs,
         )
         self.langs = langs

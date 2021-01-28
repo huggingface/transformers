@@ -135,7 +135,7 @@ class BartConfig(PretrainedConfig):
         is_encoder_decoder=True,
         decoder_start_token_id=2,
         forced_bos_token_id=None,
-        forced_eos_token_id=None,
+        forced_eos_token_id=2,
         **kwargs
     ):
         super().__init__(
@@ -145,6 +145,8 @@ class BartConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 

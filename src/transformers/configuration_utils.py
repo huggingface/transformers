@@ -210,6 +210,8 @@ class PretrainedConfig(object):
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
         self.output_scores = kwargs.pop("output_scores", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
+        self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
+        self.forced_eos_token_id = kwargs.pop("forced_bos_token_id", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)

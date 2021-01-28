@@ -128,7 +128,7 @@ class MBartConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         forced_bos_token_id=None,
-        forced_eos_token_id=None,
+        forced_eos_token_id=2,
         **kwargs
     ):
         super().__init__(
@@ -136,6 +136,8 @@ class MBartConfig(PretrainedConfig):
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 
@@ -160,8 +162,6 @@ class MBartConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.forced_bos_token_id = forced_bos_token_id
-        self.forced_eos_token_id = forced_eos_token_id
 
     @property
     def num_attention_heads(self) -> int:
