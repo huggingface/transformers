@@ -479,7 +479,7 @@ class ForcedBosTokenLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len == 1:
-            num_tokens = scores.shape[1])
+            num_tokens = scores.shape[1]
             scores[:, [i for i in range(num_tokens) if i != self.bos_token_id]] = -float("inf")
         return scores
 
@@ -492,6 +492,6 @@ class ForcedEosTokenLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         cur_len = input_ids.shape[-1]
         if cur_len == self.max_length - 1:
-            num_tokens = scores.shape[1])
+            num_tokens = scores.shape[1]
             scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
         return scores
