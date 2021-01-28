@@ -14,7 +14,7 @@
 # limitations under the License.
 """ PyTorch PEGASUS model. """
 
-
+import copy
 import math
 import random
 from typing import Optional, Tuple
