@@ -680,7 +680,7 @@ class Trainer:
         self,
         resume_from_checkpoint: Optional[str] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Main training entry point.
@@ -1248,9 +1248,9 @@ class Trainer:
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
 
-        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
