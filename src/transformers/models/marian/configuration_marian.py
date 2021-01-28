@@ -128,7 +128,7 @@ class MarianConfig(PretrainedConfig):
         pad_token_id=58100,
         eos_token_id=0,
         forced_bos_token_id=None,
-        forced_eos_token_id=2,
+        forced_eos_token_id=0,
         **kwargs
     ):
         super().__init__(
