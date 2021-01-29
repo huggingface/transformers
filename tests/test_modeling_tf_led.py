@@ -361,6 +361,10 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make LED float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make LED XLA compliant
+        pass
+
     def test_saved_model_with_attentions_output(self):
         # This test don't pass because of the error:
         # condition [13,8,4,5], then [13,8,4,5], and else [13,8,4,6] must be broadcastable
