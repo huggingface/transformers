@@ -51,6 +51,7 @@ from . import (
     mobilebert,
     mpnet,
     mt5,
+    mtm_100_mt,
     openai,
     pegasus,
     phobert,
