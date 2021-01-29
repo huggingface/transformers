@@ -421,7 +421,8 @@ class Trainer:
         signature = inspect.signature(self.model.forward)
         signature_columns = list(signature.parameters.keys())
         # Labels may be named label or label_ids, the default data collator handles that.
-        signature_columns += ["label", "label_ids"]
+        # Need reference inf when run mlm_wwm in Chinese
+        signature_columns += ["label", "label_ids","chinŒese_ref"]
         columns = [k for k in signature_columns if k in dataset.column_names]
         ignored_columns = list(set(dataset.column_names) - set(signature_columns))
         dset_description = "" if description is None else f"in the {description} set "
