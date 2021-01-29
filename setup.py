@@ -123,6 +123,7 @@ _deps = [
     "sacremoses",
     "scikit-learn",
     "sentencepiece==0.1.91",
+    "soundfile",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -226,12 +227,14 @@ extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
+extras["speech"] = deps_list("datasets", "soundfile")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil")
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["speech"]
 )
 extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
 extras["quality"] = deps_list("black", "isort", "flake8")
@@ -248,8 +251,20 @@ extras["dev"] = (
     + extras["modelcreation"]
 )
 
-extras["torchhub"] = deps_list("filelock", "importlib_metadata", "numpy", "packaging", "protobuf", "regex",
-                               "requests", "sacremoses", "sentencepiece", "torch", "tokenizers", "tqdm")
+extras["torchhub"] = deps_list(
+    "filelock",
+    "importlib_metadata",
+    "numpy",
+    "packaging",
+    "protobuf",
+    "regex",
+    "requests",
+    "sacremoses",
+    "sentencepiece",
+    "torch",
+    "tokenizers",
+    "tqdm",
+)
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -267,7 +282,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.3.0.dev0", # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.3.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

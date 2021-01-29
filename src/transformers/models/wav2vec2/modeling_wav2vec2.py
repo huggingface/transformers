@@ -24,7 +24,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
@@ -387,9 +387,9 @@ class Wav2Vec2EncoderLayer(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, output_attentions=False):
         attn_residual = hidden_states
-        hidden_states, attn_weights, _ = self.attention(hidden_states)
+        hidden_states, attn_weights, _ = self.attention(hidden_states, output_attentions=output_attentions)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
@@ -414,10 +414,10 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(hidden_states)
+        hidden_states, attn_weights, _ = self.attention(hidden_states, output_attentions=output_attentions)
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
@@ -435,16 +435,40 @@ class Wav2Vec2Encoder(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
-    def forward(self, hidden_states):
+    def forward(
+        self,
+        hidden_states,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         for layer in self.layers:
-            hidden_states, attn_weights = layer(hidden_states)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
 
-        return hidden_states
+            hidden_states, attn_weights = layer(hidden_states, output_attentions=output_attentions)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (attn_weights,)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 class Wav2Vec2EncoderStableLayerNorm(nn.Module):
@@ -459,17 +483,41 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
 
-    def forward(self, hidden_states):
+    def forward(
+        self,
+        hidden_states,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
+    ):
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
 
         for layer in self.layers:
-            hidden_states, attn_weights = layer(hidden_states)
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            hidden_states, attn_weights = layer(hidden_states, output_attentions=output_attentions)
+
+            if output_attentions:
+                all_self_attentions = all_self_attentions + (attn_weights,)
 
         hidden_states = self.layer_norm(hidden_states)
 
-        return hidden_states
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 class Wav2Vec2PreTrainedModel(PreTrainedModel):
@@ -484,16 +532,16 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, nn.Conv1d):
             torch.nn.init.kaiming_normal_(module.weight.data)
-        if isinstance(module, nn.Linear) and module.bias is not None:
+        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
 
@@ -532,11 +580,38 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids):
+    def forward(
+        self,
+        input_ids,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         hidden_states = self.feature_extractor(input_ids)
         hidden_states = self.feature_projection(hidden_states)
-        hidden_states = self.encoder(hidden_states)
-        return hidden_states
+
+        encoder_outputs = self.encoder(
+            hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = encoder_outputs[0]
+
+        if not return_dict:
+            return (hidden_states,) + encoder_outputs[1:]
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @add_start_docstrings("""Wav2Vec2 Model with a `language modeling` head on top. """, WAV_2_VEC_2_START_DOCSTRING)
@@ -550,30 +625,29 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, input_ids):
-        hidden_states = self.wav2vec2(input_ids)
+    def forward(
+        self,
+        input_ids,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.wav2vec2(
+            input_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
         logits = self.lm_head(hidden_states)
 
-        # WHY SWITCH AXIS HERE AGAIN? DOES NOT MAKE TOO MUCH SENSE IMO
-        #        logits = logits.transpose(0, 1)
-        return logits
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return output
 
-
-@add_start_docstrings(
-    """Wav2Vec2 Model with a `language modeling` head on top for CLM fine-tuning. """, WAV_2_VEC_2_START_DOCSTRING
-)
-class Wav2Vec2ForCausalLM(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.wav2vec2 = Wav2Vec2Model(config)
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        # ...
-    ):
-        # TODO(PVP)
-        pass
+        return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)

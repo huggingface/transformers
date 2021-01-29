@@ -15,21 +15,21 @@
 """ Testing suite for the PyTorch Wav2Vec2 model. """
 
 
+import math
 import unittest
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, _config_zero_init
 
 
 if is_torch_available():
     import torch
 
-    from transformers import Wav2Vec2Config, Wav2Vec2ForCausalLM, Wav2Vec2ForMaskedLM, Wav2Vec2Model
-    from transformers.models.wav2vec2.modeling_wav2vec2 import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import Wav2Vec2Config, Wav2Vec2ForMaskedLM, Wav2Vec2Model, Wav2Vec2Tokenizer
 
 
 class Wav2Vec2ModelTester:
@@ -37,118 +37,98 @@ class Wav2Vec2ModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=7,
-        is_training=True,
-        use_input_mask=True,
-        use_token_type_ids=True,
-        use_labels=True,
-        vocab_size=99,
-        hidden_size=32,
-        num_hidden_layers=5,
-        num_attention_heads=4,
-        intermediate_size=37,
+        seq_length=1024,  # speech is longer
+        is_training=False,
+        hidden_size=16,
+        feat_extract_norm="group",
+        feat_extract_dropout=0.0,
+        feat_extract_activation="gelu",
+        conv_dim=(32, 32, 32),
+        conv_stride=(4, 4, 4),
+        conv_kernel=(8, 8, 8),
+        conv_bias=False,
+        num_conv_pos_embeddings=16,
+        num_conv_pos_embedding_groups=2,
+        num_hidden_layers=4,
+        num_attention_heads=2,
+        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
+        intermediate_size=20,
+        layer_norm_eps=1e-5,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=16,
-        type_sequence_label_size=2,
         initializer_range=0.02,
-        num_labels=3,
-        num_choices=4,
+        vocab_size=32,
+        do_stable_layer_norm=False,
         scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.seq_length = seq_length
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_token_type_ids = use_token_type_ids
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.feat_extract_norm = feat_extract_norm
+        self.feat_extract_dropout = feat_extract_dropout
+        self.feat_extract_activation = feat_extract_activation
+        self.conv_dim = conv_dim
+        self.conv_stride = conv_stride
+        self.conv_kernel = conv_kernel
+        self.conv_bias = conv_bias
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.type_vocab_size = type_vocab_size
-        self.type_sequence_label_size = type_sequence_label_size
+        self.intermediate_size = intermediate_size
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        self.num_labels = num_labels
-        self.num_choices = num_choices
+        self.vocab_size = vocab_size
+        self.do_stable_layer_norm = do_stable_layer_norm
         self.scope = scope
 
+        output_seq_length = self.seq_length
+        for kernel, stride in zip(self.conv_kernel, self.conv_stride):
+            output_seq_length = (output_seq_length - (kernel - 1)) / stride
+        self.output_seq_length = int(math.ceil(output_seq_length))
+        self.encoder_seq_length = self.output_seq_length
+
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
-
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+        input_ids = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = Wav2Vec2Config(
-            vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            feat_extract_norm=self.feat_extract_norm,
+            feat_extract_dropout=self.feat_extract_dropout,
+            feat_extract_activation=self.feat_extract_activation,
+            conv_dim=self.conv_dim,
+            conv_stride=self.conv_stride,
+            conv_kernel=self.conv_kernel,
+            conv_bias=self.conv_bias,
+            num_conv_pos_embeddings=self.num_conv_pos_embeddings,
+            num_conv_pos_embedding_groups=self.num_conv_pos_embedding_groups,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
-            intermediate_size=self.intermediate_size,
-            hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            type_vocab_size=self.type_vocab_size,
-            is_decoder=False,
+            intermediate_size=self.intermediate_size,
+            layer_norm_eps=self.layer_norm_eps,
+            hidden_act=self.hidden_act,
             initializer_range=self.initializer_range,
+            vocab_size=self.vocab_size,
         )
 
-        return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        return config, input_ids
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids):
         model = Wav2Vec2Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-        result = model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_masked_lm(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
-        model = Wav2Vec2ForMaskedLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        config, input_ids = self.prepare_config_and_inputs()
+        inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
 
@@ -159,12 +139,12 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
         (
             Wav2Vec2Model,
             Wav2Vec2ForMaskedLM,
-            Wav2Vec2ForCausalLM,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (Wav2Vec2ForCausalLM,) if is_torch_available() else ()
+    test_pruning = False
+    test_headmasking = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -177,62 +157,107 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+    # Wav2Vec2 has no inputs_embeds
+    def test_inputs_embeds(self):
+        pass
 
-    def test_model_as_decoder_with_default_input_mask(self):
-        # This regression test was failing with PyTorch < 1.3
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+    # Wav2Vec2 cannot resize token embeddings
+    # since it has no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass
 
-        input_mask = None
+    # Wav2Vec2 has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
+        pass
 
-        self.model_tester.create_and_check_model_as_decoder(
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if "conv.weight" in name:
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        )
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = Wav2Vec2Model.from_pretrained(model_name)
-            self.assertIsNotNone(model)
+        # TODO(PVP): change to facebook before release
+        model = Wav2Vec2Model.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        self.assertIsNotNone(model)
 
 
 @require_torch
+@slow
+@require_datasets
+@require_soundfile
 class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
-    @slow
+    def _load_datasamples(self, num_samples):
+        from datasets import load_dataset
+
+        import soundfile as sf
+
+        # map files to raw
+        def map_to_array(batch):
+            speech, _ = sf.read(batch["file"])
+            batch["speech"] = speech
+            return batch
+
+        ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+
+        # datasets needs at least two samples
+        ds = ds.select(range(min(num_samples, 2)))
+
+        ds = ds.map(map_to_array)
+
+        return ds["speech"][:num_samples]
+
     def test_inference_masked_lm(self):
-        model = Wav2Vec2ForMaskedLM.from_pretrained("fill_later")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+        # TODO(PVP): change to facebook before release
+        model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        model.to(torch_device)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        input_speech = self._load_datasamples(1)
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+        input_ids = tokenizer(input_speech, return_tensors="pt").input_ids.to(torch_device)
+        logits = model(input_ids).logits
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = tokenizer.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist "]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_masked_lm_batched(self):
+        model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        model.to(torch_device)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
+
+        input_speech = self._load_datasamples(4)
+
+        input_ids = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_ids.to(
+            torch_device
         )
+        logits = model(input_ids).logits
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = tokenizer.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "a man said to the universe sir i exist ",
+            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore ",
+        ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

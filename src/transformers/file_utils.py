@@ -155,6 +155,14 @@ except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
 
 
+_soundfile_available = importlib.util.find_spec("soundfile") is not None
+try:
+    _soundfile_version = importlib_metadata.version("soundfile")
+    logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
+except importlib_metadata.PackageNotFoundError:
+    _soundfile_available = False
+
+
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -295,6 +303,10 @@ def is_scatter_available():
 
 def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
+
+
+def is_soundfile_availble():
+    return _soundfile_available
 
 
 def torch_only_method(fn):
