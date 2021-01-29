@@ -17,7 +17,7 @@
 
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
@@ -130,13 +130,13 @@ class TFBertPreTrainingLoss:
 class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: BertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
+        self.type_vocab_size = config.type_vocab_size
         self.hidden_size = config.hidden_size
         self.max_position_embeddings = config.max_position_embeddings
-        self.type_vocab_size = config.type_vocab_size
         self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
@@ -150,13 +150,6 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
-        with tf.name_scope("position_embeddings"):
-            self.position_embeddings = self.add_weight(
-                name="embeddings",
-                shape=[self.max_position_embeddings, self.hidden_size],
-                initializer=get_initializer(initializer_range=self.initializer_range),
-            )
-
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
@@ -164,14 +157,21 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
                 initializer=get_initializer(initializer_range=self.initializer_range),
             )
 
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.hidden_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
         super().build(input_shape)
 
     def call(
         self,
-        input_ids: tf.Tensor,
-        position_ids: tf.Tensor,
-        token_type_ids: tf.Tensor,
-        inputs_embeds: tf.Tensor,
+        input_ids: tf.Tensor = None,
+        position_ids: tf.Tensor = None,
+        token_type_ids: tf.Tensor = None,
+        inputs_embeds: tf.Tensor = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -185,16 +185,17 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
+        input_shape = shape_list(inputs_embeds)[:-1]
+
         if token_type_ids is None:
-            input_shape = shape_list(inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            seq_length = shape_list(inputs_embeds)[1]
-            position_ids = tf.range(start=0, limit=seq_length)[tf.newaxis, :]
+            position_ids = tf.range(start=0, limit=input_shape[-1])[tf.newaxis, :]
 
-        position_embeds = tf.gather(self.position_embeddings, position_ids)
-        token_type_embeds = tf.gather(self.token_type_embeddings, token_type_ids)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -227,10 +228,10 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, tensor, batch_size):
-        x = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+    def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
-        return tf.transpose(tensor=tensor, perm=[0, 2, 1, 3])
+        return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def call(
         self,
@@ -272,7 +273,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
             attention_probs = tf.multiply(attention_probs, head_mask)
 
         attention_output = tf.matmul(attention_probs, value_layer)
-        attention_output = tf.transpose(tensor=attention_output, perm=[0, 2, 1, 3])
+        attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
@@ -580,11 +581,11 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         self.pooler = TFBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
-        self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
