@@ -1366,6 +1366,11 @@ class Trainer:
         elif self.is_world_process_zero():
             self._save(output_dir)
 
+        # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
+        # SM_MODEL_DIR for easy deployment.
+        if output_dir is None and os.getenv("SM_MODEL_DIR") is not None:
+            self.save_model(output_dir=os.getenv("SM_MODEL_DIR"))
+
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         logger.info("Saving model checkpoint to %s", output_dir)
