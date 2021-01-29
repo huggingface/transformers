@@ -250,6 +250,10 @@ class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Marian float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make Marian XLA compliant
+        pass
+
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
