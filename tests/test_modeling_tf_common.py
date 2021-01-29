@@ -884,7 +884,6 @@ class TFModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
 
             inputs = self._prepare_for_class(inputs, model_class)
-            print(model_class)
 
             model(inputs)
 
