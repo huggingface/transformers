@@ -281,6 +281,10 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make BART float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make BART XLA compliant
+        pass
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""

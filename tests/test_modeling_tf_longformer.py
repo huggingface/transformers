@@ -359,6 +359,10 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Longformer float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make Blenderbot XLA compliant
+        pass
+
 
 @require_tf
 @require_sentencepiece

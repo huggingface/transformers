@@ -334,6 +334,10 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Flaubert float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make Flaubert XLA compliant
+        pass
+
 
 @require_tf
 @require_sentencepiece

@@ -310,6 +310,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make T5 float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make T5 XLA compliant
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")
@@ -441,6 +445,10 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make T5 float16 compliant
+        pass
+
+    def test_xla_mode(self):
+        # TODO JP: Make T5 XLA compliant
         pass
 
 

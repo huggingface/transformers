@@ -208,6 +208,10 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make TransfoXL float16 compliant
         pass
 
+    def test_xla_mode(self):
+        # TODO JP: Make TransfoXL XLA compliant
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
