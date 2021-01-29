@@ -134,6 +134,8 @@ _import_structure = {
         "Wav2Vec2FeatureExtractor",
         "Wav2Vec2Processor",
     ],
+    "models.wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config", "Wav2Vec2Tokenizer"],
+    "models.mtm_100_mt": ["M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100MTConfig", "M2M100MTTokenizer"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -288,6 +290,7 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.mtm_100_mt"].append("M2M100MTTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -385,6 +388,16 @@ if is_torch_available():
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.mtm_100_mt"].extend(
+        [
+            "M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "M2M100MTForConditionalGeneration",
+            "M2M100MTForQuestionAnswering",
+            "M2M100MTForSequenceClassification",
+            "M2M100MTModel",
+        ]
+    )
+
     _import_structure["models.convbert"].extend(
         [
             "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1354,6 +1367,7 @@ if TYPE_CHECKING:
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
     from .models.mt5 import MT5Config
+    from .models.mtm_100_mt import M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100MTConfig, M2M100MTTokenizer
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PegasusConfig
     from .models.phobert import PhobertTokenizer
@@ -1472,6 +1486,7 @@ if TYPE_CHECKING:
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
+        from .models.mtm_100_mt import M2M100MTTokenizerFast
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.reformer import ReformerTokenizerFast
@@ -1803,6 +1818,13 @@ if TYPE_CHECKING:
             MPNetPreTrainedModel,
         )
         from .models.mt5 import MT5EncoderModel, MT5ForConditionalGeneration, MT5Model
+        from .models.mtm_100_mt import (
+            M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            M2M100MTForConditionalGeneration,
+            M2M100MTForQuestionAnswering,
+            M2M100MTForSequenceClassification,
+            M2M100MTModel,
+        )
         from .models.openai import (
             OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OpenAIGPTDoubleHeadsModel,
