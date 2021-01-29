@@ -586,9 +586,9 @@ class GenerationMixin:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
-        if forced_bos_token_id is not None:
+        if forced_bos_token_id is not None and num_beams > 1:
             processors.append(ForcedBosTokenLogitsProcessor(forced_bos_token_id))
-        if forced_eos_token_id is not None:
+        if forced_eos_token_id is not None and num_beams > 1:
             processors.append(ForcedEosTokenLogitsProcessor(max_length, forced_eos_token_id))
         return processors
 

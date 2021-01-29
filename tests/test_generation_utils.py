@@ -73,7 +73,12 @@ class GenerationTesterMixin:
 
     @staticmethod
     def _get_logits_processor_and_kwargs(
-        input_length, eos_token_id, forced_bos_token_id, forced_eos_token_id, max_length, diversity_penalty=None
+        input_length,
+        eos_token_id,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
+        max_length=None,
+        diversity_penalty=None,
     ):
         process_kwargs = {
             "min_length": input_length + 1,
@@ -202,9 +207,6 @@ class GenerationTesterMixin:
             max_length = 4
         logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
             input_ids.shape[-1],
-            model.config.eos_token_id,
-            model.config.forced_bos_token_id,
-            model.config.forced_eos_token_id,
             max_length,
         )
 
@@ -571,9 +573,6 @@ class GenerationTesterMixin:
             process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 model.config.eos_token_id,
-                model.config.forced_bos_token_id,
-                model.config.forced_eos_token_id,
-                max_length,
             )
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
@@ -617,9 +616,6 @@ class GenerationTesterMixin:
             process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
                 input_ids.shape[-1],
                 model.config.eos_token_id,
-                model.config.forced_bos_token_id,
-                model.config.forced_eos_token_id,
-                max_length,
             )
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
