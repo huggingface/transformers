@@ -1146,7 +1146,7 @@ class GenerationMixin:
             stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
                 An instance of :class:`~transformers.StoppingCriteriaList`. List of instances of class derived from
                 :class:`~transformers.StoppingCriteria` used to tell if the generation loop should stop.
-            max_length (:obj:`int`, `optional`, defaults to 20, Deprecated, use `stopping_criteria` instead):
+            max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             pad_token_id (:obj:`int`, `optional`):
                 The id of the `padding` token.
@@ -1354,7 +1354,7 @@ class GenerationMixin:
                 An instance of :class:`~transformers.LogitsProcessorList`. List of instances of class derived from
                 :class:`~transformers.LogitsWarper` used to warp the prediction score distribution of the language
                 modeling head applied before multinomial sampling at each generation step.
-            max_length (:obj:`int`, `optional`, defaults to 20, Deprecated):
+            max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             pad_token_id (:obj:`int`, `optional`):
                 The id of the `padding` token.
