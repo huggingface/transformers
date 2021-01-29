@@ -2043,14 +2043,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
-        Converts a string in a sequence of tokens, using the backend Rust tokenizer.
-
-        Note that this method behave differently between fast and slow tokenizers:
-
-            - in fast tokenizers (instances of :class:`~transformers.PreTrainedTokenizerFast`), this method will
-              replace the unknown tokens with the :obj:`unk_token`,
-            - in slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method keep unknown
-              tokens unchanged.
+        Converts a string in a sequence of tokens, replacing unknown tokens with the :obj:`unk_token`.
 
         Args:
             text (:obj:`str`):
