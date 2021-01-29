@@ -1510,7 +1510,7 @@ class GenerationMixin:
             if unfinished_sequences.max() == 0:
                 break
 
-            if stopping_criteria():
+            if stopping_criteria(input_ids, scores):
                 break
 
             # update model kwargs
@@ -1766,7 +1766,7 @@ class GenerationMixin:
             if beam_scorer.is_done:
                 break
 
-            if stopping_criteria():
+            if stopping_criteria(input_ids, scores):
                 break
 
         sequence_outputs = beam_scorer.finalize(
@@ -2035,7 +2035,7 @@ class GenerationMixin:
             if beam_scorer.is_done:
                 break
 
-            if stopping_criteria():
+            if stopping_criteria(input_ids, scores):
                 break
 
         sequence_outputs = beam_scorer.finalize(
