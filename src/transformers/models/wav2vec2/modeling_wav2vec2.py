@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import add_start_docstrings
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
