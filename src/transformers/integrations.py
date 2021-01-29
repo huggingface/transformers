@@ -258,6 +258,7 @@ import torch
 
 # Model parallel group that the current rank belongs to.
 _MODEL_PARALLEL_GROUP = None
+_MODEL_PARALLEL_GROUP_DEVICE_IDS = None
 # Data parallel group that the current rank belongs to.
 _DATA_PARALLEL_GROUP = None
 
@@ -271,18 +272,29 @@ class MPU:
 
         Arguments:
             model_parallel_size: number of GPUs used to parallelize model.
+                                **Important**: not the total number of gpus!
 
         Let's say we have a total of 8 GPUs denoted by g0 ... g7 and we
         use 2 GPUs to parallelize the model. The present function will
-        create 4 model parallel groups and 2 data parallel grous as:
+        create 4 model parallel groups and 2 data parallel groups as:
             4 model parallel groups:
                 [g0, g1], [g2, g3], [g4, g5], [g6, g7]
             2 data parallel groups:
                 [g0, g2, g4, g6], [g1, g3, g5, g7]
+
         Note that for efficiency, the caller should make sure adjacent ranks
         are on the same DGX box. For example if we are using 2 DGX-1 boxes
         with a total of 16 GPUs, rank 0 to 7 belong to the first box and
         ranks 8 to 15 belong to the second box.
+
+        Let's say we have a total of 4 GPUs denoted by g0 ... g3 and we
+        use 2 GPUs to parallelize the model. The present function will
+        create 2 model parallel groups and 2 data parallel groups as:
+            2 model parallel groups:
+                [g0, g1], [g2, g3]
+            2 data parallel groups:
+                [g0, g2], [g1, g3]
+
         """
 
         model_parallel_size_ = self.n_gpus
@@ -300,6 +312,8 @@ class MPU:
         ensure_divisibility(world_size, model_parallel_size)
         rank = torch.distributed.get_rank()
 
+        #print(f"MP size: {model_parallel_size}")
+
         # Build the data parallel groups.
         global _DATA_PARALLEL_GROUP
         assert _DATA_PARALLEL_GROUP is None, "data parallel group is already initialized"
@@ -307,22 +321,31 @@ class MPU:
             ranks = range(i, world_size, model_parallel_size)
             group = torch.distributed.new_group(ranks)
             if i == (rank % model_parallel_size):
+                #print(f"DP ranks: {list(ranks)}")
                 _DATA_PARALLEL_GROUP = group
 
         # Build the model parallel groups.
         global _MODEL_PARALLEL_GROUP
+        global _MODEL_PARALLEL_GROUP_DEVICE_IDS
         assert _MODEL_PARALLEL_GROUP is None, "model parallel group is already initialized"
         for i in range(world_size // model_parallel_size):
             ranks = range(i * model_parallel_size, (i + 1) * model_parallel_size)
             group = torch.distributed.new_group(ranks)
             if i == (rank // model_parallel_size):
+                #print(f"MP ranks: {list(ranks)}")
                 _MODEL_PARALLEL_GROUP = group
+                _MODEL_PARALLEL_GROUP_DEVICE_IDS = list(ranks)
 
     def model_parallel_is_initialized(self):
         """Check if model and data parallel groups are initialized."""
         if _MODEL_PARALLEL_GROUP is None or _DATA_PARALLEL_GROUP is None:
             return False
         return True
+
+    def get_model_parallel_group_device_ids(self):
+        """Get the model parallel group the caller rank belongs to."""
+        assert _MODEL_PARALLEL_GROUP is not None, "model parallel group is not initialized"
+        return _MODEL_PARALLEL_GROUP_DEVICE_IDS
 
     def get_model_parallel_group(self):
         """Get the model parallel group the caller rank belongs to."""
@@ -343,7 +366,7 @@ class MPU:
         return torch.distributed.get_rank(group=self.get_model_parallel_group())
 
     def get_model_parallel_src_rank(self):
-        """Calculate the global rank corresponding to a local rank zeor
+        """Calculate the global rank corresponding to a local rank zero
         in the model parallel group."""
         global_rank = torch.distributed.get_rank()
         local_world_size = get_model_parallel_world_size()
@@ -360,12 +383,14 @@ class MPU:
     def destroy_model_parallel(self):
         """Set the groups to none."""
         global _MODEL_PARALLEL_GROUP
-        _MODEL_PARALLEL_GROUP = None
+        global _MODEL_PARALLEL_GROUP_DEVICE_IDS
         global _DATA_PARALLEL_GROUP
+        _MODEL_PARALLEL_GROUP = None
+        _MODEL_PARALLEL_GROUP_DEVICE_IDS = None
         _DATA_PARALLEL_GROUP = None
 
 
-def init_deepspeed(trainer, num_training_steps):
+def init_deepspeed(trainer, num_training_steps, mpu):
     """
     Init DeepSpeed, after converting any relevant Trainer's args into DeepSpeed configuration
 
@@ -380,14 +405,6 @@ def init_deepspeed(trainer, num_training_steps):
     args = trainer.args
     ds_config_file = args.deepspeed
     model = trainer.model
-
-    # 2D Parallel
-    if len(args.pipeline):
-        n_gpus = torch.distributed.get_world_size()
-        mpu = MPU(n_gpus)
-        mpu.initialize_model_parallel()
-    else:
-        mpu = None
 
     with io.open(ds_config_file, "r", encoding="utf-8") as f:
         config = json.load(f)

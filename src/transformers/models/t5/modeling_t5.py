@@ -1622,13 +1622,20 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         self.pipeline_is_enabled = False
 
-    def pipeline_enable(self, chunks, device_map):
+    def pipeline_enable(self, chunks, device_map, mpu=None):
         logger.info(f"enabling pipeline with chunks={chunks}")
 
         # XXX: should be a separate function
         import torch
 
-        n_gpus = torch.cuda.device_count()
+        if mpu is not None:
+            this_proc_device_ids = mpu.get_model_parallel_group_device_ids()
+        else:
+            this_proc_device_ids = list(range(torch.cuda.device_count()))
+
+        logger.info(f"process { torch.distributed.get_rank() } uses MP/PP device ids: {this_proc_device_ids}")
+
+        n_gpus = len(this_proc_device_ids)
         if n_gpus < 2:
             raise ValueError("Need at least 2 gpus to use the pipeline")
 
@@ -1651,14 +1658,23 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             n_layers = len(self.encoder.block)
             device_map = make_device_map(n_gpus, n_layers)
 
-        self.device_map = device_map
+        # 2D parallel - i.e. deepspeed + pp
+        if mpu is not None:
+            # we need to assign the correct set of IDs for this process - that we get from MPU
+            remapped_device_map = {}
+            for i, id in enumerate(device_map.keys()):
+                remapped_device_map[this_proc_device_ids[i]] = device_map[id]
+            self.device_map = remapped_device_map
+        else:
+            self.device_map = device_map
+
         self.pipeline_is_enabled = True
-        logger.info(f"using pipeline partitioning: {device_map}")
+        logger.info(f"using pipeline partitioning: {self.device_map}")
 
         # XXX: validate chunks is a good arg
 
-        self.encoder.pipeline_params(chunks=chunks, device_map=device_map)
-        self.decoder.pipeline_params(chunks=chunks, device_map=device_map)
+        self.encoder.pipeline_params(chunks=chunks, device_map=self.device_map)
+        self.decoder.pipeline_params(chunks=chunks, device_map=self.device_map)
 
         # XXX for now hardcoded the RPC setup here - but it should happen in the trainer instead
         import os
@@ -1667,8 +1683,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         from torch.distributed import rpc
 
         # dynamically check if rpc has been initialized already - i.e in case we have deepspeed as the launcher of 2D
+        # XXX: this needs to be parameterized/cleaned up
         try:
-            # will succeed if rpc has started
+            # will succeed if rpc has started (deepspeed launcher)
             torch.distributed.get_world_size()
         except:
             os.environ.update({"MASTER_ADDR": "localhost"})

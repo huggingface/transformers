@@ -246,6 +246,22 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+
+
+        # 2D Parallel
+        if self.args.deepspeed and len(self.args.pipeline):
+            from .integrations import MPU
+            #n_gpus = torch.distributed.get_world_size()
+            # XXX: hardcoded for 2 gpus for PP/MP - needs to be configurable
+            #n_gpus_per_mp = n_gpus/2
+            # at the moment experimenting with just 4 gpus - hence 2 gpus for MP|PP, 2 for DP
+            n_gpus_per_mp = 2
+            self.mpu = MPU(n_gpus_per_mp)
+            self.mpu.initialize_model_parallel()
+        else:
+            self.mpu = None
+
+
         # XXX: for now hack over naive MP to have the same behavior
         if len(self.args.pipeline):
             # using range() syntax for upper boundary (i.e. not inclusive)
@@ -263,7 +279,7 @@ class Trainer:
                     device_id, layers = x.split(":")
                     device_map[int(device_id)] = list(range(*map(int, layers.split("-"))))
 
-            model.pipeline_enable(chunks=chunks, device_map=device_map)
+            model.pipeline_enable(chunks=chunks, device_map=device_map, mpu=self.mpu)
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
@@ -737,7 +753,7 @@ class Trainer:
             num_update_steps_per_epoch = max_steps
 
         if self.args.deepspeed:
-            model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
+            model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps, mpu=self.mpu)
             self.model = model.module
             self.model_wrapped = model  # will get further wrapped in DDP
             self.deepspeed = model  # DeepSpeedEngine object
