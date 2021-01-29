@@ -60,16 +60,14 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
 
-    vocab_files_names = {
-        "vocab_file": "vocab.json",
-        "tokenizer_config": "tokenizer_config.json",
-    }
+    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = {
         "vocab_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/vocab.json"
+            "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer.json"
+            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer.json",
+            "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
         },
     }
 
@@ -90,14 +88,43 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             pad_token=pad_token,
             do_lower_case=do_lower_case,
+            word_delimiter_token=word_delimiter_token,
             **kwargs,
         )
-        self.word_delimiter_token = word_delimiter_token
+        self._word_delimiter_token = word_delimiter_token
         self.do_lower_case = do_lower_case
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
+
+    @property
+    def word_delimiter_token(self) -> str:
+        """
+        :obj:`str`: Padding token. Log an error if used while not having been set.
+        """
+        if self._word_delimiter_token is None and self.verbose:
+            logger.error("Using word_delimiter_token, but it is not set yet.")
+            return None
+        return str(self._word_delimiter_token)
+
+    @property
+    def word_delimiter_token_id(self) -> Optional[int]:
+        """
+        :obj:`Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns :obj:`None` if the token has
+        not been set.
+        """
+        if self._word_delimiter_token is None:
+            return None
+        return self.convert_tokens_to_ids(self.word_delimiter_token)
+
+    @word_delimiter_token.setter
+    def word_delimiter_token(self, value):
+        self._word_delimiter_token = value
+
+    @word_delimiter_token_id.setter
+    def word_delimiter_token_id(self, value):
+        self._word_delimiter_token = self.convert_tokens_to_ids(value)
 
     def __call__(
         self,
@@ -145,15 +172,16 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         return len(self.decoder)
 
     def get_vocab(self) -> Dict:
-        return dict(self.decoder, **self.added_tokens_decoder)
+        return dict(self.encoder, **self.added_tokens_encoder)
 
     def _convert_token_to_id(self, token: str) -> int:
         """Converts a token (str) in an index (integer) using the vocab."""
-        return self.encoder.get(token)
+        return self.encoder.get(token, self.encoder.get(self.unk_token))
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.unk_token)
+        result = self.decoder.get(index, self.unk_token)
+        return result
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
@@ -166,11 +194,38 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         filtered_tokens = list(filter(lambda token: token != self.pad_token, grouped_tokens))
 
         # replace delimiter token
-        string = "".join([" " if token == self.word_delimiter_token else token for token in filtered_tokens])
+        string = "".join([" " if token == self.word_delimiter_token else token for token in filtered_tokens]).strip()
 
         if self.do_lower_case:
             string = string.lower()
         return string
+
+    def _decode(
+        self,
+        token_ids: List[int],
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool = True,
+    ) -> str:
+        """
+        special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
+        same as tokens of the base vocabulary and therefore the function `convert_tokens_to_string` has to be called on
+        the whole token list and not individually on added tokens
+        """
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+
+        result = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            result.append(token)
+
+        text = self.convert_tokens_to_string(result)
+
+        if clean_up_tokenization_spaces:
+            clean_text = self.clean_up_tokenization(text)
+            return clean_text
+        else:
+            return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

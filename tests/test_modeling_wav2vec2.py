@@ -134,7 +134,6 @@ class Wav2Vec2ModelTester:
 
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             Wav2Vec2Model,
@@ -148,6 +147,67 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    # Wav2Vec2 has no inputs_embeds
+    def test_inputs_embeds(self):
+        pass
+
+    # Wav2Vec2 cannot resize token embeddings
+    # since it has no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    # Wav2Vec2 has no inputs_embeds
+    # and thus the `get_input_embeddings` fn
+    # is not implemented
+    def test_model_common_attributes(self):
+        pass
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if "conv.weight" in name:
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        )
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        )
+
+    @slow
+    def test_model_from_pretrained(self):
+        # TODO(PVP): change to facebook before release
+        model = Wav2Vec2Model.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        self.assertIsNotNone(model)
+
+
+@require_torch
+class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (Wav2Vec2Model, Wav2Vec2ForMaskedLM) if is_torch_available() else ()
+    test_pruning = False
+    test_headmasking = False
+
+    def setUp(self):
+        self.model_tester = Wav2Vec2ModelTester(
+            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True
+        )
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
 
     def test_config(self):
@@ -216,15 +276,11 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             return batch
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-
-        # datasets needs at least two samples
-        ds = ds.select(range(min(num_samples, 2)))
-
-        ds = ds.map(map_to_array)
+        ds = ds.select(range(num_samples)).map(map_to_array)
 
         return ds["speech"][:num_samples]
 
-    def test_inference_masked_lm(self):
+    def test_inference_masked_lm_normal(self):
         # TODO(PVP): change to facebook before release
         model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
         model.to(torch_device)
@@ -233,17 +289,43 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         input_ids = tokenizer(input_speech, return_tensors="pt").input_ids.to(torch_device)
-        logits = model(input_ids).logits
+
+        with torch.no_grad():
+            logits = model(input_ids).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = tokenizer.batch_decode(predicted_ids)
 
-        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist "]
+        EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
-    def test_inference_masked_lm_batched(self):
+    def test_inference_masked_lm_normal_batched(self):
+        # TODO(PVP): change to facebook before release
         model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
         model.to(torch_device)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
+
+        input_speech = self._load_datasamples(2)
+
+        input_ids = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_ids.to(
+            torch_device
+        )
+
+        with torch.no_grad():
+            logits = model(input_ids).logits
+
+        predicted_ids = torch.argmax(logits, dim=-1)
+        predicted_trans = tokenizer.batch_decode(predicted_ids)
+
+        EXPECTED_TRANSCRIPTIONS = [
+            "a man said to the universe sir i exist",
+            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore",
+        ]
+        self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
+
+    def test_inference_masked_lm_robust_batched(self):
+        # TODO(PVP): change to facebook before release
+        model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-large-960h-lv60-self").to(torch_device)
         tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
 
         input_speech = self._load_datasamples(4)
@@ -251,13 +333,17 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         input_ids = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_ids.to(
             torch_device
         )
-        logits = model(input_ids).logits
+
+        with torch.no_grad():
+            logits = model(input_ids).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = tokenizer.batch_decode(predicted_ids)
 
         EXPECTED_TRANSCRIPTIONS = [
-            "a man said to the universe sir i exist ",
-            "sweat covered brion's body trickling into the tight lowing cloth that was the only garment he wore ",
+            "a man said to the universe sir i exist",
+            "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
+            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with the thousands of spectators were trivialities not worth thinking about",
+            "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
