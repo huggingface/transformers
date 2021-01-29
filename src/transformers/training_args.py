@@ -451,9 +451,11 @@ class TrainingArguments:
                 "`output_dir`."
             )
         elif os.getenv("SM_OUTPUT_DATA_DIR") is not None:
-            logger.warn(
-                f"`output_dir` is overwritten by the env variable 'SM_OUTPUT_DATA_DIR' ({os.getenv('SM_OUTPUT_DATA_DIR')})."
-            )
+            if self.output_dir is not None:
+                logger.warn(
+                    f"`output_dir` is overwritten by the env variable 'SM_OUTPUT_DATA_DIR' "
+                    "({os.getenv('SM_OUTPUT_DATA_DIR')})."
+                )
             self.output_dir = os.getenv("SM_OUTPUT_DATA_DIR")
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
