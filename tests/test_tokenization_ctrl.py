@@ -17,7 +17,7 @@ import json
 import os
 import unittest
 
-from transformers.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
+from transformers.models.ctrl.tokenization_ctrl import VOCAB_FILES_NAMES, CTRLTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -26,6 +26,7 @@ class CTRLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = CTRLTokenizer
     test_rust_tokenizer = False
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 Microsoft.
+# Copyright 2018 Microsoft, the Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@ import re
 import unittest
 from typing import Tuple
 
+from transformers.models.deberta.tokenization_deberta import DebertaTokenizer
 from transformers.testing_utils import require_torch
-from transformers.tokenization_deberta import DebertaTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 

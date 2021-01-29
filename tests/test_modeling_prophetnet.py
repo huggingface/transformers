@@ -38,6 +38,7 @@ if is_torch_available():
         ProphetNetModel,
         ProphetNetTokenizer,
     )
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 class ProphetNetModelTester:
@@ -142,7 +143,6 @@ class ProphetNetModelTester:
             disable_ngram_loss=self.disable_ngram_loss,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
-            return_dict=True,
         )
 
         return (
@@ -302,6 +302,24 @@ class ProphetNetModelTester:
         output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
+    def create_and_check_decoder_generate_with_past_key_value_states(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetForCausalLM(config=config).to(torch_device).eval()
+        torch.manual_seed(0)
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=10, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=10, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+
     def create_and_check_model_fp16_forward(
         self,
         config,
@@ -344,7 +362,6 @@ class ProphetNetModelTester:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
-                return_dict=True,
             )
 
             tied_model_result = tied_model(
@@ -352,7 +369,6 @@ class ProphetNetModelTester:
                 decoder_input_ids=decoder_input_ids,
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
-                return_dict=True,
             )
 
             # check that models has less parameters
@@ -419,9 +435,8 @@ class ProphetNetModelTester:
                 attention_mask=attention_mask,
                 decoder_attention_mask=decoder_attention_mask,
                 labels=lm_labels,
-                return_dict=True,
             )
-        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(128.2925, device=torch_device), atol=1e-3))
+        self.parent.assertTrue(torch.allclose(result.loss, torch.tensor(4.5819, device=torch_device), atol=1e-3))
 
         expected_logit_slice = torch.tensor(
             [-0.1565, 0.0418, 0.1207, 0.0030, 0.0665, 0.0467, 0.0412], device=torch_device
@@ -433,9 +448,7 @@ class ProphetNetModelTester:
         model.to(torch_device)
         model.eval()
 
-        outputs_no_mask = model(
-            input_ids=input_ids[:, :5], decoder_input_ids=decoder_input_ids[:, :5], return_dict=True
-        )
+        outputs_no_mask = model(input_ids=input_ids[:, :5], decoder_input_ids=decoder_input_ids[:, :5])
         attention_mask = torch.ones_like(input_ids)
         decoder_attention_mask = torch.ones_like(decoder_input_ids)
 
@@ -446,7 +459,6 @@ class ProphetNetModelTester:
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
-            return_dict=True,
         )
 
         # check encoder
@@ -470,6 +482,31 @@ class ProphetNetModelTester:
             torch.allclose(
                 outputs_no_mask.last_hidden_state_ngram[0, :5, 0],
                 outputs_with_mask.last_hidden_state_ngram[0, :5, 0],
+                atol=1e-3,
+            )
+        )
+
+    def check_causal_lm_from_pretrained(
+        self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, *args
+    ):
+        model = ProphetNetForConditionalGeneration(config).to(torch_device).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            model.save_pretrained(tmp_dirname)
+            decoder = ProphetNetForCausalLM.from_pretrained(tmp_dirname).to(torch_device)
+
+        encoder_hidden_states = model.prophetnet.encoder(input_ids).last_hidden_state
+
+        model_outputs = model(
+            encoder_outputs=BaseModelOutput(last_hidden_state=encoder_hidden_states),
+            decoder_input_ids=decoder_input_ids,
+        )
+        dec_outputs = decoder(encoder_hidden_states=encoder_hidden_states, input_ids=decoder_input_ids)
+
+        self.parent.assertTrue(
+            torch.allclose(
+                model_outputs.logits[0, :5],
+                dec_outputs.logits[0, :5],
                 atol=1e-3,
             )
         )
@@ -524,7 +561,6 @@ class ProphetNetStandaloneDecoderModelTester:
         bos_token_id=1,
         eos_token_id=2,
         ngram=2,
-        return_dict=True,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -562,7 +598,6 @@ class ProphetNetStandaloneDecoderModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.add_cross_attention = add_cross_attention
         self.is_encoder_decoder = is_encoder_decoder
-        self.return_dict = return_dict
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -602,7 +637,6 @@ class ProphetNetStandaloneDecoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             add_cross_attention=self.add_cross_attention,
             is_encoder_decoder=self.is_encoder_decoder,
-            return_dict=self.return_dict,
         )
 
         return (
@@ -757,7 +791,6 @@ class ProphetNetStandaloneEncoderModelTester:
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        return_dict=True,
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
@@ -794,7 +827,6 @@ class ProphetNetStandaloneEncoderModelTester:
         self.max_position_embeddings = max_position_embeddings
         self.add_cross_attention = add_cross_attention
         self.is_encoder_decoder = is_encoder_decoder
-        self.return_dict = return_dict
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -829,7 +861,6 @@ class ProphetNetStandaloneEncoderModelTester:
             max_position_embeddings=self.max_position_embeddings,
             add_cross_attention=self.add_cross_attention,
             is_encoder_decoder=self.is_encoder_decoder,
-            return_dict=self.return_dict,
         )
 
         return (
@@ -898,6 +929,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_value_states(*config_and_inputs)
 
+    def test_encoder_decoder_model_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_generate_with_past_key_value_states(*config_and_inputs)
+
     def test_attn_mask_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_model_with_attn_mask(*config_and_inputs)
@@ -911,6 +946,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
         self.assertFalse(config.add_cross_attention)
 
+    def test_causal_lm_from_pretrained(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_causal_lm_from_pretrained(*config_and_inputs)
+
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -919,7 +958,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # methods overwrite method in `test_modeling_common.py`
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
 
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
@@ -933,7 +971,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
             inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -1026,6 +1063,32 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_hidden_states.retain_grad()
+        encoder_attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(encoder_attentions.grad)
+
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -1051,6 +1114,10 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        return
 
 
 @require_torch
@@ -1121,7 +1188,6 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
             attention_mask=None,
             encoder_outputs=None,
             decoder_input_ids=decoder_prev_ids,
-            return_dict=True,
         )
         output_predited_logits = output[0]
         expected_shape = torch.Size((1, 12, 30522))
@@ -1143,9 +1209,7 @@ class ProphetNetModelIntegrationTest(unittest.TestCase):
         assert torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4)
 
         # decoder outputs
-        decoder_outputs = model.prophetnet.decoder(
-            decoder_prev_ids, encoder_hidden_states=encoder_outputs, return_dict=True
-        )
+        decoder_outputs = model.prophetnet.decoder(decoder_prev_ids, encoder_hidden_states=encoder_outputs)
         predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 12, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 LXMERT Authors.
+# Copyright 2018 LXMERT Authors, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ if is_torch_available():
         LxmertForQuestionAnswering,
         LxmertModel,
     )
-    from transformers.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.lxmert.modeling_lxmert import LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class LxmertModelTester:
@@ -282,7 +282,6 @@ class LxmertModelTester:
             attention_mask=input_mask,
             labels=ans,
             output_attentions=output_attentions,
-            return_dict=True,
         )
         result = model(input_ids, visual_feats, bounding_boxes, labels=ans)
         result = model(
@@ -302,7 +301,6 @@ class LxmertModelTester:
             attention_mask=input_mask,
             labels=ans,
             output_attentions=not output_attentions,
-            return_dict=True,
         )
 
         self.parent.assertEqual(result.question_answering_score.shape, (self.batch_size, self.num_qa_labels))
@@ -335,7 +333,6 @@ class LxmertModelTester:
             matched_label=matched_label,
             ans=ans,
             output_attentions=output_attentions,
-            return_dict=True,
         )
         result = model(
             input_ids,
@@ -390,7 +387,6 @@ class LxmertModelTester:
             matched_label=matched_label,
             ans=ans,
             output_attentions=not output_attentions,
-            return_dict=True,
         )
 
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
@@ -427,7 +423,6 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             ans=ans,
-            return_dict=True,
         )
 
         result_qa = model_qa(
@@ -437,7 +432,6 @@ class LxmertModelTester:
             labels=ans,
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            return_dict=True,
         )
 
         model_pretrain.resize_num_qa_labels(num_small_labels)
@@ -450,7 +444,6 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             ans=less_labels_ans,
-            return_dict=True,
         )
 
         result_qa_less = model_qa(
@@ -460,7 +453,6 @@ class LxmertModelTester:
             labels=less_labels_ans,
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            return_dict=True,
         )
 
         model_pretrain.resize_num_qa_labels(num_large_labels)
@@ -473,7 +465,6 @@ class LxmertModelTester:
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
             ans=more_labels_ans,
-            return_dict=True,
         )
 
         result_qa_more = model_qa(
@@ -483,7 +474,6 @@ class LxmertModelTester:
             labels=more_labels_ans,
             token_type_ids=token_type_ids,
             attention_mask=input_mask,
-            return_dict=True,
         )
 
         model_qa_labels = model_qa.num_qa_labels
@@ -532,10 +522,6 @@ class LxmertModelTester:
 class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
-
-    test_head_masking = False
-    test_pruning = False
-    test_torchscript = False
 
     test_head_masking = False
     test_pruning = False
@@ -707,3 +693,36 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        hidden_states_lang = outputs.language_hidden_states[0]
+        attentions_lang = outputs.language_attentions[0]
+
+        hidden_states_vision = outputs.vision_hidden_states[0]
+        attentions_vision = outputs.vision_attentions[0]
+
+        hidden_states_lang.retain_grad()
+        attentions_lang.retain_grad()
+        hidden_states_vision.retain_grad()
+        attentions_vision.retain_grad()
+
+        outputs.language_output.flatten()[0].backward(retain_graph=True)
+        outputs.vision_output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states_lang.grad)
+        self.assertIsNotNone(attentions_vision.grad)
+        self.assertIsNotNone(hidden_states_vision.grad)
+        self.assertIsNotNone(attentions_vision.grad)

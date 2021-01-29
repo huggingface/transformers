@@ -1,3 +1,19 @@
+<!---
+Copyright 2020 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
 # How to contribute to transformers?
 
 Everyone is welcome to contribute, and we value everybody's contribution. Code
@@ -125,7 +141,7 @@ Follow these steps to start contributing:
    $ git checkout -b a-descriptive-name-for-my-changes
    ```
 
-   **do not** work on the `master` branch.
+   **Do not** work on the `master` branch.
 
 4. Set up a development environment by running the following command in a virtual environment:
 
@@ -312,8 +328,28 @@ for more information.
 
 ### Develop on Windows
 
+On windows, you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
+
+`git config core.autocrlf input`
+
 One way one can run the make command on Window is to pass by MSYS2:
 
 1. [Download MSYS2](https://www.msys2.org/), we assume to have it installed in C:\msys64
 2. Open the command line C:\msys64\msys2.exe (it should be available from the start menu)
 3. Run in the shell: `pacman -Syu` and install make with `pacman -S make`
+4. Add `C:\msys64\usr\bin` to your PATH environment variable.
+
+You can now use `make` from any terminal (Powershell, cmd.exe, etc) 🎉
+
+### Syncing forked master with upstream (HuggingFace) master
+
+To avoid pinging the upstream repository which adds reference notes to each upstream PR and sends unnessary notifications to the developers involved in these PRs, 
+when syncing the master branch of a forked repository, please, follow these steps:
+1. When possible, avoid syncing with the upstream using a branch and PR on the forked repository. Instead merge directly into the forked master.
+2. If a PR is absolutely necessary, use the following steps after checking out your branch:
+```
+$ git checkout -b your-branch-for-syncing
+$ git pull --squash --no-commit upstream master
+$ git commit -m '<your message without GitHub references>'
+$ git push --set-upstream origin your-branch-for-syncing
+```

@@ -23,7 +23,7 @@ from unittest.mock import patch
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, slow, torch_device
 
 
 SRC_DIRS = [
@@ -33,7 +33,9 @@ SRC_DIRS = [
         "text-classification",
         "token-classification",
         "language-modeling",
+        "multiple-choice",
         "question-answering",
+        "seq2seq",
     ]
 ]
 sys.path.extend(SRC_DIRS)
@@ -45,8 +47,9 @@ if SRC_DIRS is not None:
     import run_glue
     import run_mlm
     import run_ner
-    import run_pl_glue
-    import run_squad
+    import run_qa as run_squad
+    import run_seq2seq
+    import run_swag
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -96,47 +99,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_glue.main()
-            del result["eval_loss"]
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.75)
-
-    @require_torch_non_multi_gpu_but_fix_me
-    def test_run_pl_glue(self):
-        stream_handler = logging.StreamHandler(sys.stdout)
-        logger.addHandler(stream_handler)
-
-        tmp_dir = self.get_auto_remove_tmp_dir()
-        testargs = f"""
-            run_pl_glue.py
-            --model_name_or_path bert-base-cased
-            --data_dir ./tests/fixtures/tests_samples/MRPC/
-            --output_dir {tmp_dir}
-            --task mrpc
-            --do_train
-            --do_predict
-            --train_batch_size=32
-            --learning_rate=1e-4
-            --num_train_epochs=1
-            --seed=42
-            --max_seq_length=128
-            """.split()
-        if torch.cuda.is_available():
-            testargs += ["--gpus=1"]
-        if is_cuda_and_apex_available():
-            testargs.append("--fp16")
-
-        with patch.object(sys, "argv", testargs):
-            result = run_pl_glue.main()[0]
-            # for now just testing that the script can run to completion
-            self.assertGreater(result["acc"], 0.25)
-            #
-            # TODO: this fails on CI - doesn't get acc/f1>=0.75:
-            #
-            #     # remove all the various *loss* attributes
-            #     result = {k: v for k, v in result.items() if "loss" not in k}
-            #     for k, v in result.items():
-            #         self.assertGreaterEqual(v, 0.75, f"({k})")
-            #
+            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_run_clm(self):
@@ -213,8 +176,8 @@ class ExamplesTests(TestCasePlus):
             --do_eval
             --warmup_steps=2
             --learning_rate=2e-4
-            --per_gpu_train_batch_size=2
-            --per_gpu_eval_batch_size=2
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=2
             --num_train_epochs=2
         """.split()
 
@@ -223,7 +186,7 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             result = run_ner.main()
-            self.assertGreaterEqual(result["eval_accuracy_score"], 0.75)
+            self.assertGreaterEqual(result["eval_accuracy"], 0.75)
             self.assertGreaterEqual(result["eval_precision"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
@@ -235,26 +198,51 @@ class ExamplesTests(TestCasePlus):
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
             run_squad.py
-            --model_type=distilbert
-            --model_name_or_path=sshleifer/tiny-distilbert-base-cased-distilled-squad
-            --data_dir=./tests/fixtures/tests_samples/SQUAD
+            --model_name_or_path bert-base-uncased
+            --version_2_with_negative
+            --train_file tests/fixtures/tests_samples/SQUAD/sample.json
+            --validation_file tests/fixtures/tests_samples/SQUAD/sample.json
             --output_dir {tmp_dir}
             --overwrite_output_dir
             --max_steps=10
             --warmup_steps=2
             --do_train
             --do_eval
-            --version_2_with_negative
             --learning_rate=2e-4
-            --per_gpu_train_batch_size=2
-            --per_gpu_eval_batch_size=1
-            --seed=42
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
         """.split()
 
         with patch.object(sys, "argv", testargs):
             result = run_squad.main()
-            self.assertGreaterEqual(result["f1"], 25)
-            self.assertGreaterEqual(result["exact"], 21)
+            self.assertGreaterEqual(result["f1"], 30)
+            self.assertGreaterEqual(result["exact"], 30)
+
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_swag(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_swag.py
+            --model_name_or_path bert-base-uncased
+            --train_file tests/fixtures/tests_samples/swag/sample.json
+            --validation_file tests/fixtures/tests_samples/swag/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=20
+            --warmup_steps=2
+            --do_train
+            --do_eval
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            result = run_swag.main()
+            self.assertGreaterEqual(result["eval_accuracy"], 0.8)
 
     @require_torch_non_multi_gpu_but_fix_me
     def test_generation(self):
@@ -273,3 +261,67 @@ class ExamplesTests(TestCasePlus):
         with patch.object(sys, "argv", testargs + [model_type, model_name]):
             result = run_generation.main()
             self.assertGreaterEqual(len(result[0]), 10)
+
+    @slow
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_seq2seq_summarization(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_seq2seq.py
+            --model_name_or_path t5-small
+            --task summarization
+            --train_file tests/fixtures/tests_samples/xsum/sample.json
+            --validation_file tests/fixtures/tests_samples/xsum/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=50
+            --warmup_steps=8
+            --do_train
+            --do_eval
+            --learning_rate=2e-4
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --predict_with_generate
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            result = run_seq2seq.main()
+
+            self.assertGreaterEqual(result["eval_rouge1"], 10)
+            self.assertGreaterEqual(result["eval_rouge2"], 2)
+            self.assertGreaterEqual(result["eval_rougeL"], 7)
+            self.assertGreaterEqual(result["eval_rougeLsum"], 7)
+
+    @slow
+    @require_torch_non_multi_gpu_but_fix_me
+    def test_run_seq2seq_translation(self):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        logger.addHandler(stream_handler)
+
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        testargs = f"""
+            run_seq2seq.py
+            --model_name_or_path sshleifer/student_marian_en_ro_6_1
+            --task translation_en_to_ro
+            --train_file tests/fixtures/tests_samples/wmt16/sample.json
+            --validation_file tests/fixtures/tests_samples/wmt16/sample.json
+            --output_dir {tmp_dir}
+            --overwrite_output_dir
+            --max_steps=50
+            --warmup_steps=8
+            --do_train
+            --do_eval
+            --learning_rate=3e-3
+            --per_device_train_batch_size=2
+            --per_device_eval_batch_size=1
+            --predict_with_generate
+            --source_lang en_XX
+            --target_lang ro_RO
+        """.split()
+
+        with patch.object(sys, "argv", testargs):
+            result = run_seq2seq.main()
+            self.assertGreaterEqual(result["eval_bleu"], 30)

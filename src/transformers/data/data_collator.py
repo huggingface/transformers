@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import random
 import warnings
 from dataclasses import dataclass
@@ -20,14 +34,14 @@ DataCollator = NewType("DataCollator", Callable[[List[InputDataClass]], Dict[str
 
 def default_data_collator(features: List[InputDataClass]) -> Dict[str, torch.Tensor]:
     """
-    Very simple data collator that simply collates batches of dict-like objects and erforms special handling for
+    Very simple data collator that simply collates batches of dict-like objects and performs special handling for
     potential keys named:
 
         - ``label``: handles a single value (int or float) per object
         - ``label_ids``: handles a list of values per object
 
-    Des not do any additional preprocessing: property names of the input object will be used as corresponding inputs to
-    the model. See glue and ner for example of how it's useful.
+    Does not do any additional preprocessing: property names of the input object will be used as corresponding inputs
+    to the model. See glue and ner for example of how it's useful.
     """
 
     # In this function we'll make the assumption that all `features` in the batch
@@ -211,6 +225,63 @@ def tolist(x: Union[List[Any], torch.Tensor]):
 
 
 @dataclass
+class DataCollatorForSeq2Seq:
+    """
+    Data collator that will dynamically pad the inputs received, as well as the labels.
+
+    Args:
+        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+            The tokenizer used for encoding the data.
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
+            among:
+
+            * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
+            * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+              maximum acceptable input length for the model if that argument is not provided.
+            * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+              different lengths).
+        max_length (:obj:`int`, `optional`):
+            Maximum length of the returned list and optionally padding length (see above).
+        pad_to_multiple_of (:obj:`int`, `optional`):
+            If set will pad the sequence to a multiple of the provided value.
+
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
+            7.5 (Volta).
+        label_pad_token_id (:obj:`int`, `optional`, defaults to -100):
+            The id to use when padding the labels (-100 will be automatically ignored by PyTorch loss functions).
+    """
+
+    tokenizer: PreTrainedTokenizerBase
+    padding: Union[bool, str, PaddingStrategy] = True
+    max_length: Optional[int] = None
+    pad_to_multiple_of: Optional[int] = None
+    label_pad_token_id: int = -100
+
+    def __call__(self, features):
+        labels = [feature["labels"] for feature in features] if "labels" in features[0].keys() else None
+        # We have to pad the labels before calling `tokenizer.pad` as this method won't pad them and needs them of the
+        # same length to return tensors.
+        if labels is not None:
+            max_label_length = max(len(l) for l in labels)
+            padding_side = self.tokenizer.padding_side
+            for feature in features:
+                remainder = [self.label_pad_token_id] * (max_label_length - len(feature["labels"]))
+                feature["labels"] = (
+                    feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
+                )
+
+        return self.tokenizer.pad(
+            features,
+            padding=self.padding,
+            max_length=self.max_length,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
+        )
+
+
+@dataclass
 class DataCollatorForLanguageModeling:
     """
     Data collator used for language modeling. Inputs are dynamically padded to the maximum length of a batch if they
@@ -261,7 +332,7 @@ class DataCollatorForLanguageModeling:
                 batch["input_ids"], special_tokens_mask=special_tokens_mask
             )
         else:
-            labels = batch["input_ids"]
+            labels = batch["input_ids"].clone()
             if self.tokenizer.pad_token_id is not None:
                 labels[labels == self.tokenizer.pad_token_id] = -100
             batch["labels"] = labels

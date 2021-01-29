@@ -1,9 +1,21 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Tensorflow trainer class."""
 
 import datetime
 import math
 import os
-import warnings
 from typing import Callable, Dict, Optional, Tuple
 
 
@@ -15,12 +27,11 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import tensorflow as tf
-from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, EvaluationStrategy, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -66,8 +77,6 @@ class TFTrainer:
             :class:`~transformers.AdamWeightDecay`. The scheduler will default to an instance of
             :class:`tf.keras.optimizers.schedules.PolynomialDecay` if :obj:`args.num_warmup_steps` is 0 else an
             instance of :class:`~transformers.WarmUp`.
-        kwargs:
-            Deprecated keyword arguments.
     """
 
     def __init__(
@@ -82,13 +91,7 @@ class TFTrainer:
             None,
             None,
         ),
-        **kwargs,
     ):
-        assert parse(tf.__version__).release >= (2, 2, 0), (
-            "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
-            % tf.__version__
-        )
-
         self.model = model
         self.args = args
         self.train_dataset = train_dataset
@@ -98,13 +101,7 @@ class TFTrainer:
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
         self.epoch_logging = 0
-        if "prediction_loss_only" in kwargs:
-            warnings.warn(
-                "Passing `prediction_loss_only` as a keyword argument is deprecated and won't be possible in a future version. Use `args.prediction_loss_only` instead.",
-                FutureWarning,
-            )
-            self.args.prediction_loss_only = kwargs.pop("prediction_loss_only")
-        assert kwargs == {}, f"Unexpected keyword arguments: {list(kwargs.keys())}."
+        self.eval_loss = tf.keras.metrics.Sum()
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -139,7 +136,7 @@ class TFTrainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         self.total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps
-        self.num_train_examples = tf.data.experimental.cardinality(self.train_dataset).numpy()
+        self.num_train_examples = self.train_dataset.cardinality().numpy()
 
         if self.num_train_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -171,7 +168,7 @@ class TFTrainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        num_examples = tf.data.experimental.cardinality(eval_dataset).numpy()
+        num_examples = eval_dataset.cardinality().numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -201,18 +198,13 @@ class TFTrainer:
         Subclass and override this method if you want to inject some custom behavior.
         """
 
-        num_examples = tf.data.experimental.cardinality(test_dataset).numpy()
+        num_examples = test_dataset.cardinality().numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
 
-        approx = math.floor if self.args.dataloader_drop_last else math.ceil
-        steps = approx(num_examples / self.args.eval_batch_size)
-        ds = (
-            test_dataset.repeat()
-            .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
+        steps = math.ceil(num_examples / self.args.eval_batch_size)
+        ds = test_dataset.batch(self.args.eval_batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
@@ -249,12 +241,6 @@ class TFTrainer:
             WANDB_DISABLED:
                 (Optional): boolean - defaults to false, set to "true" to disable wandb entirely.
         """
-        if hasattr(self, "_setup_wandb"):
-            warnings.warn(
-                "The `_setup_wandb` method is deprecated and won't be called in a future version, define `setup_wandb` in your subclass.",
-                FutureWarning,
-            )
-            return self._setup_wandb()
 
         logger.info('Automatic Weights & Biases logging enabled, to disable set os.environ["WANDB_DISABLED"] = "true"')
         combined_dict = {**self.model.config.to_dict(), **self.args.to_sanitized_dict()}
@@ -304,26 +290,20 @@ class TFTrainer:
 
         Works both with or without labels.
         """
-        if hasattr(self, "_prediction_loop"):
-            warnings.warn(
-                "The `_prediction_loop` method is deprecated and won't be called in a future version, define `prediction_loop` in your subclass.",
-                FutureWarning,
-            )
-            return self._prediction_loop(
-                dataset, steps, num_examples, description, prediction_loss_only=prediction_loss_only
-            )
 
         prediction_loss_only = (
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
         logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", num_examples)
+        logger.info("  Num examples in dataset = %d", num_examples)
+        if description == "Evaluation":
+            logger.info("  Num examples in used in evaluation = %d", self.args.eval_batch_size * steps)
         logger.info("  Batch size = %d", self.args.eval_batch_size)
 
         label_ids: np.ndarray = None
         preds: np.ndarray = None
-        self.eval_loss = tf.keras.metrics.Sum()
+        self.eval_loss.reset_states()
 
         # Reset the past mems state at the beginning of the evaluation if necessary.
         if self.args.past_index >= 0:
@@ -363,7 +343,7 @@ class TFTrainer:
                     else:
                         label_ids = np.append(label_ids, labels.numpy(), axis=0)
 
-                if step == steps:
+                if step == steps - 1:
                     break
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
@@ -393,12 +373,6 @@ class TFTrainer:
             logs (:obj:`Dict[str, float]`):
                 The values to log.
         """
-        if hasattr(self, "_log"):
-            warnings.warn(
-                "The `_log` method is deprecated and won't be called in a future version, define `log` in your subclass.",
-                FutureWarning,
-            )
-            return self._log(logs)
         logs["epoch"] = self.epoch_logging
 
         if self.tb_writer:
@@ -592,7 +566,7 @@ class TFTrainer:
 
                     if (
                         self.args.eval_steps > 0
-                        and self.args.evaluate_during_training
+                        and self.args.evaluation_strategy == EvaluationStrategy.STEPS
                         and self.global_step % self.args.eval_steps == 0
                     ):
                         self.evaluate()
@@ -662,7 +636,15 @@ class TFTrainer:
                 reduced_features = {
                     k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
                 }
-                reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
+
+                if tf.is_tensor(labels):
+                    reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
+                elif isinstance(labels, dict):
+                    reduced_labels = {
+                        k: lbl[: self.args.train_batch_size // self.args.n_replicas] for k, lbl in labels.items()
+                    }
+                else:
+                    raise ValueError("The labels must be either a tf.Tensor or a dict.")
 
                 self.training_step(reduced_features, reduced_labels, nb_instances_in_global_batch)
 
@@ -674,9 +656,20 @@ class TFTrainer:
                     for k, ft in features.items()
                 }
 
-                labels = tf.concat(
-                    [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
-                )
+                if tf.is_tensor(labels):
+                    labels = tf.concat(
+                        [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
+                    )
+                elif isinstance(labels, dict):
+                    labels = {
+                        k: tf.concat(
+                            [lbl[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]],
+                            axis=0,
+                        )
+                        for k, lbl in labels.items()
+                    }
+                else:
+                    raise ValueError("The labels must be either a tf.Tensor or a dict.")
 
             gradients = self.gradient_accumulator.gradients
             gradients = [
@@ -733,12 +726,6 @@ class TFTrainer:
         Returns:
             A tuple of two :obj:`tf.Tensor`: The loss and logits.
         """
-        if hasattr(self, "_run_model"):
-            warnings.warn(
-                "The `_run_model` method is deprecated and won't be called in a future version, define `run_model` in your subclass.",
-                FutureWarning,
-            )
-            return self._run_model(features, labels, training)
 
         if self.args.past_index >= 0 and getattr(self, "_past", None) is not None:
             features["mems"] = self._past

@@ -1,12 +1,27 @@
-from typing import Any, Dict, Optional, Tuple, Union
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
 from torch.utils.data import DistributedSampler, RandomSampler
 
 from transformers import PreTrainedModel, Trainer, logging
-from transformers.configuration_fsmt import FSMTConfig
 from transformers.file_utils import is_torch_tpu_available
+from transformers.integrations import is_fairscale_available
+from transformers.models.fsmt.configuration_fsmt import FSMTConfig
 from transformers.optimization import (
     Adafactor,
     AdamW,
@@ -18,6 +33,11 @@ from transformers.optimization import (
     get_polynomial_decay_schedule_with_warmup,
 )
 from transformers.trainer_pt_utils import get_tpu_sampler
+from transformers.training_args import ParallelMode
+
+
+if is_fairscale_available():
+    from fairscale.optim import OSS
 
 
 logger = logging.get_logger(__name__)
@@ -40,7 +60,7 @@ class Seq2SeqTrainer(Trainer):
             assert isinstance(
                 self.model, PreTrainedModel
             ), f"If no `config` is passed the model to be trained has to be of type `PreTrainedModel`, but is {self.model.__class__}"
-            self.config = self._actual_model(self.model).config
+            self.config = self.model.config
         else:
             self.config = config
 
@@ -84,18 +104,25 @@ class Seq2SeqTrainer(Trainer):
                     "weight_decay": 0.0,
                 },
             ]
+            optimizer_cls = Adafactor if self.args.adafactor else AdamW
             if self.args.adafactor:
-                self.optimizer = Adafactor(
-                    optimizer_grouped_parameters,
-                    lr=self.args.learning_rate,
-                    scale_parameter=False,
-                    relative_step=False,
-                )
-
+                optimizer_cls = Adafactor
+                optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
             else:
-                self.optimizer = AdamW(
-                    optimizer_grouped_parameters, lr=self.args.learning_rate, eps=self.args.adam_epsilon
+                optimizer_cls = AdamW
+                optimizer_kwargs = {
+                    "betas": (self.args.adam_beta1, self.args.adam_beta2),
+                    "eps": self.args.adam_epsilon,
+                }
+            optimizer_kwargs["lr"] = self.args.learning_rate
+            if self.sharded_dpp:
+                self.optimizer = OSS(
+                    params=optimizer_grouped_parameters,
+                    optim=optimizer_cls,
+                    **optimizer_kwargs,
                 )
+            else:
+                self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         if self.lr_scheduler is None:
             self.lr_scheduler = self._get_lr_scheduler(num_training_steps)
@@ -122,7 +149,8 @@ class Seq2SeqTrainer(Trainer):
         else:
             if self.args.sortish_sampler:
                 self.train_dataset.make_sortish_sampler(
-                    self.args.per_device_train_batch_size, distributed=self.args.n_gpu > 1
+                    self.args.per_device_train_batch_size,
+                    distributed=(self.args.parallel_mode == ParallelMode.DISTRIBUTED),
                 )
 
             return (
@@ -153,7 +181,11 @@ class Seq2SeqTrainer(Trainer):
         return loss
 
     def prediction_step(
-        self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]], prediction_loss_only: bool
+        self,
+        model: nn.Module,
+        inputs: Dict[str, Union[torch.Tensor, Any]],
+        prediction_loss_only: bool,
+        ignore_keys: Optional[List[str]] = None,
     ) -> Tuple[Optional[float], Optional[torch.Tensor], Optional[torch.Tensor]]:
         """
         Perform an evaluation step on :obj:`model` using obj:`inputs`.
@@ -185,7 +217,7 @@ class Seq2SeqTrainer(Trainer):
         }
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
-            generated_tokens = model.generate(
+            generated_tokens = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 **gen_kwargs,

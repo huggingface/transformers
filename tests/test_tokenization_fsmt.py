@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers.file_utils import cached_property
+from transformers.models.fsmt.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 from transformers.testing_utils import slow
-from transformers.tokenization_fsmt import VOCAB_FILES_NAMES, FSMTTokenizer
 
 from .test_tokenization_common import TokenizerTesterMixin
 

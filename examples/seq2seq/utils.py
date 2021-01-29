@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import itertools
 import json
 import linecache
@@ -21,7 +35,7 @@ from torch.utils.data import Dataset, Sampler
 from sentence_splitter import add_newline_to_end_of_each_sentence
 from transformers import BartTokenizer, EvalPrediction, PreTrainedTokenizer, T5Tokenizer
 from transformers.file_utils import cached_property
-from transformers.modeling_bart import shift_tokens_right
+from transformers.models.bart.modeling_bart import shift_tokens_right
 
 
 try:
@@ -261,9 +275,10 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
 
 
 class Seq2SeqDataCollator:
-    def __init__(self, tokenizer, data_args, tpu_num_cores=None):
+    def __init__(self, tokenizer, data_args, decoder_start_token_id, tpu_num_cores=None):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         assert (
             self.pad_token_id is not None
         ), f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
@@ -294,7 +309,7 @@ class Seq2SeqDataCollator:
         if isinstance(self.tokenizer, T5Tokenizer):
             decoder_input_ids = self._shift_right_t5(labels)
         else:
-            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id)
+            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id, self.decoder_start_token_id)
 
         batch = {
             "input_ids": input_ids,
@@ -420,7 +435,8 @@ def use_task_specific_params(model, task):
 
     if task_specific_params is not None:
         pars = task_specific_params.get(task, {})
-        logger.info(f"using task specific params for {task}: {pars}")
+        logger.info(f"setting model.config to task specific params for {task}:\n {pars}")
+        logger.info("note: command line args may override some of these")
         model.config.update(pars)
 
 
@@ -448,7 +464,7 @@ def save_git_info(folder_path: str) -> None:
 
 def save_json(content, path, indent=4, **json_dump_kwargs):
     with open(path, "w") as f:
-        json.dump(content, f, indent=indent, **json_dump_kwargs)
+        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 def load_json(path):

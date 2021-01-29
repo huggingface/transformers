@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 XLNet
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -50,46 +62,53 @@ XLNetTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+XLNetTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.XLNetTokenizerFast
+    :members:
+
+
 XLNet specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.modeling_xlnet.XLNetModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetLMHeadModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetLMHeadModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForSequenceClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForSequenceClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForMultipleChoiceOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForMultipleChoiceOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForTokenClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForTokenClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringSimpleOutput
     :members:
 
-.. autoclass:: transformers.modeling_xlnet.XLNetForQuestionAnsweringOutput
+.. autoclass:: transformers.models.xlnet.modeling_xlnet.XLNetForQuestionAnsweringOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetLMHeadModelOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForSequenceClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForMultipleChoiceOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForTokenClassificationOutput
     :members:
 
-.. autoclass:: transformers.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
+.. autoclass:: transformers.models.xlnet.modeling_tf_xlnet.TFXLNetForQuestionAnsweringSimpleOutput
     :members:
 
 

@@ -114,7 +114,6 @@ class TFFlaubertModelTester:
             summary_type=self.summary_type,
             use_proj=self.use_proj,
             bos_token_id=self.bos_token_id,
-            return_dict=True,
         )
 
         return (
@@ -292,6 +291,7 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFFlaubertWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFFlaubertModelTester(self)
@@ -330,12 +330,8 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFFlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
-
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
+    def test_mixed_precision(self):
+        # TODO JP: Make Flaubert float16 compliant
         pass
 
 

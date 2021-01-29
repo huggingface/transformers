@@ -27,10 +27,12 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers.generation_logits_process import (
+        HammingDiversityLogitsProcessor,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
         NoBadWordsLogitsProcessor,
         NoRepeatNGramLogitsProcessor,
+        PrefixConstrainedLogitsProcessor,
         RepetitionPenaltyLogitsProcessor,
         TemperatureLogitsWarper,
         TopKLogitsWarper,
@@ -281,3 +283,50 @@ class LogitsProcessorTest(unittest.TestCase):
 
         # input_ids should never be changed
         self.assertListEqual(input_ids.tolist(), input_ids_comp.tolist())
+
+    def test_prefix_constrained_logits_processor(self):
+        vocab_size = 5
+        batch_size = 2
+
+        input_ids = torch.tensor([[0, 1, 3, 1], [0, 1, 0, 1]], device=torch_device, dtype=torch.long)
+        scores = self._get_uniform_logits(batch_size, vocab_size)
+
+        def prefix_allowed_tokens_fn(batch_id, inputs_ids):
+            return [[0, 1], [2, 3]][batch_id]
+
+        prefix_constrained_logits_proc = PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, 1)
+
+        filtered_scores = prefix_constrained_logits_proc(input_ids, scores.clone())
+
+        # batch 1: 1st, 2nd (0, 1) token are allowed
+        # batch 2: 3rd, 4th (2, 3) token are allowed
+        self.assertListEqual(
+            torch.isinf(filtered_scores).tolist(), [[False, False, True, True, True], [True, True, False, False, True]]
+        )
+
+    def test_hamming_diversity(self):
+        vocab_size = 4
+        num_beams = 2
+        num_beam_groups = 2
+
+        scores = self._get_uniform_logits(num_beams, vocab_size)
+        # batch_idx = 0 -> index batch_idx * num_beam_groups -> idx = 0 * 2 = 0 -> penalises tokens 1
+        # batch_idx = 1 -> index batch_idx * num_beam_groups -> idx = 1 * 2 = 2 -> penalises tokens 1
+        current_tokens = torch.tensor([0, 3, 1, 2], device=torch_device, dtype=torch.long)
+
+        diversity_logits_processor = HammingDiversityLogitsProcessor(
+            diversity_penalty=1.0, num_beams=num_beams, num_beam_groups=num_beam_groups
+        )
+
+        processed_scores = diversity_logits_processor(None, scores, current_tokens, 1)
+
+        self.assertTrue(
+            torch.allclose(
+                processed_scores[0], torch.tensor([-0.7500, 0.2500, 0.2500, 0.2500], device=torch_device), atol=1e-3
+            )
+        )
+        self.assertTrue(
+            torch.allclose(
+                processed_scores[1], torch.tensor([0.2500, -0.7500, 0.2500, 0.2500], device=torch_device), atol=1e-3
+            )
+        )

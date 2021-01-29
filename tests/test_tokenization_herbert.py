@@ -19,8 +19,8 @@ import os
 import unittest
 
 from transformers import HerbertTokenizer, HerbertTokenizerFast
+from transformers.models.herbert.tokenization_herbert import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_tokenizers, slow
-from transformers.tokenization_herbert import VOCAB_FILES_NAMES
 
 from .test_tokenization_common import TokenizerTesterMixin
 

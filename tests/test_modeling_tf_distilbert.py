@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers.modeling_tf_distilbert import (
+    from transformers.models.distilbert.modeling_tf_distilbert import (
         TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFDistilBertForMaskedLM,
         TFDistilBertForMultipleChoice,
@@ -91,7 +91,6 @@ class TFDistilBertModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
             initializer_range=self.initializer_range,
-            return_dict=True,
         )
 
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -184,6 +183,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else None
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFDistilBertModelTester(self)

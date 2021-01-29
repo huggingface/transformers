@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import os
 from functools import partial
@@ -7,14 +21,14 @@ import numpy as np
 from tqdm import tqdm
 
 from ...file_utils import is_tf_available, is_torch_available
-from ...tokenization_bert import whitespace_tokenize
-from ...tokenization_utils_base import PreTrainedTokenizerBase, TruncationStrategy
+from ...models.bert.tokenization_bert import whitespace_tokenize
+from ...tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase, TruncationStrategy
 from ...utils import logging
 from .utils import DataProcessor
 
 
 # Store the tokenizers which insert 2 separators tokens
-MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
+MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart", "mpnet"}
 
 
 if is_torch_available():
@@ -145,11 +159,11 @@ def squad_convert_example_to_features(
     # in the way they compute mask of added tokens.
     tokenizer_type = type(tokenizer).__name__.replace("Tokenizer", "").lower()
     sequence_added_tokens = (
-        tokenizer.max_len - tokenizer.max_len_single_sentence + 1
+        tokenizer.model_max_length - tokenizer.max_len_single_sentence + 1
         if tokenizer_type in MULTI_SEP_TOKENS_TOKENIZERS_SET
-        else tokenizer.max_len - tokenizer.max_len_single_sentence
+        else tokenizer.model_max_length - tokenizer.max_len_single_sentence
     )
-    sequence_pair_added_tokens = tokenizer.max_len - tokenizer.max_len_sentences_pair
+    sequence_pair_added_tokens = tokenizer.model_max_length - tokenizer.max_len_sentences_pair
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
@@ -765,6 +779,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
     """
 
     def __init__(
@@ -784,6 +799,7 @@ class SquadFeatures:
         end_position,
         is_impossible,
         qas_id: str = None,
+        encoding: BatchEncoding = None,
     ):
         self.input_ids = input_ids
         self.attention_mask = attention_mask
@@ -802,6 +818,8 @@ class SquadFeatures:
         self.end_position = end_position
         self.is_impossible = is_impossible
         self.qas_id = qas_id
+
+        self.encoding = encoding
 
 
 class SquadResult:
