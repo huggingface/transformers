@@ -1730,26 +1730,40 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
+        unresolved_files = []
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
             else:
                 try:
-                    resolved_vocab_files[file_id] = cached_path(
-                        file_path,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                    )
+                    try:
+                        resolved_vocab_files[file_id] = cached_path(
+                            file_path,
+                            cache_dir=cache_dir,
+                            force_download=force_download,
+                            proxies=proxies,
+                            resume_download=resume_download,
+                            local_files_only=local_files_only,
+                            use_auth_token=use_auth_token,
+                        )
+                    except FileNotFoundError as error:
+                        if local_files_only:
+                            unresolved_files.append(file_id)
+                        else:
+                            raise error
+
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
                         logger.debug(err)
                         resolved_vocab_files[file_id] = None
                     else:
                         raise err
+
+        if len(unresolved_files) > 0:
+            logger.info(
+                f"Can't load following files from cache: {unresolved_files} and cannot check if these "
+                "files are necessary for the tokenizer to operate."
+            )
 
         if all(full_file_name is None for full_file_name in resolved_vocab_files.values()):
             msg = (
@@ -1760,6 +1774,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             raise EnvironmentError(msg)
 
         for file_id, file_path in vocab_files.items():
+            if file_id not in resolved_vocab_files:
+                continue
+
             if file_path == resolved_vocab_files[file_id]:
                 logger.info("loading file {}".format(file_path))
             else:
@@ -2026,14 +2043,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> List[str]:
         """
-        Converts a string in a sequence of tokens, using the backend Rust tokenizer.
-
-        Note that this method behave differently between fast and slow tokenizers:
-
-            - in fast tokenizers (instances of :class:`~transformers.PreTrainedTokenizerFast`), this method will
-              replace the unknown tokens with the :obj:`unk_token`,
-            - in slow tokenizers (instances of :class:`~transformers.PreTrainedTokenizer`), this method keep unknown
-              tokens unchanged.
+        Converts a string in a sequence of tokens, replacing unknown tokens with the :obj:`unk_token`.
 
         Args:
             text (:obj:`str`):

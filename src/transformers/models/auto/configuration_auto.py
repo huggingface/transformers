@@ -28,6 +28,7 @@ from ..blenderbot_small.configuration_blenderbot_small import (
     BlenderbotSmallConfig,
 )
 from ..camembert.configuration_camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
+from ..convbert.configuration_convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig
 from ..ctrl.configuration_ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig
 from ..deberta.configuration_deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig
 from ..distilbert.configuration_distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig
@@ -73,6 +74,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -115,6 +117,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("wav2vec2", Wav2Vec2Config),
+        ("convbert", ConvBertConfig),
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
         ("retribert", RetriBertConfig),
@@ -163,6 +166,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("wav2vec2", "Wav2Vec2"),
+        ("convbert", "ConvBERT"),
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),
         ("retribert", "RetriBERT"),

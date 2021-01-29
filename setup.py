@@ -103,7 +103,7 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
     "jax>=0.2.0",
-    "jaxlib==0.1.55",
+    "jaxlib>=0.1.59",
     "keras2onnx",
     "numpy",
     "onnxconverter-common",

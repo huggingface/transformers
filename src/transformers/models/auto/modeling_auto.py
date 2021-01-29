@@ -59,8 +59,24 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
+
+# Add modeling imports here
+from ..convbert.modeling_convbert import (
+    ConvBertForMaskedLM,
+    ConvBertForMultipleChoice,
+    ConvBertForQuestionAnswering,
+    ConvBertForSequenceClassification,
+    ConvBertForTokenClassification,
+    ConvBertModel,
+)
 from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
-from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
+from ..deberta.modeling_deberta import (
+    DebertaForMaskedLM,
+    DebertaForQuestionAnswering,
+    DebertaForSequenceClassification,
+    DebertaForTokenClassification,
+    DebertaModel,
+)
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -229,6 +245,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
     DistilBertConfig,
@@ -274,6 +291,7 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (Wav2Vec2Config, Wav2Vec2Model),
+        (ConvBertConfig, ConvBertModel),
         (LEDConfig, LEDModel),
         (BlenderbotSmallConfig, BlenderbotSmallModel),
         (RetriBertConfig, RetriBertModel),
@@ -353,6 +371,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
+        (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -382,6 +401,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
@@ -412,10 +432,12 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
+        (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
+        (MBartConfig, MBartForConditionalGeneration),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (LongformerConfig, LongformerForMaskedLM),
@@ -430,6 +452,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
@@ -455,6 +478,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
@@ -487,6 +511,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
@@ -507,6 +532,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
+        (DebertaConfig, DebertaForQuestionAnswering),
     ]
 )
 
@@ -520,6 +546,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
@@ -537,12 +564,14 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
         (MPNetConfig, MPNetForTokenClassification),
+        (DebertaConfig, DebertaForTokenClassification),
     ]
 )
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
