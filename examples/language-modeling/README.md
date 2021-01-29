@@ -131,10 +131,7 @@ should be added `##`.
 It works well on so many Chines Task like CLUE (Chinese GLUE). They use LTP, so if we want to fine-tune their model,
 we need LTP.
 
-Now LTP only only works well on `transformers==3.2.0`. So we don't add it to requirements.txt.
-You need to create a separate environment with this version of Transformers to run the `run_chinese_ref.py` script that
-will create the reference files. The script is in `examples/contrib`. Once in the proper environment, run the
-following:
+You could run the following:
 
 
 ```bash
@@ -143,7 +140,7 @@ export LTP_RESOURCE=/path/to/ltp/tokenizer
 export BERT_RESOURCE=/path/to/bert/tokenizer
 export SAVE_PATH=/path/to/data/ref.txt
 
-python examples/contrib/run_chinese_ref.py \
+python run_chinese_ref.py \
     --file_name=path_to_train_or_eval_file \
     --ltp=path_to_ltp_tokenizer \
     --bert=path_to_bert_tokenizer \
