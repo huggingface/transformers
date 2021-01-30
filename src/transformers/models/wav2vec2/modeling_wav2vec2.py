@@ -630,7 +630,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> hidden_states = model(input_ids).hidden_states
+            >>> hidden_states = model(input_values).last_hidden_state
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -692,7 +692,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             >>> import soundfile as sf
 
             >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
-            >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -703,7 +703,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             >>> ds = ds.map(map_to_array)
 
             >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> logits = model(input_ids).logits
+            >>> logits = model(input_values).logits
 
             >>> predicted_ids = torch.argmax(logits, dim=-1)
             >>> transcription = tokenizer.decode(predicted_ids[0])
