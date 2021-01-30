@@ -54,7 +54,8 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 
 # Integration functions:
 def is_wandb_available():
-    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
+    # any value of WANDB_DISABLED disables wandb
+    if len(os.getenv("WANDB_DISABLED", "")):
         return False
     return importlib.util.find_spec("wandb") is not None
 
