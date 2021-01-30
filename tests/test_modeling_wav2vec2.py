@@ -128,8 +128,7 @@ class Wav2Vec2ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values = self.prepare_config_and_inputs()
-        # input has to be called `input_ids`
-        inputs_dict = {"input_ids": input_values}
+        inputs_dict = {"input_values": input_values}
         return config, inputs_dict
 
 
@@ -145,6 +144,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_headmasking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(self)
@@ -159,6 +159,10 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
+        pass
+
+    # `input_ids` is renamed to `input_values`
+    def test_forward_signature(self):
         pass
 
     # Wav2Vec2 cannot resize token embeddings
@@ -204,6 +208,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Wav2Vec2Model, Wav2Vec2ForMaskedLM) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = Wav2Vec2ModelTester(
@@ -220,6 +225,10 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
+        pass
+
+    # `input_ids` is renamed to `input_values`
+    def test_forward_signature(self):
         pass
 
     # Wav2Vec2 cannot resize token embeddings
