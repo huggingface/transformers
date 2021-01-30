@@ -163,13 +163,14 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
             logger.info(f"Copy vocab file to {out_vocab_file}")
 
-        out_tokenizer_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tokenizer_file"]
-        )
-
-        if os.path.abspath(self.tokenizer_file) != os.path.abspath(out_tokenizer_file):
-            copyfile(self.tokenizer_file, out_tokenizer_file)
-            logger.info(f"Copy tokenizer file to {out_tokenizer_file}")
+        if self.tokenizer_file is not None:
+            out_tokenizer_file = os.path.join(
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["tokenizer_file"],
+            )
+            if os.path.abspath(self.tokenizer_file) != os.path.abspath(out_tokenizer_file):
+                copyfile(self.tokenizer_file, out_tokenizer_file)
+                logger.info(f"Copy tokenizer file to {out_tokenizer_file}")
 
         return (out_vocab_file,)
 
