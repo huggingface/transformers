@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "fill_later": "https://huggingface.co/fill_later/resolve/main/config.json",
+    "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wave2vec2-base-960h/resolve/main/config.json",
     # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
 }
 
@@ -58,21 +58,39 @@ class Wav2Vec2Config(PretrainedConfig):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.Wav2Vec2Model`
-            or :class:`~transformers.TFWav2Vec2Model`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+        feat_extract_norm= (:obj:`str`, `optional`, defaults to :obj:`"group"`):
+            The norm to be applied to 1D convolutional layers in feature extractor. One of :obj:`"group"` for group
+            normalization of only the first 1D convolutional layer or :obj:`"layer"` for layer normalization of all 1D
+            convolutional layers.
+        feat_extract_dropout (:obj:`float`, `optional`, defaults to 0.0):
+            The dropout probabilitiy for all 1D convolutional layers in feature extractor.
+        feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
+            The non-linear activation function (function or string) in the 1D convolutional layers of the feature
+            extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+        conv_dim (:obj:`tuple(int)`, `optional`, defaults to :obj:`(512, 512, 512, 512, 512, 512, 512)`):
+            A tuple of integers defining the number of input and output channels of each 1D convolutional layers in
+            feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
+        conv_stride (:obj:`tuple(int)`, `optional`, defaults to :obj:`(5, 2, 2, 2, 2, 2, 2)`):
+            A tuple of integers defining the stride of each convolutional layers in feature extractor. The length of
+            `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
+        conv_kernel (:obj:`tuple(int)`, `optional`, defaults to :obj:`(10, 3, 3, 3, 3, 3, 3)`):
+            A tuple of integers defining the kernel size of each convolutional layers in feature extractor. The length
+            of `conv_kernel` defines the number of convolutional layers and has to match the the length of `conv_dim`.
+        conv_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether the 1D convolutional layers have a bias.
+        num_conv_pos_embeddings (:obj:`int`, `optional`, defaults to 128):
+            Number of convolutional positional embeddings. Defines the kernel size of 1D convolutional positional
+            embeddings layer.
+        num_conv_pos_embedding_groups (:obj:`int`, `optional`, defaults to 16):
+            Number of groups of 1D convolutional positional embeddings layer.
+        do_stable_layer_norm  (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether do apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
+            True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
+            False` corresponds to applying layer norm after the attention layer.
 
         Example::
 
@@ -91,7 +109,16 @@ class Wav2Vec2Config(PretrainedConfig):
 
     def __init__(
         self,
+        vocab_size=32,
         hidden_size=1024,
+        num_hidden_layers=24,
+        num_attention_heads=16,
+        intermediate_size=4096,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
+        attention_probs_dropout_prob=0.1,  # this is most likely not correctly set yet
+        initializer_range=0.02,
+        layer_norm_eps=1e-5,
         feat_extract_norm="group",
         feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
@@ -101,18 +128,13 @@ class Wav2Vec2Config(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
-        intermediate_size=4096,
-        layer_norm_eps=1e-5,
-        hidden_act="gelu",
-        initializer_range=0.02,
-        vocab_size=32,
         do_stable_layer_norm=False,
+        pad_token_id=0,
+        bos_token_id=1,
+        eos_token_id=2,
         **kwargs
     ):
-        super().__init__(**kwargs)
+        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
         self.feat_extract_norm = feat_extract_norm
         self.feat_extract_dropout = feat_extract_dropout
@@ -129,6 +151,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
         self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size

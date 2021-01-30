@@ -92,7 +92,7 @@ class Wav2Vec2ModelTester:
         self.encoder_seq_length = self.output_seq_length
 
     def prepare_config_and_inputs(self):
-        input_ids = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_values = floats_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = Wav2Vec2Config(
             hidden_size=self.hidden_size,
@@ -115,20 +115,21 @@ class Wav2Vec2ModelTester:
             vocab_size=self.vocab_size,
         )
 
-        return config, input_ids
+        return config, input_values
 
-    def create_and_check_model(self, config, input_ids):
+    def create_and_check_model(self, config, input_values):
         model = Wav2Vec2Model(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids)
+        result = model(input_values)
         self.parent.assertEqual(
             result.last_hidden_state.shape, (self.batch_size, self.output_seq_length, self.hidden_size)
         )
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_ids = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids}
+        config, input_values = self.prepare_config_and_inputs()
+        # input has to be called `input_ids`
+        inputs_dict = {"input_ids": input_values}
         return config, inputs_dict
 
 
@@ -288,10 +289,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
 
-        input_ids = tokenizer(input_speech, return_tensors="pt").input_ids.to(torch_device)
+        input_values = tokenizer(input_speech, return_tensors="pt").input_values.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_ids).logits
+            logits = model(input_values).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = tokenizer.batch_decode(predicted_ids)
@@ -307,12 +308,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(2)
 
-        input_ids = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_ids.to(
+        input_values = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_values.to(
             torch_device
         )
 
         with torch.no_grad():
-            logits = model(input_ids).logits
+            logits = model(input_values).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = tokenizer.batch_decode(predicted_ids)
@@ -330,12 +331,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         input_speech = self._load_datasamples(4)
 
-        input_ids = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_ids.to(
+        input_values = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True).input_values.to(
             torch_device
         )
 
         with torch.no_grad():
-            logits = model(input_ids).logits
+            logits = model(input_values).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = tokenizer.batch_decode(predicted_ids)
