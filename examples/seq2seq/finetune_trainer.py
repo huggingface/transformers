@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import transformers
+from seq2seq_trainer import Seq2SeqTrainer
+from seq2seq_training_args import Seq2SeqTrainingArguments
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -31,8 +33,6 @@ from transformers import (
 )
 from transformers.trainer_utils import EvaluationStrategy, is_main_process
 from transformers.training_args import ParallelMode
-from seq2seq_trainer import Seq2SeqTrainer
-from seq2seq_training_args import Seq2SeqTrainingArguments
 from utils import (
     Seq2SeqDataCollator,
     Seq2SeqDataset,
