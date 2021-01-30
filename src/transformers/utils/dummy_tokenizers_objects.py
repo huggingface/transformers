@@ -263,15 +263,6 @@ class T5TokenizerFast:
         requires_tokenizers(self)
 
 
-class Wav2Vec2TokenizerFast:
-    def __init__(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-
 class XLMRobertaTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)

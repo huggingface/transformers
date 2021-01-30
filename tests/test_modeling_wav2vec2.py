@@ -199,7 +199,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         # TODO(PVP): change to facebook before release
-        model = Wav2Vec2Model.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
 
@@ -265,7 +265,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         # TODO(PVP): change to facebook before release
-        model = Wav2Vec2Model.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
 
@@ -292,9 +292,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_masked_lm_normal(self):
         # TODO(PVP): change to facebook before release
-        model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
         model.to(torch_device)
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
 
         input_speech = self._load_datasamples(1)
 
@@ -311,9 +311,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_masked_lm_normal_batched(self):
         # TODO(PVP): change to facebook before release
-        model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
         model.to(torch_device)
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
 
         input_speech = self._load_datasamples(2)
 
@@ -335,8 +335,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_masked_lm_robust_batched(self):
         # TODO(PVP): change to facebook before release
-        model = Wav2Vec2ForMaskedLM.from_pretrained("patrickvonplaten/wav2vec2-large-960h-lv60-self").to(torch_device)
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h", do_lower_case=True)
+        model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-large-960h-lv60-self").to(torch_device)
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h", do_lower_case=True)
 
         input_speech = self._load_datasamples(4)
 

@@ -94,10 +94,10 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = {
         "vocab_file": {
-            "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/vocab.json"
+            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/tokenizer.json",
+            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
         },
     }
 

@@ -10,22 +10,32 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-WAV_2_VEC_2
+WAV2VEC2
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Wav2Vec2 model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The Wav2Vec2 model was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
+<https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*We show for the first time that learning powerful representations from speech audio alone followed by fine-tuning on
+transcribed speech can outperform the best semi-supervised methods while being conceptually simpler. wav2vec 2.0 masks
+the speech input in the latent space and solves a contrastive task defined over a quantization of the latent
+representations which are jointly learned. Experiments using all labeled data of Librispeech achieve 1.8/3.3 WER on the
+clean/other test sets. When lowering the amount of labeled data to one hour, wav2vec 2.0 outperforms the previous state
+of the art on the 100 hour subset while using 100 times less labeled data. Using just ten minutes of labeled data and
+pre-training on 53k hours of unlabeled data still achieves 4.8/8.2 WER. This demonstrates the feasibility of speech
+recognition with limited amounts of labeled data.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- Wav2Vec2 is a speech model, which means that the model accepts a float array corresponding to the raw waveform
+- Wav2Vec2 model was trained in connectionist temporal classification (CTC) so that the model output has to be decoded
+  using :obj:`~transformers.Wav2Vec2Tokenizer`.
+
 
 Wav2Vec2Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -38,8 +48,7 @@ Wav2Vec2Tokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.Wav2Vec2Tokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+    :members: __call__, save_vocabulary
 
 
 Wav2Vec2Model

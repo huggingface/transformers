@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wave2vec2-base-960h/resolve/main/config.json",
+    "facebook/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wave2vec2-base-960h/resolve/main/config.json",
     # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
 }
 
@@ -62,7 +62,7 @@ class Wav2Vec2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        feat_extract_norm= (:obj:`str`, `optional`, defaults to :obj:`"group"`):
+        feat_extract_norm (:obj:`str`, `optional`, defaults to :obj:`"group"`):
             The norm to be applied to 1D convolutional layers in feature extractor. One of :obj:`"group"` for group
             normalization of only the first 1D convolutional layer or :obj:`"layer"` for layer normalization of all 1D
             convolutional layers.
@@ -87,10 +87,10 @@ class Wav2Vec2Config(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (:obj:`int`, `optional`, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
-        do_stable_layer_norm  (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        do_stable_layer_norm (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether do apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
             True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
-            False` corresponds to applying layer norm after the attention layer.
+            False`` corresponds to applying layer norm after the attention layer.
 
         Example::
 

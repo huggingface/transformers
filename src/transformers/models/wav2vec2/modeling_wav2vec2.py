@@ -35,7 +35,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "patrickvonplaten/wav2vec2-base-960h"
+    "facebook/wav2vec2-base-960h"
     # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
 ]
 
@@ -618,8 +618,8 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
-            >>> model = Wav2Vec2Model.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -691,8 +691,8 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
-            >>> model = Wav2Vec2Model.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])

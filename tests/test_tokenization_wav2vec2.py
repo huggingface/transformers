@@ -99,7 +99,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
     def test_tokenizer_decode(self):
         # TODO(PVP) - change to facebook
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
 
         sample_ids = [
             [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98],
@@ -112,7 +112,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
     def test_tokenizer_decode_special(self):
         # TODO(PVP) - change to facebook
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
 
         sample_ids = [
             [11, 5, 15, tokenizer.pad_token_id, 15, 8, 98],
@@ -143,7 +143,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
 
     def test_tokenizer_decode_added_tokens(self):
         # TODO(PVP) - change to facebook
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained("patrickvonplaten/wav2vec2-base-960h")
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer.add_tokens(["!", "?"])
         tokenizer.add_special_tokens({"cls_token": "$$$"})
 
