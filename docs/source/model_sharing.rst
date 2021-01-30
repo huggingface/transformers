@@ -60,7 +60,7 @@ Basic steps
 In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
 users to clone it and you (and your organization members) to push to it.
 
-You can create a model repo **directly from `the /new page on the website <https://huggingface.co/new>`__.**
+You can create a model repo directly from `the /new page on the website <https://huggingface.co/new>`__.
 
 Alternatively, you can use the ``transformers-cli``. The next steps describe that process:
 
