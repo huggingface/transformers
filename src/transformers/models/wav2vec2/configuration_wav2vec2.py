@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wave2vec2-base-960h/resolve/main/config.json",
+    "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/config.json",
     # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
 }
 
@@ -38,7 +38,7 @@ class Wav2Vec2Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+        vocab_size (:obj:`int`, `optional`, defaults to 32):
             Vocabulary size of the Wav2Vec2 model. Defines the number of different tokens that can be represented by
             the :obj:`inputs_ids` passed when calling :class:`~transformers.Wav2Vec2Model` or
             :class:`~transformers.TFWav2Vec2Model`. Vocabulary size of the model. Defines the different tokens that can
@@ -72,14 +72,15 @@ class Wav2Vec2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         conv_dim (:obj:`tuple(int)`, `optional`, defaults to :obj:`(512, 512, 512, 512, 512, 512, 512)`):
-            A tuple of integers defining the number of input and output channels of each 1D convolutional layers in
+            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
         conv_stride (:obj:`tuple(int)`, `optional`, defaults to :obj:`(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each convolutional layers in feature extractor. The length of
-            `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
+            A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
+            of `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
         conv_kernel (:obj:`tuple(int)`, `optional`, defaults to :obj:`(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each convolutional layers in feature extractor. The length
-            of `conv_kernel` defines the number of convolutional layers and has to match the the length of `conv_dim`.
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature extractor. The
+            length of `conv_kernel` defines the number of convolutional layers and has to match the the length of
+            `conv_dim`.
         conv_bias (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether the 1D convolutional layers have a bias.
         num_conv_pos_embeddings (:obj:`int`, `optional`, defaults to 128):
@@ -110,13 +111,13 @@ class Wav2Vec2Config(PretrainedConfig):
     def __init__(
         self,
         vocab_size=32,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        intermediate_size=4096,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        intermediate_size=3072,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,  # this is most likely not correctly set yet
-        attention_probs_dropout_prob=0.1,  # this is most likely not correctly set yet
+        hidden_dropout_prob=0.1,  # TODO(PVP) this is most likely not correctly set yet - correct when adding train
+        attention_probs_dropout_prob=0.1,  # TODO(PVP) this is most likely not correctly set yet - correct when adding train
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         feat_extract_norm="group",
