@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
+from ...file_utils import add_end_docstrings
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TensorType
 from ...utils import logging
@@ -35,27 +36,57 @@ VOCAB_FILES_NAMES = {
 }
 
 
+WAV2VEC2_KWARGS_DOCSTRING = r"""
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+                Activates and controls padding. Accepts the following values:
+
+                * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
+                  single sequence if provided).
+                * :obj:`'max_length'`: Pad to a maximum length specified with the argument :obj:`max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
+                  different lengths).
+            max_length (:obj:`int`, `optional`):
+                Controls the maximum length to use by one of the truncation/padding parameters.
+
+                If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
+                length is required by one of the truncation/padding parameters. If the model has no specific maximum
+                input length (like XLNet) truncation/padding to a maximum length will be deactivated.
+            pad_to_multiple_of (:obj:`int`, `optional`):
+                If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
+                the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+            verbose (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to print more information and warnings.
+"""
+
+
 class Wav2Vec2Tokenizer(PreTrainedTokenizer):
     """
-    Constructs a Blenderbot-90M tokenizer based on BPE (Byte-Pair-Encoding)
+    Constructs a Wav2Vec2 tokenizer.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to the superclass for more information regarding methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains some of the main methods.
+    Users should refer to the superclass for more information regarding such methods.
 
     Args:
         vocab_file (:obj:`str`):
             File containing the vocabulary.
-        merges_file (:obj:`str`):
-            Path to the merges file.
-        bos_token (:obj:`str`, `optional`, defaults to :obj:`"__start__"`):
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
             The beginning of sentence token.
-        eos_token (:obj:`str`, `optional`, defaults to :obj:`"__end__"`):
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sentence token.
-        unk_token (:obj:`str`, `optional`, defaults to :obj:`"__unk__"`):
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (:obj:`str`, `optional`, defaults to :obj:`"__pad__"`):
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`"|"`):
+            The token used for defining the end of a word.
         **kwargs
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
@@ -66,8 +97,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "facebook/blenderbot_small-90M": "https://huggingface.co/facebook/blenderbot_small-90M/resolve/main/tokenizer.json",
-            "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+            "patrickvonplaten/wav2vec2-base-960h": "https://huggingface.co/patrickvonplaten/wav2vec2-base-960h/resolve/main/tokenizer.json",
         },
     }
 
@@ -126,9 +156,10 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
     def word_delimiter_token_id(self, value):
         self._word_delimiter_token = self.convert_tokens_to_ids(value)
 
+    @add_end_docstrings(WAV2VEC2_KWARGS_DOCSTRING)
     def __call__(
         self,
-        raw_speech: Union[np.array, List[float], List[np.array], List[List[float]]],
+        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
@@ -136,6 +167,15 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+        """
+        Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
+        sequences.
+
+        Args:
+            raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
+                values, a list of numpy arrayr or a list of list of float values.
+        """
 
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))

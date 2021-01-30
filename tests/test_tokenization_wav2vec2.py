@@ -211,49 +211,43 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
         input_values_1 = tokenizer(speech_inputs).input_values
-        input_values_2 = tokenizer(speech_inputs, truncation=True).input_values
-        input_values_3 = tokenizer(speech_inputs, padding="longest").input_values
-        input_values_4 = tokenizer(speech_inputs, padding="longest", truncation=True).input_values
-        input_values_5 = tokenizer(speech_inputs, padding="longest", max_length=1600, trucation=True).input_values
+        input_values_2 = tokenizer(speech_inputs, padding="longest").input_values
+        input_values_3 = tokenizer(speech_inputs, padding="longest", max_length=1600).input_values
 
         self.assertFalse(_input_values_have_equal_length(input_values_1))
-        self.assertFalse(_input_values_have_equal_length(input_values_2))
+        self.assertTrue(_input_values_have_equal_length(input_values_2))
         self.assertTrue(_input_values_have_equal_length(input_values_3))
-        self.assertTrue(_input_values_have_equal_length(input_values_4))
-        self.assertTrue(_input_values_have_equal_length(input_values_5))
-        self.assertTrue(_input_values_are_equal(input_values_1, input_values_2))
-        self.assertTrue(_input_values_are_equal(input_values_3, input_values_4))
-        self.assertTrue(_input_values_are_equal(input_values_3, input_values_5))
+        self.assertTrue(_input_values_are_equal(input_values_2, input_values_3))
         self.assertTrue(len(input_values_1[0]) == 800)
-        self.assertTrue(len(input_values_3[0]) == 1200)
+        self.assertTrue(len(input_values_2[0]) == 1200)
         # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_values_3[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_3[1])[1000:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_2[0])[800:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_2[1])[1000:])) < 1e-3)
 
-        input_values_6 = tokenizer(speech_inputs, padding="max_length").input_values
-        input_values_7 = tokenizer(speech_inputs, padding="max_length", max_length=1600).input_values
+        input_values_4 = tokenizer(speech_inputs, padding="max_length").input_values
+        input_values_5 = tokenizer(speech_inputs, padding="max_length", max_length=1600).input_values
 
-        self.assertTrue(_input_values_are_equal(input_values_1, input_values_6))
-        self.assertTrue(input_values_7.shape, (3, 1600))
+        self.assertTrue(_input_values_are_equal(input_values_1, input_values_4))
+        self.assertTrue(input_values_5.shape, (3, 1600))
         # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_values_7[0])[800:1200])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_5[0])[800:1200])) < 1e-3)
 
-        input_values_8 = tokenizer(speech_inputs, pad_to_multiple_of=500).input_values
-        input_values_9 = tokenizer(speech_inputs, padding="longest", pad_to_multiple_of=500).input_values
-        input_values_10 = tokenizer(
+        input_values_6 = tokenizer(speech_inputs, pad_to_multiple_of=500).input_values
+        input_values_7 = tokenizer(speech_inputs, padding="longest", pad_to_multiple_of=500).input_values
+        input_values_8 = tokenizer(
             speech_inputs, padding="max_length", pad_to_multiple_of=500, max_length=2400
         ).input_values
 
-        self.assertTrue(_input_values_are_equal(input_values_1, input_values_8))
-        self.assertTrue(input_values_9.shape, (3, 1500))
-        self.assertTrue(input_values_10.shape, (3, 2500))
+        self.assertTrue(_input_values_are_equal(input_values_1, input_values_6))
+        self.assertTrue(input_values_7.shape, (3, 1500))
+        self.assertTrue(input_values_8.shape, (3, 2500))
         # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_values_9[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_9[1])[1000:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_9[2])[1200:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_10[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_10[1])[1000:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_values_10[2])[1200:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_7[0])[800:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_7[1])[1000:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_7[2])[1200:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_8[0])[800:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_8[1])[1000:])) < 1e-3)
+        self.assertTrue(abs(sum(np.asarray(input_values_8[2])[1200:])) < 1e-3)
 
     def test_save_pretrained(self):
         pretrained_name = list(self.tokenizer_class.pretrained_vocab_files_map["vocab_file"].keys())[0]
