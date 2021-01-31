@@ -152,12 +152,35 @@ class M2M100MTSinusoidalPositionalEmbedding(nn.Embedding):
         return emb
 
     @torch.no_grad()
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+    def forward(
+        self, input_ids: torch.Tensor = None, inputs_embeds: torch.Tensor = None, past_key_values_length: int = 0
+    ):
         self.weights = self.weights.to(self._float_tensor)
-        position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
-            input_ids.device
-        )
+        if input_ids is not None:
+            # Create the position ids from the input token ids. Any padded tokens remain padded.
+            position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
+                input_ids.device
+            )
+        else:
+            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
         return self.weights.index_select(0, positions.view(-1)).view(bsz, seq_len, -1).detach()
+
+    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape)
 
 
 class M2M100MTAttention(nn.Module):
@@ -678,7 +701,7 @@ class M2M100MTEncoder(M2M100MTPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(input_ids, inputs_embeds)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -870,7 +893,7 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
 
