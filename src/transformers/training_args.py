@@ -148,7 +148,9 @@ class TrainingArguments:
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
-            Random seed for initialization.
+            Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
+            :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
+            initialized parameters.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
@@ -337,7 +339,7 @@ class TrainingArguments:
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
-    seed: int = field(default=42, metadata={"help": "random seed for initialization"})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
 
     fp16: bool = field(
         default=False,
