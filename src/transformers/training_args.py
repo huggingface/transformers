@@ -339,7 +339,7 @@ class TrainingArguments:
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
-    seed: int = field(default=42, metadata={"help": "Random seed for initialization of the model's weights"})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
 
     fp16: bool = field(
         default=False,
