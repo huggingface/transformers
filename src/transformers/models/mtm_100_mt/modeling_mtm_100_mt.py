@@ -594,7 +594,6 @@ class M2M100MTEncoder(M2M100MTPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([M2M100MTEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(embed_dim)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -662,7 +661,6 @@ class M2M100MTEncoder(M2M100MTPreTrainedModel):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -741,7 +739,6 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([M2M100MTDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -856,7 +853,6 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
