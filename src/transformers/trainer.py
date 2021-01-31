@@ -268,9 +268,9 @@ class Trainer:
 
             # arg parser
             pp_args = {}
-            args = self.args.pipeline.split()
-            if len(args):
-                for x in args:
+            pp_args_str = self.args.pipeline.split()
+            if len(pp_args_str):
+                for x in pp_args_str:
                     k,v = x.split("=")
                     pp_args[k] = v
 

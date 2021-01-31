@@ -1646,10 +1646,11 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             logger.warn(f"{log_prefix} DP group { mpu.get_data_parallel_group_device_ids() }")
 
             this_proc_device_ids = mpu.get_model_parallel_group_device_ids()
-            #logger.warn(f"{log_prefix} MP group {this_proc_device_ids }")
+            logger.warn(f"{log_prefix} PP group {this_proc_device_ids } [MPU]")
 
             # XXX: automate this:
-            # I think we might be getting the right groups already in this_proc_device_ids
+            # We must be getting the right groups already from get_model_parallel_group_device_ids()
+            # If we don't then deepspeed isn't getting the right groups - and it'd break
             if dist_world_size == 4:
                 if dist_rank == 0:
                     this_proc_device_ids = [0, 1]
@@ -1665,7 +1666,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             log_prefix = f"[p0]"
             this_proc_device_ids = list(range(torch.cuda.device_count()))
 
-        logger.warn(f"{log_prefix} MP group {this_proc_device_ids }")
+        logger.warn(f"{log_prefix} PP group {this_proc_device_ids }")
         #logger.warn(f"{log_prefix} uses MP/PP device ids: {this_proc_device_ids}")
 
         n_gpus = len(this_proc_device_ids)
@@ -1710,7 +1711,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             self.device_map = device_map
 
         self.pipeline_is_enabled = True
-        logger.warn(f"{log_prefix} uses PP partitioning: {self.device_map}")
+        logger.warn(f"{log_prefix} PP partitions: {self.device_map}")
 
         # XXX: validate chunks is a good arg
 
