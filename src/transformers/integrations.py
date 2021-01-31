@@ -252,7 +252,7 @@ def rewrite_logs(d):
     return new_d
 
 
-# adjusted from Megatron-LM/mpu/
+
 import torch
 
 
@@ -261,12 +261,11 @@ _MODEL_PARALLEL_GROUP = None
 _MODEL_PARALLEL_GROUP_DEVICE_IDS = None
 # Data parallel group that the current rank belongs to.
 _DATA_PARALLEL_GROUP = None
+_DATA_PARALLEL_GROUP_DEVICE_IDS = None
 
+# adjusted from Megatron-LM/mpu/
 class MPU:
-    def __init__(self, n_gpus):
-        self.n_gpus = n_gpus
-
-    def initialize_model_parallel(self):
+    def initialize_model_parallel(self, model_parallel_size_):
         """
         Initialize model data parallel groups.
 
@@ -297,8 +296,6 @@ class MPU:
 
         """
 
-        model_parallel_size_ = self.n_gpus
-
         def ensure_divisibility(numerator, denominator):
             """Ensure that numerator is divisible by the denominator."""
             assert numerator % denominator == 0, "{} is not divisible by {}".format(numerator, denominator)
@@ -312,10 +309,13 @@ class MPU:
         ensure_divisibility(world_size, model_parallel_size)
         rank = torch.distributed.get_rank()
 
-        #print(f"MP size: {model_parallel_size}")
+        print(f"MP size: {model_parallel_size}")
+        print(f"world_size: {world_size}")
+        print(f"rank: {rank}")
 
         # Build the data parallel groups.
         global _DATA_PARALLEL_GROUP
+        global _DATA_PARALLEL_GROUP_DEVICE_IDS
         assert _DATA_PARALLEL_GROUP is None, "data parallel group is already initialized"
         for i in range(model_parallel_size):
             ranks = range(i, world_size, model_parallel_size)
@@ -323,6 +323,7 @@ class MPU:
             if i == (rank % model_parallel_size):
                 #print(f"DP ranks: {list(ranks)}")
                 _DATA_PARALLEL_GROUP = group
+                _DATA_PARALLEL_GROUP_DEVICE_IDS = list(ranks)
 
         # Build the model parallel groups.
         global _MODEL_PARALLEL_GROUP
@@ -343,7 +344,7 @@ class MPU:
         return True
 
     def get_model_parallel_group_device_ids(self):
-        """Get the model parallel group the caller rank belongs to."""
+        """Get the model parallel device ids of the group the caller rank belongs to."""
         assert _MODEL_PARALLEL_GROUP is not None, "model parallel group is not initialized"
         return _MODEL_PARALLEL_GROUP_DEVICE_IDS
 
@@ -351,6 +352,11 @@ class MPU:
         """Get the model parallel group the caller rank belongs to."""
         assert _MODEL_PARALLEL_GROUP is not None, "model parallel group is not initialized"
         return _MODEL_PARALLEL_GROUP
+
+    def get_data_parallel_group_device_ids(self):
+        """Get the data parallel device ids of the group the caller rank belongs to."""
+        assert _DATA_PARALLEL_GROUP is not None, "data parallel group is not initialized"
+        return _DATA_PARALLEL_GROUP_DEVICE_IDS
 
     def get_data_parallel_group(self):
         """Get the data parallel group the caller rank belongs to."""
@@ -385,9 +391,11 @@ class MPU:
         global _MODEL_PARALLEL_GROUP
         global _MODEL_PARALLEL_GROUP_DEVICE_IDS
         global _DATA_PARALLEL_GROUP
+        global _DATA_PARALLEL_GROUP_DEVICE_IDS
         _MODEL_PARALLEL_GROUP = None
         _MODEL_PARALLEL_GROUP_DEVICE_IDS = None
         _DATA_PARALLEL_GROUP = None
+        _DATA_PARALLEL_GROUP_DEVICE_IDS = None
 
 
 def init_deepspeed(trainer, num_training_steps, mpu):

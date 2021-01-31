@@ -357,7 +357,7 @@ class TrainingArguments:
     pipeline: str = field(
         default="",
         metadata={
-            "help": "Whether to enable Pipeline Parallelism and the value is pipeline params: 'chunks=5; device_map=0:1-10,1:11-20'"
+            "help": "Whether to enable Pipeline Parallelism and the value is pipeline params: 'chunks=5 device_map=0:1-10,1:10-20 n_gpus_per_pp=2"
         },
     )
 

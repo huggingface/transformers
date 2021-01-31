@@ -253,6 +253,7 @@ class T5LayerNorm(nn.Module):
         # convert into float16 if necessary
         if self.weight.dtype == torch.float16:
             hidden_states = hidden_states.to(torch.float16)
+
         return self.weight * hidden_states
 
 
@@ -1098,9 +1099,9 @@ class T5Stack(T5PreTrainedModel):
 
         # crazy flattening of 2 level tuples so that the batch dimension is first to be spliced upon and then restored on the other side
         if past_key_values is not None:
-            x1 = tuple(past_key_values[i][j].to(0) for i in range(len(past_key_values)) for j in [0, 1])
+            x1 = tuple(past_key_values[i][j].to(input_ids.device) for i in range(len(past_key_values)) for j in [0, 1])
             # for i in x1: print(i.shape)
-            x2 = tuple(past_key_values[i][j].to(0) for i in range(len(past_key_values)) for j in [2, 3])
+            x2 = tuple(past_key_values[i][j].to(input_ids.device) for i in range(len(past_key_values)) for j in [2, 3])
             # for i in x2: print(i.shape)
             past_key_values_p1 = torch.cat(x1, 1)
             past_key_values_p2 = torch.cat(x2, 1)
@@ -1110,8 +1111,8 @@ class T5Stack(T5PreTrainedModel):
             past_key_values_p2 = None
 
         # batch_size=2, blocks=self.n_layers, fixed=2 (2+2 keys)
-        present_key_values_p1 = torch.empty(batch_size, n_layers * 2).to(0)
-        present_key_values_p2 = torch.empty(batch_size, n_layers * 2).to(0)
+        present_key_values_p1 = torch.empty(batch_size, n_layers * 2).to(input_ids.device)
+        present_key_values_p2 = torch.empty(batch_size, n_layers * 2).to(input_ids.device)
 
         # rewrite the model after pre-trained weights were loaded
         layers = [
@@ -1207,7 +1208,7 @@ class T5Stack(T5PreTrainedModel):
             for block in present_key_value_states:
                 new_y = ()
                 for j in (0, 1, 2, 3):
-                    entries = tuple(block[i][j].to(0) for i in range(real_chunks))
+                    entries = tuple(block[i][j].to(input_ids.device) for i in range(real_chunks))
                     new_y += (torch.cat(entries, 0),)
                 new_x += (new_y,)
             present_key_value_states = new_x
@@ -1628,16 +1629,49 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # XXX: should be a separate function
         import torch
 
+
+        try:
+            # will succeed if rpc has started (deepspeed launcher)
+            dist_world_size = torch.distributed.get_world_size()
+            dist_rank = torch.distributed.get_rank()
+        except:
+            dist_world_size = 1
+            dist_rank = 0
+
+        #dist_world_size=1
+
         if mpu is not None:
+            log_prefix = f"[p{dist_rank}]"
+            #logger.warn(f"{log_prefix} got MPU")
+            logger.warn(f"{log_prefix} DP group { mpu.get_data_parallel_group_device_ids() }")
+
             this_proc_device_ids = mpu.get_model_parallel_group_device_ids()
+            #logger.warn(f"{log_prefix} MP group {this_proc_device_ids }")
+
+            # XXX: automate this:
+            # I think we might be getting the right groups already in this_proc_device_ids
+            if dist_world_size == 4:
+                if dist_rank == 0:
+                    this_proc_device_ids = [0, 1]
+                else:
+                    this_proc_device_ids = [2, 3]
+            elif dist_world_size == 2:
+                if dist_rank == 0:
+                    this_proc_device_ids = [0]
+                else:
+                    this_proc_device_ids = [1]
+
         else:
+            log_prefix = f"[p0]"
             this_proc_device_ids = list(range(torch.cuda.device_count()))
 
-        logger.info(f"process { torch.distributed.get_rank() } uses MP/PP device ids: {this_proc_device_ids}")
+        logger.warn(f"{log_prefix} MP group {this_proc_device_ids }")
+        #logger.warn(f"{log_prefix} uses MP/PP device ids: {this_proc_device_ids}")
 
         n_gpus = len(this_proc_device_ids)
-        if n_gpus < 2:
-            raise ValueError("Need at least 2 gpus to use the pipeline")
+        # XXX: restore this later
+        # if n_gpus < 2:
+        #     raise ValueError("Need at least 2 gpus to use the pipeline")
 
         if device_map is not None:
             logger.info(f"using user-provided device_map")
@@ -1661,6 +1695,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         # 2D parallel - i.e. deepspeed + pp
         if mpu is not None:
             # we need to assign the correct set of IDs for this process - that we get from MPU
+            # in case of 2D the user describes the device map only for the first group of DP
+            # and we need to re-assign the ids for the rest of the groups, so say a user passes a device map:
+            # 0:0-7, 1:7-14
+            # for process rank 0 it remains that, but for process rank 1 it should become:
+            # 2:0-7, 3:7-14
+            # and so on.
+            # MPU gives us the correct local MP group (this_proc_device_ids)
             remapped_device_map = {}
             for i, id in enumerate(device_map.keys()):
                 remapped_device_map[this_proc_device_ids[i]] = device_map[id]
@@ -1669,7 +1710,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             self.device_map = device_map
 
         self.pipeline_is_enabled = True
-        logger.info(f"using pipeline partitioning: {self.device_map}")
+        logger.warn(f"{log_prefix} uses PP partitioning: {self.device_map}")
 
         # XXX: validate chunks is a good arg
 
@@ -1684,16 +1725,19 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
 
         # dynamically check if rpc has been initialized already - i.e in case we have deepspeed as the launcher of 2D
         # XXX: this needs to be parameterized/cleaned up
-        try:
-            # will succeed if rpc has started (deepspeed launcher)
-            torch.distributed.get_world_size()
-        except:
+        # try:
+        #     # will succeed if rpc has started (deepspeed launcher)
+        #     torch.distributed.get_world_size()
+        # except:
+        if 1:
             os.environ.update({"MASTER_ADDR": "localhost"})
-            os.environ.update({"MASTER_PORT": "10638"})
+            os.environ.update({"MASTER_PORT": "10639"})
             rpc.init_rpc(
-                "worker",
-                rank=0,
-                world_size=1,
+                #"worker",
+                f"worker{dist_rank}",
+                #rank=0,
+                rank=dist_rank,
+                world_size=dist_world_size,
             )
         num_devices = torch.cuda.device_count() if torch.cuda.is_available() else 2
         device = torch.device("cuda")

@@ -247,39 +247,56 @@ class Trainer:
             self.is_model_parallel = False
 
 
-
-        # 2D Parallel
-        if self.args.deepspeed and len(self.args.pipeline):
-            from .integrations import MPU
-            #n_gpus = torch.distributed.get_world_size()
-            # XXX: hardcoded for 2 gpus for PP/MP - needs to be configurable
-            #n_gpus_per_mp = n_gpus/2
-            # at the moment experimenting with just 4 gpus - hence 2 gpus for MP|PP, 2 for DP
-            n_gpus_per_mp = 2
-            self.mpu = MPU(n_gpus_per_mp)
-            self.mpu.initialize_model_parallel()
-        else:
-            self.mpu = None
-
-
+        self.mpu = None
         # XXX: for now hack over naive MP to have the same behavior
         if len(self.args.pipeline):
             # using range() syntax for upper boundary (i.e. not inclusive)
             # --pipeline "chunks=5; device_map=0:0-10,1:10-20"
             self.is_model_parallel = True
 
-            chunks_str, *device_map_str = self.args.pipeline.split()
-            chunks = int(chunks_str.split("=")[1])
-            device_map = None
-            if len(device_map_str):
-                device_map_range = device_map_str[0].split("=")[1]
-                device_map_range_str = device_map_range.split(",")
+            # arg parser
+            pp_args = {}
+            args = self.args.pipeline.split()
+            if len(args):
+                for x in args:
+                    k,v = x.split("=")
+                    pp_args[k] = v
+
+            if "chunks" in pp_args:
+                pp_args["chunks"] = int(pp_args["chunks"])
+            else:
+                # XXX: probably can try some smart dynamic default based on batch_size
+                pp_args["chunks"] = 2
+
+            if "device_map" in pp_args:
+                device_map_range_str = pp_args["device_map"].split(",")
                 device_map = {}
                 for x in device_map_range_str:
                     device_id, layers = x.split(":")
                     device_map[int(device_id)] = list(range(*map(int, layers.split("-"))))
+                pp_args["device_map"] = device_map
+            else:
+                pp_args["device_map"] = None
 
-            model.pipeline_enable(chunks=chunks, device_map=device_map, mpu=self.mpu)
+            if "n_gpus_per_mp" in pp_args:
+                pp_args["n_gpus_per_mp"] = int(pp_args["n_gpus_per_mp"])
+            else:
+                # XXX: can try some smart dynamic default here based on total_n_gpus,
+                # if it's not 2D all gpus will be used
+                # if 2D half gpus should be a good default
+                pp_args["n_gpus_per_mp"] = 2
+
+            # 2D Parallel
+            if self.args.deepspeed:
+                from .integrations import MPU
+                self.mpu = MPU()
+                #n_gpus = torch.distributed.get_world_size()
+                # XXX: hardcoded for 2 gpus for PP/MP - needs to be configurable
+                #n_gpus_per_mp = n_gpus/2
+                # at the moment experimenting with just 4 gpus - hence 2 gpus for MP|PP, 2 for DP
+                self.mpu.initialize_model_parallel(pp_args["n_gpus_per_mp"])
+
+            model.pipeline_enable(chunks=pp_args["chunks"], device_map=pp_args["device_map"], mpu=self.mpu)
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
@@ -983,6 +1000,9 @@ class Trainer:
             # Clean the state at the end of training
             delattr(self, "_past")
 
+        if len(self.args.pipeline):
+            self.model.pipeline_finalize()
+
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if self.args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
             logger.info(
@@ -1010,9 +1030,6 @@ class Trainer:
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
-
-        if len(self.args.pipeline):
-            model.pipeline_finalize()
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1650,7 +1667,7 @@ class Trainer:
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
         if len(self.args.pipeline):
-            model.pipeline_finalize()
+            self.model.pipeline_finalize()
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 
