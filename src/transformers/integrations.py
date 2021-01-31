@@ -125,13 +125,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     import optuna
 
     def _objective(trial, checkpoint_dir=None):
-        model_path = None
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
         trainer.objective = None
-        trainer.train(model_path=model_path, trial=trial)
+        trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
@@ -150,13 +150,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     import ray
 
     def _objective(trial, local_trainer, checkpoint_dir=None):
-        model_path = None
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
         local_trainer.objective = None
-        local_trainer.train(model_path=model_path, trial=trial)
+        local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
         if getattr(local_trainer, "objective", None) is None:
             metrics = local_trainer.evaluate()

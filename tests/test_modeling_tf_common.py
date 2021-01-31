@@ -75,6 +75,7 @@ class TFModelTesterMixin:
     all_model_classes = ()
     all_generative_model_classes = ()
     test_resize_embeddings = True
+    test_head_masking = True
     is_encoder_decoder = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False) -> dict:
@@ -134,6 +135,19 @@ class TFModelTesterMixin:
             model = model_class(config)
 
             @tf.function
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
+
+    def test_xla_mode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            @tf.function(experimental_compile=True)
             def run_in_graph_mode():
                 return model(inputs)
 
@@ -278,6 +292,20 @@ class TFModelTesterMixin:
                     list(output[0].shape[-3:]),
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
+
+    def test_mixed_precision(self):
+        tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            outputs = model(class_inputs_dict)
+
+            self.assertIsNotNone(outputs)
+
+        tf.keras.mixed_precision.experimental.set_policy("float32")
 
     def test_keras_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -578,11 +578,10 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -593,10 +592,9 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -615,12 +613,11 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
             # Reinitialize trainer and load model
-            model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            model.load_state_dict(state_dict)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -631,12 +628,11 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            model.load_state_dict(state_dict)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -664,11 +660,17 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                gradient_accumulation_steps=2,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
