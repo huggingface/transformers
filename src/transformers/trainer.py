@@ -51,7 +51,14 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
-from .file_utils import WEIGHTS_NAME, is_apex_available, is_datasets_available, is_in_notebook, is_torch_tpu_available
+from .file_utils import (
+    WEIGHTS_NAME,
+    is_apex_available,
+    is_datasets_available,
+    is_in_notebook,
+    is_sagemaker_distributed_available,
+    is_torch_tpu_available,
+)
 from .modeling_utils import PreTrainedModel
 from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import Adafactor, AdamW, get_scheduler
@@ -125,6 +132,11 @@ if is_fairscale_available():
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
 
+if is_sagemaker_distributed_available():
+    import smdistributed.dataparallel.torch.distributed as dist
+    from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
+else:
+    import torch.distributed as dist
 
 if TYPE_CHECKING:
     import optuna
@@ -483,9 +495,12 @@ class Trainer:
         if self.args.parallel_mode == ParallelMode.TPU:
             num_processes = xm.xrt_world_size()
             process_index = xm.get_ordinal()
-        elif self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-            num_processes = torch.distributed.get_world_size()
-            process_index = torch.distributed.get_rank()
+        elif (
+            self.args.parallel_mode == ParallelMode.DISTRIBUTED
+            or self.args.parallel_mode == ParallelMode.SAGEMAKER_DISTRIBUTED
+        ):
+            num_processes = dist.get_world_size()
+            process_index = dist.get_rank()
         else:
             num_processes = 1
             process_index = 0
@@ -525,6 +540,7 @@ class Trainer:
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
@@ -562,6 +578,7 @@ class Trainer:
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -588,6 +605,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
+            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
@@ -713,34 +731,61 @@ class Trainer:
 
         return model
 
-    def train(self, model_path: Optional[str] = None, trial: Union["optuna.Trial", Dict[str, Any]] = None):
+    def train(
+        self,
+        resume_from_checkpoint: Optional[str] = None,
+        trial: Union["optuna.Trial", Dict[str, Any]] = None,
+        **kwargs,
+    ):
         """
         Main training entry point.
 
         Args:
-            model_path (:obj:`str`, `optional`):
-                Local path to the model if the model to train has been instantiated from a local path. If present,
-                training will resume from the optimizer/scheduler states loaded here.
+            resume_from_checkpoint (:obj:`str`, `optional`):
+                Local path to a saved checkpoint as saved by a previous instance of :class:`~transformers.Trainer`. If
+                present, training will resume from the model/optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
+            kwargs:
+                Additional keyword arguments used to hide deprecated arguments
         """
+        if "model_path" in kwargs:
+            resume_from_checkpoint = kwargs.pop("model_path")
+            warnings.warn(
+                "`model_path` is deprecated and will be removed in a future version. Use `resume_from_checkpoint` "
+                "instead.",
+                FutureWarning,
+            )
+        if len(kwargs) > 0:
+            raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
 
         # Model re-init
+        model_reloaded = False
         if self.model_init is not None:
             # Seed must be set before instantiating the model when using model_init.
             set_seed(self.args.seed)
-
-            model = self.call_model_init(trial)
-            if not self.is_model_parallel:
-                model = model.to(self.args.device)
-
-            self.model = model
-            self.model_wrapped = model
-
+            self.model = self.call_model_init(trial)
+            model_reloaded = True
             # Reinitializes optimizer and scheduler
             self.optimizer, self.lr_scheduler = None, None
+
+        # Load potential model checkpoint
+        if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+            logger.info(f"Loading model from {resume_from_checkpoint}).")
+            if isinstance(self.model, PreTrainedModel):
+                self.model = self.model.from_pretrained(resume_from_checkpoint)
+                model_reloaded = True
+            else:
+                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME))
+                self.model.load_state_dict(state_dict)
+
+        # If model was re-initialized, put it on the right device and update self.model_wrapped
+        if model_reloaded:
+            if not self.is_model_parallel:
+                self.model = self.model.to(self.args.device)
+            self.model_wrapped = self.model
 
         # Keeping track whether we can can len() on the dataset or not
         train_dataset_is_sized = isinstance(self.train_dataset, collections.abc.Sized)
@@ -783,7 +828,7 @@ class Trainer:
         self.state.is_hyper_param_search = trial is not None
 
         # Check if saved optimizer or scheduler states exist
-        self._load_optimizer_and_scheduler(model_path)
+        self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         model = self.model_wrapped
 
@@ -798,19 +843,23 @@ class Trainer:
         # Distributed training (should be after apex fp16 initialization)
         if self.sharded_dpp:
             model = ShardedDDP(model, self.optimizer)
+        elif is_sagemaker_distributed_available():
+            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
+            if self.args.ddp_find_unused_parameters is not None:
+                find_unused_parameters = self.args.ddp_find_unused_parameters
+            elif isinstance(model, PreTrainedModel):
+                # find_unused_parameters breaks checkpointing as per
+                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+            else:
+                find_unused_parameters = True
             model = torch.nn.parallel.DistributedDataParallel(
                 model,
                 device_ids=[self.args.local_rank],
                 output_device=self.args.local_rank,
-                find_unused_parameters=(
-                    not getattr(model.config, "gradient_checkpointing", False)
-                    if isinstance(model, PreTrainedModel)
-                    else True
-                ),
+                find_unused_parameters=find_unused_parameters,
             )
-            # find_unused_parameters breaks checkpointing as per
-            # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -822,14 +871,13 @@ class Trainer:
 
         # Train!
         if is_torch_tpu_available():
-            total_train_batch_size = self.args.train_batch_size * xm.xrt_world_size()
+            world_size = xm.xrt_world_size()
+        elif self.args.local_rank != -1:
+            world_size = dist.get_world_size()
         else:
-            total_train_batch_size = (
-                self.args.train_batch_size
-                * self.args.gradient_accumulation_steps
-                * (torch.distributed.get_world_size() if self.args.local_rank != -1 else 1)
-            )
+            world_size = 1
 
+        total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps * world_size
         num_examples = (
             self.num_examples(train_dataloader)
             if train_dataset_is_sized
@@ -850,8 +898,10 @@ class Trainer:
         steps_trained_in_current_epoch = 0
 
         # Check if continuing training from a checkpoint
-        if model_path and os.path.isfile(os.path.join(model_path, "trainer_state.json")):
-            self.state = TrainerState.load_from_json(os.path.join(model_path, "trainer_state.json"))
+        if resume_from_checkpoint is not None and os.path.isfile(
+            os.path.join(resume_from_checkpoint, "trainer_state.json")
+        ):
+            self.state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, "trainer_state.json"))
             epochs_trained = self.state.global_step // num_update_steps_per_epoch
             if not self.args.ignore_data_skip:
                 steps_trained_in_current_epoch = self.state.global_step % (num_update_steps_per_epoch)
@@ -886,7 +936,7 @@ class Trainer:
         tr_loss = torch.tensor(0.0).to(self.args.device)
         # _total_loss_scalar is updated everytime .item() has to be called on tr_loss and stores the sum of all losses
         self._total_loss_scalar = 0.0
-        self._globalstep_last_logged = 0
+        self._globalstep_last_logged = self.state.global_step
         self._total_flos = self.state.total_flos
         model.zero_grad()
 
@@ -1128,20 +1178,20 @@ class Trainer:
         if self.is_world_process_zero():
             self._rotate_checkpoints(use_mtime=True)
 
-    def _load_optimizer_and_scheduler(self, model_path):
+    def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
-        if model_path is None:
+        if checkpoint is None:
             return
 
-        if os.path.isfile(os.path.join(model_path, "optimizer.pt")) and os.path.isfile(
-            os.path.join(model_path, "scheduler.pt")
+        if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
+            os.path.join(checkpoint, "scheduler.pt")
         ):
             # Load in optimizer and scheduler states
             if is_torch_tpu_available():
                 # On TPU we have to take some extra precautions to properly load the states on the right device.
-                optimizer_state = torch.load(os.path.join(model_path, "optimizer.pt"), map_location="cpu")
+                optimizer_state = torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location="cpu")
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    lr_scheduler_state = torch.load(os.path.join(model_path, "scheduler.pt"), map_location="cpu")
+                    lr_scheduler_state = torch.load(os.path.join(checkpoint, "scheduler.pt"), map_location="cpu")
                 reissue_pt_warnings(caught_warnings)
 
                 xm.send_cpu_data_to_device(optimizer_state, self.args.device)
@@ -1151,15 +1201,15 @@ class Trainer:
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
                 self.optimizer.load_state_dict(
-                    torch.load(os.path.join(model_path, "optimizer.pt"), map_location=self.args.device)
+                    torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location=self.args.device)
                 )
                 with warnings.catch_warnings(record=True) as caught_warnings:
-                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(model_path, "scheduler.pt")))
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
 
         if self.deepspeed:
             # Not sure how to check if there is a saved deepspeed checkpoint, but since it just return None if it fails to find a deepspeed checkpoint this is sort of a check-n-load function
-            self.deepspeed.load_checkpoint(model_path, load_optimizer_states=True, load_lr_scheduler_states=True)
+            self.deepspeed.load_checkpoint(checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True)
 
     def hyperparameter_search(
         self,
@@ -1169,12 +1219,12 @@ class Trainer:
         direction: str = "minimize",
         backend: Optional[Union["str", HPSearchBackend]] = None,
         hp_name: Optional[Callable[["optuna.Trial"], str]] = None,
-        **kwargs
+        **kwargs,
     ) -> BestRun:
         """
         Launch an hyperparameter search using ``optuna`` or ``Ray Tune``. The optimized quantity is determined by
-        :obj:`compute_objectie`, which defaults to a function returning the evaluation loss when no metric is provided,
-        the sum of all metrics otherwise.
+        :obj:`compute_objective`, which defaults to a function returning the evaluation loss when no metric is
+        provided, the sum of all metrics otherwise.
 
         .. warning::
 
@@ -1256,9 +1306,9 @@ class Trainer:
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
 
-        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
@@ -1360,7 +1410,7 @@ class Trainer:
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
         else:
-            return self.args.local_rank == -1 or torch.distributed.get_rank() == 0
+            return self.args.local_rank == -1 or dist.get_rank() == 0
 
     def save_model(self, output_dir: Optional[str] = None):
         """
@@ -1373,6 +1423,11 @@ class Trainer:
             self._save_tpu(output_dir)
         elif self.is_world_process_zero():
             self._save(output_dir)
+
+        # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
+        # SM_MODEL_DIR for easy deployment.
+        if output_dir is None and os.getenv("SM_MODEL_DIR") is not None:
+            self.save_model(output_dir=os.getenv("SM_MODEL_DIR"))
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1600,7 +1655,7 @@ class Trainer:
         if is_torch_tpu_available():
             world_size = xm.xrt_world_size()
         elif self.args.local_rank != -1:
-            world_size = torch.distributed.get_world_size()
+            world_size = dist.get_world_size()
         world_size = max(1, world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)

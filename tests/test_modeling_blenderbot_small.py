@@ -214,7 +214,6 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
     all_generative_model_classes = (BlenderbotSmallForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_head_masking = True
     test_missing_keys = False
 
     def setUp(self):

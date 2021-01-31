@@ -230,9 +230,6 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         """
         Converts a string in a sequence of tokens, using the tokenizer.
 
-        Note that, unlike Fast tokenizers (instances of PreTrainedTokenizerFast), this method won't replace the unknown
-        tokens with the `unk_token` yet (this is done in the `encode()` method)
-
         Split in words for word-based vocabulary or sub-words for sub-word-based vocabularies
         (BPE/SentencePieces/WordPieces). Takes care of added tokens.
 

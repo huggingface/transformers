@@ -125,13 +125,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     import optuna
 
     def _objective(trial, checkpoint_dir=None):
-        model_path = None
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
         trainer.objective = None
-        trainer.train(model_path=model_path, trial=trial)
+        trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
@@ -149,20 +149,20 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import ray
 
-    def _objective(trial, checkpoint_dir=None):
-        model_path = None
+    def _objective(trial, local_trainer, checkpoint_dir=None):
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
-        trainer.objective = None
-        trainer.train(model_path=model_path, trial=trial)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
+        local_trainer.objective = None
+        local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
-            trainer._tune_save_checkpoint()
-            ray.tune.report(objective=trainer.objective, **metrics, done=True)
+        if getattr(local_trainer, "objective", None) is None:
+            metrics = local_trainer.evaluate()
+            local_trainer.objective = local_trainer.compute_objective(metrics)
+            local_trainer._tune_save_checkpoint()
+            ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
 
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
@@ -217,7 +217,12 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 
-    analysis = ray.tune.run(_objective, config=trainer.hp_space(None), num_samples=n_trials, **kwargs)
+    analysis = ray.tune.run(
+        ray.tune.with_parameters(_objective, local_trainer=trainer),
+        config=trainer.hp_space(None),
+        num_samples=n_trials,
+        **kwargs,
+    )
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     if _tb_writer is not None:
@@ -658,6 +663,8 @@ class WandbCallback(TrainerCallback):
             else:
                 self._wandb = wandb
         self._initialized = False
+        # log outputs
+        self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def setup(self, args, state, model, reinit, **kwargs):
         """
@@ -711,9 +718,6 @@ class WandbCallback(TrainerCallback):
                     model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps)
                 )
 
-            # log outputs
-            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
-
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
             return
@@ -725,7 +729,8 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         # commit last step
-        self._wandb.log({})
+        if state.is_world_process_zero:
+            self._wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
