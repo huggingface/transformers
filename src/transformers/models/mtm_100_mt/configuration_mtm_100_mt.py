@@ -150,7 +150,6 @@ class M2M100MTConfig(PretrainedConfig):
         self.init_std = init_std
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
-        self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
