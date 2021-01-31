@@ -240,7 +240,6 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
         self,
         input_ids: tf.Tensor = None,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -257,7 +256,6 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -425,6 +423,19 @@ class TFDPRPretrainedReader(TFPreTrainedModel):
     config_class = DPRConfig
     base_model_prefix = "reader"
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
 
 ###############
 # Actual Models
@@ -443,16 +454,22 @@ TF_DPR_START_DOCSTRING = r"""
 
     .. note::
 
-        TF 2.0 models accepts two formats as inputs: - having all inputs as keyword arguments (like PyTorch models), or
-        - having all inputs as a list, tuple or dict in the first positional arguments. This second option is useful
-        when using :meth:`tf.keras.Model.fit` method which currently requires having all the tensors in the first
-        argument of the model call function: :obj:`model(inputs)`. If you choose this second option, there are three
-        possibilities you can use to gather all the input Tensors in the first positional argument : - a single Tensor
-        with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)` - a list of varying length with one or
-        several input Tensors IN THE ORDER given in the docstring: :obj:`model([input_ids, attention_mask])` or
-        :obj:`model([input_ids, attention_mask, token_type_ids])` - a dictionary with one or several input Tensors
-        associated to the input names given in the docstring: :obj:`model({"input_ids": input_ids, "token_type_ids":
-        token_type_ids})`
+        TF 2.0 models accepts two formats as inputs:
+
+        - having all inputs as keyword arguments (like PyTorch models), or
+        - having all inputs as a list, tuple or dict in the first positional arguments.
+
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
+
+        - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
+        - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+          :obj:`model([input_ids, attention_mask])` or :obj:`model([input_ids, attention_mask, token_type_ids])`
+        - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+          :obj:`model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Parameters:
         config (:class:`~transformers.DPRConfig`): Model configuration class with all the parameters of the model.
@@ -506,12 +523,18 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 TF_DPR_READER_INPUTS_DOCSTRING = r"""
@@ -539,14 +562,16 @@ TF_DPR_READER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to rturn the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 
@@ -560,7 +585,11 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         self.ctx_encoder = TFDPREncoderLayer(config, name="ctx_encoder")
 
     def get_input_embeddings(self):
-        return self.ctx_encoder.bert_model.get_input_embeddings()
+        try:
+            return self.ctx_encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.ctx_encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRContextEncoderOutput, config_class=_CONFIG_FOR_DOC)
@@ -637,6 +666,12 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFDPRContextEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     "The bare DPRQuestionEncoder transformer outputting pooler outputs as question representations.",
@@ -648,7 +683,11 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         self.question_encoder = TFDPREncoderLayer(config, name="question_encoder")
 
     def get_input_embeddings(self):
-        return self.question_encoder.bert_model.get_input_embeddings()
+        try:
+            return self.question_encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.question_encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_ENCODERS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRQuestionEncoderOutput, config_class=_CONFIG_FOR_DOC)
@@ -724,6 +763,12 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
             pooler_output=outputs.pooler_output, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFDPRQuestionEncoderOutput(pooler_output=output.pooler_output, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     "The bare DPRReader transformer outputting span predictions.",
@@ -735,7 +780,11 @@ class TFDPRReader(TFDPRPretrainedReader):
         self.span_predictor = TFDPRSpanPredictorLayer(config, name="span_predictor")
 
     def get_input_embeddings(self):
-        return self.span_predictor.encoder.bert_model.get_input_embeddings()
+        try:
+            return self.span_predictor.encoder.bert_model.get_input_embeddings()
+        except AttributeError:
+            self(self.dummy_inputs)
+            return self.span_predictor.encoder.bert_model.get_input_embeddings()
 
     @add_start_docstrings_to_model_forward(TF_DPR_READER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFDPRReaderOutput, config_class=_CONFIG_FOR_DOC)
@@ -743,7 +792,6 @@ class TFDPRReader(TFDPRPretrainedReader):
         self,
         input_ids=None,
         attention_mask: Optional[tf.Tensor] = None,
-        token_type_ids: Optional[tf.Tensor] = None,
         inputs_embeds: Optional[tf.Tensor] = None,
         output_attentions: bool = None,
         output_hidden_states: bool = None,
@@ -776,7 +824,6 @@ class TFDPRReader(TFDPRPretrainedReader):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -797,16 +844,24 @@ class TFDPRReader(TFDPRPretrainedReader):
         if inputs["attention_mask"] is None:
             inputs["attention_mask"] = tf.ones(input_shape, dtype=tf.dtypes.int32)
 
-        if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.zeros(input_shape, dtype=tf.dtypes.int32)
-
         return self.span_predictor(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFDPRReaderOutput(
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            relevance_logits=output.relevance_logits,
+            hidden_states=hs,
+            attentions=attns,
         )

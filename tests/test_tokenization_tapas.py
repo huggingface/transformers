@@ -32,7 +32,14 @@ from transformers.models.tapas.tokenization_tapas import (
     _is_punctuation,
     _is_whitespace,
 )
-from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_pandas,
+    require_scatter,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 
 from .test_tokenization_common import TokenizerTesterMixin, filter_non_english, merge_model_tokenizer_mappings
 
@@ -44,6 +51,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_rust_tokenizer = False
     space_between_special_tokens = True
     from_pretrained_filter = filter_non_english
+    test_seq2seq = False
 
     def get_table(
         self,
@@ -290,7 +298,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_sequence_builders(self):
-        tokenizer = self.tokenizer_class.from_pretrained("nielsr/tapas-base-finetuned-wtq")
+        tokenizer = self.tokenizer_class.from_pretrained("google/tapas-base-finetuned-wtq")
 
         empty_table = self.get_table(tokenizer, length=0)
         table = self.get_table(tokenizer, length=10)
@@ -983,6 +991,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @require_torch
     @slow
+    @require_scatter
     def test_torch_encode_plus_sent_to_model(self):
         import torch
 
@@ -1187,4 +1196,8 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @unittest.skip("Skip this test while all models are still to be uploaded.")
     def test_pretrained_model_lists(self):
+        pass
+
+    @unittest.skip("Doesn't support another framework than PyTorch")
+    def test_np_encode_plus_sent_to_model(self):
         pass
