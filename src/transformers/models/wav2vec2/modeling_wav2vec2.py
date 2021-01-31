@@ -161,19 +161,18 @@ class Wav2Vec2FeatureExtractor(nn.Module):
         super().__init__()
 
         if config.feat_extract_norm == "group":
-            self.conv_layers = nn.ModuleList(
-                [Wav2Vec2GroupNormConvLayer(config, layer_id=0)]
-                + [
-                    Wav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1)
-                    for i in range(config.num_feat_extract_layers - 1)
-                ]
-            )
+            conv_layers = [Wav2Vec2GroupNormConvLayer(config, layer_id=0)] + [
+                Wav2Vec2NoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+            ]
         elif config.feat_extract_norm == "layer":
-            self.conv_layers = nn.ModuleList(
-                [Wav2Vec2LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
-            )
+            conv_layers = [
+                Wav2Vec2LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+            ]
         else:
-            raise ValueError("...")
+            raise ValueError(
+                f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
+            )
+        self.conv_layers = nn.ModuleList(conv_layers)
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
@@ -567,9 +566,10 @@ WAV_2_VEC_2_START_DOCSTRING = r"""
 WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
     Args:
         input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Float values of input raw speech waveform.
-
-            Values can be obtained using :class:`~transformers.Wav2Vec2Tokenizer`. See
+            Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
+            into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Tokenizer` should
+            be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
             :meth:`transformers.Wav2Vec2Tokenizer.__call__` for details.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned

@@ -30,8 +30,8 @@ class Wav2Vec2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.Wav2Vec2Model`. It is used to
     instantiate an Wav2Vec2 model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2 `fill_later
-    <https://huggingface.co/fill_later>`__ architecture.
+    a configuration with the defaults will yield a similar configuration to that of the Wav2Vec2
+    `facebook/wav2vec2-base-960h <https://huggingface.co/facebook/wav2vec2-base-960h>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -97,10 +97,10 @@ class Wav2Vec2Config(PretrainedConfig):
 
         >>> from transformers import Wav2Vec2Model, Wav2Vec2Config
 
-        >>> # Initializing a Wav2Vec2 fill_later style configuration
+        >>> # Initializing a Wav2Vec2 facebook/wav2vec2-base-960h style configuration
         >>> configuration = Wav2Vec2Config()
 
-        >>> # Initializing a model from the fill_later style configuration
+        >>> # Initializing a model from the facebook/wav2vec2-base-960h style configuration
         >>> model = Wav2Vec2Model(configuration)
 
         >>> # Accessing the model configuration

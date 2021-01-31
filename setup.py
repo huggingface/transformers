@@ -227,11 +227,11 @@ extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["speech"] = deps_list("datasets", "soundfile")
+extras["speech"] = deps_list("soundfile")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
     + extras["retrieval"]
     + extras["modelcreation"]
     + extras["speech"]
