@@ -100,6 +100,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
         },
     }
+    required_input_name: str = "input_values"
 
     def __init__(
         self,
