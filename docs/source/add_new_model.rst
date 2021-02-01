@@ -202,15 +202,15 @@ and return to the parent directory
    cd ..
 
 4. We recommend adding the PyTorch version of *brand_new_bert* to Transformers. To install PyTorch, please follow the
-   instructions on https://pytorch.org/.
+   instructions on https://pytorch.org/get-started/locally/.
 
-**Note:** You don’t need to have CUDA installed. It is sufficient to just be working on the CPU.
+**Note:** You don’t need to have CUDA installed. Making the new model work on CPU is sufficient.
 
 5. To port *brand_new_bert*, you will also need access to its original repository:
 
 .. code:: bash
 
-   git clone https://github.com/brand_new_bert_org/brand_new_bert.git 
+   git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git 
    cd brand_new_bert
    pip install -e .
 
@@ -219,18 +219,17 @@ Now you have set up a development environment to port *brand_new_bert* to 🤗 T
 Run a pretrained checkpoint using the original repository
 -----------------------------------------------------------------------------------------------------------------------
 
-At first, you will work on the original repository. Often, the original implementation is very “researchy” meaning that
+At first, you will work on the original *brand_new_bert* repository. Often, the original implementation is very “researchy”. Meaning that
 documentation might be lacking and the code can be difficult to understand. But this should be exactly your motivation
 to reimplement *brand_new_bert*. At Hugging Face, one of our main goals is to *make people stand on the shoulders of
 giants* which translates here very well into taking a working model and rewriting it to make it as **accessible,
 user-friendly, and beautiful** as possible. This is the number-one motivation to re-implement models into 🤗
-Transformers - trying to maximize access to a complex new NLP technology for **everybody**.
+Transformers - trying to make complex new NLP technology accessible to **everybody**.
 
 You should start thereby by diving into the original repository.
 
 Successfully running the official pretrained model in the original repository is often **the most difficult** step.
-From our experience, it is very important to spend some time getting familiar with the original codebase. You should
-find out
+From our experience, it is very important to spend some time getting familiar with the original codebase. You need to figure out the following:
 
 -  Where to find the pretrained weights?
 -  How to load the pretrained weights into the corresponding model?
