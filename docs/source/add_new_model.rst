@@ -80,7 +80,7 @@ that's it. As a general rule, we want to make sure that a new model only depends
 :class:`~transformers.PreTrainedModel`. The important functionalities that are automatically provided to every new
 model are :meth:`~transformers.PreTrainedModel.from_pretrained` and
 :meth:`~transformers.PreTrainedModel.save_pretrained`, which are used for serialization and deserialization. All of the
-other important functionalities, such as :meth:`BrandNewBertModelforward` should be completely defined in the new
+other important functionalities, such as :meth:`BrandNewBertModel.forward` should be completely defined in the new
 ``modeling_brand_new_bert.py`` script. Next, we want to make sure that a model with a specific head layer, such as
 :obj:`BrandNewBertForMaskedLM` does not inherit from :obj:`BrandNewBertModel`, but rather uses :obj:`BrandNewBertModel`
 as a component that can be called in its forward pass to keep the level of abstraction low. Every new model requires a
@@ -167,10 +167,10 @@ effectively re-implement the model in 🤗 Transformers. That being said, you do
 theoretical aspects, but rather focus on the practical ones, namely:
 
 -  What type of model is *brand_new_bert*? BERT-like encoder-only model? GPT2-like decoder-only model? BART-like
-   encoder-decoder model?
+   encoder-decoder model? Look at the :doc:`model_summary` if you're not familiar with the differences between those.
 -  What are the applications of *brand_new_bert*? Text classification? Text generation? Seq2Seq tasks, *e.g.,*
    summarization?
--  What is the novel feature of the model making it different from BERT or BART (if it's an encoder-decoder model)?
+-  What is the novel feature of the model making it different from BERT/GPT-2/BART?
 -  Which of the already existing `🤗 Transformers models <https://huggingface.co/transformers/#contents>`__ is most
    similar to *brand_new_bert*?
 -  What type of tokenizer is used? A sentencepiece tokenizer? Word piece tokenizer? Is it the same tokenizer as used
@@ -263,8 +263,8 @@ model also works as expected on GPU.
 
 In general, there are two possible debugging environments for running the original model
 
--  `Jupyter notebooks <https://jupyter.org/>`_, *e.g.* `google colab
-   <https://colab.research.google.com/notebooks/intro.ipynb>`_
+-  `Jupyter notebooks <https://jupyter.org/>`__ / `google colab
+   <https://colab.research.google.com/notebooks/intro.ipynb>`__
 -  Local python scripts.
 
 Jupyter notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
@@ -359,9 +359,9 @@ important. Here is some advice is to make your debugging environment as efficien
 -  Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
    probably take the time to write a longer script that decomposes the original model into smaller sub-components to
    retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on
-   TensorFlow print operations like https://www.tensorflow.org/api_docs/python/tf/print to output intermediate values.
+   TensorFlow print operations like `tf.print <https://www.tensorflow.org/api_docs/python/tf/print>`__ to output intermediate values.
    Is the original repository written in Jax? Then make sure that the model is **not jitted** when running the forward
-   pass, *e.g.* check-out `this link <https://github.com/google/jax/issues/196>`_.
+   pass, *e.g.* check-out `this link <https://github.com/google/jax/issues/196>`__.
 -  Use the smallest pretrained checkpoint you can find. The smaller the checkpoint, the faster your debug cycle
    becomes. It is not efficient if your pretrained model is so big that your forward pass takes more than 10 seconds.
    In case only very large checkpoints are available, it might make more sense to create a dummy model in the new
@@ -369,7 +369,7 @@ important. Here is some advice is to make your debugging environment as efficien
    of your model
 -  Make sure you are using the easiest way of calling a forward pass in the original repository. Ideally, you want to
    find the function in the original repository that **only** calls a single forward pass, *i.e.* that is often called
-   `'predict``, ``evaluate``, ``forward`` or ``__call__``. You don't want to debug a function that calls ``forward``
+   ``predict``, ``evaluate``, ``forward`` or ``__call__``. You don't want to debug a function that calls ``forward``
    multiple times, *e.g.* to generate text, like ``autoregressive_sample``, ``generate``.
 -  Try to separate the tokenization from the model's `forward` pass. If the original repository shows examples where
    you have to input a string, then try to find out where in the forward call the string input is changed to input ids
@@ -406,7 +406,7 @@ only adding the PyTorch version of the model at first. Make sure you follow the 
 the `🤗 Transformers templates <https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model>`__
 carefully.
 
-**Open a Pull Request on the main ``huggingface/transformers`` repo**
+**Open a Pull Request on the main huggingface/transformers repo**
 
 Before starting to adapt the automatically generated code, now is the time to open a “Work in progress (WIP)” pull
 request, *e.g.* “[WIP] Add *brand_new_bert*”, in 🤗 Transformers so that you and the Hugging Face team can work
@@ -528,7 +528,7 @@ PyTorch, called ``SimpleModel`` as follows:
                self.intermediate = nn.Linear(10, 10)
                self.layer_norm = nn.LayerNorm(10)
 
-Now we can create an instance of this model definition which will fill all weights: ``dense, intermediate, layer_norm``
+Now we can create an instance of this model definition which will fill all weights: ``dense``, ``intermediate``, ``layer_norm``
 with random weights. We can print the model to see its architecture
 
 .. code:: python
@@ -636,7 +636,7 @@ the model under a folder of your choice ``/path/to/converted/checkpoint/folder``
 
 Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
 sure that the forward pass is correctly implemented. In `Get familiar with the original repository
-<#get-familiar-with-the-original-repository>`__, you have already created a script that runs a forward pass of the
+<#run-a-pretrained-checkpoint-using-the-original-repository>`__, you have already created a script that runs a forward pass of the
 model using the original repository. Now you should write an analogous script using the 🤗 Transformers implementation
 instead of the original one. It should look as follows:
 
@@ -649,7 +649,7 @@ instead of the original one. It should look as follows:
 It is very likely that the 🤗 Transformers implementation and the original model implementation don't give the exact
 same output the very first time or that the forward pass throws an error. Don't be disappointed - it's expected! First,
 you should make sure that the forward pass doesn't throw any errors. It often happens that the wrong dimensions are
-used leading to a ``Dimensionality mismatch`` error or that the wrong data type object is used, *e.g.* ``torch.long``
+used leading to a `Dimensionality mismatch` error or that the wrong data type object is used, *e.g.* ``torch.long``
 instead of ``torch.float32``. Don't hesitate to ask the Hugging Face team for help, if you don't manage to solve
 certain errors.
 
