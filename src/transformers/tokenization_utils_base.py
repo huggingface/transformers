@@ -1493,7 +1493,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
     max_model_input_sizes: Dict[str, Optional[int]] = {}
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
-    required_input_name: str = ["input_ids"]
+    required_input_name: str = "input_ids"
     padding_side: str = "right"
     slow_tokenizer_class = None
 
