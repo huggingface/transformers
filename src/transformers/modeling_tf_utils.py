@@ -360,7 +360,7 @@ def input_processing(func, config, **kwargs):
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
-    
+
     input_ids = kwargs.pop("input_ids")
 
     if already_processed:
