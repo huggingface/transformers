@@ -5,7 +5,7 @@
 
 -[name of model]
 
--[name of teacher]
+-[name of mentor]
 
 -[start date]
 
