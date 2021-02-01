@@ -14,6 +14,8 @@
 # limitations under the License.
 """ BART model configuration """
 
+import warnings
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -173,10 +175,11 @@ class BartConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         # ensure backward compatibilty for BART CNN models
-        self.forced_bos_token_id = (
-            bos_token_id if kwargs.get("force_bos_token_to_be_generated", False) else forced_bos_token_id
-        )
-        self.forced_eos_token_id = forced_eos_token_id if forced_eos_token_id is None else eos_token_id
+        if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
+            self.forced_bos_token_id = self.bos_token_id
+            warnings.warn(
+                f"please make sure your config includes `config.forced_bos_token_id = {self.bos_token_id}` in the future. You can simply save this config and upload it again."
+            )
 
     @property
     def num_attention_heads(self) -> int:

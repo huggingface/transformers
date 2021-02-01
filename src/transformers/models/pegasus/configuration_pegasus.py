@@ -127,7 +127,6 @@ class PegasusConfig(PretrainedConfig):
         gradient_checkpointing=False,
         pad_token_id=0,
         eos_token_id=1,
-        forced_bos_token_id=None,
         forced_eos_token_id=1,
         **kwargs
     ):
@@ -136,7 +135,6 @@ class PegasusConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )

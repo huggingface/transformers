@@ -128,7 +128,6 @@ class BlenderbotSmallConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        forced_bos_token_id=None,
         forced_eos_token_id=2,
         **kwargs
     ):
@@ -138,7 +137,6 @@ class BlenderbotSmallConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
