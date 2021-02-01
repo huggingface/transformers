@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -10,7 +10,7 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-WAV2VEC2
+Wav2Vec2
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
@@ -32,9 +32,9 @@ recognition with limited amounts of labeled data.*
 
 Tips:
 
-- Wav2Vec2 is a speech model, which means that the model accepts a float array corresponding to the raw waveform
-- Wav2Vec2 model was trained in connectionist temporal classification (CTC) so that the model output has to be decoded
-  using :obj:`~transformers.Wav2Vec2Tokenizer`.
+- Wav2Vec2 is a speech model that accepts a float array corresponding to the raw waveform of the speech signal.
+- Wav2Vec2 model was trained using connectionist temporal classification (CTC) so the model output has to be decoded
+  using :class:`~transformers.Wav2Vec2Tokenizer`.
 
 
 Wav2Vec2Config

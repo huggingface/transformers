@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # coding=utf-8
-# Copyright 2020 The HuggingFace Team. All rights reserved.
+# Copyright 2021 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,40 +50,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        vocab = [
-            "<pad>",
-            "<s>",
-            "</s>",
-            "<unk>",
-            "|",
-            "E",
-            "T",
-            "A",
-            "O",
-            "N",
-            "I",
-            "H",
-            "S",
-            "R",
-            "D",
-            "L",
-            "U",
-            "M",
-            "W",
-            "C",
-            "F",
-            "G",
-            "Y",
-            "P",
-            "B",
-            "V",
-            "K",
-            "'",
-            "X",
-            "J",
-            "Q",
-            "Z",
-        ]
+        vocab = "<pad> <s> </s> <unk> | E T A O N I H S R D L U M W C F G Y P B V K ' X J Q Z".split(" ")
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
 
         self.special_tokens_map = {"pad_token": "<pad>", "unk_token": "<unk>", "bos_token": "<s>", "eos_token": "</s>"}
@@ -142,7 +109,6 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         self.assertEqual(batch_tokens, ["HELLO<unk>", "BYE BYE<unk>"])
 
     def test_tokenizer_decode_added_tokens(self):
-        # TODO(PVP) - change to facebook
         tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
         tokenizer.add_tokens(["!", "?"])
         tokenizer.add_special_tokens({"cls_token": "$$$"})

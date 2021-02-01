@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -59,7 +59,7 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
-    print(f"{key + '.' + weight_type} was initialized from {full_name}.")
+    logger.info(f"{key + '.' + weight_type} was initialized from {full_name}.")
 
 
 def recursively_load_weights(fairseq_model, hf_model):
@@ -97,7 +97,7 @@ def recursively_load_weights(fairseq_model, hf_model):
         if not is_used:
             unused_weights.append(name)
 
-    print("Unused weights", unused_weights)
+    logger.info("Unused weights", unused_weights)
 
 
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
@@ -112,26 +112,26 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
                 value.shape == feature_extractor.conv_layers[layer_id].conv.bias.data.shape
             ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
             feature_extractor.conv_layers[layer_id].conv.bias.data = value
-            print(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
             assert (
                 value.shape == feature_extractor.conv_layers[layer_id].conv.weight.data.shape
             ), f"{full_name} has size {value.shape}, but {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
             feature_extractor.conv_layers[layer_id].conv.weight.data = value
-            print(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
     elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
         if "bias" in name:
             assert (
                 value.shape == feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape
             ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.bias.data.shape} was found."
             feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
-            print(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
         elif "weight" in name:
             assert (
                 value.shape == feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape
             ), f"{full_name} has size {value.shape}, but {feature_extractor[layer_id].layer_norm.weight.data.shape} was found."
             feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
-            print(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
         unused_weights.append(full_name)
 
