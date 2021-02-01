@@ -193,8 +193,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             raw_speech = [raw_speech]
 
         # convert into correct format for padding
-        # key has to be called `input_ids`
-        encoded_inputs = BatchEncoding({"input_ids": raw_speech})
+        encoded_inputs = BatchEncoding({"input_values": raw_speech})
 
         padded_inputs = self.pad(
             encoded_inputs,
@@ -205,10 +204,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             return_tensors=return_tensors,
             verbose=verbose,
         )
-
-        # hacky way of renaming input_ids to input_values
-        padded_inputs["input_values"] = padded_inputs["input_ids"]
-        del padded_inputs["input_ids"]
 
         return padded_inputs
 

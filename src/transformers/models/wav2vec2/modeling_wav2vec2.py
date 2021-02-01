@@ -614,6 +614,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         Returns:
 
         Example::
+
             >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
             >>> from datasets import load_dataset
             >>> import soundfile as sf
@@ -687,6 +688,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         Returns:
 
         Example::
+
             >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
             >>> from datasets import load_dataset
             >>> import soundfile as sf

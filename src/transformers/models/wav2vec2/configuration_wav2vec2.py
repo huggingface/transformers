@@ -93,7 +93,7 @@ class Wav2Vec2Config(PretrainedConfig):
             True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
             False`` corresponds to applying layer norm after the attention layer.
 
-        Example::
+    Example::
 
         >>> from transformers import Wav2Vec2Model, Wav2Vec2Config
 
