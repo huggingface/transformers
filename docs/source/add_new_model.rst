@@ -31,7 +31,7 @@ more importantly, you will have made a major open-source contribution to 🤗 Tr
 -  get insights into open-source best practices
 -  understand the design principles of one of the most popular NLP libraries
 -  learn how to do efficiently test large NLP models
--  learn how to integrate python utilities like ``black``, ``isort``, ``make fix-copies`` into a library to always
+-  learn how to integrate Python utilities like ``black``, ``isort``, ``make fix-copies`` into a library to always
    ensure clean and readable code
 
 We are also more than happy if you want to add a model that cannot be found in the “calls-for-model-addition” folder.
@@ -49,7 +49,7 @@ chance that you don’t agree with some of the library’s philosophies or desig
 we found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
 Transformers while keeping maintenance costs at a reasonable level.
 
-A good first starting point to better understand the library, recommend that you read the :doc:`documenation of our
+A good first starting point to better understand the library is to read the :doc:`documentation of our
 philosophy <philosophy>`. As a result of our way of working, there are some choices that we try to apply to all
 models:
 
@@ -115,7 +115,7 @@ of how other contributors ported models to Hugging Face. Here is a list of commu
 
 From experience, we can tell you that the most important things to keep in mind when adding a model are:
 
--  Don’t reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exists
+-  Don’t reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exist
    somewhere in 🤗 Transformers. Take some time to find similar, already existing models and tokenizers you can copy
    from. `grep <https://www.gnu.org/software/grep/>`__ and `rg <https://github.com/BurntSushi/ripgrep>`__ are your
    friends.
@@ -142,18 +142,20 @@ List:
 -  ☐ Run end-to-end integration tests on GPU
 -  ☐ Finished docs
 -  ☐ Uploaded model weights to the hub
--  ☐ Merged the pull request
--  ☐ (Optionally) added a notebook
+-  ☐ Submitted the pull request
+-  ☐ (Optionally) added a demo notebook
 
-For exemplary purposes, we will call the model that we will add to 🤗 Transformers BrandNewBert. To begin with, you
+For exemplary purposes, we will call the model that we will add to 🤗 Transformers ``BrandNewBert``. 
+
+To begin with, you
 should start by getting a good understanding of BrandNewBert.
 
 Theoretical aspects of BrandNewBert
 -----------------------------------------------------------------------------------------------------------------------
 
-You should take some time to read *brand_new_bert's* paper. There might be large sections of the paper that are
+You should take some time to read *brand_new_bert's* paper, if such descriptive work exists. There might be large sections of the paper that are
 difficult to understand. If this is the case, this is fine - don’t worry! The goal is not to get a deep theoretical
-understanding of the paper, but to extract the necessary information required to effectively re-implement the model to
+understanding of the paper, but to extract the necessary information required to effectively re-implement the model in
 🤗 Transformers. That being said, you don’t have to spend too much time on the theoretical aspects, but rather focus on
 the practical ones, namely:
 
@@ -167,8 +169,8 @@ the practical ones, namely:
 -  What type of tokenizer is used? A sentencepiece tokenizer? Word piece tokenizer? Is it the same tokenizer as used
    for BERT or BART?
 
-After you feel like you have gotten a good overview of the architecture of the model, you might want to write the
-Hugging Face team for any questions you might have. This might include questions regarding the model’s architecture,
+After you feel like you have gotten a good overview of the architecture of the model, you might want to write to the
+Hugging Face team with any questions you might have. This might include questions regarding the model’s architecture,
 its attention layer, etc. We will be more than happy to help you.
 
 Next prepare your environment
@@ -177,7 +179,7 @@ Next prepare your environment
 1. Fork the `repository <https://github.com/huggingface/transformers>`__ by clicking on the ‘Fork’ button on the
    repository’s page. This creates a copy of the code under your GitHub user account.
 
-2. Clone your fork to your local disk, and add the base repository as a remote:
+2. Clone your ``transformers`` fork to your local disk, and add the base repository as a remote:
 
    .. code:: bash
 
