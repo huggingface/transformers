@@ -380,7 +380,7 @@ important. Here is some advice is to make your debugging environment as efficien
 
 The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
 
-Port BrandNewBert to 🤗 Transformers
+5.-14. Port BrandNewBert to 🤗 Transformers
 -----------------------------------------------------------------------------------------------------------------------
 
 Next, you can finally start adding new code to 🤗 Transformers. Go into the clone of your 🤗 Transformers' fork:
@@ -466,7 +466,7 @@ In the same way, the Hugging Face team will open comments when reviewing your co
 on GitHub on your PR. For some very general questions that are not very useful for the public, feel free to ping the
 Hugging Face team by Slack or email.
 
-**Adapt the generated models code for brand_new_bert**
+**5. Adapt the generated models code for brand_new_bert**
 
 At first, we will focus only on the model itself and not care about the tokenizer. All the relevant code should be
 found in the generated files ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` and
@@ -496,7 +496,7 @@ following command should work:
 The above command will create a model according to the default parameters as defined in ``BrandNewBertConfig()`` with
 random weights, thus making sure that the ``init()`` methods of all components works.
 
-**Write a conversion script**
+**6. Write a conversion script**
 
 Next, you should write a conversion script that lets you convert the checkpoint you used to debug *brand_new_bert* in
 the original repository to a checkpoint compatible with your just created 🤗 Transformers implementation of
@@ -630,7 +630,7 @@ the model under a folder of your choice ``/path/to/converted/checkpoint/folder``
 
    model.save_pretrained("/path/to/converted/checkpoint/folder")
 
-**Implement the forward pass**
+**7. Implement the forward pass**
 
 Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
 sure that the forward pass is correctly implemented. In `Get familiar with the original repository
@@ -679,7 +679,7 @@ When you're confident that both implementations yield the same output, verifying
 ``torch.allclose(original_output, output, atol=1e-3)``, you're done with the most difficult part! Congratulations - the
 work left to be done should be a cakewalk 😊.
 
-**Adding all necessary model tests**
+**8. Adding all necessary model tests**
 
 At this point, you have successfully added a new model. However, it is very much possible that the model does not yet
 fully comply with the required design. To make sure, the implementation is fully compatible with 🤗 Transformers, all
@@ -717,7 +717,7 @@ ways:
    special features of *brand_new_bert* should work.
 -  Future contributors can quickly test changes to the model by running those special tests.
 
-**Implement the tokenizer**
+**9. Implement the tokenizer**
 
 Next, we should add the tokenizer of *brand_new_bert*. Usually, the tokenizer is equivalent or very similar to an
 already existing tokenizer of 🤗 Transformers.
@@ -753,7 +753,7 @@ When both ``input_ids`` yield the same values, as a final step a tokenizer test 
 Analogous to the modeling test files of *brand_new_bert*, the tokenization test files of *brand_new_bert* should
 contain a couple of hard-coded integration tests.
 
-**Run End-to-end integration tests**
+**10. Run End-to-end integration tests**
 
 Having added the tokenizer, you should also add a couple of end-to-end integration tests using both the model and the
 tokenizer to ``tests/test_modeling_brand_new_bert.py`` in 🤗 Transformers. Such a test should show on a meaningful
@@ -765,7 +765,7 @@ happen that you forgot to add some ``.to(self.device)`` statements to internal t
 test would show in an error. In case you have no access to a GPU, the Hugging Face team can take care of running those
 tests for you.
 
-**Add Docstring**
+**11. Add Docstring**
 
 Now, all the necessary functionality for *brand_new_bert* is added - you're almost done! The only thing left to add is
 a nice docstring and a doc page. The Cookiecutter should have added a template file called
@@ -803,7 +803,7 @@ tests passing, now it's a good time to go over the added code again and do some 
 
 You have now finished the coding part, congratulation! 🎉 You are Awesome! 😎
 
-**Upload the models to the model hub**
+**12. Upload the models to the model hub**
 
 In this final part, you should convert and upload all checkpoints to the model hub and add a model card for each
 uploaded model checkpoint. You should work alongside the Hugging Face team here to decide on a fitting name for each
@@ -815,7 +815,7 @@ specific characteristics of this particular checkpoint, *e.g.* On which dataset 
 pretrained/fine-tuned on? On what down-stream task should the model be used? And also include some code on how to
 correctly use the model.
 
-**(Optional) Add notebook**
+**13. (Optional) Add notebook**
 
 It is very helpful to add a notebook that showcases in-detail how *brand_new_bert* can be used for inference and/or
 fine-tuned on a downstream task. This is not mandatory to merge your PR, but very useful for the community.
