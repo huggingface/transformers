@@ -346,13 +346,6 @@ class GenerationMixin:
         """
         return {"input_ids": input_ids}
 
-    def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
-        """
-        Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to adjust the logits in
-        the generate method.
-        """
-        return logits
-
     def _prepare_input_ids_for_generation(self, bos_token_id: int) -> torch.LongTensor:
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
