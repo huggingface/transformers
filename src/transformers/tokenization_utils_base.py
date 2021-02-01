@@ -2640,7 +2640,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 f"that includes {self.required_input_name}, but you provided {list(encoded_inputs.keys())}"
             )
 
-        if not encoded_inputs[self.required_input_name]:
+        required_input = encoded_inputs[self.required_input_name]
+
+        if not required_input:
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
@@ -2649,14 +2651,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
-        first_element = encoded_inputs[self.required_input_name][0]
+        first_element = required_input[0]
         if isinstance(first_element, (list, tuple)):
             # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
             index = 0
-            while len(encoded_inputs[self.required_input_name][index]) == 0:
+            while len(required_input[index]) == 0:
                 index += 1
-            if index < len(encoded_inputs[self.required_input_name]):
-                first_element = encoded_inputs[self.required_input_name][index][0]
+            if index < len(required_input):
+                first_element = required_input[index][0]
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and _is_tensorflow(first_element):
@@ -2679,9 +2681,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             padding=padding, max_length=max_length, verbose=verbose
         )
 
-        if encoded_inputs[self.required_input_name] and not isinstance(
-            encoded_inputs[self.required_input_name][0], (list, tuple)
-        ):
+        if required_input and not isinstance(required_input[0], (list, tuple)):
             encoded_inputs = self._pad(
                 encoded_inputs,
                 max_length=max_length,
@@ -2691,13 +2691,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
-        batch_size = len(encoded_inputs[self.required_input_name])
+        batch_size = len(required_input)
         assert all(
             len(v) == batch_size for v in encoded_inputs.values()
         ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(inputs) for inputs in encoded_inputs[self.required_input_name])
+            max_length = max(len(inputs) for inputs in required_input)
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
