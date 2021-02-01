@@ -50,7 +50,8 @@ from ..bert.modeling_bert import (
     BertModel,
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
-from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration
+from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
+from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -60,8 +61,24 @@ from ..camembert.modeling_camembert import (
     CamembertForTokenClassification,
     CamembertModel,
 )
+
+# Add modeling imports here
+from ..convbert.modeling_convbert import (
+    ConvBertForMaskedLM,
+    ConvBertForMultipleChoice,
+    ConvBertForQuestionAnswering,
+    ConvBertForSequenceClassification,
+    ConvBertForTokenClassification,
+    ConvBertModel,
+)
 from ..ctrl.modeling_ctrl import CTRLForSequenceClassification, CTRLLMHeadModel, CTRLModel
-from ..deberta.modeling_deberta import DebertaForSequenceClassification, DebertaModel
+from ..deberta.modeling_deberta import (
+    DebertaForMaskedLM,
+    DebertaForQuestionAnswering,
+    DebertaForSequenceClassification,
+    DebertaForTokenClassification,
+    DebertaModel,
+)
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -100,7 +117,18 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
-from ..layoutlm.modeling_layoutlm import LayoutLMForMaskedLM, LayoutLMForTokenClassification, LayoutLMModel
+from ..layoutlm.modeling_layoutlm import (
+    LayoutLMForMaskedLM,
+    LayoutLMForSequenceClassification,
+    LayoutLMForTokenClassification,
+    LayoutLMModel,
+)
+from ..led.modeling_led import (
+    LEDForConditionalGeneration,
+    LEDForQuestionAnswering,
+    LEDForSequenceClassification,
+    LEDModel,
+)
 from ..longformer.modeling_longformer import (
     LongformerForMaskedLM,
     LongformerForMultipleChoice,
@@ -110,8 +138,13 @@ from ..longformer.modeling_longformer import (
     LongformerModel,
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
-from ..marian.modeling_marian import MarianMTModel
-from ..mbart.modeling_mbart import MBartForConditionalGeneration
+from ..marian.modeling_marian import MarianModel, MarianMTModel
+from ..mbart.modeling_mbart import (
+    MBartForConditionalGeneration,
+    MBartForQuestionAnswering,
+    MBartForSequenceClassification,
+    MBartModel,
+)
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -132,7 +165,7 @@ from ..mpnet.modeling_mpnet import (
 )
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration
+from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -209,7 +242,9 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
+    ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
     DistilBertConfig,
@@ -221,6 +256,7 @@ from .configuration_auto import (
     FunnelConfig,
     GPT2Config,
     LayoutLMConfig,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
     MarianConfig,
@@ -252,9 +288,16 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (ConvBertConfig, ConvBertModel),
+        (LEDConfig, LEDModel),
+        (BlenderbotSmallConfig, BlenderbotSmallModel),
         (RetriBertConfig, RetriBertModel),
         (MT5Config, MT5Model),
         (T5Config, T5Model),
+        (PegasusConfig, PegasusModel),
+        (MarianConfig, MarianMTModel),
+        (MBartConfig, MBartModel),
+        (BlenderbotConfig, BlenderbotModel),
         (DistilBertConfig, DistilBertModel),
         (AlbertConfig, AlbertModel),
         (CamembertConfig, CamembertModel),
@@ -285,6 +328,7 @@ MODEL_MAPPING = OrderedDict(
         (ProphetNetConfig, ProphetNetModel),
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
+        (MarianConfig, MarianModel),
     ]
 )
 
@@ -323,6 +367,9 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (ConvBertConfig, ConvBertForMaskedLM),
+        (LEDConfig, LEDForConditionalGeneration),
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (T5Config, T5ForConditionalGeneration),
         (DistilBertConfig, DistilBertForMaskedLM),
@@ -350,6 +397,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
@@ -379,10 +427,12 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+        (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (BartConfig, BartForConditionalGeneration),
+        (MBartConfig, MBartForConditionalGeneration),
         (CamembertConfig, CamembertForMaskedLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (LongformerConfig, LongformerForMaskedLM),
@@ -397,12 +447,15 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForMaskedLM),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+        (LEDConfig, LEDForConditionalGeneration),
+        (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
         (T5Config, T5ForConditionalGeneration),
         (PegasusConfig, PegasusForConditionalGeneration),
@@ -420,14 +473,18 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (ConvBertConfig, ConvBertForSequenceClassification),
+        (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
         (AlbertConfig, AlbertForSequenceClassification),
         (CamembertConfig, CamembertForSequenceClassification),
         (XLMRobertaConfig, XLMRobertaForSequenceClassification),
+        (MBartConfig, MBartForSequenceClassification),
         (BartConfig, BartForSequenceClassification),
         (LongformerConfig, LongformerForSequenceClassification),
         (RobertaConfig, RobertaForSequenceClassification),
         (SqueezeBertConfig, SqueezeBertForSequenceClassification),
+        (LayoutLMConfig, LayoutLMForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
         (MobileBertConfig, MobileBertForSequenceClassification),
@@ -449,10 +506,13 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (ConvBertConfig, ConvBertForQuestionAnswering),
+        (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
         (AlbertConfig, AlbertForQuestionAnswering),
         (CamembertConfig, CamembertForQuestionAnswering),
         (BartConfig, BartForQuestionAnswering),
+        (MBartConfig, MBartForQuestionAnswering),
         (LongformerConfig, LongformerForQuestionAnswering),
         (XLMRobertaConfig, XLMRobertaForQuestionAnswering),
         (RobertaConfig, RobertaForQuestionAnswering),
@@ -467,6 +527,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForQuestionAnswering),
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
+        (DebertaConfig, DebertaForQuestionAnswering),
     ]
 )
 
@@ -480,6 +541,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
         (CamembertConfig, CamembertForTokenClassification),
@@ -497,12 +559,14 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForTokenClassification),
         (FunnelConfig, FunnelForTokenClassification),
         (MPNetConfig, MPNetForTokenClassification),
+        (DebertaConfig, DebertaForTokenClassification),
     ]
 )
 
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
         (XLMRobertaConfig, XLMRobertaForMultipleChoice),
@@ -614,7 +678,7 @@ class AutoModel:
     r"""
     This is a generic model class that will be instantiated as one of the base model classes of the library when
     created with the :meth:`~transformers.AutoModel.from_pretrained` class method or the
-    :meth:`~transformers.AutoModel.from_config` class methods.
+    :meth:`~transformers.AutoModel.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -704,7 +768,7 @@ class AutoModel:
 class AutoModelForPreTraining:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with the
-    architecture used for pretraining this model---when created with the when created with the
+    architecture used for pretraining this model---when created with the
     :meth:`~transformers.AutoModelForPreTraining.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForPreTraining.from_config` class method.
 
@@ -798,9 +862,8 @@ class AutoModelForPreTraining:
 class AutoModelWithLMHead:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    language modeling head---when created with the when created with the
-    :meth:`~transformers.AutoModelWithLMHead.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelWithLMHead.from_config` class method.
+    language modeling head---when created with the :meth:`~transformers.AutoModelWithLMHead.from_pretrained` class
+    method or the :meth:`~transformers.AutoModelWithLMHead.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
 
@@ -910,9 +973,8 @@ class AutoModelWithLMHead:
 class AutoModelForCausalLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a causal
-    language modeling head---when created with the when created with the
-    :meth:`~transformers.AutoModelForCausalLM.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelForCausalLM.from_config` class method.
+    language modeling head---when created with the :meth:`~transformers.AutoModelForCausalLM.from_pretrained` class
+    method or the :meth:`~transformers.AutoModelForCausalLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1004,9 +1066,8 @@ class AutoModelForCausalLM:
 class AutoModelForMaskedLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
-    language modeling head---when created with the when created with the
-    :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelForMaskedLM.from_config` class method.
+    language modeling head---when created with the :meth:`~transformers.AutoModelForMaskedLM.from_pretrained` class
+    method or the :meth:`~transformers.AutoModelForMaskedLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1098,7 +1159,7 @@ class AutoModelForMaskedLM:
 class AutoModelForSeq2SeqLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence-to-sequence language modeling head---when created with the when created with the
+    sequence-to-sequence language modeling head---when created with the
     :meth:`~transformers.AutoModelForSeq2SeqLM.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForSeq2SeqLM.from_config` class method.
 
@@ -1196,7 +1257,7 @@ class AutoModelForSeq2SeqLM:
 class AutoModelForSequenceClassification:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence classification head---when created with the when created with the
+    sequence classification head---when created with the
     :meth:`~transformers.AutoModelForSequenceClassification.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForSequenceClassification.from_config` class method.
 
@@ -1294,9 +1355,8 @@ class AutoModelForSequenceClassification:
 class AutoModelForQuestionAnswering:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    question answering head---when created with the when created with the
-    :meth:`~transformers.AutoModeForQuestionAnswering.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelForQuestionAnswering.from_config` class method.
+    question answering head---when created with the :meth:`~transformers.AutoModeForQuestionAnswering.from_pretrained`
+    class method or the :meth:`~transformers.AutoModelForQuestionAnswering.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1393,7 +1453,7 @@ class AutoModelForQuestionAnswering:
 class AutoModelForTableQuestionAnswering:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a table
-    question answering head---when created with the when created with the
+    question answering head---when created with the
     :meth:`~transformers.AutoModeForTableQuestionAnswering.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForTableQuestionAnswering.from_config` class method.
 
@@ -1493,9 +1553,8 @@ class AutoModelForTableQuestionAnswering:
 class AutoModelForTokenClassification:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a token
-    classification head---when created with the when created with the
-    :meth:`~transformers.AutoModelForTokenClassification.from_pretrained` class method or the
-    :meth:`~transformers.AutoModelForTokenClassification.from_config` class method.
+    classification head---when created with the :meth:`~transformers.AutoModelForTokenClassification.from_pretrained`
+    class method or the :meth:`~transformers.AutoModelForTokenClassification.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1592,7 +1651,7 @@ class AutoModelForTokenClassification:
 class AutoModelForMultipleChoice:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the when created with the
+    multiple choice classification head---when created with the
     :meth:`~transformers.AutoModelForMultipleChoice.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForMultipleChoice.from_config` class method.
 
@@ -1691,8 +1750,8 @@ class AutoModelForMultipleChoice:
 
 class AutoModelForNextSentencePrediction:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a next
+    sentence prediction head---when created with the
     :meth:`~transformers.AutoModelForNextSentencePrediction.from_pretrained` class method or the
     :meth:`~transformers.AutoModelForNextSentencePrediction.from_config` class method.
 

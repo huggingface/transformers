@@ -29,9 +29,10 @@ python finetune_trainer.py \
     --freeze_encoder --freeze_embeds \
     --num_train_epochs=6 \
     --save_steps 3000 --eval_steps 3000 \
-    --max_source_length $MAX_LEN --max_target_length $MAX_LEN --val_max_target_length $MAX_LEN --test_max_target_length $MAX_LEN \
+    --max_source_length $MAX_LEN --max_target_length $MAX_LEN \
+    --val_max_target_length $MAX_TGT_LEN --test_max_target_length $MAX_TGT_LEN \
     --do_train --do_eval --do_predict \
     --evaluation_strategy steps \
     --predict_with_generate --logging_first_step \
-    --task translation --label_smoothing 0.1 \
+    --task translation --label_smoothing_factor 0.1 \
     "$@"

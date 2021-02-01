@@ -16,14 +16,21 @@
 import logging
 import os
 import sys
-import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 import transformers
 from seq2seq_trainer import Seq2SeqTrainer
 from seq2seq_training_args import Seq2SeqTrainingArguments
-from transformers import AutoConfig, AutoModelForSeq2SeqLM, AutoTokenizer, HfArgumentParser, MBartTokenizer, set_seed
+from transformers import (
+    AutoConfig,
+    AutoModelForSeq2SeqLM,
+    AutoTokenizer,
+    HfArgumentParser,
+    MBartTokenizer,
+    MBartTokenizerFast,
+    set_seed,
+)
 from transformers.trainer_utils import EvaluationStrategy, is_main_process
 from transformers.training_args import ParallelMode
 from utils import (
@@ -98,7 +105,9 @@ class DataTrainingArguments:
         default=142,
         metadata={
             "help": "The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "than this will be truncated, sequences shorter will be padded. "
+            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+            "during ``evaluate`` and ``predict``."
         },
     )
     test_max_target_length: Optional[int] = field(
@@ -120,30 +129,6 @@ class DataTrainingArguments:
     )
 
 
-def speed_metrics(split, start_time, num_samples):
-    """
-    Measure and return speed performance metrics.
-
-    This function requires a time snapshot `start_time` before the operation to be measured starts and this
-    function should be run immediately after the operation to be measured has completed.
-
-    Args:
-    - split: one of train, val, test
-    - start_time: operation start time
-    - num_samples: number of samples processed
-
-    """
-    runtime = time.time() - start_time
-    result = {}
-
-    samples_per_second = 1 / (runtime / num_samples)
-    result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
-    result[f"{split}_runtime"] = round(runtime, 4)
-
-    result[f"{split}_n_ojbs"] = num_samples
-    return result
-
-
 def handle_metrics(split, metrics, output_dir):
     """
     Log and save metrics
@@ -155,8 +140,8 @@ def handle_metrics(split, metrics, output_dir):
     """
 
     logger.info(f"***** {split} metrics *****")
-    for key, value in metrics.items():
-        logger.info(f"  {key} = {value}")
+    for key in sorted(metrics.keys()):
+        logger.info(f"  {key} = {metrics[key]}")
     save_json(metrics, os.path.join(output_dir, f"{split}_results.json"))
 
 
@@ -190,11 +175,11 @@ def main():
         bool(training_args.parallel_mode == ParallelMode.DISTRIBUTED),
         training_args.fp16,
     )
+    transformers.utils.logging.enable_default_handler()
+    transformers.utils.logging.enable_explicit_format()
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
-        transformers.utils.logging.enable_default_handler()
-        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed
@@ -236,11 +221,14 @@ def main():
         data_args.eval_beams = model.config.num_beams
 
     # set decoder_start_token_id for MBart
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         assert (
             data_args.tgt_lang is not None and data_args.src_lang is not None
         ), "mBart requires --tgt_lang and --src_lang"
-        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        if isinstance(tokenizer, MBartTokenizer):
+            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        else:
+            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.tgt_lang)
 
     if model_args.freeze_embeds:
         freeze_embeds(model)
@@ -297,13 +285,15 @@ def main():
     )
     trainer = Seq2SeqTrainer(
         model=model,
-        config=config,
         args=training_args,
+        data_args=data_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=Seq2SeqDataCollator(tokenizer, data_args, training_args.tpu_num_cores),
+        data_collator=Seq2SeqDataCollator(
+            tokenizer, data_args, model.config.decoder_start_token_id, training_args.tpu_num_cores
+        ),
         compute_metrics=compute_metrics_fn,
-        data_args=data_args,
+        tokenizer=tokenizer,
     )
 
     all_metrics = {}
@@ -311,11 +301,11 @@ def main():
     if training_args.do_train:
         logger.info("*** Train ***")
 
-        start_time = time.time()
-        trainer.train(
+        train_result = trainer.train(
             model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
         )
-        metrics = speed_metrics("train", start_time, data_args.n_train)
+        metrics = train_result.metrics
+        metrics["train_n_objs"] = data_args.n_train
 
         trainer.save_model()  # this also saves the tokenizer
 
@@ -334,9 +324,8 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        start_time = time.time()
         metrics = trainer.evaluate(metric_key_prefix="val")
-        metrics.update(speed_metrics("val", start_time, data_args.n_val))
+        metrics["val_n_objs"] = data_args.n_val
         metrics["val_loss"] = round(metrics["val_loss"], 4)
 
         if trainer.is_world_process_zero():
@@ -347,10 +336,9 @@ def main():
     if training_args.do_predict:
         logger.info("*** Predict ***")
 
-        start_time = time.time()
         test_output = trainer.predict(test_dataset=test_dataset, metric_key_prefix="test")
         metrics = test_output.metrics
-        metrics.update(speed_metrics("test", start_time, data_args.n_test))
+        metrics["test_n_objs"] = data_args.n_test
 
         if trainer.is_world_process_zero():
             metrics["test_loss"] = round(metrics["test_loss"], 4)

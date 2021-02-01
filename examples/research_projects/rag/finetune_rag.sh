@@ -2,7 +2,7 @@
 export PYTHONPATH="../":"${PYTHONPATH}"
 
 # A sample finetuning run, you need to specify data_dir, output_dir and model_name_or_path
-# run ./examples/rag/finetune.sh --help to see all the possible options
+# run ./examples/rag/finetune_rag.sh --help to see all the possible options
 
 python examples/rag/finetune_rag.py \
     --data_dir $DATA_DIR \
@@ -11,10 +11,10 @@ python examples/rag/finetune_rag.py \
     --model_type rag_sequence \
     --fp16 \
     --gpus 8 \
+    --profile \
     --do_train \
     --do_predict \
     --n_val -1 \
-    --val_check_interval 0.25 \
     --train_batch_size 8 \
     --eval_batch_size 1 \
     --max_source_length 128 \
@@ -31,4 +31,4 @@ python examples/rag/finetune_rag.py \
     --learning_rate 3e-05 \
     --num_train_epochs 100 \
     --warmup_steps 500 \
-    --gradient_accumulation_steps 1
+    --gradient_accumulation_steps 1 \

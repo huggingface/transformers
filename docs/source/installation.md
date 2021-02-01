@@ -19,7 +19,7 @@ limitations under the License.
 🤗 Transformers is tested on Python 3.6+, and PyTorch 1.1.0+ or TensorFlow 2.0+.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're
-unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going 
+unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). Create a virtual environment with the version of Python you're going
 to use and activate it.
 
 Now, if you want to use 🤗 Transformers, you can install it with pip. If you'd like to play with the examples, you
@@ -28,8 +28,8 @@ must install it from source.
 ## Installation with pip
 
 First you need to install one of, or both, TensorFlow 2.0 and PyTorch.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available), 
-[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or 
+Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/pip#tensorflow-2.0-rc-is-available),
+[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or
 [Flax installation page](https://github.com/google/flax#quick-install)
 regarding the specific install command for your platform.
 
@@ -73,7 +73,27 @@ It should download a pretrained model then print something like
 
 ## Installing from source
 
-To install from source, clone the repository and install with the following commands:
+Here is how to quickly install `transformers` from source:
+
+```bash
+pip install git+https://github.com/huggingface/transformers
+```
+
+Note that this will install not the latest released version, but the bleeding edge `master` version, which you may want to use in case a bug has been fixed since the last official release and a new release hasn't  been yet rolled out.
+
+While we strive to keep `master` operational at all times, if you notice some issues, they usually get fixed within a few hours or a day and and you're more than welcome to help us detect any problems by opening an [Issue](https://github.com/huggingface/transformers/issues) and this way, things will get fixed even sooner.
+
+Again, you can run:
+
+```bash
+python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('I hate you'))"
+```
+
+to check 🤗 Transformers is properly installed.
+
+## Editable install
+
+If you want to constantly use the bleeding edge `master` version of the source code, or if you want to contribute to the library and need to test the changes in the code you're making, you will need an editable install. This is done by cloning the repository and installing with the following commands:
 
 ``` bash
 git clone https://github.com/huggingface/transformers.git
@@ -81,13 +101,22 @@ cd transformers
 pip install -e .
 ```
 
-Again, you can run 
+This command performs a magical link between the folder you cloned the repository to and your python library paths, and it'll look inside this folder in addition to the normal library-wide paths. So if normally your python packages get installed into:
+```
+~/anaconda3/envs/main/lib/python3.7/site-packages/
+```
+now this editable install will reside where you clone the folder to, e.g. `~/transformers/` and python will search it too.
 
-```bash
-python -c "from transformers import pipeline; print(pipeline('sentiment-analysis')('I hate you'))"
+Do note that you have to keep that `transformers` folder around and not delete it to continue using the  `transfomers` library.
+
+Now, let's get to the real benefit of this installation approach. Say, you saw some new feature has been just committed into `master`. If you have already performed all the steps above, to update your transformers to include all the latest commits, all you need to do is to `cd` into that cloned repository folder and update the clone to the latest version:
+
+```
+cd ~/transformers/
+git pull
 ```
 
-to check 🤗 Transformers is properly installed.
+There is nothing else to do. Your python environment will find the bleeding edge version of `transformers` on the next run.
 
 
 ## With conda
@@ -100,7 +129,7 @@ Since Transformers version v4.0.0, we now have a conda channel: `huggingface`.
 conda install -c huggingface transformers
 ```
 
-Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda. 
+Follow the installation pages of TensorFlow, PyTorch or Flax to see how to install them with conda.
 
 ## Caching models
 
@@ -109,7 +138,7 @@ This library provides pretrained models that will be downloaded and cached local
 folder given by the shell environment variable ``TRANSFORMERS_CACHE``. The default value for it will be the Hugging
 Face cache home followed by ``/transformers/``. This is (by order of priority):
 
-  * shell environment variable ``HF_HOME`` 
+  * shell environment variable ``HF_HOME``
   * shell environment variable ``XDG_CACHE_HOME`` + ``/huggingface/``
   * default: ``~/.cache/huggingface/``
 
@@ -130,7 +159,7 @@ faster, and cheaper. Feel free to contact us privately if you need any help.
 
 You should check out our [swift-coreml-transformers](https://github.com/huggingface/swift-coreml-transformers) repo.
 
-It contains a set of tools to convert PyTorch or TensorFlow 2.0 trained Transformer models (currently contains `GPT-2`, 
+It contains a set of tools to convert PyTorch or TensorFlow 2.0 trained Transformer models (currently contains `GPT-2`,
 `DistilGPT-2`, `BERT`, and `DistilBERT`) to CoreML models that run on iOS devices.
 
 At some point in the future, you'll be able to seamlessly move from pretraining or fine-tuning models in PyTorch or
