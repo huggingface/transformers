@@ -308,7 +308,7 @@ def booleans_processing(config, **kwargs):
     return final_booleans
 
 
-def input_processing(func, config, input_ids, **kwargs):
+def input_processing(func, config, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
     has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
@@ -331,6 +331,7 @@ def input_processing(func, config, input_ids, **kwargs):
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
+    already_processed = kwargs["kwargs_call"].pop("already_processed", False)
 
     if "inputs" in kwargs["kwargs_call"]:
         warnings.warn(
@@ -359,6 +360,11 @@ def input_processing(func, config, input_ids, **kwargs):
             output[k] = v
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
+    
+    input_ids = kwargs.pop("input_ids")
+
+    if already_processed:
+        return output
 
     if isinstance(input_ids, (tuple, list)):
         for i, input in enumerate(input_ids):
