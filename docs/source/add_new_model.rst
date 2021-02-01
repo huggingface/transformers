@@ -28,46 +28,46 @@ If selected, you will then work closely with one member of the Hugging Face team
 Transformers. By doing so, you will both gain a theoretical and deep practical understanding of the proposed model. But
 more importantly, you will have made a major open-source contribution to 🤗 Transformers. Along the way, you will:
 
--  get insights into open-source best practices,
--  understand the design principles of one of the most popular NLP libraries,
--  learn how to do efficiently test large NLP models,
+-  get insights into open-source best practices
+-  understand the design principles of one of the most popular NLP libraries
+-  learn how to do efficiently test large NLP models
 -  learn how to integrate python utilities like ``black``, ``isort``, ``make fix-copies`` into a library to always
-   ensure clean and readable code.
+   ensure clean and readable code
 
-We are also more than happy if you want to add a model that can not be found in the “calls-for-model-addition” folder.
-The following sections explain in detail how to add a new model. It might also be very helpful to check-out already
+We are also more than happy if you want to add a model that cannot be found in the “calls-for-model-addition” folder.
+The following sections explain in detail how to add a new model. It might also be very helpful to check out already
 added models to see if those resemble the model you would like to add `here
 <https://github.com/huggingface/transformers/pulls?q=is%3Apr+label%3A%22PR+for+Model+Addition%22+is%3Aclosed>`__.
 
-To start with let’s try to get a general overview of the Transformers library.
+To start, let’s try to get a general overview of the Transformers library.
 
 General overview of 🤗 Transformers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First, you should get a general overview of 🤗 Transformers. 🤗 Transformers is a very opinionated library, so there is a
-chance that you don’t agree with some of the libraries’ philosophies or design choices. From our experience, however,
+chance that you don’t agree with some of the library’s philosophies or design choices. From our experience, however,
 we found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
 Transformers while keeping maintenance costs at a reasonable level.
 
 A good first starting point to better understand the library, recommend that you read the :doc:`documenation of our
-philosophy <philosophy>`. As a result of this philosophy, there are some design choices that we try to apply to all
+philosophy <philosophy>`. As a result of our way of working, there are some choices that we try to apply to all
 models:
 
 -  Composition is generally favored over-abstraction
 -  Duplicating code is not always bad if it strongly improves the readability or accessibility of a model
 -  Model files are as self-contained as possible so that when you read the code of a specific model, you ideally only
-   have to look into the respective ``..._modeling.py`` file.
+   have to look into the respective ``modeling_....py`` file.
 
-In our opinion, the libraries’ code is not just a means to provide a product, *e.g.* the ability to use BERT in
-inference, but as the very product that we want to improve. Hence, when adding a model, the user is not only the person
+In our opinion, the library’s code is not just a means to provide a product, *e.g.* the ability to use BERT for
+inference, but also as the very product that we want to improve. Hence, when adding a model, the user is not only the person
 that will use your model, but also everybody that will read, try to understand, and possibly tweak your code.
 
-With this in mind, let’s go a bit deeper about the general library design.
+With this in mind, let’s go a bit deeper into the general library design.
 
 Overview of models
 -----------------------------------------------------------------------------------------------------------------------
 
-To successfully add a model, it is important to understand the interaction your model will have with its config,
+To successfully add a model, it is important to understand the interaction between your model and its config,
 :class:`~transformers.PreTrainedModel`, and :class:`~transformers.PretrainedConfig`.
 
 Let’s take a look:
@@ -77,21 +77,21 @@ Let’s take a look:
 As you can see, we do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an absolute
 minimum. There are never more than two levels of abstraction for any model in the library. :obj:`BrandNewBertModel`
 inherits from :obj:`BrandNewBertPreTrainedModel` which in turn inherits from :class:`~transformres.PreTrainedModel` and
-that's it. As a general rule, we want to make sure that the only existing class a new model depends on is
+that's it. As a general rule, we want to make sure that a new model only depends on 
 :class:`~transformers.PreTrainedModel`. The important functionalities that are automatically provided to every new
-model are :meth:`~transformres.PreTrainedModel.from_pretrained` and
+model are :meth:`~transformers.PreTrainedModel.from_pretrained` and
 :meth:`~transformers.PreTrainedModel.save_pretrained`, which are used for serialization and deserialization. All of the
-other important functionalities, such as :meth:`BrandNewBertModelforward` should be more or less completely be defined
+other important functionalities, such as :meth:`BrandNewBertModelforward` should be completely defined
 in the new ``modeling_brand_new_bert.py`` script. Next, we want to make sure that a model with a specific head layer,
 such as :obj:`BrandNewBertForMaskedLM` does not inherit from :obj:`BrandNewBertModel`, but rather uses
 :obj:`BrandNewBertModel` as a component that can be called in its forward pass. Every new model requires its
 configuration class, called :obj:`BrandNewBertConfig`. This configuration is always stored as an attribute in the
-model, and thus can be accessed the ``config`` attribute:
+model, and thus can be accessed via the ``config`` attribute:
 
    .. code:: python
 
       model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
-      model.config  # model has access to the config
+      model.config  # model has access to its config
 
 The config then inherits basic serialization and deserialization functionalities from
 :class:`~transformers.PretrainedConfig` in the same fashion the model inherits from
@@ -112,9 +112,8 @@ of how other contributors ported models to Hugging Face. Here is a list of commu
 1. `Porting GPT2 Model <https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28>`__ by `Thomas
    <https://huggingface.co/thomwolf>`__
 2. `Porting WMT19 MT Model <https://huggingface.co/blog/porting-fsmt>`__ by `Stas <https://huggingface.co/stas>`__
-3. TODO(PVP): ADD TAPAS blog post by Niels?
 
-From experience, the most important things to keep in mind when adding a model are:
+From experience, we can tell you that the most important things to keep in mind when adding a model are:
 
 -  Don’t reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exists
    somewhere in 🤗 Transformers. Take some time to find similar, already existing models and tokenizers you can copy
