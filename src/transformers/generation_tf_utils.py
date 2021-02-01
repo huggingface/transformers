@@ -390,6 +390,8 @@ class TFGenerationMixin:
                 encoder_outputs=encoder_outputs,
                 attention_mask=attention_mask,
                 use_cache=use_cache,
+                forced_bos_token_id=forced_bos_token_id,
+                forced_eos_token_id=forced_eos_token_id,
             )
         else:
             output = self._generate_no_beam_search(
