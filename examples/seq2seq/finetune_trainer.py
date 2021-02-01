@@ -175,11 +175,11 @@ def main():
         bool(training_args.parallel_mode == ParallelMode.DISTRIBUTED),
         training_args.fp16,
     )
+    transformers.utils.logging.enable_default_handler()
+    transformers.utils.logging.enable_explicit_format()
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
-        transformers.utils.logging.enable_default_handler()
-        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed
