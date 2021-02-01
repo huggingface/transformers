@@ -653,12 +653,12 @@ class TFRagModel(TFRagPreTrainedModel):
                     retriever_outputs["retrieved_doc_embeds"],
                     retriever_outputs["doc_ids"],
                 )
-                
+
                 context_input_ids = tf.cast(context_input_ids, tf.int32)
                 context_attention_mask = tf.cast(context_attention_mask, tf.int32)
                 retrieved_doc_embeds = tf.cast(retrieved_doc_embeds, tf.float32)
                 retrieved_doc_ids = tf.cast(retrieved_doc_ids, tf.int32)
-                
+
                 # compute doc_scores
                 doc_scores = tf.squeeze(
                     tf.matmul(
@@ -845,26 +845,24 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     @staticmethod
     def _reorder_cache(past, beam_idx):
         """Reorders cache for generation. BART-inspired but we need to take care of the extra dimension for docs"""
-        
+
         def tf_index_select(input_, dim, indices):
             """
             Input:
-                input_(tensor): input tensor
-                dim(int): dimension
-                indices(list): selected indices list
+                input_(tensor): input tensor dim(int): dimension indices(list): selected indices list
             Output:
                 mimic of torch_tensor.index_select(dim, indices)
-            
+
             credit: https://stackoverflow.com/questions/58464790/is-there-an-equivalent-function-of-pytorch-named-index-select-in-tensorflow
             """
             shape = input_.get_shape().as_list()
             if dim == -1:
-                dim = len(shape)-1
+                dim = len(shape) - 1
             shape[dim] = 1
 
             tmp = []
             for idx in indices:
-                begin = [0]*len(shape)
+                begin = [0] * len(shape)
                 begin[dim] = idx
                 tmp.append(tf.slice(input_, begin, shape))
             res = tf.concat(tmp, axis=dim)
@@ -873,11 +871,11 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
         def _reorder_stacked(hidden_states, new_order=beam_idx):
             n_docs = hidden_states.shape[0] // new_order.shape[0]
-            hidden_states = tf.reshape(hidden_states, (-1, n_docs, *hidden_states.shape[1:]) )
+            hidden_states = tf.reshape(hidden_states, (-1, n_docs, *hidden_states.shape[1:]))
             hidden_states = tf_index_select(hidden_states, 0, new_order)
-            return tf.reshape(hidden_states, (-1, *hidden_states.shape[2:]) )
+            return tf.reshape(hidden_states, (-1, *hidden_states.shape[2:]))
 
-        if len(past)==1:
+        if len(past) == 1:
             return past
 
         past_key_values = past[1]

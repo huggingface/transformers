@@ -1270,7 +1270,14 @@ if TYPE_CHECKING:
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
-    from .models.dpr import DPR_PRETRAINED_CONFIG_ARCHIVE_MAP, DPRConfig, DPRReaderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderOutput, DPRContextEncoderTokenizer
+    from .models.dpr import (
+        DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DPRConfig,
+        DPRContextEncoderTokenizer,
+        DPRQuestionEncoderTokenizer,
+        DPRReaderOutput,
+        DPRReaderTokenizer,
+    )
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer

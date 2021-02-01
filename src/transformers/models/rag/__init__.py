@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available
 
+
 _import_structure = {
     "configuration_rag": ["RagConfig"],
     "retrieval_rag": ["RagRetriever"],
