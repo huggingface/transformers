@@ -54,6 +54,7 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 
 # Integration functions:
 def is_wandb_available():
+    # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         return False
     return importlib.util.find_spec("wandb") is not None
@@ -125,13 +126,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     import optuna
 
     def _objective(trial, checkpoint_dir=None):
-        model_path = None
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
         trainer.objective = None
-        trainer.train(model_path=model_path, trial=trial)
+        trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
@@ -150,13 +151,13 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
     import ray
 
     def _objective(trial, local_trainer, checkpoint_dir=None):
-        model_path = None
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
         local_trainer.objective = None
-        local_trainer.train(model_path=model_path, trial=trial)
+        local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
         if getattr(local_trainer, "objective", None) is None:
             metrics = local_trainer.evaluate()
@@ -535,7 +536,7 @@ class WandbCallback(TrainerCallback):
             WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
                 Set this to a custom string to store results in a different project.
             WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to disable wandb entirely.
+                Whether or not to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return

@@ -59,7 +59,7 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-ENV_VARS_TRUE_VALUES = {"1", "ON", "YES"}
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
 USE_TF = os.environ.get("USE_TF", "AUTO").upper()
@@ -1239,7 +1239,7 @@ def get_from_cache(
                 # the models might've been found if local_files_only=False
                 # Notify the user about that
                 if local_files_only:
-                    raise ValueError(
+                    raise FileNotFoundError(
                         "Cannot find the requested files in the cached path and outgoing traffic has been"
                         " disabled. To enable model look-ups and downloads online, set 'local_files_only'"
                         " to False."

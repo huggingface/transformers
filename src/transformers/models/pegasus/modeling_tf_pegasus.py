@@ -39,6 +39,7 @@ from ...modeling_tf_outputs import (
 # Public API
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
+    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
@@ -598,14 +599,20 @@ PEGASUS_INPUTS_DOCSTRING = r"""
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`). Set to :obj:`False` during training, :obj:`True` during generation
+            output_attentions (:obj:`bool`, `optional`): Whether or not to return the attentions tensors of all
+            attention layers. See ``attentions`` under returned tensors for more detail. This argument can be used only
+            in eager mode, in graph mode the value in the config will be used instead.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -689,12 +696,18 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
                 into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
+                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
+                in the config will be used instead.
             output_hidden_states (:obj:`bool`, `optional`):
                 Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
+                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
+                will be used instead.
             return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+                argument can be used in eager mode, in graph mode the value will always be set to True.
+            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the model in training mode (some modules like dropout modules have different
+                behaviors between training and evaluation).
         """
         inputs = input_processing(
             func=self.call,
@@ -881,12 +894,18 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
                 into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
+                returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
+                in the config will be used instead.
             output_hidden_states (:obj:`bool`, `optional`):
                 Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
+                for more detail. This argument can be used only in eager mode, in graph mode the value in the config
+                will be used instead.
             return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+                argument can be used in eager mode, in graph mode the value will always be set to True.
+            training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the model in training mode (some modules like dropout modules have different
+                behaviors between training and evaluation).
         """
         inputs = input_processing(
             func=self.call,
@@ -1252,7 +1271,7 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
     "The PEGASUS Model with a language modeling head. Can be used for summarization.",
     PEGASUS_START_DOCSTRING,
 )
-class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel):
+class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
@@ -1340,6 +1359,11 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel):
         )
 
         if inputs["labels"] is not None:
+            inputs["labels"] = tf.where(
+                inputs["labels"] == self.config.pad_token_id,
+                tf.fill(shape_list(inputs["labels"]), -100),
+                inputs["labels"],
+            )
             inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = shift_tokens_right(

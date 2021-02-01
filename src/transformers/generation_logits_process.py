@@ -439,8 +439,6 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             raise ValueError("`num_beam_groups` should be an integer strictly larger than 1.")
         if num_beam_groups > num_beams:
             raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`.")
-        if num_beam_groups > num_beams:
-            raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`")
         self._num_sub_beams = num_beams // num_beam_groups
 
     def __call__(
