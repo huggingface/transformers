@@ -450,7 +450,7 @@ you can click on the “Resolve” button of the created comment.
 
 In the same way, the Hugging Face team will open comments when reviewing your code. We recommend asking most questions
 on GitHub on your PR. For some very general questions that are not very useful for the public, feel free to ping the
-Hugging Face team by Slack or mail.
+Hugging Face team by Slack or email.
 
 **Adapt the generated models code for brand_new_bert**
 
@@ -460,7 +460,7 @@ found in the generated files ``src/transformers/models/brand_new_bert/modeling_b
 
 Now you can finally start coding :). The generated code in
 ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` will either have the same architecture as BERT if
-it’s an encoder-only model or BART if it’s an encoder-decoder model. At this point, you should remind yourself what
+it's an encoder-only model or BART if it’s an encoder-decoder model. At this point, you should remind yourself what
 you’ve learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
 BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization
 layer, etc… Again, it is often useful to look at the similar architecture of already existing models in Transformers to
@@ -472,7 +472,7 @@ advised to add a first *unclean*, copy-pasted version of the original code to
 added. From our experience, it is much more efficient to quickly add a first version of the required code and
 improve/correct the code iteratively with the conversion script as described in the next section. The only thing that
 has to work at this point is that you can instantiate the 🤗 Transformers implementation of *brand_new_bert*, *i.e.* the
-following command works:
+following command should work:
 
 .. code:: python
 
@@ -497,7 +497,7 @@ existing conversion script for your model.
 -  If you are porting a model from PyTorch to PyTorch, a good starting point might be BART’s conversion script `here
    <https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py>`__
 
-In the following, we’ll quickly explain how PyTorch models stores layer weights and define layer names. In PyTorch, the
+In the following, we’ll quickly explain how PyTorch models store layer weights and define layer names. In PyTorch, the
 name of a layer is defined by the name of the class attribute you give the layer. Let’s define a dummy model in
 PyTorch, called ``SimpleModel`` as follows:
 
@@ -531,14 +531,13 @@ This will print out the following:
      (layer_norm): LayerNorm((10,), eps=1e-05, elementwise_affine=True)
    )
 
-We can see that the layer names are defined by the name of the class attribute in PyTorch. Printing out the values of a
-weight,
+We can see that the layer names are defined by the name of the class attribute in PyTorch. You can print out the weight values of a specific layer:
 
 .. code:: python
 
    print(model.dense.weight.data)
 
-shows that the weights were randomly initialized
+to see that the weights were randomly initialized
 
 .. code:: bash
 
@@ -563,8 +562,7 @@ shows that the weights were randomly initialized
            [-0.1492, -0.1616,  0.1057,  0.1950, -0.2807, -0.2710, -0.1586,  0.0739,
              0.2220,  0.2358]]).
 
-In the conversion script, you should fill those randomly initialized weights with the corresponding pretrained weights
-of the checkpoint by setting ``weight.data`` pointer to its respective layer weight of the checkpoint. *E.g.*
+In the conversion script, you should fill those randomly initialized weights with the exact weights of the corresponding layer in the checkpoint. *E.g.*
 
 .. code:: python
 
@@ -689,7 +687,7 @@ tests are passing, run
 
 .. code:: python
 
-   RUN_SLOW=1 pytest tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
+   RUN_SLOW=1 pytest -sv tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 
 Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
 ``BrandNewBertModelTester``/``BrandNewBertModelTest``. This part is often forgotten but is extremely useful in two
@@ -707,7 +705,7 @@ already existing tokenizer of 🤗 Transformers.
 It is very important to find/extract the original tokenizer file and to manage to load this file into the 🤗
 Transformers’ implementation of the tokenizer.
 
-To ensure that the tokenizer works correctly, it is recommend to analogous to the model, first create a script in the
+To ensure that the tokenizer works correctly, it is recommended to first create a script in the
 original repository that inputs a string and returns the ``input_ids``. It could look similar to this (in pseudo-code):
 
 .. code:: bash
@@ -784,7 +782,7 @@ tests passing, now it’s a good time to go over the added code again and do som
 
 You have now finished the coding part, congratulation! 🎉 You are Awesome! 😎
 
-**Upload the models to the modeling hub**
+**Upload the models to the model hub**
 
 In this final part, you should convert and upload all checkpoints to the model hub and add a model card for each
 uploaded model checkpoint. You should work alongside the Hugging Face team here to decide on a fitting name for each
@@ -793,7 +791,7 @@ checkpoint and to get the required access rights to be able to upload the model 
 
 It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the
 specific characteristics of this particular checkpoint, *e.g.* On which dataset was the checkpoint
-pretrained/fine-tuned on? On what down-stream task should the model be used? and also include some code on how to
+pretrained/fine-tuned on? On what down-stream task should the model be used? And also include some code on how to
 correctly use the model.
 
 **(Optional) Add notebook**
@@ -805,7 +803,7 @@ Share your work!!
 -----------------------------------------------------------------------------------------------------------------------
 
 Now, it’s time to get some credit from the community for your work! Having completed a model addition is a major
-contribution to Transformers and the whole NLP community. Your code will certainly be used by hundreds of developers
+contribution to Transformers and the whole NLP community. Your code and the ported pre-trained models will certainly be used by hundreds and possibly even thousands of developers
 and researchers. You should be proud of your work and share your achievement with the community.
 
 **You have made another model that is super easy to access for everyone in the community! 🤯**
