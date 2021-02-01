@@ -207,7 +207,8 @@ class GenerationTesterMixin:
             max_length = 4
         logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
             input_ids.shape[-1],
-            max_length,
+            eos_token_id=model.config.eos_token_id,
+            max_length=max_length,
         )
 
         kwargs = {}
