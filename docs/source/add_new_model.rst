@@ -236,28 +236,28 @@ From our experience, it is very important to spend some time getting familiar wi
 -  How to run the tokenizer independently from the model?
 -  Trace one forward pass so that you know which classes and functions are required for a simple forward pass. Usually,
    you only have to reimplement those functions.
--  Be able to locate the important components of the model: Where is the model class? Are there submodel classes,
+-  Be able to locate the important components of the model: Where is the model's class? Are there model sub-classes,
    *e.g.* EncoderModel, DecoderModel? Where is the self-attention layer? Are there multiple different attention layers,
    *e.g.* *self-attention*, *cross-attention*...?
--  How can you debug the model in the original environment of the repo? Do you have to set `print` statements, can you
+-  How can you debug the model in the original environment of the repo? Do you have to add `print` statements, can you
    work with an interactive debugger like `ipdb`, or should you use an efficient IDE to debug the model, like PyCharm?
 
-It is very important that before you start opening a PR in 🤗 Transformers that you can **efficiently** debug code in
+It is very important that before you start the porting process, that you can **efficiently** debug code in
 the original repository!
 
-At this point, it is really up to you which debugging environment and strategy you prefer to debug the original model.
+At this point, it is really up to you which debugging environment and strategy you prefer to use to debug the original model.
 We strongly advise against setting up a costly GPU environment, but simply work on a CPU both when starting to dive
-into the original repository and also when starting to write the 🤗 Transformers implementation of the model. Only in
+into the original repository and also when starting to write the 🤗 Transformers implementation of the model. Only at
 the very end, when the model has already been successfully ported to 🤗 Transformers, one should verify that the model
 also works as expected on GPU.
 
 In general, there are two possible debugging environments for running the original model
 
--  `Jupyther notebooks <https://jupyter.org/>`_, *e.g.* the `google colab
+-  `Jupyter notebooks <https://jupyter.org/>`_, *e.g.* `google colab
    <https://colab.research.google.com/notebooks/intro.ipynb>`_
 -  Local python scripts.
 
-Jupiter notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
+Jupyter notebooks have the advantage that they allow for cell-by-cell execution which can be helpful to better split
 logical components from one another and to have faster debugging cycles as intermediate results can be stored. Also,
 notebooks are often easier to share with other contributors, which might be very helpful if you want to ask the Hugging
 Face team for help. If you are familiar with Jupiter notebooks, we strongly recommend you to work with them.
@@ -276,7 +276,7 @@ pseudocode):
    input_ids = [0, 4, 5, 2, 3, 7, 9]  # vector of input ids
    original_output = model.predict(input_ids)
 
-Next, regarding the debugging strategy, there are generally from which to choose from:
+Next, regarding the debugging strategy, there are generally a few from which to choose from:
 
 -  Decompose the original model into many small testable components and run a forward pass on each of those for
    verification
@@ -290,15 +290,15 @@ If the original code base allows you to decompose the model into smaller subcomp
 can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages to taking
 the more difficult road in the beginning:
 
--  at a later stage when comparing the original model to the hugging face implementation, you can verify automatically
+-  at a later stage when comparing the original model to the Hugging Face implementation, you can verify automatically
    for each component individually that the corresponding component of the 🤗 Transformers implementation matches
    instead of relying on visual comparison via print statements
 -  it can give you some rope to decompose the big problem of porting a model into smaller problems of just porting
    individual components and thus structure your work better
--  separating the model into logical meaningful components will help you to get a better overview of the model design
+-  separating the model into logical meaningful components will help you to get a better overview of the model's design
    and thus to better understand the model
 - at a later stage those component-by-component tests help you to ensure that no regression occurs as you continue
-  changing your 🤗 Transformers
+  changing your code
 
 `Lysandre’s <https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed>`__ integration checks for ELECTRA
 gives a nice example of how this can be done.
@@ -309,8 +309,8 @@ example is `T5’s MeshTensorFlow <https://github.com/tensorflow/mesh/tree/maste
 very complex and does not offer a simple way to decompose the model into its subcomponents. For such libraries, one
 often relies on verifying print statements.
 
-No matter which strategy, you choose, the recommended procedure is often the same in that you should start to debug the
-starting layers at first and the ending layers at last.
+No matter which strategy you choose, the recommended procedure is often the same in that you should start to debug the
+starting layers first and the ending layers last.
 
 It is recommended that you retrieve the output, either by print statements or subcomponent functions, of the following
 layers in the following order:
@@ -340,10 +340,10 @@ The outputs of the following layers often consist of multi-dimensional float arr
 We expect that every model added to 🤗 Transformers passes a couple of integration tests, meaning that the original
 model and the reimplemented version in 🤗 Transformers have to give the exact same output up to a precision of 0.001!
 Since it is normal that the exact same model written in different libraries can give a slightly different output
-depending on the library framework, which is why we accept an error tolerance of 1e-3 == 0.001. It is not enough if the
-model gives nearly the same output, they have to be the same. Therefore, you will certainly compare the intermediate
+depending on the library framework, we accept an error tolerance of 1e-3 (0.001). It is not enough if the
+model gives nearly the same output, they have to be the almost identical. Therefore, you will certainly compare the intermediate
 outputs of the 🤗 Transformers version multiple times against the intermediate outputs of the original implementation of
-*brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolute key. Here
+*brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely important. Here
 is some advice is to make your debugging environment as efficient as possible.
 
 -  Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
@@ -359,8 +359,8 @@ is some advice is to make your debugging environment as efficient as possible.
    of your model
 -  Make sure you are using the easiest way of calling a forward pass in the original repository. Ideally, you want to
    find the function in the original repository that **only** calls a single forward pass, *i.e.* that is often called
-   `predict`, `evaluate`, `forward` or `__call__`. You don't want to debug a function that calls `forward` multiple
-   times, *e.g.* to generate text, like `autoregressive_sample`, `generate`.
+   `'predict``, ``evaluate``, ``forward`` or ``__call__``. You don't want to debug a function that calls ``forward`` multiple
+   times, *e.g.* to generate text, like ``autoregressive_sample``, ``generate``.
 -  Try to separate the tokenization from the model's `forward` pass. If the original repository shows examples where
    you have to input a string, then try to find out where in the forward call the string input is changed to input ids
    and start from this point. This might mean that you have to possibly write a small script yourself or change the
@@ -372,10 +372,10 @@ is some advice is to make your debugging environment as efficient as possible.
 
 The following section gives you more specific details/tips on how you can do this for *brand_new_bert*.
 
-Implement BrandNewBert into 🤗 Transformers
+Port BrandNewBert to 🤗 Transformers
 -----------------------------------------------------------------------------------------------------------------------
 
-Next, you can finally add code to 🤗 Transformers. Go into the clone of your 🤗 Transformers’ fork:
+Next, you can finally start adding new code to 🤗 Transformers. Go into the clone of your 🤗 Transformers’ fork:
 
 ::
 
