@@ -19,7 +19,7 @@ import argparse
 import os
 from pathlib import Path
 
-# import fairseq
+import fairseq
 import torch
 from packaging import version
 
