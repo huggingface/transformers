@@ -1493,6 +1493,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
     max_model_input_sizes: Dict[str, Optional[int]] = {}
     model_input_names: List[str] = ["token_type_ids", "attention_mask"]
+    required_input_name: str = ["input_ids"]
     padding_side: str = "right"
     slow_tokenizer_class = None
 
@@ -2633,13 +2634,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
-        assert "input_ids" in encoded_inputs, (
-            "You should supply an encoding or a list of encodings to this method. "
-            "An encoding is the output of one the encoding methods of the tokenizer, i.e. "
-            "__call__/encode_plus/batch_encode_plus. "
-        )
+        if self.required_input_name not in encoded_inputs:
+            raise ValueError(
+                "You should supply an encoding or a list of encodings to this method that includes {self.required_input_name}, but you provided {list(encoded_inputs.keys()}"
+            )
 
-        if not encoded_inputs["input_ids"]:
+        if not encoded_inputs[self.required_input_name]:
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
             return encoded_inputs
@@ -2648,14 +2648,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         # and rebuild them afterwards if no return_tensors is specified
         # Note that we lose the specific device the tensor may be on for PyTorch
 
-        first_element = encoded_inputs["input_ids"][0]
+        first_element = encoded_inputs[self.required_input_name][0]
         if isinstance(first_element, (list, tuple)):
             # first_element might be an empty list/tuple in some edge cases so we grab the first non empty element.
             index = 0
-            while len(encoded_inputs["input_ids"][index]) == 0:
+            while len(encoded_inputs[self.required_input_name][index]) == 0:
                 index += 1
-            if index < len(encoded_inputs["input_ids"]):
-                first_element = encoded_inputs["input_ids"][index][0]
+            if index < len(encoded_inputs[self.required_input_name]):
+                first_element = encoded_inputs[self.required_input_name][index][0]
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
         if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and _is_tensorflow(first_element):
@@ -2678,7 +2678,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             padding=padding, max_length=max_length, verbose=verbose
         )
 
-        if encoded_inputs["input_ids"] and not isinstance(encoded_inputs["input_ids"][0], (list, tuple)):
+        if encoded_inputs[self.required_input_name] and not isinstance(
+            encoded_inputs[self.required_input_name][0], (list, tuple)
+        ):
             encoded_inputs = self._pad(
                 encoded_inputs,
                 max_length=max_length,
@@ -2688,13 +2690,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             )
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
 
-        batch_size = len(encoded_inputs["input_ids"])
+        batch_size = len(encoded_inputs[self.required_input_name])
         assert all(
             len(v) == batch_size for v in encoded_inputs.values()
         ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = max(len(inputs) for inputs in encoded_inputs["input_ids"])
+            max_length = max(len(inputs) for inputs in encoded_inputs[self.required_input_name])
             padding_strategy = PaddingStrategy.MAX_LENGTH
 
         batch_outputs = {}
@@ -3005,41 +3007,50 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             return_attention_mask = "attention_mask" in self.model_input_names
 
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = len(encoded_inputs["input_ids"])
+            max_length = len(encoded_inputs[self.required_input_name])
 
         if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
 
         needs_to_be_padded = (
-            padding_strategy != PaddingStrategy.DO_NOT_PAD and len(encoded_inputs["input_ids"]) != max_length
+            padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and len(encoded_inputs[self.required_input_name]) != max_length
         )
 
         if needs_to_be_padded:
-            difference = max_length - len(encoded_inputs["input_ids"])
+            difference = max_length - len(encoded_inputs[self.required_input_name])
             if self.padding_side == "right":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"]) + [0] * difference
+                    encoded_inputs["attention_mask"] = [1] * len(encoded_inputs[self.required_input_name]) + [
+                        0
+                    ] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (
                         encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
                     )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs["input_ids"] = encoded_inputs["input_ids"] + [self.pad_token_id] * difference
+                encoded_inputs[self.required_input_name] = (
+                    encoded_inputs[self.required_input_name] + [self.pad_token_id] * difference
+                )
             elif self.padding_side == "left":
                 if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(encoded_inputs["input_ids"])
+                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(
+                        encoded_inputs[self.required_input_name]
+                    )
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
                         "token_type_ids"
                     ]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs["input_ids"] = [self.pad_token_id] * difference + encoded_inputs["input_ids"]
+                encoded_inputs[self.required_input_name] = [self.pad_token_id] * difference + encoded_inputs[
+                    self.required_input_name
+                ]
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in encoded_inputs:
-            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs["input_ids"])
+            encoded_inputs["attention_mask"] = [1] * len(encoded_inputs[self.required_input_name])
 
         return encoded_inputs
 
