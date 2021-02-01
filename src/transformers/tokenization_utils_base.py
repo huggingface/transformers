@@ -2633,6 +2633,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
+        assert "input_ids" in encoded_inputs, (
+            "You should supply an encoding or a list of encodings to this method. "
+            "An encoding is the output of one the encoding methods of the tokenizer, i.e. "
+            "__call__/encode_plus/batch_encode_plus. "
+        )
+
         if not encoded_inputs["input_ids"]:
             if return_attention_mask:
                 encoded_inputs["attention_mask"] = []
