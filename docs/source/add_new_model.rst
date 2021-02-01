@@ -67,7 +67,8 @@ Overview of models
 -----------------------------------------------------------------------------------------------------------------------
 
 To successfully add a model, it is important to understand the interaction between your model and its config,
-:class:`~transformers.PreTrainedModel`, and :class:`~transformers.PretrainedConfig`.
+:class:`~transformers.PreTrainedModel`, and :class:`~transformers.PretrainedConfig`. For exemplary purposes, we will
+call the model to be added to 🤗 Transformers ``BrandNewBert``.
 
 Let's take a look:
 
@@ -148,8 +149,6 @@ List:
 -  12. ☐ Uploaded model weights to the hub
 -  13. ☐ Submitted the pull request
 -  14. ☐ (Optional) Added a demo notebook
-
-For exemplary purposes, we will call the model that we will add to 🤗 Transformers ``BrandNewBert``.
 
 To begin with, we usually recommend to start by getting a good theoretical understanding of ``BrandNewBert``. However,
 if you prefer to understand the theoretical aspects of the model *on-the-job*, then it is totally fine to directly dive
@@ -300,13 +299,13 @@ If the original code-base allows you to decompose the model into smaller sub-com
 code-base can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages
 to taking the more difficult road in the beginning:
 
--  at a later stage when comparing the original model to the Hugging Face implementation, you can verify automatically
-   for each component individually that the corresponding component of the 🤗 Transformers implementation matches
-   instead of relying on visual comparison via print statements
--  it can give you some rope to decompose the big problem of porting a model into smaller problems of just porting
-   individual components and thus structure your work better
--  separating the model into logical meaningful components will help you to get a better overview of the model's design
-   and thus to better understand the model
+- at a later stage when comparing the original model to the Hugging Face implementation, you can verify automatically
+  for each component individually that the corresponding component of the 🤗 Transformers implementation matches instead
+  of relying on visual comparison via print statements
+- it can give you some rope to decompose the big problem of porting a model into smaller problems of just porting
+  individual components and thus structure your work better
+- separating the model into logical meaningful components will help you to get a better overview of the model's design
+  and thus to better understand the model
 - at a later stage those component-by-component tests help you to ensure that no regression occurs as you continue
   changing your code
 
@@ -359,9 +358,9 @@ important. Here is some advice is to make your debugging environment as efficien
 -  Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
    probably take the time to write a longer script that decomposes the original model into smaller sub-components to
    retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on
-   TensorFlow print operations like `tf.print <https://www.tensorflow.org/api_docs/python/tf/print>`__ to output intermediate values.
-   Is the original repository written in Jax? Then make sure that the model is **not jitted** when running the forward
-   pass, *e.g.* check-out `this link <https://github.com/google/jax/issues/196>`__.
+   TensorFlow print operations like `tf.print <https://www.tensorflow.org/api_docs/python/tf/print>`__ to output
+   intermediate values. Is the original repository written in Jax? Then make sure that the model is **not jitted** when
+   running the forward pass, *e.g.* check-out `this link <https://github.com/google/jax/issues/196>`__.
 -  Use the smallest pretrained checkpoint you can find. The smaller the checkpoint, the faster your debug cycle
    becomes. It is not efficient if your pretrained model is so big that your forward pass takes more than 10 seconds.
    In case only very large checkpoints are available, it might make more sense to create a dummy model in the new
@@ -528,8 +527,8 @@ PyTorch, called ``SimpleModel`` as follows:
                self.intermediate = nn.Linear(10, 10)
                self.layer_norm = nn.LayerNorm(10)
 
-Now we can create an instance of this model definition which will fill all weights: ``dense``, ``intermediate``, ``layer_norm``
-with random weights. We can print the model to see its architecture
+Now we can create an instance of this model definition which will fill all weights: ``dense``, ``intermediate``,
+``layer_norm`` with random weights. We can print the model to see its architecture
 
 .. code:: python
 
@@ -636,9 +635,9 @@ the model under a folder of your choice ``/path/to/converted/checkpoint/folder``
 
 Having managed to correctly load the pretrained weights into the 🤗 Transformers implementation, you should now make
 sure that the forward pass is correctly implemented. In `Get familiar with the original repository
-<#run-a-pretrained-checkpoint-using-the-original-repository>`__, you have already created a script that runs a forward pass of the
-model using the original repository. Now you should write an analogous script using the 🤗 Transformers implementation
-instead of the original one. It should look as follows:
+<#run-a-pretrained-checkpoint-using-the-original-repository>`__, you have already created a script that runs a forward
+pass of the model using the original repository. Now you should write an analogous script using the 🤗 Transformers
+implementation instead of the original one. It should look as follows:
 
 .. code:: python
 
@@ -711,8 +710,11 @@ tests are passing, run
 
    RUN_SLOW=1 pytest -sv tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 
-*In case you are using Windows, you should replace ``RUN_SLOW=1`` with ``SET RUN_SLOW=1``.* Second, all features that
-are special to *brand_new_bert* should be tested additionally in a separate test under
+.. note::
+
+  In case you are using Windows, you should replace ``RUN_SLOW=1`` with ``SET RUN_SLOW=1``
+
+Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
 ``BrandNewBertModelTester``/``BrandNewBertModelTest``. This part is often forgotten but is extremely useful in two
 ways:
 
