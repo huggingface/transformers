@@ -13,7 +13,7 @@ How to add a model to 🤗 Transformers?
 =======================================================================================================================
 
 Adding a new model is often difficult and requires an in-depth knowledge of the 🤗 Transformers library and ideally also
-of the model’s original repository. At Hugging Face, we are trying to empower the community more and more to add models
+of the model's original repository. At Hugging Face, we are trying to empower the community more and more to add models
 independently. Thus, for some new models that the community wants to be added to 🤗 Transformers, we create a customized
 *call-for-model-addition* that explains step-by-step how to add the requested model. With this
 *call-for-model-addition*, we want to teach a motivated and experienced contributor of the community how to port a
@@ -39,30 +39,29 @@ The following sections explain in detail how to add a new model. It might also b
 added models to see if those resemble the model you would like to add `here
 <https://github.com/huggingface/transformers/pulls?q=is%3Apr+label%3A%22PR+for+Model+Addition%22+is%3Aclosed>`__.
 
-To start, let’s try to get a general overview of the Transformers library.
+To start, let's try to get a general overview of the Transformers library.
 
 General overview of 🤗 Transformers
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 First, you should get a general overview of 🤗 Transformers. 🤗 Transformers is a very opinionated library, so there is a
-chance that you don’t agree with some of the library’s philosophies or design choices. From our experience, however,
-we found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
+chance that you don't agree with some of the library's philosophies or design choices. From our experience, however, we
+found that the fundamental design choices and philosophies of the library are crucial to efficiently scale 🤗
 Transformers while keeping maintenance costs at a reasonable level.
 
-A good first starting point to better understand the library is to read the :doc:`documentation of our
-philosophy <philosophy>`. As a result of our way of working, there are some choices that we try to apply to all
-models:
+A good first starting point to better understand the library is to read the :doc:`documentation of our philosophy
+<philosophy>`. As a result of our way of working, there are some choices that we try to apply to all models:
 
 -  Composition is generally favored over-abstraction
 -  Duplicating code is not always bad if it strongly improves the readability or accessibility of a model
 -  Model files are as self-contained as possible so that when you read the code of a specific model, you ideally only
    have to look into the respective ``modeling_....py`` file.
 
-In our opinion, the library’s code is not just a means to provide a product, *e.g.* the ability to use BERT for
-inference, but also as the very product that we want to improve. Hence, when adding a model, the user is not only the person
-that will use your model, but also everybody that will read, try to understand, and possibly tweak your code.
+In our opinion, the library's code is not just a means to provide a product, *e.g.* the ability to use BERT for
+inference, but also as the very product that we want to improve. Hence, when adding a model, the user is not only the
+person that will use your model, but also everybody that will read, try to understand, and possibly tweak your code.
 
-With this in mind, let’s go a bit deeper into the general library design.
+With this in mind, let's go a bit deeper into the general library design.
 
 Overview of models
 -----------------------------------------------------------------------------------------------------------------------
@@ -70,32 +69,35 @@ Overview of models
 To successfully add a model, it is important to understand the interaction between your model and its config,
 :class:`~transformers.PreTrainedModel`, and :class:`~transformers.PretrainedConfig`.
 
-Let’s take a look:
+Let's take a look:
 
 .. image:: ./imgs/transformers_overview.png
 
 As you can see, we do make use of inheritance in 🤗 Transformers, but we keep the level of abstraction to an absolute
 minimum. There are never more than two levels of abstraction for any model in the library. :obj:`BrandNewBertModel`
 inherits from :obj:`BrandNewBertPreTrainedModel` which in turn inherits from :class:`~transformres.PreTrainedModel` and
-that's it. As a general rule, we want to make sure that a new model only depends on 
+that's it. As a general rule, we want to make sure that a new model only depends on
 :class:`~transformers.PreTrainedModel`. The important functionalities that are automatically provided to every new
 model are :meth:`~transformers.PreTrainedModel.from_pretrained` and
 :meth:`~transformers.PreTrainedModel.save_pretrained`, which are used for serialization and deserialization. All of the
-other important functionalities, such as :meth:`BrandNewBertModelforward` should be completely defined
-in the new ``modeling_brand_new_bert.py`` script. Next, we want to make sure that a model with a specific head layer,
-such as :obj:`BrandNewBertForMaskedLM` does not inherit from :obj:`BrandNewBertModel`, but rather uses
-:obj:`BrandNewBertModel` as a component that can be called in its forward pass. Every new model requires its
-configuration class, called :obj:`BrandNewBertConfig`. This configuration is always stored as an attribute in the
-model, and thus can be accessed via the ``config`` attribute:
+other important functionalities, such as :meth:`BrandNewBertModelforward` should be completely defined in the new
+``modeling_brand_new_bert.py`` script. Next, we want to make sure that a model with a specific head layer, such as
+:obj:`BrandNewBertForMaskedLM` does not inherit from :obj:`BrandNewBertModel`, but rather uses :obj:`BrandNewBertModel`
+as a component that can be called in its forward pass to keep the level of abstraction low. Every new model requires a
+configuration class, called :obj:`BrandNewBertConfig`. This configuration is always stored as an attribute in
+:class:`~transformers.PreTrainedModel`, and thus can be accessed via the ``config`` attribute for all classes
+inheriting from :obj:`BrandNewBertPreTrainedModel`:
 
    .. code:: python
 
       model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
       model.config  # model has access to its config
 
-The config then inherits basic serialization and deserialization functionalities from
-:class:`~transformers.PretrainedConfig` in the same fashion the model inherits from
-:class:`~transformers.PreTrainedModel`.
+Similar to the model, the configuration inherits basic serialization and deserialization functionalities from
+:class:`~transformers.PretrainedConfig`. Note that the configuration and the model are always serialized into two
+different formats - the model to a `pytorch_model.bin` file and the configuration to a `config.json` file. Calling
+:meth:`~transformers.PreTrainedModel.save_pretrained` will automatically call
+:meth:`~transformers.PretrainedConfig.save_pretrained`, so that both model and configuration are saved.
 
 
 Overview of tokenizers
@@ -115,14 +117,16 @@ of how other contributors ported models to Hugging Face. Here is a list of commu
 
 From experience, we can tell you that the most important things to keep in mind when adding a model are:
 
--  Don’t reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exist
+-  Don't reinvent the wheel! Most parts of the code you will add for the new 🤗 Transformers model already exist
    somewhere in 🤗 Transformers. Take some time to find similar, already existing models and tokenizers you can copy
    from. `grep <https://www.gnu.org/software/grep/>`__ and `rg <https://github.com/BurntSushi/ripgrep>`__ are your
-   friends.
--  It’s more of an engineering challenge than a scientific challenge. You should spend more time on creating an
+   friends. Note that it might very well happen that your model's tokenizer is based on one model implementation, and
+   your model's modeling code on another one. *E.g.* FSMT's modeling code is based on BART, while FSMT's tokenizer code
+   is based on XLM.
+-  It's more of an engineering challenge than a scientific challenge. You should spend more time on creating an
    efficient debugging environment than trying to understand all theoretical aspects of the model in the paper.
--  Ask for help, when you’re stuck! Models are the core component of 🤗 Transformers so that we at Hugging Face are more
-   than happy to help you at every step to add your model. Don’t hesitate to ask if you notice you are not making
+-  Ask for help, when you're stuck! Models are the core component of 🤗 Transformers so that we at Hugging Face are more
+   than happy to help you at every step to add your model. Don't hesitate to ask if you notice you are not making
    progress.
 
 In the following, we try to give you a general recipe that we found most useful when porting a model to 🤗 Transformers.
@@ -130,54 +134,57 @@ In the following, we try to give you a general recipe that we found most useful 
 The following list is a summary of everything that has to be done to add a model and can be used by you as a To-Do
 List:
 
--  ☐ Understood theoretical aspects
--  ☐ Prepared environment
--  ☐ Set up debugging environment of the original repository
--  ☐ Created script that successfully runs forward pass using original repository and checkpoint
--  ☐ Successfully added the model skeleton to Transformers
--  ☐ Successfully converted original checkpoint to Transformers checkpoint
--  ☐ Successfully ran forward pass in Transformers that gives identical output to original checkpoint
--  ☐ Finished model tests in Transformers
--  ☐ Successfully added Tokenizer in Transformers
--  ☐ Run end-to-end integration tests on GPU
--  ☐ Finished docs
--  ☐ Uploaded model weights to the hub
--  ☐ Submitted the pull request
--  ☐ (Optionally) added a demo notebook
+-  1. ☐ (Optional) Understood theoretical aspects
+-  2. ☐ Prepared transformers dev environment
+-  3. ☐ Set up debugging environment of the original repository
+-  4. ☐ Created script that successfully runs forward pass using original repository and checkpoint
+-  5. ☐ Successfully added the model skeleton to Transformers
+-  6. ☐ Successfully converted original checkpoint to Transformers checkpoint
+-  7. ☐ Successfully ran forward pass in Transformers that gives identical output to original checkpoint
+-  8. ☐ Finished model tests in Transformers
+-  9. ☐ Successfully added Tokenizer in Transformers
+-  10. ☐ Run end-to-end integration tests
+-  11. ☐ Finished docs
+-  12. ☐ Uploaded model weights to the hub
+-  13. ☐ Submitted the pull request
+-  14. ☐ (Optional) Added a demo notebook
 
-For exemplary purposes, we will call the model that we will add to 🤗 Transformers ``BrandNewBert``. 
+For exemplary purposes, we will call the model that we will add to 🤗 Transformers ``BrandNewBert``.
 
-To begin with, you
-should start by getting a good understanding of BrandNewBert.
+To begin with, we usually recommend to start by getting a good theoretical understanding of ``BrandNewBert``. However,
+if you prefer to understand the theoretical aspects of the model *on-the-job*, then it is totally fine to directly dive
+into the ``BrandNewBert``'s code-base. This option might suit you better, if your engineering skills are better than
+your theoretical skill, if you have trouble understanding ``BrandNewBert``'s paper, or if you just enjoy programming
+much more than reading scientific papers.
 
-Theoretical aspects of BrandNewBert
+1. (Optional) Theoretical aspects of BrandNewBert
 -----------------------------------------------------------------------------------------------------------------------
 
-You should take some time to read *brand_new_bert's* paper, if such descriptive work exists. There might be large sections of the paper that are
-difficult to understand. If this is the case, this is fine - don’t worry! The goal is not to get a deep theoretical
-understanding of the paper, but to extract the necessary information required to effectively re-implement the model in
-🤗 Transformers. That being said, you don’t have to spend too much time on the theoretical aspects, but rather focus on
-the practical ones, namely:
+You should take some time to read *BrandNewBert's* paper, if such descriptive work exists. There might be large
+sections of the paper that are difficult to understand. If this is the case, this is fine - don't worry! The goal is
+not to get a deep theoretical understanding of the paper, but to extract the necessary information required to
+effectively re-implement the model in 🤗 Transformers. That being said, you don't have to spend too much time on the
+theoretical aspects, but rather focus on the practical ones, namely:
 
 -  What type of model is *brand_new_bert*? BERT-like encoder-only model? GPT2-like decoder-only model? BART-like
    encoder-decoder model?
 -  What are the applications of *brand_new_bert*? Text classification? Text generation? Seq2Seq tasks, *e.g.,*
    summarization?
--  What is the novel feature of the model making it different from BERT or BART (if it’s an encoder-decoder model)?
+-  What is the novel feature of the model making it different from BERT or BART (if it's an encoder-decoder model)?
 -  Which of the already existing `🤗 Transformers models <https://huggingface.co/transformers/#contents>`__ is most
    similar to *brand_new_bert*?
 -  What type of tokenizer is used? A sentencepiece tokenizer? Word piece tokenizer? Is it the same tokenizer as used
    for BERT or BART?
 
 After you feel like you have gotten a good overview of the architecture of the model, you might want to write to the
-Hugging Face team with any questions you might have. This might include questions regarding the model’s architecture,
+Hugging Face team with any questions you might have. This might include questions regarding the model's architecture,
 its attention layer, etc. We will be more than happy to help you.
 
-Next prepare your environment
+2. Next prepare your environment
 -----------------------------------------------------------------------------------------------------------------------
 
-1. Fork the `repository <https://github.com/huggingface/transformers>`__ by clicking on the ‘Fork’ button on the
-   repository’s page. This creates a copy of the code under your GitHub user account.
+1. Fork the `repository <https://github.com/huggingface/transformers>`__ by clicking on the ‘Fork' button on the
+   repository's page. This creates a copy of the code under your GitHub user account.
 
 2. Clone your ``transformers`` fork to your local disk, and add the base repository as a remote:
 
@@ -204,7 +211,7 @@ and return to the parent directory
 4. We recommend adding the PyTorch version of *brand_new_bert* to Transformers. To install PyTorch, please follow the
    instructions on https://pytorch.org/get-started/locally/.
 
-**Note:** You don’t need to have CUDA installed. Making the new model work on CPU is sufficient.
+**Note:** You don't need to have CUDA installed. Making the new model work on CPU is sufficient.
 
 5. To port *brand_new_bert*, you will also need access to its original repository:
 
@@ -216,20 +223,21 @@ and return to the parent directory
 
 Now you have set up a development environment to port *brand_new_bert* to 🤗 Transformers.
 
-Run a pretrained checkpoint using the original repository
+3.-4. Run a pretrained checkpoint using the original repository
 -----------------------------------------------------------------------------------------------------------------------
 
-At first, you will work on the original *brand_new_bert* repository. Often, the original implementation is very “researchy”. Meaning that
-documentation might be lacking and the code can be difficult to understand. But this should be exactly your motivation
-to reimplement *brand_new_bert*. At Hugging Face, one of our main goals is to *make people stand on the shoulders of
-giants* which translates here very well into taking a working model and rewriting it to make it as **accessible,
-user-friendly, and beautiful** as possible. This is the number-one motivation to re-implement models into 🤗
-Transformers - trying to make complex new NLP technology accessible to **everybody**.
+At first, you will work on the original *brand_new_bert* repository. Often, the original implementation is very
+“researchy”. Meaning that documentation might be lacking and the code can be difficult to understand. But this should
+be exactly your motivation to reimplement *brand_new_bert*. At Hugging Face, one of our main goals is to *make people
+stand on the shoulders of giants* which translates here very well into taking a working model and rewriting it to make
+it as **accessible, user-friendly, and beautiful** as possible. This is the number-one motivation to re-implement
+models into 🤗 Transformers - trying to make complex new NLP technology accessible to **everybody**.
 
 You should start thereby by diving into the original repository.
 
 Successfully running the official pretrained model in the original repository is often **the most difficult** step.
-From our experience, it is very important to spend some time getting familiar with the original codebase. You need to figure out the following:
+From our experience, it is very important to spend some time getting familiar with the original code-base. You need to
+figure out the following:
 
 -  Where to find the pretrained weights?
 -  How to load the pretrained weights into the corresponding model?
@@ -242,14 +250,14 @@ From our experience, it is very important to spend some time getting familiar wi
 -  How can you debug the model in the original environment of the repo? Do you have to add `print` statements, can you
    work with an interactive debugger like `ipdb`, or should you use an efficient IDE to debug the model, like PyCharm?
 
-It is very important that before you start the porting process, that you can **efficiently** debug code in
-the original repository!
+It is very important that before you start the porting process, that you can **efficiently** debug code in the original
+repository!
 
-At this point, it is really up to you which debugging environment and strategy you prefer to use to debug the original model.
-We strongly advise against setting up a costly GPU environment, but simply work on a CPU both when starting to dive
-into the original repository and also when starting to write the 🤗 Transformers implementation of the model. Only at
-the very end, when the model has already been successfully ported to 🤗 Transformers, one should verify that the model
-also works as expected on GPU.
+At this point, it is really up to you which debugging environment and strategy you prefer to use to debug the original
+model. We strongly advise against setting up a costly GPU environment, but simply work on a CPU both when starting to
+dive into the original repository and also when starting to write the 🤗 Transformers implementation of the model. Only
+at the very end, when the model has already been successfully ported to 🤗 Transformers, one should verify that the
+model also works as expected on GPU.
 
 In general, there are two possible debugging environments for running the original model
 
@@ -286,9 +294,9 @@ Next, regarding the debugging strategy, there are generally a few from which to 
 Again, it is up to you which strategy to choose. Often, one or the other is advantageous depending on the original code
 base.
 
-If the original code base allows you to decompose the model into smaller subcomponents, *e.g.* if the original codebase
-can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages to taking
-the more difficult road in the beginning:
+If the original code-base allows you to decompose the model into smaller sub-components, *e.g.* if the original
+code-base can easily be run in eager mode, it is usually worth the effort to do so. There are some important advantages
+to taking the more difficult road in the beginning:
 
 -  at a later stage when comparing the original model to the Hugging Face implementation, you can verify automatically
    for each component individually that the corresponding component of the 🤗 Transformers implementation matches
@@ -300,19 +308,19 @@ the more difficult road in the beginning:
 - at a later stage those component-by-component tests help you to ensure that no regression occurs as you continue
   changing your code
 
-`Lysandre’s <https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed>`__ integration checks for ELECTRA
+`Lysandre's <https://gist.github.com/LysandreJik/db4c948f6b4483960de5cbac598ad4ed>`__ integration checks for ELECTRA
 gives a nice example of how this can be done.
 
-However, if the original code base is very complex or only allows intermediate components to be run in a compiled mode,
-it might be too time-consuming or even impossible to separate the model into smaller testable subcomponents. A good
-example is `T5’s MeshTensorFlow <https://github.com/tensorflow/mesh/tree/master/mesh_tensorflow>`__ library which is
-very complex and does not offer a simple way to decompose the model into its subcomponents. For such libraries, one
+However, if the original code-base is very complex or only allows intermediate components to be run in a compiled mode,
+it might be too time-consuming or even impossible to separate the model into smaller testable sub-components. A good
+example is `T5's MeshTensorFlow <https://github.com/tensorflow/mesh/tree/master/mesh_tensorflow>`__ library which is
+very complex and does not offer a simple way to decompose the model into its sub-components. For such libraries, one
 often relies on verifying print statements.
 
 No matter which strategy you choose, the recommended procedure is often the same in that you should start to debug the
 starting layers first and the ending layers last.
 
-It is recommended that you retrieve the output, either by print statements or subcomponent functions, of the following
+It is recommended that you retrieve the output, either by print statements or sub-component functions, of the following
 layers in the following order:
 
 1.  Retrieve the input IDs passed to the model
@@ -340,14 +348,14 @@ The outputs of the following layers often consist of multi-dimensional float arr
 We expect that every model added to 🤗 Transformers passes a couple of integration tests, meaning that the original
 model and the reimplemented version in 🤗 Transformers have to give the exact same output up to a precision of 0.001!
 Since it is normal that the exact same model written in different libraries can give a slightly different output
-depending on the library framework, we accept an error tolerance of 1e-3 (0.001). It is not enough if the
-model gives nearly the same output, they have to be the almost identical. Therefore, you will certainly compare the intermediate
+depending on the library framework, we accept an error tolerance of 1e-3 (0.001). It is not enough if the model gives
+nearly the same output, they have to be the almost identical. Therefore, you will certainly compare the intermediate
 outputs of the 🤗 Transformers version multiple times against the intermediate outputs of the original implementation of
-*brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely important. Here
-is some advice is to make your debugging environment as efficient as possible.
+*brand_new_bert* in which case an **efficient** debugging environment of the original repository is absolutely
+important. Here is some advice is to make your debugging environment as efficient as possible.
 
 -  Find the best way of debugging intermediate results. Is the original repository written in PyTorch? Then you should
-   probably take the time to write a longer script that decomposes the original model into smaller subcomponents to
+   probably take the time to write a longer script that decomposes the original model into smaller sub-components to
    retrieve intermediate values. Is the original repository written in Tensorflow 1? Then you might have to rely on
    TensorFlow print operations like https://www.tensorflow.org/api_docs/python/tf/print to output intermediate values.
    Is the original repository written in Jax? Then make sure that the model is **not jitted** when running the forward
@@ -359,8 +367,8 @@ is some advice is to make your debugging environment as efficient as possible.
    of your model
 -  Make sure you are using the easiest way of calling a forward pass in the original repository. Ideally, you want to
    find the function in the original repository that **only** calls a single forward pass, *i.e.* that is often called
-   `'predict``, ``evaluate``, ``forward`` or ``__call__``. You don't want to debug a function that calls ``forward`` multiple
-   times, *e.g.* to generate text, like ``autoregressive_sample``, ``generate``.
+   `'predict``, ``evaluate``, ``forward`` or ``__call__``. You don't want to debug a function that calls ``forward``
+   multiple times, *e.g.* to generate text, like ``autoregressive_sample``, ``generate``.
 -  Try to separate the tokenization from the model's `forward` pass. If the original repository shows examples where
    you have to input a string, then try to find out where in the forward call the string input is changed to input ids
    and start from this point. This might mean that you have to possibly write a small script yourself or change the
@@ -375,7 +383,7 @@ The following section gives you more specific details/tips on how you can do thi
 Port BrandNewBert to 🤗 Transformers
 -----------------------------------------------------------------------------------------------------------------------
 
-Next, you can finally start adding new code to 🤗 Transformers. Go into the clone of your 🤗 Transformers’ fork:
+Next, you can finally start adding new code to 🤗 Transformers. Go into the clone of your 🤗 Transformers' fork:
 
 ::
 
@@ -385,9 +393,9 @@ In the special case that you are adding a model whose architecture exactly match
 existing model you only have to add a conversion script as described in `this section <#write-a-conversion-script>`__.
 In this case, you can just re-use the whole model architecture of the already existing model.
 
-Otherwise, let’s start generating a new model with the amazing Cookiecutter!
+Otherwise, let's start generating a new model with the amazing Cookiecutter!
 
-**Use the Cookiecutter to automatically generate the model’s code**
+**Use the Cookiecutter to automatically generate the model's code**
 
 To begin with head over to the `🤗 Transformers templates
 <https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model>`__ to make use of our
@@ -404,33 +412,39 @@ side-by-side on integrating the model into 🤗 Transformers.
 
 You should do the following:
 
-1. Commit the automatically generated code:
+1. Create a branch with a descriptive name from your master branch
+
+::
+
+   git checkout -b add_brand_new_bert
+
+2. Commit the automatically generated code:
 
 ::
 
    git add .
    git commit
 
-2. Fetch and rebase to current master
+3. Fetch and rebase to current master
 
 ::
 
    git fetch upstream
    git rebase upstream/master
 
-3. Push the changes to your account using:
+4. Push the changes to your account using:
 
 ::
 
    git push -u origin a-descriptive-name-for-my-changes
 
-4. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
+5. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
    GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
    future changes.
 
-5. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
+6. Change the PR into a draft by clicking on “Convert to draft” on the right of the GitHub pull request web page.
 
-In the following, whenever you have done some progress, don’t forget to commit your work and push it to your account so
+In the following, whenever you have done some progress, don't forget to commit your work and push it to your account so
 that it shows in the pull request. Additionally, you should make sure to update your work with the current master from
 time to time by doing:
 
@@ -460,13 +474,13 @@ found in the generated files ``src/transformers/models/brand_new_bert/modeling_b
 
 Now you can finally start coding :). The generated code in
 ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` will either have the same architecture as BERT if
-it's an encoder-only model or BART if it’s an encoder-decoder model. At this point, you should remind yourself what
-you’ve learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
+it's an encoder-only model or BART if it's an encoder-decoder model. At this point, you should remind yourself what
+you've learned in the beginning about the theoretical aspects of the model: *How is the model different from BERT or
 BART?*". Implement those changes which often means to change the *self-attention* layer, the order of the normalization
 layer, etc… Again, it is often useful to look at the similar architecture of already existing models in Transformers to
 get a better feeling of how your model should be implemented.
 
-**Note** that at this point, you don’t have to be very sure that your code is fully correct or clean. Rather, it is
+**Note** that at this point, you don't have to be very sure that your code is fully correct or clean. Rather, it is
 advised to add a first *unclean*, copy-pasted version of the original code to
 ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` until you feel like all the necessary code is
 added. From our experience, it is much more efficient to quickly add a first version of the required code and
@@ -489,16 +503,16 @@ the original repository to a checkpoint compatible with your just created 🤗 T
 *brand_new_bert*. It is not advised to write the conversion script from scratch, but rather to look through already
 existing conversion scripts in 🤗 Transformers for one that has been used to convert a similar model that was written in
 the same framework as *brand_new_bert*. Usually, it is enough to copy an already existing conversion script and
-slightly adapt it for your use case. Don’t hesitate to ask the Hugging Face team to point you to a similar already
+slightly adapt it for your use case. Don't hesitate to ask the Hugging Face team to point you to a similar already
 existing conversion script for your model.
 
--  If you are porting a model from TensorFlow to PyTorch, a good starting point might be BERT’s conversion script `here
+-  If you are porting a model from TensorFlow to PyTorch, a good starting point might be BERT's conversion script `here
    <https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91>`__
--  If you are porting a model from PyTorch to PyTorch, a good starting point might be BART’s conversion script `here
+-  If you are porting a model from PyTorch to PyTorch, a good starting point might be BART's conversion script `here
    <https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py>`__
 
-In the following, we’ll quickly explain how PyTorch models store layer weights and define layer names. In PyTorch, the
-name of a layer is defined by the name of the class attribute you give the layer. Let’s define a dummy model in
+In the following, we'll quickly explain how PyTorch models store layer weights and define layer names. In PyTorch, the
+name of a layer is defined by the name of the class attribute you give the layer. Let's define a dummy model in
 PyTorch, called ``SimpleModel`` as follows:
 
 .. code:: python
@@ -531,7 +545,8 @@ This will print out the following:
      (layer_norm): LayerNorm((10,), eps=1e-05, elementwise_affine=True)
    )
 
-We can see that the layer names are defined by the name of the class attribute in PyTorch. You can print out the weight values of a specific layer:
+We can see that the layer names are defined by the name of the class attribute in PyTorch. You can print out the weight
+values of a specific layer:
 
 .. code:: python
 
@@ -562,7 +577,8 @@ to see that the weights were randomly initialized
            [-0.1492, -0.1616,  0.1057,  0.1950, -0.2807, -0.2710, -0.1586,  0.0739,
              0.2220,  0.2358]]).
 
-In the conversion script, you should fill those randomly initialized weights with the exact weights of the corresponding layer in the checkpoint. *E.g.*
+In the conversion script, you should fill those randomly initialized weights with the exact weights of the
+corresponding layer in the checkpoint. *E.g.*
 
 .. code:: python
 
@@ -591,12 +607,12 @@ Besides, you should also print out the names of both weights to make sure they m
 
    logger.info(f"Initialize PyTorch weight {layer_name} from {pretrained_weight.name}")
 
-If either the shape or the name doesn’t match, you probably assigned the wrong checkpoint weight to a randomly
+If either the shape or the name doesn't match, you probably assigned the wrong checkpoint weight to a randomly
 initialized layer of the 🤗 Transformers implementation.
 
 An incorrect shape is most likely due to an incorrect setting of the config parameters in ``BrandNewBertConfig()`` that
 do not exactly match those that were used for the checkpoint you want to convert. However, it could also be that
-PyTorch’s implementation of a layer requires the weight to be transposed beforehand.
+PyTorch's implementation of a layer requires the weight to be transposed beforehand.
 
 Finally, you should also check that **all** required weights are initialized and print out all checkpoint weights that
 were not used for initialization to make sure the model is correctly converted. It is completely normal, that the
@@ -607,8 +623,12 @@ implementation or you need to transpose one of the checkpoint weights.
 
 This step should be iterated with the previous step until all weights of the checkpoint are correctly loaded in the
 Transformers model. Having correctly loaded the checkpoint into the 🤗 Transformers implementation, you can then save
-the model under a folder of your choice ``/path/to/converted/checkpoint/folder`` that should include both a
-``pytorch_model.bin`` file and a ``config.json`` file.
+the model under a folder of your choice ``/path/to/converted/checkpoint/folder`` that should then contain both a
+``pytorch_model.bin`` file and a ``config.json`` file:
+
+.. code:: python
+
+   model.save_pretrained("/path/to/converted/checkpoint/folder")
 
 **Implement the forward pass**
 
@@ -624,11 +644,11 @@ instead of the original one. It should look as follows:
    input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
    output = model(input_ids).last_hidden_states
 
-It is very likely that the 🤗 Transformers implementation and the original model implementation don’t give the exact
-same output the very first time or that the forward pass throws an error. Don’t be disappointed - it’s expected! First,
-you should make sure that the forward pass doesn’t throw any errors. It often happens that the wrong dimensions are
+It is very likely that the 🤗 Transformers implementation and the original model implementation don't give the exact
+same output the very first time or that the forward pass throws an error. Don't be disappointed - it's expected! First,
+you should make sure that the forward pass doesn't throw any errors. It often happens that the wrong dimensions are
 used leading to a ``Dimensionality mismatch`` error or that the wrong data type object is used, *e.g.* ``torch.long``
-instead of ``torch.float32``. Don’t hesitate to ask the Hugging Face team for help, if you don’t manage to solve
+instead of ``torch.float32``. Don't hesitate to ask the Hugging Face team for help, if you don't manage to solve
 certain errors.
 
 The final part to make sure the 🤗 Transformers implementation works correctly is to ensure that the outputs are
@@ -655,8 +675,8 @@ in the 🤗 Transformers implementation. From our experience, a simple and effic
 in both the original implementation and 🤗 Transformers implementation, at the same positions in the network
 respectively, and to successively remove print statements showing the same values for intermediate presentions.
 
-When you’re confident that both implementations yield the same output, verifying the outputs with
-``torch.allclose(original_output, output, atol=1e-3)``, you’re done with the most difficult part! Congratulations - the
+When you're confident that both implementations yield the same output, verifying the outputs with
+``torch.allclose(original_output, output, atol=1e-3)``, you're done with the most difficult part! Congratulations - the
 work left to be done should be a cakewalk 😊.
 
 **Adding all necessary model tests**
@@ -703,10 +723,10 @@ Next, we should add the tokenizer of *brand_new_bert*. Usually, the tokenizer is
 already existing tokenizer of 🤗 Transformers.
 
 It is very important to find/extract the original tokenizer file and to manage to load this file into the 🤗
-Transformers’ implementation of the tokenizer.
+Transformers' implementation of the tokenizer.
 
-To ensure that the tokenizer works correctly, it is recommended to first create a script in the
-original repository that inputs a string and returns the ``input_ids``. It could look similar to this (in pseudo-code):
+To ensure that the tokenizer works correctly, it is recommended to first create a script in the original repository
+that inputs a string and returns the ``input_ids``. It could look similar to this (in pseudo-code):
 
 .. code:: bash
 
@@ -740,17 +760,18 @@ tokenizer to ``tests/test_modeling_brand_new_bert.py`` in 🤗 Transformers. Suc
 text-to-text sample that the 🤗 Transformers implementation works as expected. A meaningful text-to-text sample can
 include *e.g.* a source-to-target-translation pair, an article-to-summary pair, a question-to-answer pair, etc… If none
 of the ported checkpoints has been fine-tuned on a downstream task it is enough to simply rely on the model tests. In a
-final step to ensure that the model is fully functional, you should also run all tests on GPU. It can happen that you
-forgot to add some ``.to(self.device)`` statements to internal tensors of the model, which in such a test would show in
-an error.
+final step to ensure that the model is fully functional, it is advised that you also run all tests on GPU. It can
+happen that you forgot to add some ``.to(self.device)`` statements to internal tensors of the model, which in such a
+test would show in an error. In case you have no access to a GPU, the Hugging Face team can take care of running those
+tests for you.
 
 **Add Docstring**
 
-Now, all the necessary functionality for *brand_new_bert* is added - you’re almost done! The only thing left to add is
+Now, all the necessary functionality for *brand_new_bert* is added - you're almost done! The only thing left to add is
 a nice docstring and a doc page. The Cookiecutter should have added a template file called
 ``docs/source/model_doc/brand_new_bert.rst`` that you should fill out. Users of your model will usually first look at
 this page before using your model. Hence, the documentation must be understandable and concise. It is very useful for
-the community to add some *Tips* to show how the model should be used. Don’t hesitate to ping the Hugging Face team
+the community to add some *Tips* to show how the model should be used. Don't hesitate to ping the Hugging Face team
 regarding the docstrings.
 
 Next, make sure that the docstring added to ``src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`` is
@@ -775,10 +796,10 @@ and verify that your coding style passes the quality check:
 
 There are a couple of other very strict design tests in 🤗 Transformers that might still be failing, which shows up in
 the tests of your pull request. This is often because of some missing information in the docstring or some incorrect
-naming. The Hugging Face team will surely help you if you’re stuck here.
+naming. The Hugging Face team will surely help you if you're stuck here.
 
-Lastly, it is always a good idea to refactor one’s code after having ensured that the code works correctly. With all
-tests passing, now it’s a good time to go over the added code again and do some refactoring.
+Lastly, it is always a good idea to refactor one's code after having ensured that the code works correctly. With all
+tests passing, now it's a good time to go over the added code again and do some refactoring.
 
 You have now finished the coding part, congratulation! 🎉 You are Awesome! 😎
 
@@ -786,7 +807,7 @@ You have now finished the coding part, congratulation! 🎉 You are Awesome! �
 
 In this final part, you should convert and upload all checkpoints to the model hub and add a model card for each
 uploaded model checkpoint. You should work alongside the Hugging Face team here to decide on a fitting name for each
-checkpoint and to get the required access rights to be able to upload the model under the author’s organization of
+checkpoint and to get the required access rights to be able to upload the model under the author's organization of
 *brand_new_bert*.
 
 It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the
@@ -799,11 +820,19 @@ correctly use the model.
 It is very helpful to add a notebook that showcases in-detail how *brand_new_bert* can be used for inference and/or
 fine-tuned on a downstream task. This is not mandatory to merge your PR, but very useful for the community.
 
+**14. Submit your finished PR**
+
+You're done programming now and can move to the last step, which is getting your PR merged into master. Usually, the
+Hugging Face team should have helped you already at this point, but it is worth taking some time to give your finished
+PR a nice description and eventually add comments to your code, if you want to point out certain design choices to your
+reviewer.
+
 Share your work!!
 -----------------------------------------------------------------------------------------------------------------------
 
-Now, it’s time to get some credit from the community for your work! Having completed a model addition is a major
-contribution to Transformers and the whole NLP community. Your code and the ported pre-trained models will certainly be used by hundreds and possibly even thousands of developers
-and researchers. You should be proud of your work and share your achievement with the community.
+Now, it's time to get some credit from the community for your work! Having completed a model addition is a major
+contribution to Transformers and the whole NLP community. Your code and the ported pre-trained models will certainly be
+used by hundreds and possibly even thousands of developers and researchers. You should be proud of your work and share
+your achievement with the community.
 
 **You have made another model that is super easy to access for everyone in the community! 🤯**
