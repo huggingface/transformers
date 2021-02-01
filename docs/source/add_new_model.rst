@@ -251,7 +251,9 @@ figure out the following:
    work with an interactive debugger like `ipdb`, or should you use an efficient IDE to debug the model, like PyCharm?
 
 It is very important that before you start the porting process, that you can **efficiently** debug code in the original
-repository!
+repository! Also, remember that you are working with an open-source library, so do not hesitate to open an issue, or
+even a pull request in the original repository. The maintainers of this repository are most likely very happy about
+someone looking into their code!
 
 At this point, it is really up to you which debugging environment and strategy you prefer to use to debug the original
 model. We strongly advise against setting up a costly GPU environment, but simply work on a CPU both when starting to
@@ -709,13 +711,15 @@ tests are passing, run
 
    RUN_SLOW=1 pytest -sv tests/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
 
-Second, all features that are special to *brand_new_bert* should be tested additionally in a separate test under
+*In case you are using Windows, you should replace ``RUN_SLOW=1`` with ``SET RUN_SLOW=1``.* Second, all features that
+are special to *brand_new_bert* should be tested additionally in a separate test under
 ``BrandNewBertModelTester``/``BrandNewBertModelTest``. This part is often forgotten but is extremely useful in two
 ways:
 
 -  It helps to transfer the knowledge you have acquired during the model addition to the community by showing how the
    special features of *brand_new_bert* should work.
 -  Future contributors can quickly test changes to the model by running those special tests.
+
 
 **9. Implement the tokenizer**
 
