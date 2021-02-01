@@ -22,6 +22,7 @@ from pathlib import Path
 import fairseq
 import torch
 from packaging import version
+from torch import nn
 
 from transformers import (
     BartConfig,
