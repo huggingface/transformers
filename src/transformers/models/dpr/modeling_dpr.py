@@ -364,9 +364,11 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
             Indices can be obtained using :class:`~transformers.DPRTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details. attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`,
-            `optional`): Mask to avoid performing attention on padding token indices. Mask values selected in ``[0,
-            1]``:
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__ attention_mask (:obj:`torch.FloatTensor` of shape
+            :obj:`(batch_size, sequence_length)`, `optional`): Mask to avoid performing attention on padding token
+            indices. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
