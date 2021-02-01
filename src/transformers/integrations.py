@@ -54,6 +54,7 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 
 # Integration functions:
 def is_wandb_available():
+    # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         return False
     return importlib.util.find_spec("wandb") is not None
@@ -535,7 +536,7 @@ class WandbCallback(TrainerCallback):
             WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
                 Set this to a custom string to store results in a different project.
             WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to disable wandb entirely.
+                Whether or not to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return
