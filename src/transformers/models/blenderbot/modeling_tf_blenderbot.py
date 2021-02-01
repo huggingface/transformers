@@ -1456,13 +1456,6 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel):
             )
         return (past[0], reordered_past)
 
-    def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        if cur_len == max_length - 1:
-            vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
-        else:
-            return logits
-
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.compute_loss
     def compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""

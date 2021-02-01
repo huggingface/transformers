@@ -22,6 +22,8 @@ from .utils import logging
 
 logger = logging.get_logger(__name__)
 
+LARGE_NEGATIVE = -1e8
+
 
 class TFGenerationMixin:
     """
@@ -67,6 +69,8 @@ class TFGenerationMixin:
         attention_mask=None,
         decoder_start_token_id=None,
         use_cache=None,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
     ):
         r"""
         Generates sequences for models with a language modeling head. The method currently supports greedy decoding,
@@ -213,6 +217,12 @@ class TFGenerationMixin:
         )
         decoder_start_token_id = (
             decoder_start_token_id if decoder_start_token_id is not None else self.config.decoder_start_token_id
+        )
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
 
         if input_ids is not None:
@@ -591,6 +601,8 @@ class TFGenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        forced_bos_token_id,
+        forced_eos_token_id,
     ):
         """Generate sequences for each example with beam search."""
 
@@ -641,7 +653,11 @@ class TFGenerationMixin:
 
             if self.config.is_encoder_decoder and do_sample is False:
                 next_token_logits = self.adjust_logits_during_generation(
-                    next_token_logits, cur_len=cur_len, max_length=max_length
+                    next_token_logits,
+                    cur_len=cur_len,
+                    max_length=max_length,
+                    forced_bos_token_id=forced_bos_token_id,
+                    forced_eos_token_id=forced_eos_token_id,
                 )
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
@@ -893,12 +909,21 @@ class TFGenerationMixin:
     def _reorder_cache(past, beam_idx):
         return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
 
-    def adjust_logits_during_generation(self, logits, **kwargs):
+    def adjust_logits_during_generation(
+        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
+    ):
         """
         Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to adjust the logits in
         the generate method.
         """
-        return logits
+        if cur_len == 1 and forced_bos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_bos_token_id, LARGE_NEGATIVE, logits)
+        elif cur_len == max_length - 1 and forced_eos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_eos_token_id, LARGE_NEGATIVE, logits)
+        else:
+            return logits
 
 
 def _create_next_token_logits_penalties(input_ids, logits, repetition_penalty):
