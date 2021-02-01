@@ -18,6 +18,8 @@ import math
 import os
 from typing import Callable, Dict, Optional, Tuple
 
+from .file_utils import ENV_VARS_TRUE_VALUES
+
 
 # Integrations must be imported before ML frameworks:
 from .integrations import (  # isort: split
@@ -110,7 +112,7 @@ class TFTrainer:
 
         if is_wandb_available():
             self.setup_wandb()
-        elif os.environ.get("WANDB_DISABLED") != "true":
+        elif os.getenv("WANDB_DISABLED", "").upper() not in ENV_VARS_TRUE_VALUES:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
