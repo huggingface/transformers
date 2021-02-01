@@ -351,7 +351,7 @@ class TFSequenceClassifierOutput(ModelOutput):
     Base class for outputs of sentence classification models.
 
     Args:
-        loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`tf.Tensor` of shape :obj:`(batch_size, )`, `optional`, returned when :obj:`labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
@@ -432,7 +432,7 @@ class TFMultipleChoiceModelOutput(ModelOutput):
     Base class for outputs of multiple choice models.
 
     Args:
-        loss (:obj:`tf.Tensor` of shape `(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`tf.Tensor` of shape `(batch_size, )`, `optional`, returned when :obj:`labels` is provided):
             Classification loss.
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, num_choices)`):
             `num_choices` is the second dimension of the input tensors. (see `input_ids` above).
@@ -492,7 +492,7 @@ class TFQuestionAnsweringModelOutput(ModelOutput):
     Base class for outputs of question answering models.
 
     Args:
-        loss (:obj:`tf.Tensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
+        loss (:obj:`tf.Tensor` of shape :obj:`(batch_size, )`, `optional`, returned when :obj:`start_positions` and :obj:`end_positions` are provided):
             Total span extraction loss is the sum of a Cross-Entropy for the start and end positions.
         start_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Span-start scores (before SoftMax).
@@ -579,7 +579,7 @@ class TFSequenceClassifierOutputWithPast(ModelOutput):
     Base class for outputs of sentence classification models.
 
     Args:
-        loss (:obj:`tf.Tensor` of shape :obj:`(n,)`, `optional`, where n is the number of unmasked labels, returned when :obj:`labels` is provided):
+        loss (:obj:`tf.Tensor` of shape :obj:`(batch_size, )`, `optional`, returned when :obj:`labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
         logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, config.num_labels)`):
             Classification (or regression if config.num_labels==1) scores (before SoftMax).
