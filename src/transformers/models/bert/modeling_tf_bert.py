@@ -15,6 +15,7 @@
 # limitations under the License.
 """ TF 2.0 BERT model. """
 
+import math
 import warnings
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple, Union
@@ -216,6 +217,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.rsqrt_att_head_size = tf.cast(1.0 / math.sqrt(self.attention_head_size), dtype=self._compute_dtype)
 
         self.query = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
@@ -229,6 +231,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
@@ -253,9 +256,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         # attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        dk = tf.cast(self.attention_head_size, dtype=query_layer.dtype)
-        one_cst = tf.constant(1.0, dtype=dk.dtype)
-        query_layer = tf.multiply(query_layer, tf.divide(one_cst, tf.math.sqrt(dk)))
+        query_layer = tf.multiply(query_layer, self.rsqrt_att_head_size)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)

@@ -16,6 +16,7 @@
 
 {% if cookiecutter.is_encoder_decoder_model == "False" %}
 
+import math
 from typing import Any, Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -66,122 +67,6 @@ TF_{{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "{{cookiecutter.checkpoint_identifier}}",
     # See all {{cookiecutter.modelname}} models at https://huggingface.co/models?filter={{cookiecutter.lowercase_modelname}}
 ]
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
-class TF{{cookiecutter.camelcase_modelname}}WordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.weight = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
-class TF{{cookiecutter.camelcase_modelname}}TokenTypeEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.token_type_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "type_vocab_size": self.type_vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, token_type_ids: tf.Tensor) -> tf.Tensor:
-        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
-        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
-        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
-class TF{{cookiecutter.camelcase_modelname}}PositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
-        input_shape = shape_list(position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings with Bert->{{cookiecutter.camelcase_modelname}}
@@ -276,6 +161,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.rsqrt_att_head_size = tf.cast(1.0 / math.sqrt(self.attention_head_size), dtype=self._compute_dtype)
 
         self.query = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
@@ -289,6 +175,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
@@ -313,9 +200,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
         # attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        dk = tf.cast(self.attention_head_size, dtype=query_layer.dtype)
-        one_cst = tf.constant(1.0, dtype=dk.dtype)
-        query_layer = tf.multiply(query_layer, tf.divide(one_cst, tf.math.sqrt(dk)))
+        query_layer = tf.multiply(query_layer, self.rsqrt_att_head_size)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TF{{cookiecutter.camelcase_modelname}}Model call() function)

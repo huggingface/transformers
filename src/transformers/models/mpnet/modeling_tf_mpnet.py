@@ -226,6 +226,7 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         return tf.transpose(x, perm=[0, 2, 1, 3])

@@ -197,6 +197,7 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         self.output_dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
         return tf.transpose(x, perm=[0, 2, 1, 3])
@@ -222,7 +223,7 @@ class TFAlbertAttention(tf.keras.layers.Layer):
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFAlbertModel call() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
