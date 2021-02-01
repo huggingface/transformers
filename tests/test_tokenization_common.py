@@ -169,6 +169,18 @@ class TokenizerTesterMixin:
             for i in range(len(batch_encode_plus_sequences["input_ids"]))
         ]
 
+    def test_model_input_names_signature(self):
+        accepted_model_main_input_names = [
+            "input_ids",  # nlp models
+            "input_values",  # speech models
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            # first name of model_input_names has to correspond to main model input name
+            # to make sure `tokenizer.pad(...)` works correctly
+            self.assertTrue(tokenizer.model_input_names[0] in accepted_model_main_input_names)
+
     def test_rust_tokenizer_signature(self):
         if not self.test_rust_tokenizer:
             return

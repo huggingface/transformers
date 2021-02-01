@@ -1492,8 +1492,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     pretrained_vocab_files_map: Dict[str, Dict[str, str]] = {}
     pretrained_init_configuration: Dict[str, Dict[str, Any]] = {}
     max_model_input_sizes: Dict[str, Optional[int]] = {}
-    model_input_names: List[str] = ["token_type_ids", "attention_mask"]
-    required_input_name: str = "input_ids"
+
+    # first name has to correspond to main model input name
+    # to make sure `tokenizer.pad(...)` works correctly
+    model_input_names: List[str] = ["input_ids", "token_type_ids", "attention_mask"]
     padding_side: str = "right"
     slow_tokenizer_class = None
 
@@ -2634,13 +2636,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], (dict, BatchEncoding)):
             encoded_inputs = {key: [example[key] for example in encoded_inputs] for key in encoded_inputs[0].keys()}
 
-        if self.required_input_name not in encoded_inputs:
+        # The model's main input name, usually `input_ids`, has be passed for padding
+        if self.model_input_names[0] not in encoded_inputs:
             raise ValueError(
                 "You should supply an encoding or a list of encodings to this method"
-                f"that includes {self.required_input_name}, but you provided {list(encoded_inputs.keys())}"
+                f"that includes {self.model_input_names[0]}, but you provided {list(encoded_inputs.keys())}"
             )
 
-        required_input = encoded_inputs[self.required_input_name]
+        required_input = encoded_inputs[self.model_input_names[0]]
 
         if not required_input:
             if return_attention_mask:
@@ -3007,7 +3010,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
 
-        required_input = encoded_inputs[self.required_input_name]
+        required_input = encoded_inputs[self.model_input_names[0]]
 
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = len(required_input)
@@ -3028,7 +3031,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.required_input_name] = required_input + [self.pad_token_id] * difference
+                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + [1] * len(required_input)
@@ -3038,7 +3041,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     ]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.required_input_name] = [self.pad_token_id] * difference + required_input
+                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in encoded_inputs:
