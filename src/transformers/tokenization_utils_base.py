@@ -2636,7 +2636,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         if self.required_input_name not in encoded_inputs:
             raise ValueError(
-                "You should supply an encoding or a list of encodings to this method that includes {self.required_input_name}, but you provided {list(encoded_inputs.keys()}"
+                "You should supply an encoding or a list of encodings to this method"
+                f"that includes {self.required_input_name}, but you provided {list(encoded_inputs.keys())}"
             )
 
         if not encoded_inputs[self.required_input_name]:
