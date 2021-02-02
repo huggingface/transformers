@@ -300,7 +300,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
         all_answers = []
         for features, example in zip(features_list, examples):
-            model_input_names = self.tokenizer.model_input_names + ["input_ids"]
+            model_input_names = self.tokenizer.model_input_names
             fw_args = {k: [feature.__dict__[k] for feature in features] for k in model_input_names}
 
             # Manage tensor allocation on correct device
