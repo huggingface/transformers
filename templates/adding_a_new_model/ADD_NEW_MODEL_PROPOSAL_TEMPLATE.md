@@ -180,36 +180,36 @@ useful when porting a model to 🤗 Transformers.
 The following list is a summary of everything that has to be done to add
 a model and can be used by you as a To-Do List:
 
--   1.  [ ] (Optional) Understood theoretical aspects
+1.  [ ] (Optional) Understood theoretical aspects
 
--   2.  [ ] Prepared transformers dev environment
+2.  [ ] Prepared transformers dev environment
 
--   3.  [ ] Set up debugging environment of the original repository
+3.  [ ] Set up debugging environment of the original repository
 
--   4.  [ ] Created script that successfully runs forward pass using
-        original repository and checkpoint
+4.  [ ] Created script that successfully runs forward pass using
+    original repository and checkpoint
 
--   5.  [ ] Successfully added the model skeleton to Transformers
+5.  [ ] Successfully added the model skeleton to Transformers
 
--   6.  [ ] Successfully converted original checkpoint to Transformers
-        checkpoint
+6.  [ ] Successfully converted original checkpoint to Transformers
+    checkpoint
 
--   7.  [ ] Successfully ran forward pass in Transformers that gives
-        identical output to original checkpoint
+7.  [ ] Successfully ran forward pass in Transformers that gives
+    identical output to original checkpoint
 
--   8.  [ ] Finished model tests in Transformers
+8.  [ ] Finished model tests in Transformers
 
--   9.  [ ] Successfully added Tokenizer in Transformers
+9.  [ ] Successfully added Tokenizer in Transformers
 
--   10. [ ] Run end-to-end integration tests
+10. [ ] Run end-to-end integration tests
 
--   11. [ ] Finished docs
+11. [ ] Finished docs
 
--   12. [ ] Uploaded model weights to the hub
+12. [ ] Uploaded model weights to the hub
 
--   13. [ ] Submitted the pull request
+13. [ ] Submitted the pull request
 
--   14. [ ] (Optional) Added a demo notebook
+14. [ ] (Optional) Added a demo notebook
 
 To begin with, we usually recommend to start by getting a good
 theoretical understanding of `[camelcase name of model]`. However, if you prefer to
