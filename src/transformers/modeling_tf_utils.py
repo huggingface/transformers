@@ -351,10 +351,14 @@ def input_processing(func, config, input_ids, **kwargs):
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
-    if len(kwargs["kwargs_call"]) > 0 and "labels" not in kwargs["kwargs_call"]:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
+    if len(kwargs["kwargs_call"]) > 0:
+        # if "labels" is not the single extra argument then raise the error
+        if not (len(kwargs["kwargs_call"]) == 1 and "labels" in kwargs["kwargs_call"]):
+            kwargs["kwargs_call"].pop("labels", None)
+
+            raise ValueError(
+                f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
+            )
 
     kwargs.pop("kwargs_call")
 
