@@ -998,19 +998,7 @@ class TFBertModel(TFBertPreTrainedModel):
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
 
         return outputs
 
@@ -1101,19 +1089,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         sequence_output, pooled_output = outputs[:2]
         prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
         seq_relationship_score = self.nsp(pooled_output=pooled_output)
@@ -1220,19 +1196,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         sequence_output = outputs[0]
         prediction_scores = self.mlm(sequence_output=sequence_output, training=inputs["training"])
         loss = (
@@ -1324,19 +1288,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         sequence_output = outputs[0]
         logits = self.mlm(sequence_output=sequence_output, training=inputs["training"])
         loss = None
@@ -1430,19 +1382,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         pooled_output = outputs[1]
         seq_relationship_scores = self.nsp(pooled_output=pooled_output)
         next_sentence_loss = (
@@ -1538,19 +1478,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
         logits = self.classifier(inputs=pooled_output)
@@ -1691,7 +1619,6 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
-            already_processed=True,
         )
         pooled_output = outputs[1]
         pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
@@ -1805,19 +1732,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         sequence_output = outputs[0]
         sequence_output = self.dropout(inputs=sequence_output, training=inputs["training"])
         logits = self.classifier(inputs=sequence_output)
@@ -1920,19 +1835,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             training=training,
             kwargs_call=kwargs,
         )
-        outputs = self.bert(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            token_type_ids=inputs["token_type_ids"],
-            position_ids=inputs["position_ids"],
-            head_mask=inputs["head_mask"],
-            inputs_embeds=inputs["inputs_embeds"],
-            output_attentions=inputs["output_attentions"],
-            output_hidden_states=inputs["output_hidden_states"],
-            return_dict=inputs["return_dict"],
-            training=inputs["training"],
-            already_processed=True,
-        )
+        outputs = self.bert(**inputs)
         sequence_output = outputs[0]
         logits = self.qa_outputs(inputs=sequence_output)
         start_logits, end_logits = tf.split(value=logits, num_or_size_splits=2, axis=-1)

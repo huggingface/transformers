@@ -369,6 +369,8 @@ def input_processing(func, config, input_ids, **kwargs):
 
         return output
 
+    output["already_processed"] = True
+
     if isinstance(input_ids, (tuple, list)):
         for i, input in enumerate(input_ids):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
