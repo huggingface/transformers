@@ -258,7 +258,6 @@ def rewrite_logs(d):
     return new_d
 
 
-
 import torch
 
 
@@ -327,7 +326,7 @@ class MPU:
             ranks = range(i, world_size, model_parallel_size)
             group = torch.distributed.new_group(ranks)
             if i == (rank % model_parallel_size):
-                #print(f"DP ranks: {list(ranks)}")
+                # print(f"DP ranks: {list(ranks)}")
                 _DATA_PARALLEL_GROUP = group
                 _DATA_PARALLEL_GROUP_DEVICE_IDS = list(ranks)
 
@@ -339,7 +338,7 @@ class MPU:
             ranks = range(i * model_parallel_size, (i + 1) * model_parallel_size)
             group = torch.distributed.new_group(ranks)
             if i == (rank // model_parallel_size):
-                #print(f"MP ranks: {list(ranks)}")
+                # print(f"MP ranks: {list(ranks)}")
                 _MODEL_PARALLEL_GROUP = group
                 _MODEL_PARALLEL_GROUP_DEVICE_IDS = list(ranks)
 
@@ -550,7 +549,7 @@ def init_deepspeed(trainer, num_training_steps, mpu):
         model=model,
         model_parameters=model_parameters,
         config_params=config,
-        mpu = mpu,
+        mpu=mpu,
     )
 
     return model, optimizer, lr_scheduler

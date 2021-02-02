@@ -258,7 +258,6 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
-
         self.mpu = None
         # XXX: for now hack over naive MP to have the same behavior
         if len(self.args.pipeline):
@@ -271,7 +270,7 @@ class Trainer:
             pp_args_str = self.args.pipeline.split()
             if len(pp_args_str):
                 for x in pp_args_str:
-                    k,v = x.split("=")
+                    k, v = x.split("=")
                     pp_args[k] = v
 
             if "chunks" in pp_args:
@@ -301,10 +300,11 @@ class Trainer:
             # 2D Parallel
             if self.args.deepspeed:
                 from .integrations import MPU
+
                 self.mpu = MPU()
-                #n_gpus = torch.distributed.get_world_size()
+                # n_gpus = torch.distributed.get_world_size()
                 # XXX: hardcoded for 2 gpus for PP/MP - needs to be configurable
-                #n_gpus_per_mp = n_gpus/2
+                # n_gpus_per_mp = n_gpus/2
                 # at the moment experimenting with just 4 gpus - hence 2 gpus for MP|PP, 2 for DP
                 self.mpu.initialize_model_parallel(pp_args["n_gpus_per_mp"])
 
