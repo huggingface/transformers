@@ -237,19 +237,21 @@ happy to help you.
 
  Before diving into the code, here are some additional resources that might be worth taking a look at:
  
- - [link 1]
- - [link 2]
- - [link 3]
- - ...
+ - [Yannic Kilcher's paper summary](https://www.youtube.com/watch?v=WVPE62Gk3EM&ab_channel=YannicKilcher)
+ - [Yannic Kilcher's summary of Longformer](https://www.youtube.com/watch?v=_8KNb5iqblE&ab_channel=YannicKilcher) - Longformer and BigBird are **very** similar models. Since Longformer has already been ported to 🤗 Transformers, it is useful to understand the differences between the two models
+ - [Blog post](https://medium.com/dsc-msit/is-google-bigbird-gonna-be-the-new-leader-in-nlp-domain-8c95cecc30f8) - A relatively superficial blog post about BigBird. Might be a good starting point to understand BigBird
 
 #### Make sure you've understood the fundamental aspects of BigBird
 
 Alright, now you should be ready to take a closer look into the actual code of BigBird.
 You should have understood the following aspects of BigBird by now:
 
-- [characteristic 1 of BigBird]
-- [characteristic 2 of BigBird]
-- ...
+- BigBird provides a new attention layer for long-range sequence modelling that can be used 
+  as a drop-in replacement for already existing architectures, such as RoBERTa, and PEGASUS
+- BigBird's self-attention layer is composed of three mechanisms: block sparse (local) self-attention, global self-attention, random self-attention
+- BigBird's block sparse (local) self-attention is different from Longformer's local self-attention. How so? Why does that matter? => Can be deployed on TPU much easier this way
+- BigBird can be implemented for both RoBERTa (as an encoder-only model), which means that we can reuse lots of [code from RoBERTa](https://github.com/huggingface/transformers/blob/master/src/transformers/models/roberta/modeling_roberta.py) **and** PEGASUS (as an encoder-decoder model), which means that we can reuse lots of [code from PEGASUS](https://github.com/huggingface/transformers/blob/master/src/transformers/models/pegasus/modeling_pegasus.py).
+
 
 If any of the mentioned aspects above are **not** clear to you, now is a great time to talk to Patrick.
 
