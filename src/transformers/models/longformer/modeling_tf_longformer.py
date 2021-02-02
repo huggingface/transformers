@@ -553,8 +553,6 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
                 position_ids = tf.tile(input=position_ids, multiples=(input_shape[0], 1))
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
-        # When position_ids is not built from the input_ids, its batch_size equals 1 and needs to be properly reshaped
-        #position_embeds = self.resize_embeds(position_embeds, input_shape[0])
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
