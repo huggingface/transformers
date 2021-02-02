@@ -929,13 +929,15 @@ T5_START_DOCSTRING = r"""
 
 T5_INPUTS_DOCSTRING = r"""
     Args:
-        inputs (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
+        input_ids (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. T5 is a model with relative position embeddings so you
             should be able to pad the inputs on the right or the left.
 
             Indices can be obtained using :class:`~transformers.BertTokenizer`. See
             :func:`transformers.PreTrainedTokenizer.__call__` and :func:`transformers.PreTrainedTokenizer.encode` for
             details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
 
             To know more on how to prepare :obj:`inputs` for pretraining take a look at `T5 Training
             <./t5.html#training>`__.

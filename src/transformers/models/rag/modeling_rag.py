@@ -412,6 +412,8 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. :class:`~transformers.RagConfig`, used to initialize
             the model, specifies which generator to use, it also specifies a compatible generator tokenizer. Use that
             tokenizer class to obtain the indices.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 

@@ -135,6 +135,14 @@ class CodeStyler:
         """
         return SpecialBlock.NOT_SPECIAL
 
+    def end_of_special_style(self, line):
+        """
+        Sets back the `in_block` attribute to `NOT_SPECIAL`.
+
+        Useful for some docstrings where we may have to go back to `ARG_LIST` instead.
+        """
+        self.in_block = SpecialBlock.NOT_SPECIAL
+
     def style_paragraph(self, paragraph, max_len, no_style=False, min_indent=None):
         """
         Style `paragraph` (a list of lines) by making sure no line goes over `max_len`, except if the `no_style` flag
@@ -220,6 +228,7 @@ class CodeStyler:
         new_lines = []
         paragraph = []
         self.current_indent = ""
+        self.previous_indent = None
         # If one of those is True, the paragraph should not be touched (code samples, lists...)
         no_style = False
         no_style_next = False
@@ -251,7 +260,7 @@ class CodeStyler:
                                 self.current_indent = indent
                         elif not indent.startswith(self.current_indent):
                             # If not, we are leaving the block when we unindent.
-                            self.in_block = SpecialBlock.NOT_SPECIAL
+                            self.end_of_special_style(paragraph[0])
 
                     if self.is_special_block(paragraph[0]):
                         # Maybe we are starting a special block.
@@ -326,12 +335,22 @@ class DocstringStyler(CodeStyler):
 
     def is_special_block(self, line):
         if self.is_no_style_block(line):
+            if self.previous_indent is None and self.in_block == SpecialBlock.ARG_LIST:
+                self.previous_indent = self.current_indent
             self.in_block = SpecialBlock.NO_STYLE
             return True
         if _re_arg_def.search(line) is not None:
             self.in_block = SpecialBlock.ARG_LIST
             return True
         return False
+
+    def end_of_special_style(self, line):
+        if self.previous_indent is not None and line.startswith(self.previous_indent):
+            self.in_block = SpecialBlock.ARG_LIST
+            self.current_indent = self.previous_indent
+        else:
+            self.in_block = SpecialBlock.NOT_SPECIAL
+            self.previous_indent = None
 
     def init_in_block(self, text):
         lines = text.split("\n")
