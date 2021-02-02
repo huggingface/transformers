@@ -56,6 +56,8 @@ PreTrainedTokenizer
     :special-members: __call__
     :members:
 
+    .. automethod:: encode
+
 
 PreTrainedTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -63,6 +65,8 @@ PreTrainedTokenizerFast
 .. autoclass:: transformers.PreTrainedTokenizerFast
     :special-members: __call__
     :members:
+
+    .. automethod:: encode
 
 
 BatchEncoding
