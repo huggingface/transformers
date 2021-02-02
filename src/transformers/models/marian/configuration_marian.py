@@ -161,7 +161,14 @@ class MarianConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        self.bad_words_ids = bad_words_ids if bad_words_ids is not None else [[self.pad_token_id]]
+        if isinstance(bad_words_ids, (tuple, list)) and (
+            [self.pad_token_id] not in bad_words_ids and (self.pad_token_id,) not in bad_words_ids
+        ):
+            bad_words_ids = list(bad_words_ids)
+            bad_words_ids.extend([[self.pad_token_id]])
+        elif bad_words_ids is None:
+            bad_words_ids = [[self.pad_token_id]]
+        self.bad_words_ids = bad_words_ids
 
     @property
     def num_attention_heads(self) -> int:
