@@ -71,7 +71,7 @@ exemplary purposes, we will call the model to be added to 🤗 Transformers
 
 Let\'s take a look:
 
-![image](../../docs/source/imgs/transformers_overview.png)
+![image](../../../docs/source/imgs/transformers_overview.png)
 
 As you can see, we do make use of inheritance in 🤗 Transformers, but we
 keep the level of abstraction to an absolute minimum. There are never
