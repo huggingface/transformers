@@ -870,7 +870,7 @@ class TFModelTesterMixin:
                 inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
 
             model(inputs)
-    
+
     def test_graph_mode_with_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -892,14 +892,13 @@ class TFModelTesterMixin:
             else:
                 inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
-            
+
             @tf.function
             def run_in_graph_mode():
                 return model(inputs)
-            
+
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
-
 
     def test_numpy_arrays_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
