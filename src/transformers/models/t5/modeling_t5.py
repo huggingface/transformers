@@ -807,6 +807,8 @@ class T5StackPipeSegment(nn.Module):
             all_hidden_states,
             output_hidden_states,
             present_key_value_states,
+            all_attentions,
+            all_cross_attentions,
         ) = input
 
         if output_hidden_states:
@@ -860,6 +862,8 @@ class T5StackPipeSegment(nn.Module):
             all_hidden_states,
             output_hidden_states,
             present_key_value_states,
+            all_attentions,
+            all_cross_attentions,
         )
 
         return outputs
@@ -871,50 +875,16 @@ class T5Stack(T5PreTrainedModel):
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
+        self.config = config
 
         self.block = nn.ModuleList(
             [T5Block(config, has_relative_attention_bias=bool(i == 0)) for i in range(config.num_layers)]
         )
+
         self.final_layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
         self.init_weights()
-        # Model parallel
-        self.model_parallel = False
-        self.device_map = None
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def parallelize(self, device_map=None):
-        # Check validity of device_map
-        self.device_map = (
-            get_device_map(len(self.block), range(torch.cuda.device_count())) if device_map is None else device_map
-        )
-        assert_device_map(self.device_map, len(self.block))
-        self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
-        # Load onto devices
-        for k, v in self.device_map.items():
-            for layer in v:
-                cuda_device = "cuda:" + str(k)
-                self.block[layer] = self.block[layer].to(cuda_device)
-
-        # Set embed_tokens to first layer
-        self.embed_tokens = self.embed_tokens.to(self.first_device)
-        # Set final layer norm to last device
-        self.final_layer_norm = self.final_layer_norm.to(self.last_device)
-
-    @add_start_docstrings(PARALLELIZE_DOCSTRING)
-    def deparallelize(self):
-        self.model_parallel = False
-        self.device_map = None
-        self.first_device = "cpu"
-        self.last_device = "cpu"
-        for i in range(len(self.block)):
-            self.block[i] = self.block[i].to("cpu")
-        self.embed_tokens = self.embed_tokens.to("cpu")
-        self.final_layer_norm = self.final_layer_norm.to("cpu")
-        torch.cuda.empty_cache()
 
     def get_input_embeddings(self):
         return self.embed_tokens
@@ -937,10 +907,6 @@ class T5Stack(T5PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        # Model parallel
-        if self.model_parallel:
-            torch.cuda.set_device(self.first_device)
-            self.embed_tokens = self.embed_tokens.to(self.first_device)
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1008,17 +974,7 @@ class T5Stack(T5PreTrainedModel):
 
         hidden_states = self.dropout(inputs_embeds)
 
-        # rewrite the model after pre-trained weights were loaded
-        layers = [
-            T5StackPipeSegment(
-                idx,
-                layer_module,
-                self.is_decoder,
-            )
-            for idx, layer_module in enumerate(self.block)
-        ]
-        net = nn.Sequential(*layers)
-
+        # pack
         input = (
             hidden_states,
             extended_attention_mask,
@@ -1034,9 +990,34 @@ class T5Stack(T5PreTrainedModel):
             all_hidden_states,
             output_hidden_states,
             present_key_value_states,
+            all_attentions,
+            all_cross_attentions,
         )
-        output = net(input)
 
+        # rewrite the model after pre-trained weights were loaded
+        layers = [
+            T5StackPipeSegment(
+                idx,
+                layer_module,
+                self.is_decoder,
+            ).to(input_ids.device)
+            for idx, layer_module in enumerate(self.block)
+        ]
+
+        layers.append(T5StackLast(return_dict, self.final_layer_norm, self.dropout).to(input_ids.device))
+        net = nn.Sequential(*layers)
+        return net(input)
+
+
+class T5StackLast(nn.Module):
+    def __init__(self, return_dict, final_layer_norm, dropout):
+        super().__init__()
+
+        self.return_dict = return_dict
+        self.final_layer_norm = final_layer_norm
+        self.dropout = dropout
+
+    def forward(self, input):
         # unpack
         (
             hidden_states,
@@ -1053,7 +1034,9 @@ class T5Stack(T5PreTrainedModel):
             all_hidden_states,
             output_hidden_states,
             present_key_value_states,
-        ) = output
+            all_attentions,
+            all_cross_attentions,
+        ) = input
 
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -1062,7 +1045,7 @@ class T5Stack(T5PreTrainedModel):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if not return_dict:
+        if not self.return_dict:
             return tuple(
                 v
                 for v in [
