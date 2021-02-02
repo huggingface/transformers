@@ -714,7 +714,7 @@ class GenerationMixin:
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             forced_bos_token_id (:obj:`int`, `optional`, defaults to `None`):
                 The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
-                for multilingual models like `mBART<https://huggingface.co/transformers/model_doc/mbart.html>`__ where
+                for multilingual models like `mBART <https://huggingface.co/transformers/model_doc/mbart.html>`__ where
                 the first generated token needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`, defaults to `None`):
                 The id of the token to force as the last generated token when `max_length` is reached.
