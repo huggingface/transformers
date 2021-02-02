@@ -482,12 +482,14 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         token_type_bias = tf.einsum("bind,snd->bnis", q_head + r_s_bias, self.seg_embed)
         # Shape batch_size x n_head x seq_len x context_len
         token_type_mat = tf.tile(token_type_mat[:, None], [1, shape_list(q_head)[2], 1, 1])
-        #token_type_mat = tf.broadcast_to(token_type_mat[:, None], new_shape)
+        # token_type_mat = tf.broadcast_to(token_type_mat[:, None], new_shape)
         # Shapes batch_size x n_head x seq_len
         diff_token_type, same_token_type = tf.split(token_type_bias, 2, axis=-1)
         # Shape batch_size x n_head x seq_len x context_len
         token_type_attn = tf.where(
-            token_type_mat, tf.tile(same_token_type, [1, 1, 1, context_len]), tf.tile(diff_token_type, [1, 1, 1, context_len])
+            token_type_mat,
+            tf.tile(same_token_type, [1, 1, 1, context_len]),
+            tf.tile(diff_token_type, [1, 1, 1, context_len]),
         )
 
         if cls_mask is not None:
