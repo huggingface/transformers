@@ -224,18 +224,27 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         conv_kernel_layer = tf.reshape(conv_kernel_layer, [-1, self.conv_kernel_size, 1])
         conv_kernel_layer = tf.nn.softmax(conv_kernel_layer, axis=1)
 
+        paddings = tf.constant(
+            [
+                [
+                    0,
+                    0,
+                ],
+                [int((self.conv_kernel_size - 1) / 2), int((self.conv_kernel_size - 1) / 2)],
+                [0, 0],
+            ]
+        )
+
         conv_out_layer = self.conv_out_layer(hidden_states)
         conv_out_layer = tf.reshape(conv_out_layer, [batch_size, -1, self.all_head_size])
+        conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
 
-        conv_out_layer = tf.reshape(
-            conv_out_layer, [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size, 1]
-        )
-        unfold_conv_out_layer = tf.image.extract_patches(
-            images=conv_out_layer,
-            sizes=[1, self.conv_kernel_size, 1, 1],
-            strides=[1, 1, 1, 1],
-            rates=[1, 1, 1, 1],
-            padding="SAME",
+        unfold_conv_out_layer = tf.stack(
+           [
+               tf.slice(conv_out_layer, [0, i, 0], [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size])
+               for i in range(self.conv_kernel_size)
+           ],
+           axis=-1,
         )
 
         conv_out_layer = tf.reshape(unfold_conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])

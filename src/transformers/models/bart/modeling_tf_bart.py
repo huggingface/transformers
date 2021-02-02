@@ -92,7 +92,11 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=tf.float32), mask], axis=-1)
-    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+    
+    #broad = tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+    broad = tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
+    
+    return broad
 
 
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
@@ -101,9 +105,10 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     bsz, src_len = shape_list(mask)
     tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
-
+    
+    #expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
+    expanded_mask = tf.cast(tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)), tf.float32)
+    
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
 
