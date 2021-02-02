@@ -891,7 +891,6 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = True
 
     def setUp(self):
