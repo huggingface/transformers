@@ -31,6 +31,7 @@ from .file_utils import (
     is_pandas_available,
     is_scatter_available,
     is_sentencepiece_available,
+    is_soundfile_availble,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -363,6 +364,19 @@ def require_ray(test_case):
     """
     if not is_ray_available():
         return unittest.skip("test requires Ray/tune")(test_case)
+    else:
+        return test_case
+
+
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+
+    These tests are skipped when soundfile isn't installed.
+
+    """
+    if not is_soundfile_availble():
+        return unittest.skip("test requires soundfile")(test_case)
     else:
         return test_case
 
