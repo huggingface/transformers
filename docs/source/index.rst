@@ -343,6 +343,7 @@ TensorFlow and/or Flax.
     converting_tensorflow_models
     migration
     contributing
+    add_new_model
     testing
     serialization
 
