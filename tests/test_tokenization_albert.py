@@ -18,7 +18,7 @@ import os
 import unittest
 
 from transformers import AlbertTokenizer, AlbertTokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -102,3 +102,29 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + text_2 + [
             tokenizer.sep_token_id
         ]
+
+    @slow
+    def test_tokenizer_integration(self):
+        tokenizer_classes = [self.tokenizer_class]
+        if self.test_rust_tokenizer:
+            tokenizer_classes.append(self.rust_tokenizer_class)
+
+        for tokenizer_class in tokenizer_classes:
+            tokenizer = tokenizer_class.from_pretrained("albert-base-v2")
+
+            sequence = "ALBERT: A Lite BERT for Self-supervised Learning of Language Representations"
+
+            encoding = tokenizer(sequence)
+            decoded_sequence = tokenizer.decode(encoding["input_ids"])
+
+            expected_encoding = {
+                "input_ids": [2, 2953, 45, 21, 13, 10601, 11502, 26, 1119, 8, 8542, 3762, 69, 2477, 16, 816, 18667, 3],
+                "token_type_ids": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                "attention_mask": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            }
+            expected_decoded_sequence = (
+                "[CLS] albert: a lite bert for self-supervised learning of language representations[SEP]"
+            )
+
+            self.assertDictEqual(encoding.data, expected_encoding)
+            self.assertEqual(decoded_sequence, expected_decoded_sequence)
