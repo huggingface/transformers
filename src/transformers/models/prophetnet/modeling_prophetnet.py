@@ -730,9 +730,8 @@ class ProphetNetAttention(nn.Module):
             assert layer_head_mask.size() == (
                 self.num_attn_heads,
             ), f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is {layer_head_mask.size()}"
-            attn_weights = (
-                layer_head_mask.view(1, -1, 1, 1)
-                * attn_weights.view(batch_size, self.num_attn_heads, sequence_length, key_sequence_length)
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(
+                batch_size, self.num_attn_heads, sequence_length, key_sequence_length
             )
             attn_weights = attn_weights.view(batch_size * self.num_attn_heads, sequence_length, key_sequence_length)
 
@@ -908,13 +907,10 @@ class ProphetNetNgramSelfAttention(nn.Module):
             assert layer_head_mask.size() == (
                 self.num_attn_heads,
             ), f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is {layer_head_mask.size()}"
-            main_attn_probs = (
-                layer_head_mask.view(1, -1, 1, 1)
-                * main_attn_probs.view(batch_size, self.num_attn_heads, -1, main_sequence_length)
+            main_attn_probs = layer_head_mask.view(1, -1, 1, 1) * main_attn_probs.view(
+                batch_size, self.num_attn_heads, -1, main_sequence_length
             )
-            main_attn_probs = main_attn_probs.view(
-                batch_size * self.num_attn_heads, -1, main_sequence_length
-            )
+            main_attn_probs = main_attn_probs.view(batch_size * self.num_attn_heads, -1, main_sequence_length)
 
         main_attn_probs = F.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
 
@@ -969,11 +965,8 @@ class ProphetNetNgramSelfAttention(nn.Module):
             assert layer_head_mask.size() == (
                 self.num_attn_heads,
             ), f"Head mask for a single layer should be of size {(self.num_attn_heads,)}, but is {layer_head_mask.size()}"
-            predict_attn_probs = (
-                layer_head_mask.view(1, 1, -1, 1, 1)
-                * predict_attn_probs.view(
-                    self.ngram, batch_size, self.num_attn_heads, main_sequence_length, 2 * main_sequence_length
-                )
+            predict_attn_probs = layer_head_mask.view(1, 1, -1, 1, 1) * predict_attn_probs.view(
+                self.ngram, batch_size, self.num_attn_heads, main_sequence_length, 2 * main_sequence_length
             )
             predict_attn_probs = predict_attn_probs.view(
                 self.ngram, batch_size * self.num_attn_heads, main_sequence_length, 2 * main_sequence_length
@@ -2054,7 +2047,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
-    
+
         past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
