@@ -18,7 +18,7 @@ deps = {
     "jax": "jax>=0.2.0",
     "jaxlib": "jaxlib>=0.1.59",
     "keras2onnx": "keras2onnx",
-    "numpy": "numpy",
+    "numpy": "numpy>=1.17",
     "onnxconverter-common": "onnxconverter-common",
     "onnxruntime-tools": "onnxruntime-tools>=1.4.2",
     "onnxruntime": "onnxruntime>=1.4.0",
