@@ -105,7 +105,7 @@ _deps = [
     "jax>=0.2.0",
     "jaxlib>=0.1.59",
     "keras2onnx",
-    "numpy",
+    "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
