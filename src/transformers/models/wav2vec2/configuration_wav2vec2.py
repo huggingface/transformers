@@ -71,13 +71,13 @@ class Wav2Vec2Config(PretrainedConfig):
         feat_extract_activation (:obj:`str, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        conv_dim (:obj:`tuple(int)`, `optional`, defaults to :obj:`(512, 512, 512, 512, 512, 512, 512)`):
+        conv_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
-        conv_stride (:obj:`tuple(int)`, `optional`, defaults to :obj:`(5, 2, 2, 2, 2, 2, 2)`):
+        conv_stride (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
             of `conv_stride` defines the number of convolutional layers and has to match the the length of `conv_dim`.
-        conv_kernel (:obj:`tuple(int)`, `optional`, defaults to :obj:`(10, 3, 3, 3, 3, 3, 3)`):
+        conv_kernel (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature extractor. The
             length of `conv_kernel` defines the number of convolutional layers and has to match the the length of
             `conv_dim`.
@@ -166,5 +166,6 @@ class Wav2Vec2Config(PretrainedConfig):
             raise ValueError(
                 "Configuration for convolutional layers is incorrect."
                 "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`,"
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
+                f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
