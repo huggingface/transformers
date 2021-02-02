@@ -736,6 +736,9 @@ class ProphetNetAttention(nn.Module):
             )
             attn_weights = attn_weights.view(batch_size * self.num_attn_heads, sequence_length, key_sequence_length)
 
+            # apply head_mask also on attn_weights_reshaped which is used for n-gram attention inside the model
+            attn_weights_reshaped = layer_head_mask.view(1, -1, 1, 1) * attn_weights_reshaped
+
         attn_probs = F.dropout(
             attn_weights,
             p=self.attention_dropout,
