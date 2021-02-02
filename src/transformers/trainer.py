@@ -258,6 +258,58 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+
+        self.mpu = None
+        # XXX: for now hack over naive MP to have the same behavior
+        if len(self.args.pipeline):
+            # using range() syntax for upper boundary (i.e. not inclusive)
+            # --pipeline "chunks=5; device_map=0:0-10,1:10-20"
+            self.is_model_parallel = True
+
+            # arg parser
+            pp_args = {}
+            pp_args_str = self.args.pipeline.split()
+            if len(pp_args_str):
+                for x in pp_args_str:
+                    k,v = x.split("=")
+                    pp_args[k] = v
+
+            if "chunks" in pp_args:
+                pp_args["chunks"] = int(pp_args["chunks"])
+            else:
+                # XXX: probably can try some smart dynamic default based on batch_size
+                pp_args["chunks"] = 2
+
+            if "device_map" in pp_args:
+                device_map_range_str = pp_args["device_map"].split(",")
+                device_map = {}
+                for x in device_map_range_str:
+                    device_id, layers = x.split(":")
+                    device_map[int(device_id)] = list(range(*map(int, layers.split("-"))))
+                pp_args["device_map"] = device_map
+            else:
+                pp_args["device_map"] = None
+
+            if "n_gpus_per_mp" in pp_args:
+                pp_args["n_gpus_per_mp"] = int(pp_args["n_gpus_per_mp"])
+            else:
+                # XXX: can try some smart dynamic default here based on total_n_gpus,
+                # if it's not 2D all gpus will be used
+                # if 2D half gpus should be a good default
+                pp_args["n_gpus_per_mp"] = 2
+
+            # 2D Parallel
+            if self.args.deepspeed:
+                from .integrations import MPU
+                self.mpu = MPU()
+                #n_gpus = torch.distributed.get_world_size()
+                # XXX: hardcoded for 2 gpus for PP/MP - needs to be configurable
+                #n_gpus_per_mp = n_gpus/2
+                # at the moment experimenting with just 4 gpus - hence 2 gpus for MP|PP, 2 for DP
+                self.mpu.initialize_model_parallel(pp_args["n_gpus_per_mp"])
+
+            model.pipeline_enable(chunks=pp_args["chunks"], device_map=pp_args["device_map"], mpu=self.mpu)
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -270,6 +322,9 @@ class Trainer:
         else:
             # Force n_gpu to 1 to avoid DataParallel.
             self.args._n_gpu = 1
+
+        if len(self.args.pipeline):
+            model = model.to(args.device)
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
@@ -760,7 +815,7 @@ class Trainer:
             num_update_steps_per_epoch = max_steps
 
         if self.args.deepspeed:
-            model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
+            model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps, mpu=self.mpu)
             self.model = model.module
             self.model_wrapped = model  # will get further wrapped in DDP
             self.deepspeed = model  # DeepSpeedEngine object
@@ -994,6 +1049,9 @@ class Trainer:
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
             delattr(self, "_past")
+
+        if len(self.args.pipeline):
+            self.model.pipeline_finalize()
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if self.args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
@@ -1662,6 +1720,9 @@ class Trainer:
         for key in list(metrics.keys()):
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
+
+        if len(self.args.pipeline):
+            self.model.pipeline_finalize()
 
         return PredictionOutput(predictions=preds, label_ids=label_ids, metrics=metrics)
 

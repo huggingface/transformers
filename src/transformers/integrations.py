@@ -257,7 +257,153 @@ def rewrite_logs(d):
     return new_d
 
 
-def init_deepspeed(trainer, num_training_steps):
+
+import torch
+
+
+# Model parallel group that the current rank belongs to.
+_MODEL_PARALLEL_GROUP = None
+_MODEL_PARALLEL_GROUP_DEVICE_IDS = None
+# Data parallel group that the current rank belongs to.
+_DATA_PARALLEL_GROUP = None
+_DATA_PARALLEL_GROUP_DEVICE_IDS = None
+
+# adjusted from Megatron-LM/mpu/
+class MPU:
+    def initialize_model_parallel(self, model_parallel_size_):
+        """
+        Initialize model data parallel groups.
+
+        Arguments:
+            model_parallel_size: number of GPUs used to parallelize model.
+                                **Important**: not the total number of gpus!
+
+        Let's say we have a total of 8 GPUs denoted by g0 ... g7 and we
+        use 2 GPUs to parallelize the model. The present function will
+        create 4 model parallel groups and 2 data parallel groups as:
+            4 model parallel groups:
+                [g0, g1], [g2, g3], [g4, g5], [g6, g7]
+            2 data parallel groups:
+                [g0, g2, g4, g6], [g1, g3, g5, g7]
+
+        Note that for efficiency, the caller should make sure adjacent ranks
+        are on the same DGX box. For example if we are using 2 DGX-1 boxes
+        with a total of 16 GPUs, rank 0 to 7 belong to the first box and
+        ranks 8 to 15 belong to the second box.
+
+        Let's say we have a total of 4 GPUs denoted by g0 ... g3 and we
+        use 2 GPUs to parallelize the model. The present function will
+        create 2 model parallel groups and 2 data parallel groups as:
+            2 model parallel groups:
+                [g0, g1], [g2, g3]
+            2 data parallel groups:
+                [g0, g2], [g1, g3]
+
+        """
+
+        def ensure_divisibility(numerator, denominator):
+            """Ensure that numerator is divisible by the denominator."""
+            assert numerator % denominator == 0, "{} is not divisible by {}".format(numerator, denominator)
+
+        if torch.distributed.get_rank() == 0:
+            print("> initializing model parallel with size {}".format(model_parallel_size_))
+        # Get world size and rank. Ensure some consistencies.
+        assert torch.distributed.is_initialized()
+        world_size = torch.distributed.get_world_size()
+        model_parallel_size = min(model_parallel_size_, world_size)
+        ensure_divisibility(world_size, model_parallel_size)
+        rank = torch.distributed.get_rank()
+
+        print(f"MP size: {model_parallel_size}")
+        print(f"world_size: {world_size}")
+        print(f"rank: {rank}")
+
+        # Build the data parallel groups.
+        global _DATA_PARALLEL_GROUP
+        global _DATA_PARALLEL_GROUP_DEVICE_IDS
+        assert _DATA_PARALLEL_GROUP is None, "data parallel group is already initialized"
+        for i in range(model_parallel_size):
+            ranks = range(i, world_size, model_parallel_size)
+            group = torch.distributed.new_group(ranks)
+            if i == (rank % model_parallel_size):
+                #print(f"DP ranks: {list(ranks)}")
+                _DATA_PARALLEL_GROUP = group
+                _DATA_PARALLEL_GROUP_DEVICE_IDS = list(ranks)
+
+        # Build the model parallel groups.
+        global _MODEL_PARALLEL_GROUP
+        global _MODEL_PARALLEL_GROUP_DEVICE_IDS
+        assert _MODEL_PARALLEL_GROUP is None, "model parallel group is already initialized"
+        for i in range(world_size // model_parallel_size):
+            ranks = range(i * model_parallel_size, (i + 1) * model_parallel_size)
+            group = torch.distributed.new_group(ranks)
+            if i == (rank // model_parallel_size):
+                #print(f"MP ranks: {list(ranks)}")
+                _MODEL_PARALLEL_GROUP = group
+                _MODEL_PARALLEL_GROUP_DEVICE_IDS = list(ranks)
+
+    def model_parallel_is_initialized(self):
+        """Check if model and data parallel groups are initialized."""
+        if _MODEL_PARALLEL_GROUP is None or _DATA_PARALLEL_GROUP is None:
+            return False
+        return True
+
+    def get_model_parallel_group_device_ids(self):
+        """Get the model parallel device ids of the group the caller rank belongs to."""
+        assert _MODEL_PARALLEL_GROUP is not None, "model parallel group is not initialized"
+        return _MODEL_PARALLEL_GROUP_DEVICE_IDS
+
+    def get_model_parallel_group(self):
+        """Get the model parallel group the caller rank belongs to."""
+        assert _MODEL_PARALLEL_GROUP is not None, "model parallel group is not initialized"
+        return _MODEL_PARALLEL_GROUP
+
+    def get_data_parallel_group_device_ids(self):
+        """Get the data parallel device ids of the group the caller rank belongs to."""
+        assert _DATA_PARALLEL_GROUP is not None, "data parallel group is not initialized"
+        return _DATA_PARALLEL_GROUP_DEVICE_IDS
+
+    def get_data_parallel_group(self):
+        """Get the data parallel group the caller rank belongs to."""
+        assert _DATA_PARALLEL_GROUP is not None, "data parallel group is not initialized"
+        return _DATA_PARALLEL_GROUP
+
+    def get_model_parallel_world_size(self):
+        """Return world size for the model parallel group."""
+        return torch.distributed.get_world_size(group=self.get_model_parallel_group())
+
+    def get_model_parallel_rank(self):
+        """Return my rank for the model parallel group."""
+        return torch.distributed.get_rank(group=self.get_model_parallel_group())
+
+    def get_model_parallel_src_rank(self):
+        """Calculate the global rank corresponding to a local rank zero
+        in the model parallel group."""
+        global_rank = torch.distributed.get_rank()
+        local_world_size = get_model_parallel_world_size()
+        return (global_rank // local_world_size) * local_world_size
+
+    def get_data_parallel_world_size(self):
+        """Return world size for the data parallel group."""
+        return torch.distributed.get_world_size(group=self.get_data_parallel_group())
+
+    def get_data_parallel_rank(self):
+        """Return my rank for the data parallel group."""
+        return torch.distributed.get_rank(group=self.get_data_parallel_group())
+
+    def destroy_model_parallel(self):
+        """Set the groups to none."""
+        global _MODEL_PARALLEL_GROUP
+        global _MODEL_PARALLEL_GROUP_DEVICE_IDS
+        global _DATA_PARALLEL_GROUP
+        global _DATA_PARALLEL_GROUP_DEVICE_IDS
+        _MODEL_PARALLEL_GROUP = None
+        _MODEL_PARALLEL_GROUP_DEVICE_IDS = None
+        _DATA_PARALLEL_GROUP = None
+        _DATA_PARALLEL_GROUP_DEVICE_IDS = None
+
+
+def init_deepspeed(trainer, num_training_steps, mpu):
     """
     Init DeepSpeed, after converting any relevant Trainer's args into DeepSpeed configuration
 
@@ -403,6 +549,7 @@ def init_deepspeed(trainer, num_training_steps):
         model=model,
         model_parameters=model_parameters,
         config_params=config,
+        mpu = mpu,
     )
 
     return model, optimizer, lr_scheduler

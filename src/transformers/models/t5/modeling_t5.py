@@ -1416,6 +1416,13 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.device_map = None
         torch.cuda.empty_cache()
 
+
+    def pipeline_enable(self, chunks, device_map, mpu=None):
+        logger.info(f"enabling pipeline with chunks={chunks}")
+
+    def pipeline_finalize(self):
+        pass
+
     def get_input_embeddings(self):
         return self.shared
 
