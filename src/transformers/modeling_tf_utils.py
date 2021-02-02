@@ -322,7 +322,8 @@ def input_processing(func, config, input_ids, **kwargs):
         input_ids (:obj:`np.ndarray`, :obj:`tf.Tensor`, :obj:`List[tf.Tensor]` :obj:`Dict[str, tf.Tensor]` or :obj:`Dict[str, np.ndarray]`):
             Indices of input sequence tokens in the vocabulary.
         **kwargs:
-            The inputs of the model. May contain the `already_processed` argument to detect if an input has already been processed or not.
+            The inputs of the model. May contain the `already_processed` argument to detect if an input has already
+            been processed or not.
 
     Returns:
         Two lists, one for the missing layers, and another one for the unexpected layers.
