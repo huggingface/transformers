@@ -525,16 +525,6 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
 
         return incremental_indices + self.padding_idx
 
-    @tf.function
-    def resize_embeds(self, embeds_to_resize, batch_size):
-
-        if shape_list(embeds_to_resize)[0] != batch_size:
-            new_ebds = tf.tile(input=embeds_to_resize, multiples=(batch_size, 1, 1))
-
-            return new_ebds
-
-        return embeds_to_resize
-
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
         Applies embedding based on inputs tensor.
@@ -560,10 +550,11 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
                 position_ids = tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1)[
                     tf.newaxis, :
                 ]
+                position_ids = tf.tile(input=position_ids, multiples=(input_shape[0], 1))
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
         # When position_ids is not built from the input_ids, its batch_size equals 1 and needs to be properly reshaped
-        position_embeds = self.resize_embeds(position_embeds, input_shape[0])
+        #position_embeds = self.resize_embeds(position_embeds, input_shape[0])
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
