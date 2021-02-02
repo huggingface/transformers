@@ -58,4 +58,4 @@ class RetriBertTokenizerFast(BertTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = RetriBertTokenizer
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]

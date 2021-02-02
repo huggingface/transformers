@@ -98,7 +98,7 @@ if is_tf_available():
                 label = d.pop("label")
                 yield (d, label)
 
-        input_names = ["input_ids"] + tokenizer.model_input_names
+        input_names = tokenizer.model_input_names
 
         return tf.data.Dataset.from_generator(
             gen,
