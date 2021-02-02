@@ -148,7 +148,9 @@ class TrainingArguments:
         no_cuda (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to not use CUDA even when it is available or not.
         seed (:obj:`int`, `optional`, defaults to 42):
-            Random seed for initialization.
+            Random seed that will be set at the beginning of training. To ensure reproducibility across runs, use the
+            :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
+            initialized parameters.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
@@ -244,12 +246,13 @@ class TrainingArguments:
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
-        pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
+        dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
     """
 
-    output_dir: str = field(
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written."}
+    output_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
     overwrite_output_dir: bool = field(
         default=False,
@@ -336,7 +339,7 @@ class TrainingArguments:
         },
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
-    seed: int = field(default=42, metadata={"help": "random seed for initialization"})
+    seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
 
     fp16: bool = field(
         default=False,
@@ -438,10 +441,24 @@ class TrainingArguments:
             "`DistributedDataParallel`."
         },
     )
-    pin_memory: bool = field(default=True, metadata={"help": "Whether or not to pin memory for data loaders."})
+    dataloader_pin_memory: bool = field(
+        default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
+        if self.output_dir is None and os.getenv("SM_OUTPUT_DATA_DIR") is None:
+            raise ValueError(
+                "`output_dir` is only optional if it can get inferred from the environment. Please set a value for "
+                "`output_dir`."
+            )
+        elif os.getenv("SM_OUTPUT_DATA_DIR") is not None:
+            if self.output_dir is not None:
+                logger.warn(
+                    "`output_dir` is overwritten by the env variable 'SM_OUTPUT_DATA_DIR' "
+                    f"({os.getenv('SM_OUTPUT_DATA_DIR')})."
+                )
+            self.output_dir = os.getenv("SM_OUTPUT_DATA_DIR")
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
@@ -520,6 +537,20 @@ class TrainingArguments:
             self.local_rank = dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
+        elif self.deepspeed:
+            # deepspeed performs its own DDP internally, and requires the program to be started with:
+            # deepspeed  ./program.py
+            # rather than:
+            # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
+            from .integrations import is_deepspeed_available
+
+            if not is_deepspeed_available():
+                raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
+            import deepspeed
+
+            deepspeed.init_distributed()
+            device = torch.device("cuda", self.local_rank)
+            self._n_gpu = 1
         elif self.local_rank == -1:
             # if n_gpu is > 1 we'll use nn.DataParallel.
             # If you only want to use a specific subset of GPUs use `CUDA_VISIBLE_DEVICES=0`
@@ -534,21 +565,7 @@ class TrainingArguments:
         else:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
-            #
-            # deepspeed performs its own DDP internally, and requires the program to be started with:
-            # deepspeed  ./program.py
-            # rather than:
-            # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
-            if self.deepspeed:
-                from .integrations import is_deepspeed_available
-
-                if not is_deepspeed_available():
-                    raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
-                import deepspeed
-
-                deepspeed.init_distributed()
-            else:
-                torch.distributed.init_process_group(backend="nccl")
+            torch.distributed.init_process_group(backend="nccl")
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 

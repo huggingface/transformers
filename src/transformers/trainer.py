@@ -485,7 +485,7 @@ class Trainer:
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
-            pin_memory=self.args.pin_memory,
+            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
@@ -523,7 +523,7 @@ class Trainer:
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
             num_workers=self.args.dataloader_num_workers,
-            pin_memory=self.args.pin_memory,
+            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def get_test_dataloader(self, test_dataset: Dataset) -> DataLoader:
@@ -550,7 +550,7 @@ class Trainer:
             batch_size=self.args.eval_batch_size,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
-            pin_memory=self.args.pin_memory,
+            pin_memory=self.args.dataloader_pin_memory,
         )
 
     def create_optimizer_and_scheduler(self, num_training_steps: int):
@@ -680,7 +680,7 @@ class Trainer:
         self,
         resume_from_checkpoint: Optional[str] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
-        **kwargs
+        **kwargs,
     ):
         """
         Main training entry point.
@@ -1248,9 +1248,9 @@ class Trainer:
         if self.state.epoch is not None:
             logs["epoch"] = round(self.state.epoch, 2)
 
-        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
+        self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
@@ -1312,7 +1312,7 @@ class Trainer:
 
         return loss.detach()
 
-    def compute_loss(self, model, inputs):
+    def compute_loss(self, model, inputs, return_outputs=False):
         """
         How the loss is computed by Trainer. By default, all models return the loss in the first element.
 
@@ -1329,10 +1329,12 @@ class Trainer:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            return self.label_smoother(outputs, labels)
+            loss = self.label_smoother(outputs, labels)
         else:
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
-            return outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+            loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+
+        return (loss, outputs) if return_outputs else loss
 
     def is_local_process_zero(self) -> bool:
         """
@@ -1365,6 +1367,11 @@ class Trainer:
             self._save_tpu(output_dir)
         elif self.is_world_process_zero():
             self._save(output_dir)
+
+        # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
+        # SM_MODEL_DIR for easy deployment.
+        if output_dir is None and os.getenv("SM_MODEL_DIR") is not None:
+            self.save_model(output_dir=os.getenv("SM_MODEL_DIR"))
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1713,29 +1720,27 @@ class Trainer:
                 ignore_keys = []
 
         with torch.no_grad():
-            if self.use_amp:
-                with autocast():
-                    outputs = model(**inputs)
-            else:
-                outputs = model(**inputs)
             if has_labels:
-                if self.label_smoother is not None and "labels" in inputs:
-                    loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()
-                else:
-                    loss = (outputs["loss"] if isinstance(outputs, dict) else outputs[0]).mean().detach()
+                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                loss = loss.mean().detach()
                 if isinstance(outputs, dict):
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
                 else:
                     logits = outputs[1:]
             else:
                 loss = None
+                if self.use_amp:
+                    with autocast():
+                        outputs = model(**inputs)
+                else:
+                    outputs = model(**inputs)
                 if isinstance(outputs, dict):
                     logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
                 else:
                     logits = outputs
-            # TODO: this needs to be fixed and made cleaner later.
-            if self.args.past_index >= 0:
-                self._past = outputs[self.args.past_index if has_labels else self.args.past_index - 1]
+                # TODO: this needs to be fixed and made cleaner later.
+                if self.args.past_index >= 0:
+                    self._past = outputs[self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)

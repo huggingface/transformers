@@ -1041,6 +1041,8 @@ T5_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             detail.
 
+            `What are input IDs? <../glossary.html#input-ids>`__
+
             To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
             <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
