@@ -177,10 +177,10 @@ class MBart50Tokenizer(XLMRobertaTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An MBART sequence has the following format, where ``X`` represents the sequence:
+        adding special tokens. An MBART-50 sequence has the following format, where ``X`` represents the sequence:
 
-        - ``input_ids`` (for encoder) ``X [eos, src_lang_code]``
-        - ``decoder_input_ids``: (for decoder) ``X [eos, tgt_lang_code]``
+        - ``input_ids`` (for encoder) ``[src_lang_code] X [eos]``
+        - ``labels``: (for decoder) ``[tgt_lang_code] X [eos]``
 
         BOS is never used. Pairs of sequences are not the expected use case, but they will be handled without a
         separator.

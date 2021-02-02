@@ -223,7 +223,7 @@ class MBart50TokenizerFast(XLMRobertaTokenizerFast):
         self.set_src_lang_special_tokens(self.src_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
-        """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
+        """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""
         self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
@@ -238,7 +238,7 @@ class MBart50TokenizerFast(XLMRobertaTokenizerFast):
         )
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
-        """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
+        """Reset the special tokens to the target language setting. prefix=[src_lang_code] and suffix=[eos]."""
         self.cur_lang_code = self.convert_tokens_to_ids(lang)
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]

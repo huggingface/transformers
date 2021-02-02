@@ -84,6 +84,9 @@ class BlenderbotSmallConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
+        forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
+            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+            `eos_token_id`.
 
     Example::
 

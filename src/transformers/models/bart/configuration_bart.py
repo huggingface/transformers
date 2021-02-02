@@ -91,6 +91,9 @@ class BartConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         num_labels: (:obj:`int`, `optional`, defaults to 3):
             The number of labels to use in :class:`~transformers.BartForSequenceClassification`.
+        forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
+            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
+            `eos_token_id`.
 
     Example::
 
