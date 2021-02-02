@@ -85,8 +85,7 @@ design.
 
 To successfully add a model, it is important to understand the
 interaction between your model and its config,
-`~transformers.PreTrainedModel`{.interpreted-text role="class"}, and
-`~transformers.PretrainedConfig`{.interpreted-text role="class"}. For
+`PreTrainedModel`, and `.PretrainedConfig`. For
 exemplary purposes, we will call the model to be added to 🤗 Transformers
 `[camelcase name of model]`.
 
@@ -97,49 +96,44 @@ Let\'s take a look:
 As you can see, we do make use of inheritance in 🤗 Transformers, but we
 keep the level of abstraction to an absolute minimum. There are never
 more than two levels of abstraction for any model in the library.
-`[camelcase name of model]Model`{.interpreted-text role="obj"} inherits from
-`[camelcase name of model]PreTrainedModel`{.interpreted-text role="obj"} which in
-turn inherits from `~transformres.PreTrainedModel`{.interpreted-text
-role="class"} and that\'s it. As a general rule, we want to make sure
-that a new model only depends on
-`~transformers.PreTrainedModel`{.interpreted-text role="class"}. The
+`[camelcase name of model]Model` inherits from
+`[camelcase name of model]PreTrainedModel` which in
+turn inherits from `PreTrainedModel` and that\'s it. 
+As a general rule, we want to make sure
+that a new model only depends on `PreTrainedModel`. The
 important functionalities that are automatically provided to every new
 model are
-`~transformers.PreTrainedModel.from_pretrained`{.interpreted-text
-role="meth"} and
-`~transformers.PreTrainedModel.save_pretrained`{.interpreted-text
-role="meth"}, which are used for serialization and deserialization. All
+`PreTrainedModel.from_pretrained` and `PreTrainedModel.save_pretrained`, which are 
+used for serialization and deserialization. All
 of the other important functionalities, such as
-`[camelcase name of model]Model.forward`{.interpreted-text role="meth"} should be
+`[camelcase name of model]Model.forward` should be
 completely defined in the new `modeling_[name of model].py` script. Next,
 we want to make sure that a model with a specific head layer, such as
-`[camelcase name of model]ForMaskedLM`{.interpreted-text role="obj"} does not inherit
-from `[camelcase name of model]Model`{.interpreted-text role="obj"}, but rather uses
-`[camelcase name of model]Model`{.interpreted-text role="obj"} as a component that
+`[camelcase name of model]ForMaskedLM` does not inherit
+from `[camelcase name of model]Model`, but rather uses
+`[camelcase name of model]Model` as a component that
 can be called in its forward pass to keep the level of abstraction low.
 Every new model requires a configuration class, called
-`[camelcase name of model]Config`{.interpreted-text role="obj"}. This configuration
+`[camelcase name of model]Config`. This configuration
 is always stored as an attribute in
-`~transformers.PreTrainedModel`{.interpreted-text role="class"}, and
+`PreTrainedModel`, and
 thus can be accessed via the `config` attribute for all classes
-inheriting from `[camelcase name of model]PreTrainedModel`{.interpreted-text
-role="obj"}:
+inheriting from `[camelcase name of model]PreTrainedModel`
+:
 
 > ``` {.python}
-> model = [camelcase name of model]Model.from_pretrained("brandy/[name of model]")
+> model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 > model.config  # model has access to its config
 > ```
 
 Similar to the model, the configuration inherits basic serialization and
 deserialization functionalities from
-`~transformers.PretrainedConfig`{.interpreted-text role="class"}. Note
+`PretrainedConfig`. Note
 that the configuration and the model are always serialized into two
-different formats - the model to a [pytorch\_model.bin]{.title-ref} file
-and the configuration to a [config.json]{.title-ref} file. Calling
-`~transformers.PreTrainedModel.save_pretrained`{.interpreted-text
-role="meth"} will automatically call
-`~transformers.PretrainedConfig.save_pretrained`{.interpreted-text
-role="meth"}, so that both model and configuration are saved.
+different formats - the model to a `pytorch\_model.bin` file
+and the configuration to a `config.json` file. Calling
+`PreTrainedModel.save_pretrained` will automatically call
+`PretrainedConfig.save_pretrained`, so that both model and configuration are saved.
 
 ### Overview of tokenizers
 
@@ -321,7 +315,7 @@ work on CPU is sufficient.
     original repository:
 
 ``` {.bash}
-git clone https://github.com/org_that_created_[name of model]_org/[name of model].git 
+git clone [link to original repo].git 
 cd [name of model]
 pip install -e .
 ```
@@ -342,7 +336,7 @@ user-friendly, and beautiful** as possible. This is the number-one
 motivation to re-implement models into 🤗 Transformers - trying to make
 complex new NLP technology accessible to **everybody**.
 
-You should start thereby by diving into the original repository.
+You should start thereby by diving into the [original repository]([link to original repo]).
 
 Successfully running the official pretrained model in the original
 repository is often **the most difficult** step. From our experience, it
@@ -361,8 +355,8 @@ code-base. You need to figure out the following:
     there multiple different attention layers, *e.g.* *self-attention*,
     *cross-attention*\...?
 -   How can you debug the model in the original environment of the repo?
-    Do you have to add [print]{.title-ref} statements, can you work with
-    an interactive debugger like [ipdb]{.title-ref}, or should you use
+    Do you have to add `print` statements, can you work with
+    an interactive debugger like [ipdb](https://pypi.org/project/ipdb/), or should you use
     an efficient IDE to debug the model, like PyCharm?
 
 It is very important that before you start the porting process, that you
@@ -384,8 +378,7 @@ expected on GPU.
 In general, there are two possible debugging environments for running
 the original model
 
--   [Jupyter notebooks](https://jupyter.org/) / [google
-    colab](https://colab.research.google.com/notebooks/intro.ipynb)
+-   [Jupyter notebooks](https://jupyter.org/) / [google colab](https://colab.research.google.com/notebooks/intro.ipynb)
 -   Local python scripts.
 
 Jupyter notebooks have the advantage that they allow for cell-by-cell
