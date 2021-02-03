@@ -240,11 +240,11 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         conv_out_layer = tf.pad(conv_out_layer, paddings, "CONSTANT")
 
         unfold_conv_out_layer = tf.stack(
-           [
-               tf.slice(conv_out_layer, [0, i, 0], [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size])
-               for i in range(self.conv_kernel_size)
-           ],
-           axis=-1,
+            [
+                tf.slice(conv_out_layer, [0, i, 0], [batch_size, shape_list(mixed_query_layer)[1], self.all_head_size])
+                for i in range(self.conv_kernel_size)
+            ],
+            axis=-1,
         )
 
         conv_out_layer = tf.reshape(unfold_conv_out_layer, [-1, self.attention_head_size, self.conv_kernel_size])
