@@ -210,9 +210,8 @@ def find_tested_models(test_file):
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
-    # Check with one less parenthesis
-    if len(all_models) == 0:
-        all_models = re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
+    # Check with one less parenthesis as well
+    all_models += re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
     if len(all_models) > 0:
         model_tested = []
         for entry in all_models:

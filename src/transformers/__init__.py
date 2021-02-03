@@ -631,7 +631,7 @@ if is_torch_available():
             "LxmertXLayer",
         ]
     )
-    _import_structure["models.marian"].extend(["MarianModel", "MarianMTModel", "MarianForCausalmLM"])
+    _import_structure["models.marian"].extend(["MarianModel", "MarianMTModel", "MarianForCausalLM"])
     _import_structure["models.mbart"].extend(
         [
             "MBartForCausalLM",

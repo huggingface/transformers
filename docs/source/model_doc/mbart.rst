@@ -127,7 +127,7 @@ MBartForSequenceClassification
 MBartForCausalLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BartForCausalLM
+.. autoclass:: transformers.MBartForCausalLM
     :members: forward
 
 
