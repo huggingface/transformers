@@ -168,5 +168,5 @@ Using `tensorflow_datasets` is as easy as using a data file:
     )
 
 
-Another example using these processors is given in the `run_squad.py
-<https://github.com/huggingface/transformers/blob/master/examples/question-answering/run_squad.py>`__ script.
+Another example using these processors is given in the :prefix_link:`run_squad.py
+<examples/question-answering/run_squad.py>` script.

@@ -20,14 +20,15 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import transformers
+from seq2seq_trainer import Seq2SeqTrainer
+from seq2seq_training_args import Seq2SeqTrainingArguments
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
     AutoTokenizer,
     HfArgumentParser,
     MBartTokenizer,
-    Seq2SeqTrainer,
-    Seq2SeqTrainingArguments,
+    MBartTokenizerFast,
     set_seed,
 )
 from transformers.trainer_utils import EvaluationStrategy, is_main_process
@@ -174,11 +175,11 @@ def main():
         bool(training_args.parallel_mode == ParallelMode.DISTRIBUTED),
         training_args.fp16,
     )
+    transformers.utils.logging.enable_default_handler()
+    transformers.utils.logging.enable_explicit_format()
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
-        transformers.utils.logging.enable_default_handler()
-        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed
@@ -220,11 +221,14 @@ def main():
         data_args.eval_beams = model.config.num_beams
 
     # set decoder_start_token_id for MBart
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         assert (
             data_args.tgt_lang is not None and data_args.src_lang is not None
         ), "mBart requires --tgt_lang and --src_lang"
-        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        if isinstance(tokenizer, MBartTokenizer):
+            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.tgt_lang]
+        else:
+            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.tgt_lang)
 
     if model_args.freeze_embeds:
         freeze_embeds(model)
@@ -282,9 +286,12 @@ def main():
     trainer = Seq2SeqTrainer(
         model=model,
         args=training_args,
+        data_args=data_args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=Seq2SeqDataCollator(tokenizer, data_args, training_args.tpu_num_cores),
+        data_collator=Seq2SeqDataCollator(
+            tokenizer, data_args, model.config.decoder_start_token_id, training_args.tpu_num_cores
+        ),
         compute_metrics=compute_metrics_fn,
         tokenizer=tokenizer,
     )
@@ -317,9 +324,7 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        metrics = trainer.evaluate(
-            metric_key_prefix="val", max_length=data_args.val_max_target_length, num_beams=data_args.eval_beams
-        )
+        metrics = trainer.evaluate(metric_key_prefix="val")
         metrics["val_n_objs"] = data_args.n_val
         metrics["val_loss"] = round(metrics["val_loss"], 4)
 
@@ -331,12 +336,7 @@ def main():
     if training_args.do_predict:
         logger.info("*** Predict ***")
 
-        test_output = trainer.predict(
-            test_dataset=test_dataset,
-            metric_key_prefix="test",
-            max_length=data_args.val_max_target_length,
-            num_beams=data_args.eval_beams,
-        )
+        test_output = trainer.predict(test_dataset=test_dataset, metric_key_prefix="test")
         metrics = test_output.metrics
         metrics["test_n_objs"] = data_args.n_test
 
