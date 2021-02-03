@@ -104,13 +104,16 @@ where :obj:`lang_code` is source language id for source text and target language
 mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer` and the
 :meth:`transformers.MBart50Tokenizer.prepare_seq2seq_batch` handles this automatically
 
-- Generation To generate using the mBART-50 multilingual translation models, :obj:`eos_token_id` is used as the
-  `:obj:`decoder_start_token_id` and the target language id is forced as the first generated token. To force the target
-  language id as the first generated token, pass the `forced_bos_token_id` parameter to the `generate` method. The
-  following example shows how to translate between Hindi to English and English to Hindi using the
-  `facebook/mbart-50-large-many-to-many` model.
+- Generation
+
+    To generate using the mBART-50 multilingual translation models, :obj:`eos_token_id` is used as the
+    `:obj:`decoder_start_token_id` and the target language id is forced as the first generated token. To force the
+    target language id as the first generated token, pass the `forced_bos_token_id` parameter to the `generate` method.
+    The following example shows how to translate between Hindi to English and English to Hindi using the
+    `facebook/mbart-50-large-many-to-many` model.
 
 .. code-block::
+
     from transformers import MBartForConditionalGeneration, MBart50Tokenizer
     article_hi = "संयुक्त राष्ट्र के प्रमुख का कहना है कि सीरिया में कोई सैन्य समाधान नहीं है"
     article_en = "The head of the United Nations says there is no military solution in Syria"
