@@ -60,7 +60,7 @@ Basic steps
 In order to upload a model, you'll need to first create a git repo. This repo will live on the model hub, allowing
 users to clone it and you (and your organization members) to push to it.
 
-You can create a model repo **directly from `the /new page on the website <https://huggingface.co/new>`__.**
+You can create a model repo directly from `the /new page on the website <https://huggingface.co/new>`__.
 
 Alternatively, you can use the ``transformers-cli``. The next steps describe that process:
 
@@ -77,6 +77,12 @@ Once you are logged in with your model hub credentials, you can start building y
 .. code-block:: bash
 
     transformers-cli repo create your-model-name
+
+If you want to create a repo under a specific organization, you should add a `--organization` flag:
+
+.. code-block:: bash
+
+    transformers-cli repo create your-model-name --organization your-org-name
 
 This creates a repo on the model hub, which can be cloned.
 
@@ -104,6 +110,9 @@ you already know.
 The only learning curve you might have compared to regular git is the one for git-lfs. The documentation at
 `git-lfs.github.com <https://git-lfs.github.com/>`__ is decent, but we'll work on a tutorial with some tips and tricks
 in the coming weeks!
+
+Additionally, if you want to change multiple repos at once, the `change_config.py script
+<https://github.com/huggingface/efficient_scripts/blob/main/change_config.py>`__ can probably save you some time.
 
 Make your model work on all frameworks
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

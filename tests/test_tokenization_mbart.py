@@ -16,22 +16,18 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
-from transformers.testing_utils import (
-    _sentencepiece_available,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-)
+from transformers.file_utils import is_sentencepiece_available
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if _sentencepiece_available:
+if is_sentencepiece_available():
     from .test_tokenization_xlm_roberta import SAMPLE_VOCAB
 
 
 if is_torch_available():
-    from transformers.models.bart.modeling_bart import shift_tokens_right
+    from transformers.models.mbart.modeling_mbart import shift_tokens_right
 
 EN_CODE = 250004
 RO_CODE = 250020
@@ -196,6 +192,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
             self.src_text, tgt_texts=self.tgt_text, return_tensors="pt"
         )
         batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
+
         for k in batch:
             batch[k] = batch[k].tolist()
         # batch = {k: v.tolist() for k,v in batch.items()}
