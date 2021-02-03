@@ -346,6 +346,13 @@ class GenerationMixin:
         """
         return {"input_ids": input_ids}
 
+    def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
+        """
+        Implement in subclasses of :class:`~transformers.PreTrainedModel` for custom behavior to adjust the logits in
+        the generate method.
+        """
+        return logits
+
     def _prepare_input_ids_for_generation(self, bos_token_id: int) -> torch.LongTensor:
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
@@ -1607,6 +1614,11 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
+            # hack: adjust tokens for Marian, Marian generation breaks without this
+            next_token_logits = self.adjust_logits_during_generation(
+                next_token_logits, cur_len=cur_len, max_length=max_length
+            )
+
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
             next_token_scores = logits_processor(input_ids, next_token_scores)
@@ -1855,6 +1867,11 @@ class GenerationMixin:
                 output_hidden_states=output_hidden_states,
             )
             next_token_logits = outputs.logits[:, -1, :]
+
+            # adjust token scores (a no-op by default)
+            next_token_logits = self.adjust_logits_during_generation(
+                next_token_logits, cur_len=cur_len, max_length=max_length
+            )
 
             next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * num_beams, vocab_size)
 
@@ -2134,6 +2151,11 @@ class GenerationMixin:
 
                 # select outputs of beams of current group only
                 next_token_logits = outputs.logits[batch_group_indices, -1, :]
+
+                # adjust token scores (a no-op by default)
+                next_token_logits = self.adjust_logits_during_generation(
+                    next_token_logits, cur_len=cur_len, max_length=max_length
+                )
 
                 next_token_scores = F.log_softmax(next_token_logits, dim=-1)  # (batch_size * group_size, vocab_size)
                 vocab_size = next_token_scores.shape[-1]

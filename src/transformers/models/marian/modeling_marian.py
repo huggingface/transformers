@@ -1301,6 +1301,10 @@ class MarianMTModel(MarianPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
+    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+        logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.
+        return logits
+
     @staticmethod
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
