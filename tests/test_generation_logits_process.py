@@ -345,7 +345,7 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores)
         self.assertTrue(torch.isneginf(scores[:, bos_token_id + 1 :]).all())
-        self.assertFalse(torch.isinf(scores[:, bos_token_id]).any())  # score for bos_token_id shold not be -inf
+        self.assertListEqual(scores[:, bos_token_id].tolist(), 4 * [0])  # score for bos_token_id shold be zero
 
         # check that bos_token_id is not forced if current length is greater than 1
         input_ids = ids_tensor((batch_size, 4), vocab_size=20)
@@ -366,10 +366,10 @@ class LogitsProcessorTest(unittest.TestCase):
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores)
         self.assertTrue(torch.isneginf(scores[:, eos_token_id + 1 :]).all())
-        self.assertFalse(torch.isinf(scores[:, eos_token_id]).any())  # score for eos_token_id should not be -inf
+        self.assertListEqual(scores[:, eos_token_id].tolist(), 4 * [0])  # score for eos_token_id should be zero
 
         # check that eos_token_id is not forced if max_length is not reached
         input_ids = ids_tensor((batch_size, 3), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores)
-        self.assertFalse(torch.isinf(scores[:, eos_token_id]).any())
+        self.assertFalse(torch.isinf(scores).any())
