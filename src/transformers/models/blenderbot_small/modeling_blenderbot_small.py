@@ -1332,8 +1332,8 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->BlenderbotSmall
 class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
     """
-    This wrapper class is used so that :class:`~transformers.BlenderbotSmallForCausalLM` can correctly be loaded from pretrained
-    BlenderbotSmall checkpoints using the :class:`~transformers.EncoderDecoderModel` framework.
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
     """
 
     def __init__(self, config):

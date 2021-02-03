@@ -1346,8 +1346,8 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Pegasus
 class PegasusDecoderWrapper(PegasusPreTrainedModel):
     """
-    This wrapper class is used so that :class:`~transformers.PegasusForCausalLM` can correctly be loaded from pretrained
-    Pegasus checkpoints using the :class:`~transformers.EncoderDecoderModel` framework.
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
     """
 
     def __init__(self, config):

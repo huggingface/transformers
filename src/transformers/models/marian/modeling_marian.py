@@ -1343,8 +1343,8 @@ class MarianMTModel(MarianPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Marian
 class MarianDecoderWrapper(MarianPreTrainedModel):
     """
-    This wrapper class is used so that :class:`~transformers.MarianForCausalLM` can correctly be loaded from pretrained
-    Marian checkpoints using the :class:`~transformers.EncoderDecoderModel` framework.
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
     """
 
     def __init__(self, config):

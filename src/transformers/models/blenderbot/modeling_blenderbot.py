@@ -1357,8 +1357,8 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Blenderbot
 class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
     """
-    This wrapper class is used so that :class:`~transformers.BlenderbotForCausalLM` can correctly be loaded from pretrained
-    Blenderbot checkpoints using the :class:`~transformers.EncoderDecoderModel` framework.
+    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
+    used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
     """
 
     def __init__(self, config):
