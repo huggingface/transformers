@@ -128,6 +128,7 @@ class BlenderbotConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
+        encoder_no_repeat_ngram_size=3,
         **kwargs
     ):
         super().__init__(
@@ -160,6 +161,7 @@ class BlenderbotConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+        self.encoder_no_repeat_ngram_size = encoder_no_repeat_ngram_size
 
     @property
     def num_attention_heads(self) -> int:
