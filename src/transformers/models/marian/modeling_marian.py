@@ -811,6 +811,12 @@ class MarianDecoder(MarianPreTrainedModel):
         self.layers = nn.ModuleList([MarianDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.init_weights()
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
     def forward(
         self,
         input_ids=None,
