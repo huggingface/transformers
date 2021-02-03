@@ -307,7 +307,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
 
 @require_tf
 class TFAlbertModelIntegrationTest(unittest.TestCase):
-    # @slow
+    @slow
     def test_inference_masked_lm(self):
         model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
