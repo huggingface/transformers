@@ -39,7 +39,7 @@ from transformers import (
     set_seed,
 )
 from transformers.tokenization_utils_base import PaddingStrategy, PreTrainedTokenizerBase
-from transformers.trainer_utils import is_main_process
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,17 @@ class ModelArguments:
     use_fast_tokenizer: bool = field(
         default=True,
         metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
+        },
     )
 
 
@@ -183,23 +194,28 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
-            "Use --overwrite_output_dir to overcome."
-        )
+    # Detecting last checkpoint.
+    last_checkpoint = None
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif last_checkpoint is not None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
 
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
+    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -245,17 +261,23 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         use_fast=model_args.use_fast_tokenizer,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
     model = AutoModelForMultipleChoice.from_pretrained(
         model_args.model_name_or_path,
         from_tf=bool(".ckpt" in model_args.model_name_or_path),
         config=config,
         cache_dir=model_args.cache_dir,
+        revision=model_args.model_revision,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
     # When using your own dataset or a different dataset from swag, you will probably need to change this.
@@ -295,7 +317,9 @@ def main():
 
     # Data collator
     data_collator = (
-        default_data_collator if data_args.pad_to_max_length else DataCollatorForMultipleChoice(tokenizer=tokenizer)
+        default_data_collator
+        if data_args.pad_to_max_length
+        else DataCollatorForMultipleChoice(tokenizer=tokenizer, pad_to_multiple_of=8 if training_args.fp16 else None)
     )
 
     # Metric
@@ -317,9 +341,13 @@ def main():
 
     # Training
     if training_args.do_train:
-        train_result = trainer.train(
-            model_path=model_args.model_name_or_path if os.path.isdir(model_args.model_name_or_path) else None
-        )
+        if last_checkpoint is not None:
+            checkpoint = last_checkpoint
+        elif os.path.isdir(model_args.model_name_or_path):
+            checkpoint = model_args.model_name_or_path
+        else:
+            checkpoint = None
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         output_train_file = os.path.join(training_args.output_dir, "train_results.txt")

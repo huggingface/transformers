@@ -42,7 +42,7 @@ from transformers import (
     TrainingArguments,
     set_seed,
 )
-from transformers.trainer_utils import is_main_process
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
 logger = logging.getLogger(__name__)
@@ -80,6 +80,17 @@ class ModelArguments:
     use_fast_tokenizer: bool = field(
         default=True,
         metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
+    )
+    model_revision: str = field(
+        default="main",
+        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
+    )
+    use_auth_token: bool = field(
+        default=False,
+        metadata={
+            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+            "with private models)."
+        },
     )
 
 
@@ -160,23 +171,28 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
-            "Use --overwrite_output_dir to overcome."
-        )
+    # Detecting last checkpoint.
+    last_checkpoint = None
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif last_checkpoint is not None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
 
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
+        handlers=[logging.StreamHandler(sys.stdout)],
     )
+    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
 
     # Log on each process the small summary:
     logger.warning(
@@ -234,22 +250,29 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
+    config_kwargs = {
+        "cache_dir": model_args.cache_dir,
+        "revision": model_args.model_revision,
+        "use_auth_token": True if model_args.use_auth_token else None,
+    }
     if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
     elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+        config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
 
+    tokenizer_kwargs = {
+        "cache_dir": model_args.cache_dir,
+        "use_fast": model_args.use_fast_tokenizer,
+        "revision": model_args.model_revision,
+        "use_auth_token": True if model_args.use_auth_token else None,
+    }
     if model_args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.tokenizer_name, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-        )
+        tokenizer = AutoTokenizer.from_pretrained(model_args.tokenizer_name, **tokenizer_kwargs)
     elif model_args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(
-            model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_fast=model_args.use_fast_tokenizer
-        )
+        tokenizer = AutoTokenizer.from_pretrained(model_args.model_name_or_path, **tokenizer_kwargs)
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
@@ -262,6 +285,8 @@ def main():
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
             config=config,
             cache_dir=model_args.cache_dir,
+            revision=model_args.model_revision,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         logger.info("Training new model from scratch")
@@ -318,6 +343,12 @@ def main():
 
         if data_args.max_seq_length is None:
             max_seq_length = tokenizer.model_max_length
+            if max_seq_length > 1024:
+                logger.warn(
+                    f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                    "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+                )
+                max_seq_length = 1024
         else:
             if data_args.max_seq_length > tokenizer.model_max_length:
                 logger.warn(
@@ -371,12 +402,13 @@ def main():
 
     # Training
     if training_args.do_train:
-        model_path = (
-            model_args.model_name_or_path
-            if (model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path))
-            else None
-        )
-        train_result = trainer.train(model_path=model_path)
+        if last_checkpoint is not None:
+            checkpoint = last_checkpoint
+        elif model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path):
+            checkpoint = model_args.model_name_or_path
+        else:
+            checkpoint = None
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
