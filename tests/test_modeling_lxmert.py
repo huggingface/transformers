@@ -727,3 +727,9 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertIsNotNone(attentions_vision.grad)
         self.assertIsNotNone(hidden_states_vision.grad)
         self.assertIsNotNone(attentions_vision.grad)
+
+@require_torch
+class LxmertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head_absolute_embedding(self):
+        pass
