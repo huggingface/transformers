@@ -1317,8 +1317,8 @@ class BlenderbotSmallForConditionalGeneration(BlenderbotSmallPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->BlenderbotSmall
 class BlenderbotSmallDecoderWrapper(BlenderbotSmallPreTrainedModel):
     """
-    This is a wrapper class, so that :class:`~transformers.BlenderbotSmallForCausalLM` can correctly be loaded from pretrained
-    BlenderbotSmall classes.
+    This is a wrapper class, so that :class:`~transformers.BlenderbotSmallForCausalLM` can correctly be loaded from
+    pretrained BlenderbotSmall checkpoints.
     """
 
     def __init__(self, config):
@@ -1430,10 +1430,10 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MartianTokenizer, MartianForCausalLM
+            >>> from transformers import BlenderbotSmallTokenizer, BlenderbotSmallForCausalLM
 
-            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/blenderbot_small-90M')
-            >>> model = BlenderbotSmallForCausalLM.from_pretrained('facebook/blenderbot_small-90M', add_cross_attention=False)
+            >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained('facebook/bart-large')
+            >>> model = BlenderbotSmallForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

@@ -1332,7 +1332,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel):
 class PegasusDecoderWrapper(PegasusPreTrainedModel):
     """
     This is a wrapper class, so that :class:`~transformers.PegasusForCausalLM` can correctly be loaded from pretrained
-    Pegasus classes.
+    Pegasus checkpoints.
     """
 
     def __init__(self, config):
@@ -1446,8 +1446,8 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
 
             >>> from transformers import PegasusTokenizer, PegasusForCausalLM
 
-            >>> tokenizer = PegasusTokenizer.from_pretrained('google/pegasus-large')
-            >>> model = PegasusForCausalLM.from_pretrained('google/pegasus-large', add_cross_attention=False)
+            >>> tokenizer = PegasusTokenizer.from_pretrained('facebook/bart-large')
+            >>> model = PegasusForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

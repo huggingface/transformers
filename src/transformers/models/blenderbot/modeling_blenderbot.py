@@ -1343,8 +1343,8 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel):
 # Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Blenderbot
 class BlenderbotDecoderWrapper(BlenderbotPreTrainedModel):
     """
-    This is a wrapper class, so that :class:`~transformers.BlenderbotForCausalLM` can correctly be loaded from pretrained
-    Blenderbot classes.
+    This is a wrapper class, so that :class:`~transformers.BlenderbotForCausalLM` can correctly be loaded from
+    pretrained Blenderbot checkpoints.
     """
 
     def __init__(self, config):
@@ -1458,8 +1458,8 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
 
             >>> from transformers import BlenderbotTokenizer, BlenderbotForCausalLM
 
-            >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/blenderbot-3B')
-            >>> model =  BlenderbotForCausalLM.from_pretrained('facebook/blenderbot-3B', add_cross_attention=False)
+            >>> tokenizer = BlenderbotTokenizer.from_pretrained('facebook/bart-large')
+            >>> model = BlenderbotForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

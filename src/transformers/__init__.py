@@ -469,6 +469,7 @@ if is_torch_available():
             "BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BlenderbotForConditionalGeneration",
             "BlenderbotModel",
+            "BlenderbotForCausalLM",
         ]
     )
     _import_structure["models.blenderbot_small"].extend(
@@ -476,6 +477,7 @@ if is_torch_available():
             "BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST",
             "BlenderbotSmallForConditionalGeneration",
             "BlenderbotSmallModel",
+            "BlenderbotSmallForCausalLM",
         ]
     )
     _import_structure["models.camembert"].extend(
@@ -629,7 +631,7 @@ if is_torch_available():
             "LxmertXLayer",
         ]
     )
-    _import_structure["models.marian"].extend(["MarianModel", "MarianMTModel"])
+    _import_structure["models.marian"].extend(["MarianModel", "MarianMTModel", "MarianForCausalmLM"])
     _import_structure["models.mbart"].extend(
         [
             "MBartForCausalLM",
@@ -681,7 +683,9 @@ if is_torch_available():
             "load_tf_weights_in_openai_gpt",
         ]
     )
-    _import_structure["models.pegasus"].extend(["PegasusForConditionalGeneration", "PegasusModel"])
+    _import_structure["models.pegasus"].extend(
+        ["PegasusForConditionalGeneration", "PegasusModel", "PegasusForCausalLM"]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1549,11 +1553,13 @@ if TYPE_CHECKING:
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlenderbotForCausalLM,
             BlenderbotForConditionalGeneration,
             BlenderbotModel,
         )
         from .models.blenderbot_small import (
             BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlenderbotSmallForCausalLM,
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,
         )
@@ -1738,7 +1744,7 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
-        from .models.pegasus import PegasusForConditionalGeneration, PegasusModel
+        from .models.pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,

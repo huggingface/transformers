@@ -1582,7 +1582,7 @@ class BartForQuestionAnswering(BartPretrainedModel):
 class BartDecoderWrapper(BartPretrainedModel):
     """
     This is a wrapper class, so that :class:`~transformers.BartForCausalLM` can correctly be loaded from pretrained
-    Bart classes.
+    Bart checkpoints.
     """
 
     def __init__(self, config):

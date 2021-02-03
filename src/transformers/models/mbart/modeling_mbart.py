@@ -1582,7 +1582,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
 class MBartDecoderWrapper(MBartPreTrainedModel):
     """
     This is a wrapper class, so that :class:`~transformers.MBartForCausalLM` can correctly be loaded from pretrained
-    MBart classes.
+    MBart checkpoints.
     """
 
     def __init__(self, config):

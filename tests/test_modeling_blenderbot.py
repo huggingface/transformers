@@ -31,7 +31,6 @@ if is_torch_available():
     import torch
 
     from transformers import BlenderbotConfig, BlenderbotForConditionalGeneration, BlenderbotModel, BlenderbotTokenizer
-
     from transformers.models.blenderbot.modeling_blenderbot import (
         BlenderbotDecoder,
         BlenderbotEncoder,
