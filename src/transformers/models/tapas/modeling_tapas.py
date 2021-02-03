@@ -472,7 +472,6 @@ class TapasAttention(nn.Module):
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
     ):
@@ -481,7 +480,6 @@ class TapasAttention(nn.Module):
             attention_mask,
             head_mask,
             encoder_hidden_states,
-            encoder_attention_mask,
             past_key_value,
             output_attentions,
         )
@@ -574,10 +572,9 @@ class TapasLayer(nn.Module):
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
             cross_attention_outputs = self.crossattention(
                 attention_output,
-                attention_mask,
+                encoder_attention_mask,
                 head_mask,
                 encoder_hidden_states,
-                encoder_attention_mask,
                 cross_attn_past_key_value,
                 output_attentions,
             )
