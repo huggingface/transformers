@@ -129,10 +129,10 @@ mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer` and the
     # => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire dans la Syrie."
 
     # translate Arabic to English
-    encoded_ar = tokenizer.prepare_seq2seq_batch(src_texts=article_hi, src_lang="ar_AR", return_tensors="pt")
-    generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
+    encoded_ar = tokenizer.prepare_seq2seq_batch(src_texts=article_ar, src_lang="ar_AR", return_tensors="pt")
+    generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-    # => "The head of the United Nations says there is no military solution in Syria"
+    # => "The Secretary-General of the United Nations says there is no military solution in Syria."
 
 
 MBartConfig
