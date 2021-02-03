@@ -601,6 +601,11 @@ def load_tf_weights_in_bert_generation(*args, **kwargs):
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BlenderbotForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class BlenderbotForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -620,6 +625,11 @@ class BlenderbotModel:
 
 
 BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BlenderbotSmallForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class BlenderbotSmallForConditionalGeneration:
@@ -1780,6 +1790,11 @@ class OpenAIGPTPreTrainedModel:
 
 def load_tf_weights_in_openai_gpt(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_openai_gpt)
+
+
+class PegasusForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class PegasusForConditionalGeneration:

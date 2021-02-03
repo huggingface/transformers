@@ -168,7 +168,7 @@ class BlenderbotModelTester:
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
         # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = BlenderbotModel(config=config).to(torch_device).eval()
@@ -448,6 +448,7 @@ class BlenderbotStandaloneDecoderModelTester:
 
         # first forward pass
         past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
+        #        past_key_values = model(input_ids, use_cache=True)["past_key_values"]
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -465,8 +466,10 @@ class BlenderbotStandaloneDecoderModelTester:
         )
 
         # get two different outputs
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -474,7 +477,7 @@ class BlenderbotStandaloneDecoderModelTester:
         output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
 
         # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
+        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
