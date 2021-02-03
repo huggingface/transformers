@@ -1589,8 +1589,8 @@ class BartForQuestionAnswering(BartPretrainedModel):
 
 class BartDecoderWrapper(BartPretrainedModel):
     """
-    This is a wrapper class, so that :class:`~transformers.BartForCausalLM` can correctly be loaded from pretrained
-    Bart checkpoints.
+    This wrapper class is used so that :class:`~transformers.BartForCausalLM` can correctly be loaded from pretrained
+    Bart checkpoints using the :class:`~transformers.EncoderDecoderModel` framework.
     """
 
     def __init__(self, config):
