@@ -375,7 +375,6 @@ class BertAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
         past_key_value=None,
         output_attentions=False,
     ):
@@ -383,7 +382,6 @@ class BertAttention(nn.Module):
             hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
             past_key_value,
             output_attentions,
         )
