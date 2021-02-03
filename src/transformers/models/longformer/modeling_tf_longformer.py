@@ -1836,7 +1836,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         batch_size, seq_len = input_shape[:2]
         padding_len = (attention_window - seq_len % attention_window) % attention_window
 
-        if padding_len > 0:
+        if tf.math.greater(padding_len, 0):
             logger.info(
                 "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
                     seq_len, seq_len + padding_len, attention_window
@@ -1859,7 +1859,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
 
-            inputs_embeds = tf.cond(padding_len > 0, pad_embeddings, lambda: inputs_embeds)
+            inputs_embeds = tf.cond(tf.math.greater(padding_len, 0), pad_embeddings, lambda: inputs_embeds)
 
         attention_mask = tf.pad(attention_mask, paddings, constant_values=False)  # no attention on the padding tokens
         token_type_ids = tf.pad(token_type_ids, paddings, constant_values=0)  # pad with token_type_id = 0
