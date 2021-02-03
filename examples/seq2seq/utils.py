@@ -275,9 +275,10 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
 
 
 class Seq2SeqDataCollator:
-    def __init__(self, tokenizer, data_args, tpu_num_cores=None):
+    def __init__(self, tokenizer, data_args, decoder_start_token_id, tpu_num_cores=None):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         assert (
             self.pad_token_id is not None
         ), f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
@@ -308,7 +309,7 @@ class Seq2SeqDataCollator:
         if isinstance(self.tokenizer, T5Tokenizer):
             decoder_input_ids = self._shift_right_t5(labels)
         else:
-            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id)
+            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id, self.decoder_start_token_id)
 
         batch = {
             "input_ids": input_ids,
@@ -562,7 +563,7 @@ def freeze_embeds(model):
     """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
     model_type = model.config.model_type
 
-    if model_type == "t5":
+    if model_type in ["t5", "mt5"]:
         freeze_params(model.shared)
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)
