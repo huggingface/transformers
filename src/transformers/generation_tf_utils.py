@@ -141,6 +141,12 @@ class TFGenerationMixin:
             use_cache: (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
+            forced_bos_token_id (:obj:`int`, `optional`, defaults to `None`):
+                The id of the token to force as the first generated token after the `decoder_start_token_id`. Useful
+                for multilingual models like `mBART <https://huggingface.co/transformers/model_doc/mbart.html>`__ where
+                the first generated token needs to be the target language token.
+            forced_eos_token_id (:obj:`int`, `optional`, defaults to `None`):
+                The id of the token to force as the last generated token when `max_length` is reached.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model.
 
