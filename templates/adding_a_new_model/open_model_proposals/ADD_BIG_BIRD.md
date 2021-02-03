@@ -247,7 +247,7 @@ Alright, now you should be ready to take a closer look into the actual code of B
 You should have understood the following aspects of BigBird by now:
 
 - BigBird provides a new attention layer for long-range sequence modelling that can be used 
-  as a drop-in replacement for already existing architectures, such as RoBERTa, and PEGASUS
+  as a drop-in replacement for already existing architectures. This means that every transformer-based model architecture can replace its [Self-attention layer](https://towardsdatascience.com/illustrated-self-attention-2d627e33b20a) with BigBird's self-attention layer.
 - BigBird's self-attention layer is composed of three mechanisms: block sparse (local) self-attention, global self-attention, random self-attention
 - BigBird's block sparse (local) self-attention is different from Longformer's local self-attention. How so? Why does that matter? => Can be deployed on TPU much easier this way
 - BigBird can be implemented for both RoBERTa (as an encoder-only model), which means that we can reuse lots of [code from RoBERTa](https://github.com/huggingface/transformers/blob/master/src/transformers/models/roberta/modeling_roberta.py) **and** PEGASUS (as an encoder-decoder model), which means that we can reuse lots of [code from PEGASUS](https://github.com/huggingface/transformers/blob/master/src/transformers/models/pegasus/modeling_pegasus.py).
@@ -378,12 +378,24 @@ your known debugging tools anymore, like `ipdb`.
 For each code-base, a good first step is always to load a **small**
 pretrained checkpoint and to be able to reproduce a single forward pass
 using a dummy integer vector of input IDs as an input. Such a script
-could look like this (in pseudocode):
+could look something like this:
 
 ```python
-model = BigBirdModel.load_pretrained_checkpoint(/path/to/checkpoint/)
-input_ids = [0, 4, 5, 2, 3, 7, 9]  # vector of input ids
-original_output = model.predict(input_ids)
+from bigbird.core import modeling
+model = modeling.BertModel(bert_config)
+from bigbird.core import utils
+
+params = utils.BigBirdConfig(vocab_size=32000, hidden_size=512,
+    num_hidden_layers=8, num_attention_heads=6, intermediate_size=1024)
+
+ckpt_path = 'gs://bigbird-transformer/pretrain/bigbr_base/model.ckpt-0'
+ckpt_reader = tf.compat.v1.train.NewCheckpointReader(ckpt_path)
+model.set_weights([ckpt_reader.get_tensor(v.name[:-2]) for v in tqdm(model.trainable_weights, position=0)])
+
+input_ids = tf.constant([[31, 51, 99], [15, 5, 0]])
+_, pooled_output = model(input_ids=input_ids, token_type_ids=token_type_ids)
+...
+
 ```
 
 Next, regarding the debugging strategy, there are generally a few from
@@ -516,10 +528,20 @@ is to make your debugging environment as efficient as possible.
     [transformers.file\_utils.set\_seed]{.title-ref} if the old and new
     implementations are in the same framework.
 
-#### More details on how to create a debugging environment for BigBird 
+#### (Important) More details on how to create a debugging environment for BigBird 
 
-[Here the mentor should add very specific information on what the student should do]
-[to set up an efficient environment for the special requirements of this model]
+- BigBird has multiple pretrained checkpoints that should eventually all be ported to 
+  🤗 Transformers. The pretrained checkpoints can be found [here](https://console.cloud.google.com/storage/browser/bigbird-transformer/pretrain;tab=objects?prefix=&forceOnObjectsSortingFiltering=false). 
+	Those checkpoints include both pretrained weights for encoder-only (BERT/RoBERTa) under the folder `bigbr_base` and encoder-decoder (PEGASUS) under the folder `bigbp_large`.
+	You should start by porting the `bigbr_base` model. The encoder-decoder model 
+	can be ported afterward.
+	for an encoder-decoder architecture as well as an encoder-only architecture. 
+- BigBird was written in tf.compat meaning that a mixture of a TensorFlow 1 and 
+  TensorFlow 2 API was used.
+- The most important part of the BigBird code-base is [bigbird.bigbird.core](https://github.com/google-research/bigbird/tree/master/bigbird/core) which includes all logic necessary 
+  to implement BigBird.
+- The first goal should be to successfully run a forward pass using the RoBERTa checkpoint `bigbr_base/model.ckpt-0.data-00000-of-00001` and `bigbr_base/model.ckpt-0.index`.
+
 
 ### 5.-14. Port BigBird to 🤗 Transformers
 
@@ -547,6 +569,10 @@ adding the PyTorch version of the model at first. Make sure you follow
 the instructions of the `README.md` on the [🤗 Transformers
 templates](https://github.com/huggingface/transformers/tree/master/templates/adding_a_new_model)
 carefully.
+Since you will first implement the Encoder-only/RoBERTa-like version of BigBird you should 
+select the `is_encoder_decoder_model = False` option in the cookiecutter. Also, it is recommended
+that you implement the model only in PyTorch in the beginning and select "Standalone" as the 
+tokenizer type for now.
 
 **Open a Pull Request on the main huggingface/transformers repo**
 
@@ -657,9 +683,14 @@ The above command will create a model according to the default
 parameters as defined in `BigBirdConfig()` with random weights,
 thus making sure that the `init()` methods of all components works.
 
-[Here the mentor should add very specific information on what exactly has to be changed for this model]
-[...]
-[...]
+Note that for BigBird you have to change the attention layer. BigBird's attention
+layer is quite complex as you can see [here](https://github.com/google-research/bigbird/blob/103a3345f94bf6364749b51189ed93024ca5ef26/bigbird/core/attention.py#L560). Don't 
+feel discouraged by this! In a first step you should simply make sure that 
+the layer `BigBirdAttention` has the correct weights as can be found in the 
+pretrained checkpoints. This means that you have to make sure that in the 
+`__init__(self, ...)` function of `BigBirdAttention`, all submodules include all 
+necessary `nn.Module` layers. Only at a later stage do we need to fully rewrite 
+the complex attention function.
 
 **6. Write a conversion script**
 
@@ -675,12 +706,11 @@ already existing conversion script and slightly adapt it for your use
 case. Don\'t hesitate to ask Patrick to point you to a
 similar already existing conversion script for your model.
 
--   If you are porting a model from TensorFlow to PyTorch, a good
-    starting point might be BERT\'s conversion script
+-   A good starting point to convert the original TF BigBird implementation to the PT Hugging Face implementation is probably BERT\'s conversion script
     [here](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
--   If you are porting a model from PyTorch to PyTorch, a good starting
-    point might be BART\'s conversion script
-    [here](https://github.com/huggingface/transformers/blob/master/src/transformers/models/bart/convert_bart_original_pytorch_checkpoint_to_pytorch.py)
+
+You can copy paste the conversion function into `modeling_big_bird.py` and then adapt it 
+to your needs.
 
 In the following, we\'ll quickly explain how PyTorch models store layer
 weights and define layer names. In PyTorch, the name of a layer is
@@ -816,10 +846,6 @@ you can then save the model under a folder of your choice
 model.save_pretrained("/path/to/converted/checkpoint/folder")
 ```
 
-[Here the mentor should add very specific information on what exactly has to be done for the conversion of this model]
-[...]
-[...]
-
 **7. Implement the forward pass**
 
 Having managed to correctly load the pretrained weights into the 🤗
@@ -907,11 +933,6 @@ file to verify that all common tests pass:
 pytest tests/test_modeling_big_bird.py
 ```
 
-[Here the mentor should add very specific information on what tests are likely to fail after having implemented the model
-, e.g. given the model, it might be very likely that `test_attention_output` fails]
-[...]
-[...]
-
 Having fixed all common tests, it is now crucial to ensure that all the
 nice work you have done is well tested, so that
 
@@ -932,14 +953,10 @@ you. To ensure that those tests are passing, run
 RUN_SLOW=1 pytest -sv tests/test_modeling_big_bird.py::BigBirdModelIntegrationTests
 ```
 
-::: {.note}
-::: {.title}
-Note
-:::
+**Note**
 
 In case you are using Windows, you should replace `RUN_SLOW=1` with
 `SET RUN_SLOW=1`
-:::
 
 Second, all features that are special to *BigBird* should be
 tested additionally in a separate test under
@@ -952,9 +969,13 @@ forgotten but is extremely useful in two ways:
 -   Future contributors can quickly test changes to the model by running
     those special tests.
 
-[Here the mentor should add very specific information on what special features of the model should be tested additionally]
-[...]
-[...]
+BigBird has quite a complex attention layer, so it is very important 
+to add more tests verifying the all parts of BigBird's self-attention layer 
+works as expected. This means that there should be at least 3 additional tests:
+
+- 1. Verify that the sparse attention works correctly
+- 2. Verify that the global attention works correctly
+- 3. Verify that the random attention works correctly
 
 **9. Implement the tokenizer**
 
@@ -962,21 +983,22 @@ Next, we should add the tokenizer of *BigBird*. Usually, the
 tokenizer is equivalent or very similar to an already existing tokenizer
 of 🤗 Transformers.
 
-[Here the mentor should add a comment whether a new tokenizer is required or if this is not the case which existing tokenizer closest resembles 
- BigBird's tokenizer and how the tokenizer should be implemented]
- [...]
- [...]
+In the case of BigBird you should be able to just rely on an already existing tokenizer.
+If not mistaken, BigBird uses the same tokenizer that was used for `BertGenerationTokenizer`,
+which is based on `sentencepiece`. So you should be able to just set the config parameter 
+`tokenizer_class` to `BertGenerationTokenizer` without having to implement any new tokenizer.
 
 It is very important to find/extract the original tokenizer file and to
 manage to load this file into the 🤗 Transformers\' implementation of the
 tokenizer.
 
-For BigBird, the tokenizer files can be found here:
-- [To be filled out by mentor]
+For BigBird, the tokenizer (sentencepiece) files can be found [here](https://github.com/google-research/bigbird/blob/master/bigbird/vocab/gpt2.model), which you should be able to load 
+as easily as:
 
-and having implemented the  🤗Transformers' version of the tokenizer can be loaded as follows:
-
-[To be filled out by mentor]
+```python
+from transformers import BertGenerationTokenizer
+tokenizer = BertGenerationTokenizer("/path/to/gpt2.model/file")
+```
 
 To ensure that the tokenizer works correctly, it is recommended to first
 create a script in the original repository that inputs a string and
@@ -996,10 +1018,10 @@ the original repository, an analogous script for 🤗 Transformers should
 be created. It should look similar to this:
 
 ```python
-from transformers import BigBirdTokenizer
+from transformers import BertGenerationTokenizer
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
 
-tokenizer = BigBirdTokenizer.from_pretrained(/path/to/tokenizer/folder/)
+tokenizer = BertGenerationTokenizer.from_pretrained("/path/big/bird/folder")
 
 input_ids = tokenizer(input_str).input_ids
 ```
@@ -1007,13 +1029,9 @@ input_ids = tokenizer(input_str).input_ids
 When both `input_ids` yield the same values, as a final step a tokenizer
 test file should also be added.
 
-[Here mentor should point the student to test files of similar tokenizers]
-
-Analogous to the modeling test files of *BigBird*, the
-tokenization test files of *BigBird* should contain a couple of
-hard-coded integration tests.
-
-[Here mentor should again point to an existing similar test of another model that the student can copy & adapt]
+Since BigBird is most likely fully based on `BertGenerationTokenizer`, 
+you should only add a couple of "slow" integration tests. However, in this 
+case you do **not** need to add any `BigBirdTokenizationTest`.
 
 **10. Run End-to-end integration tests**
 
