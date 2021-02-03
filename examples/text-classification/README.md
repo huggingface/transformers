@@ -143,13 +143,10 @@ Based on the script [`run_xnli.py`](https://github.com/huggingface/transformers/
 
 #### Fine-tuning on XNLI
 
-This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins
-on a single tesla V100 16GB.
+This example code fine-tunes mBERT (multi-lingual BERT) on the XNLI dataset. It runs in 106 mins on a single tesla V100 16GB.
 
 ```bash
-
 python run_xnli.py \
-  --task_name "xnli" \
   --model_name_or_path bert-base-multilingual-cased \
   --language de \
   --train_language en \

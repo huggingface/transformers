@@ -58,10 +58,6 @@ class DataTrainingArguments:
     the command line.
     """
 
-    task_name: Optional[str] = field(
-        default=None,
-        metadata={"help": "The name of the task to train on"},
-    )
     max_seq_length: Optional[int] = field(
         default=128,
         metadata={
@@ -82,12 +78,6 @@ class DataTrainingArguments:
     server_ip: Optional[str] = field(default=None, metadata={"help": "For distant debugging."})
     server_port: Optional[str] = field(default=None, metadata={"help": "For distant debugging."})
 
-    def __post_init__(self):
-        if self.task_name is not None:
-            self.task_name = self.task_name.lower()
-            if self.task_name not in task_to_keys.keys():
-                raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
-
 
 @dataclass
 class ModelArguments:
@@ -102,7 +92,7 @@ class ModelArguments:
         default=None, metadata={"help": "Evaluation language. Also train language if `train_language` is set to None."}
     )
     train_language: Optional[str] = field(
-        default=None, metadata={"help": "Train language if is different of the evaluation language."}
+        default=None, metadata={"help": "Train language if it is different from the evaluation language."}
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -140,6 +130,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
+    task_name = "xnli"
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -193,12 +184,13 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-    if data_args.task_name is not None:
-        # Downloading and loading xnli dataset from the hub.
-        datasets = load_dataset(data_args.task_name, model_args.language)
-        # Labels
-        label_list = datasets["train"].features["label"].names
-        num_labels = len(label_list)
+
+    # Downloading and loading xnli dataset from the hub.
+    train_dataset = load_dataset(task_name, model_args.train_language, split="train")
+    eval_dataset = load_dataset(task_name, model_args.language, split="validation")
+    # Labels
+    label_list = train_dataset.features["label"].names
+    num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     if training_args.local_rank not in [-1, 0]:
@@ -209,7 +201,7 @@ def main():
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
-        finetuning_task=data_args.task_name,
+        finetuning_task=task_name,
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -232,8 +224,7 @@ def main():
     )
 
     # Preprocessing the datasets
-    if data_args.task_name is not None:
-        sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
+    sentence1_key, sentence2_key = task_to_keys[task_name]
 
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -250,30 +241,29 @@ def main():
         result = tokenizer(*args, padding=padding, max_length=data_args.max_seq_length, truncation=True)
         return result
 
-    datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
-
-    train_dataset = datasets["train"]
-    eval_dataset = datasets["validation"]
+    train_dataset = train_dataset.map(
+        preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
+    )
+    eval_dataset = eval_dataset.map(
+        preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
+    )
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Get the metric function
-    if data_args.task_name is not None:
-        metric = load_metric(data_args.task_name)
+    metric = load_metric(task_name)
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.argmax(preds, axis=1)
-        if data_args.task_name is not None:
-            result = metric.compute(predictions=preds, references=p.label_ids)
-            if len(result) > 1:
-                result["combined_score"] = np.mean(list(result.values())).item()
-            return result
-        return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
+        result = metric.compute(predictions=preds, references=p.label_ids)
+        if len(result) > 1:
+            result["combined_score"] = np.mean(list(result.values())).item()
+        return result
 
     # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
     if data_args.pad_to_max_length:
@@ -324,11 +314,11 @@ def main():
         logger.info("*** Evaluate ***")
 
         eval_result = trainer.evaluate(eval_dataset=eval_dataset)
-        output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{data_args.task_name}.txt")
+        output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{task_name}.txt")
 
         if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
-                logger.info(f"***** Eval results {data_args.task_name} *****")
+                logger.info(f"***** Eval results {task_name} *****")
                 for key, value in sorted(eval_result.items()):
                     logger.info(f"  {key} = {value}")
                     writer.write(f"{key} = {value}\n")
