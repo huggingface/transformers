@@ -297,3 +297,9 @@ class BertGenerationEncoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_model_from_pretrained(self):
         model = BertGenerationEncoder.from_pretrained("google/bert_for_seq_generation_L-24_bbc_encoder")
         self.assertIsNotNone(model)
+
+@require_torch
+class BertGeneration_IntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head_absolute_embedding(self):
+        pass
