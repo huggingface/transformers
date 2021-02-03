@@ -101,10 +101,6 @@ class CamembertTokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-
-    Attributes:
-        sp_model (:obj:`SentencePieceProcessor`):
-            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
