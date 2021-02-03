@@ -954,9 +954,7 @@ you. To ensure that those tests are passing, run
 RUN_SLOW=1 pytest -sv tests/test_modeling_big_bird.py::BigBirdModelIntegrationTests
 ```
 
-**Note**
-
-In case you are using Windows, you should replace `RUN_SLOW=1` with
+**Note**: In case you are using Windows, you should replace `RUN_SLOW=1` with
 `SET RUN_SLOW=1`
 
 Second, all features that are special to *BigBird* should be

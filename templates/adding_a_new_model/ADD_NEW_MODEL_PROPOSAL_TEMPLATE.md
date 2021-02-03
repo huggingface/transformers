@@ -950,9 +950,7 @@ you. To ensure that those tests are passing, run
 RUN_SLOW=1 pytest -sv tests/test_modeling_[lowercase name of model].py::[camelcase name of model]ModelIntegrationTests
 ```
 
-**Note:**
-In case you are using Windows, you should replace `RUN_SLOW=1` with
-`SET RUN_SLOW=1`
+**Note:** In case you are using Windows, you should replace `RUN_SLOW=1` with `SET RUN_SLOW=1`
 
 Second, all features that are special to *[camelcase name of model]* should be
 tested additionally in a separate test under
