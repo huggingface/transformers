@@ -399,3 +399,19 @@ class FlaubertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = FlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_torch
+class FlaubertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head_absolute_embedding(self):
+        model = FlaubertModel.from_pretrained("xlm-mlm-en-2048")
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 11, 2048))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[[-3.3804, -0.9341, -7.5202], [-0.3855, -4.6408, -4.1147], [-0.5226, -1.5739, -4.7815]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
