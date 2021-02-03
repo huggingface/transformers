@@ -151,7 +151,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = []
+    model_input_names = ["input_ids"]
 
     def __init__(
         self,
