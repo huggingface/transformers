@@ -224,7 +224,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 @require_tf
-class TFBertModelIntegrationTest(unittest.TestCase):
+class TFDistilBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
