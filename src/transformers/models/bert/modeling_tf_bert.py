@@ -370,7 +370,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_scores = tf.multiply(attention_scores, head_mask)
+            attention_probs = tf.multiply(attention_probs, head_mask)
 
         attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
@@ -777,7 +777,9 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(1.0, extended_attention_mask), -10000.0)
+        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

@@ -63,6 +63,7 @@ from . import (
     t5,
     tapas,
     transfo_xl,
+    wav2vec2,
     xlm,
     xlm_roberta,
     xlnet,

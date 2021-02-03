@@ -317,7 +317,7 @@ class TF{{cookiecutter.camelcase_modelname}}SelfAttention(tf.keras.layers.Layer)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_scores = tf.multiply(attention_scores, head_mask)
+            attention_probs = tf.multiply(attention_probs, head_mask)
 
         attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
@@ -560,7 +560,7 @@ class TF{{cookiecutter.camelcase_modelname}}LMPredictionHead(tf.keras.layers.Lay
     def build(self, input_shape: tf.TensorShape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
 
-        super().build(input_shape=input_shape)
+        super().build(input_shape)
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
         return self.input_embeddings
@@ -695,7 +695,9 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
-        extended_attention_mask = tf.multiply(tf.subtract(1.0, extended_attention_mask), -10000.0)
+        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -899,9 +901,7 @@ class TF{{cookiecutter.camelcase_modelname}}Model(TF{{cookiecutter.camelcase_mod
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns,
-        )
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings("""{{cookiecutter.modelname}} Model with a `language modeling` head on top. """, {{cookiecutter.uppercase_modelname}}_START_DOCSTRING)
@@ -917,7 +917,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForMaskedLM(TF{{cookiecutter.camelca
             )
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, inputs_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
+        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, input_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
     
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
@@ -1014,7 +1014,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForCausalLM(TF{{cookiecutter.camelca
             logger.warning("If you want to use `TF{{cookiecutter.camelcase_modelname}}ForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.{{cookiecutter.lowercase_modelname}} = TF{{cookiecutter.camelcase_modelname}}MainLayer(config, name="{{cookiecutter.lowercase_modelname}}")
-        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, inputs_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
+        self.mlm = TF{{cookiecutter.camelcase_modelname}}MLMHead(config, input_embeddings=self.{{cookiecutter.lowercase_modelname}}.embeddings.word_embeddings, name="mlm___cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
         return self.mlm.predictions
@@ -2823,7 +2823,7 @@ class TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration(TF{{cookiec
             past_key_values=outputs.past_key_values,  # index 1 of d outputs
             decoder_hidden_states=outputs.decoder_hidden_states,  # index 2 of d outputs
             decoder_attentions=outputs.decoder_attentions,  # index 3 of d outputs
-            encoder_last_hidden_state=outputs.last_hidden_state,  # index 0 of encoder outputs
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,  # index 0 of encoder outputs
             encoder_hidden_states=outputs.encoder_hidden_states,  # 1 of e out
             encoder_attentions=outputs.encoder_attentions,  # 2 of e out
         )
