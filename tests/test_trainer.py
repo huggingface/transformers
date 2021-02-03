@@ -29,6 +29,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_multi_gpu,
     slow,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -53,6 +54,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
+    from transformers.trainer import _model_unwrap
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -373,6 +375,24 @@ class TrainerIntegrationTest(unittest.TestCase):
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
+    @require_torch_multi_gpu
+    def test_data_is_not_parallelized_when_model_is_parallel(self):
+        model = RegressionModel()
+        # Make the Trainer believe it's a parallelized model
+        model.is_parallelizable = True
+        model.model_parallel = True
+        args = TrainingArguments("./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16)
+        trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
+        # Check the Trainer was fooled
+        self.assertTrue(trainer.is_model_parallel)
+        self.assertEqual(trainer.args.n_gpu, 1)
+
+        # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
+        self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
+        self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
+        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
+
     def test_evaluate(self):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
         results = trainer.evaluate()
@@ -558,11 +578,10 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -573,10 +592,9 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -595,12 +613,11 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
             # Reinitialize trainer and load model
-            model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            model.load_state_dict(state_dict)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -611,12 +628,11 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            model.load_state_dict(state_dict)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -644,11 +660,17 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                gradient_accumulation_steps=2,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
@@ -850,8 +872,8 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(learning_rate=0.1)
 
         def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, trainer._actual_model(wrapped_model_to_check))
-            self.assertGreaterEqual(getattr(trainer._actual_model(wrapped_model_to_check).config, "total_flos", 0), 0)
+            self.assertEqual(trainer.model, _model_unwrap(wrapped_model_to_check))
+            self.assertGreaterEqual(getattr(_model_unwrap(wrapped_model_to_check).config, "total_flos", 0), 0)
 
         # with plain model
         assert_flos_extraction(trainer, trainer.model)
