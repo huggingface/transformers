@@ -115,22 +115,24 @@ mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer` and the
 .. code-block::
 
     from transformers import MBartForConditionalGeneration, MBart50Tokenizer
+
     article_hi = "संयुक्त राष्ट्र के प्रमुख का कहना है कि सीरिया में कोई सैन्य समाधान नहीं है"
-    article_en = "The head of the United Nations says there is no military solution in Syria"
+    article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
+
     model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-50-large-many-to-many")
     tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-50-large-many-to-many")
 
-    # translate from Hindi to English
+    # translate Hindi to French
     encoded_hi = tokenizer.prepare_seq2seq_batch(src_texts=article_hi, src_lang="hi_IN", return_tensors="pt")
+    generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"])
+    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    # => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire dans la Syrie."
+
+    # translate Arabic to English
+    encoded_ar = tokenizer.prepare_seq2seq_batch(src_texts=article_hi, src_lang="ar_AR", return_tensors="pt")
     generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-    # => 'The head of the United Nations says there is no military solution in Syria'
-
-    # translate from English to Hindi
-    encoded_en = tokenizer.prepare_seq2seq_batch(src_texts=article_en, src_lang="en_XX", return_tensors="pt")
-    generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["hi_IN"])
-    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-    # => 'संयुक्त राष्ट्र के प्रमुख का कहना है कि सीरिया में कोई सैन्य समाधान नहीं है'
+    # => "The head of the United Nations says there is no military solution in Syria"
 
 
 MBartConfig
