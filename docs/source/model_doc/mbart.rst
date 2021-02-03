@@ -119,11 +119,13 @@ mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer` and the
     article_en = "The head of the United Nations says there is no military solution in Syria"
     model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-50-large-many-to-many")
     tokenizer = MBart50Tokenizer.from_pretrained("facebook/mbart-50-large-many-to-many")
+
     # translate from Hindi to English
     encoded_hi = tokenizer.prepare_seq2seq_batch(src_texts=article_hi, src_lang="hi_IN", return_tensors="pt")
     generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     # => 'The head of the United Nations says there is no military solution in Syria'
+
     # translate from English to Hindi
     encoded_en = tokenizer.prepare_seq2seq_batch(src_texts=article_en, src_lang="en_XX", return_tensors="pt")
     generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["hi_IN"])
