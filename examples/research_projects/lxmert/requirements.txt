@@ -3,7 +3,6 @@ argon2-cffi==20.1.0
 async-generator==1.10
 attrs==20.2.0
 backcall==0.2.0
-bleach==3.1.5
 CacheControl==0.12.6
 certifi==2020.6.20
 cffi==1.14.2
