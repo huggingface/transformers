@@ -51,6 +51,7 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
+_EXAMPLE_CHECKPOINT = "facebook/bart-large"
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -520,6 +521,20 @@ BART_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+"""
+
+BART_CAUSAL_LM_EXAMPLE = r"""
+    Example::
+
+        >>> from transformers import BartTokenizer, BartForCausalLM
+
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+        >>> model = BartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+        >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
 """
 
 BART_GENERATION_EXAMPLE = r"""
@@ -1634,6 +1649,7 @@ class BartForCausalLM(BartPretrainedModel):
         return self.model.decoder
 
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
+    @add_end_docstrings(BART_CAUSAL_LM_EXAMPLE)
     def forward(
         self,
         input_ids=None,
@@ -1715,18 +1731,6 @@ class BartForCausalLM(BartPretrainedModel):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 
         Returns:
-
-        Example::
-
-            >>> from transformers import BartTokenizer, BartForCausalLM
-
-            >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
-            >>> model = BartForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
-            >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
-
-            >>> last_hidden_states = outputs.last_hidden_state
         """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
