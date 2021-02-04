@@ -156,13 +156,15 @@ class M2M100MTSinusoidalPositionalEmbedding(nn.Module):
         self, input_ids: torch.Tensor = None, inputs_embeds: torch.Tensor = None, past_key_values_length: int = 0
     ):
         if input_ids is not None:
+            bsz, seq_len = input_ids.size()
             # Create the position ids from the input token ids. Any padded tokens remain padded.
             position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
                 input_ids.device
             )
         else:
+            bsz, seq_len = inputs_embeds.size()[:-1]
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
-        return self.weights.index_select(0, positions.view(-1)).view(bsz, seq_len, -1).detach()
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
