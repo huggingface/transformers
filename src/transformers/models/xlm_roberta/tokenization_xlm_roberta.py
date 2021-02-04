@@ -117,6 +117,9 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
