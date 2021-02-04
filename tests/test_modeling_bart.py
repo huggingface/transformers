@@ -937,9 +937,6 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     all_model_classes = (BartDecoder, BartForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (BartForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
-    test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = False
 
     def setUp(

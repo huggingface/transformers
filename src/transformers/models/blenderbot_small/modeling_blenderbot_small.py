@@ -955,7 +955,7 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.is_encoder_decoder else None
         next_decoder_cache = () if use_cache else None
 
         if head_mask is not None:
@@ -1018,7 +1018,9 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-                all_cross_attentions += (layer_outputs[2],)
+
+                if self.config.is_encoder_decoder:
+                    all_cross_attentions += (layer_outputs[2],)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1382,6 +1384,8 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        head_mask=None,
+        encoder_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         labels=None,
@@ -1414,6 +1418,19 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
             encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used
                 in the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
+            encoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
+                on hidden heads. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
             past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding.
@@ -1468,6 +1485,8 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            encoder_head_mask=encoder_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,

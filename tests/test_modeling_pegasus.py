@@ -503,9 +503,6 @@ class PegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin,
     all_model_classes = (PegasusDecoder, PegasusForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (PegasusForCausalLM,) if is_torch_available() else ()
     test_pruning = False
-    test_torchscript = False
-    test_resize_embeddings = False
-    test_headmasking = False
     is_encoder_decoder = False
 
     def setUp(
