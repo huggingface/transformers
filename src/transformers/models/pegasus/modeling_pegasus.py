@@ -1414,7 +1414,7 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.ProphetNetTokenizer`. See
+                Indices can be obtained using :class:`~transformers.PegasusTokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
