@@ -839,9 +839,11 @@ class GenerationMixin:
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
 
+        # Storing encoder_input_ids for logits_processor that could use them
+        encoder_input_ids = input_ids if self.config.is_encoder_decoder else None
+
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            encoder_input_ids = input_ids
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
 
             # set input_ids as decoder_input_ids
