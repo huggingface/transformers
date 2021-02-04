@@ -989,7 +989,7 @@ class BartDecoder(BartPretrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.is_encoder_decoder else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         next_decoder_cache = () if use_cache else None
 
         # check if head_mask has a correct number of layers specified if desired
@@ -1054,7 +1054,7 @@ class BartDecoder(BartPretrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-                if self.config.is_encoder_decoder:
+                if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
         # add hidden states from the last decoder layer

@@ -1479,6 +1479,11 @@ class LxmertXLayer:
         requires_pytorch(self)
 
 
+class MarianForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MarianModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
