@@ -587,7 +587,7 @@ class GenerationMixin:
                 processors.append(EncoderNoRepeatNGramLogitsProcessor(encoder_no_repeat_ngram_size, encoder_input_ids))
             else:
                 raise ValueError(
-                    "It's impossible to use `encoder_no_repeat_ngram_size` with decoder only architecture"
+                    "It's impossible to use `encoder_no_repeat_ngram_size` with decoder-only architecture"
                 )
         if bad_words_ids is not None:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
