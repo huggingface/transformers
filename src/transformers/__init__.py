@@ -1700,7 +1700,7 @@ if TYPE_CHECKING:
             LxmertVisualFeatureEncoder,
             LxmertXLayer,
         )
-        from .models.marian import MarianModel, MarianMTModel
+        from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.mbart import (
             MBartForCausalLM,
             MBartForConditionalGeneration,
