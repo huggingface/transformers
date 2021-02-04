@@ -278,6 +278,47 @@ class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
 
     @require_torch
     @slow
+    def test_integration_torch_conversation_blenderbot_400M(self):
+        tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot-400M-distill")
+        nlp = ConversationalPipeline(model=model, tokenizer=tokenizer)
+
+        conversation_1 = Conversation("hello")
+        result = nlp(
+            conversation_1,
+        )
+        self.assertEqual(
+            result.generated_responses[0],
+            # ParlAI implementation output, we have a different one, but it's our
+            # second best, you can check by using num_return_sequences=10
+            # " Hello! How are you? I'm just getting ready to go to work, how about you?",
+            " Hello! How are you doing today? I just got back from a walk with my dog.",
+        )
+
+        conversation_1 = Conversation(" Lasagne   hello")
+        result = nlp(conversation_1, encoder_no_repeat_ngram_size=3)
+        self.assertEqual(
+            result.generated_responses[0],
+            " Lasagne is my favorite Italian dish. Do you like lasagne?",
+        )
+
+        conversation_1 = Conversation(
+            "Lasagne   hello   Lasagne is my favorite Italian dish. Do you like lasagne?   I like lasagne."
+        )
+        result = nlp(
+            conversation_1,
+            encoder_no_repeat_ngram_size=3,
+        )
+        self.assertEqual(
+            result.generated_responses[0],
+            # ParlAI implementation output, we have a different one, but it's our
+            # second best, you can check by using num_return_sequences=10
+            # " Hello! How are you? I'm just getting ready to go to work, how about you?",
+            " Lasagne is a traditional Italian dish consisting of a yeasted flatbread typically topped with tomato sauce and cheese.",
+        )
+
+    @require_torch
+    @slow
     def test_integration_torch_conversation_encoder_decoder(self):
         # When
         tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot_small-90M")
