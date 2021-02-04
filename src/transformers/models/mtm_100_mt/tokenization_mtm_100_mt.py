@@ -14,14 +14,24 @@
 # limitations under the License.
 """Tokenization classes for M2M100MT."""
 from contextlib import contextmanager
-from typing import List, Optional
+from pathlib import Path
+from shutil import copyfile
+from typing import Dict, List, Optional, Tuple, Union
 
-from ...tokenization_utils import BatchEncoding
+import sentencepiece
+
+from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
-from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 
 
 logger = logging.get_logger(__name__)
+
+SPIECE_UNDERLINE = "▁"
+
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "sp_model": "sentencepiece.bpe.model",
+}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -136,7 +146,7 @@ FAIRSEQ_LANGUAGE_CODES = [
 ]
 
 
-class M2M100MTTokenizer(XLMRobertaTokenizer):
+class M2M100MTTokenizer(PreTrainedTokenizer):
     """
     Construct an M2M100MT tokenizer.
 
@@ -166,32 +176,63 @@ class M2M100MTTokenizer(XLMRobertaTokenizer):
 
     """
 
-    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
+    vocab_files_names = VOCAB_FILES_NAMES
     max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
+    def __init__(
+        self,
+        vocab_file,
+        spm_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        pad_token="<pad>",
+        unk_token="<unk>",
+        **kwargs,
+    ):
+        super().__init__(
+            bos_token="<s>",
+            eos_token=eos_token,
+            unk_token=unk_token,
+            pad_token=pad_token,
+            **kwargs,
+        )
 
-        self.sp_model_size = len(self.sp_model)
-        self.lang_code_to_id = {
-            code: self.sp_model_size + i + self.fairseq_offset for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)
-        }
+        self.encoder = load_json(vocab_file)
+        self.decoder = {v: k for k, v in self.encoder.items()}
+        self.spm_file = spm_file
+        self.sp_model = load_spm(spm_file)
+
+        self.encoder_size = len(self.encoder)
+        self.lang_code_to_id = {code: self.encoder_size + i for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)}
         self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.cur_lang_code = self.lang_code_to_id["en_XX"]
-        self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset
-
-        self.fairseq_tokens_to_ids.update(self.lang_code_to_id)
-        self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        self.cur_lang_code = self.lang_code_to_id["en"]
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
-        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
+        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en"))
+
+        self.num_madeup_words = 8
 
     @property
-    def vocab_size(self):
-        return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+    def vocab_size(self) -> int:
+        len(self.encoder) + len(self.lang_code_to_id) + self.num_madeup_words
+
+    def _tokenize(self, text: str) -> List[str]:
+        return self.sp_model.EncodeAsPieces(text)
+
+    def _convert_token_to_id(self, token):
+        return self.encoder.get(token, self.encoder[self.unk_token])
+
+    def _convert_id_to_token(self, index: int) -> str:
+        """Converts an index (integer) in a token (str) using the decoder."""
+        return self.decoder.get(index, self.unk_token)
+
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        return out_string
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -252,6 +293,37 @@ class M2M100MTTokenizer(XLMRobertaTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
+    def get_vocab(self) -> Dict:
+        vocab = self.encoder.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+
+    def __getstate__(self) -> Dict:
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
+
+    def __setstate__(self, d: Dict) -> None:
+        self.__dict__ = d
+        self.sp_model = load_spm(self.spm_file)
+
+    def save_vocabulary(save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        save_dir = Path(save_directory)
+        assert save_dir.is_dir(), f"{save_directory} should be a directory"
+        vocab_save_path = save_dir / (
+            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
+        )
+        spm_save_path = save_dir / (
+            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["spm_file"]
+        )
+
+        save_json(self.encoder, vocab_save_path)
+
+        if not spm_save_path.exists():
+            copyfile(self.spm_file, spm_save_path)
+
+        return (vocab_save_path, spm_save_path)
+
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
@@ -286,3 +358,19 @@ class M2M100MTTokenizer(XLMRobertaTokenizer):
         self.cur_lang_code = self.lang_code_to_id[lang]
         self.prefix_tokens = [self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
+
+
+def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:
+    spm = sentencepiece.SentencePieceProcessor()
+    spm.Load(path)
+    return spm
+
+
+def load_json(path: str) -> Union[Dict, List]:
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def save_json(data, path: str) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
