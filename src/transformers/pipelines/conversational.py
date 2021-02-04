@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..utils import logging
@@ -333,7 +333,7 @@ class ConversationalPipeline(Pipeline):
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
 
-    def _parse_and_tokenize(self, conversations: List[Conversation]) -> Dict[str, torch.LongTensor]:
+    def _parse_and_tokenize(self, conversations: List[Conversation]) -> Dict[str, Any]:
         if hasattr(self.tokenizer, "_build_conversation_input_ids"):
             input_ids = [self.tokenizer._build_conversation_input_ids(conversation) for conversation in conversations]
         else:
