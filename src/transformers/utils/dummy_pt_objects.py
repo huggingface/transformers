@@ -431,6 +431,11 @@ class AutoModelWithLMHead:
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BartForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class BartForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -596,6 +601,11 @@ def load_tf_weights_in_bert_generation(*args, **kwargs):
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BlenderbotForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class BlenderbotForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -615,6 +625,11 @@ class BlenderbotModel:
 
 
 BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BlenderbotSmallForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class BlenderbotSmallForConditionalGeneration:
@@ -1464,6 +1479,11 @@ class LxmertXLayer:
         requires_pytorch(self)
 
 
+class MarianForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MarianModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1479,6 +1499,11 @@ class MarianMTModel:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartForCausalLM:
+    def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
 
@@ -1770,6 +1795,11 @@ class OpenAIGPTPreTrainedModel:
 
 def load_tf_weights_in_openai_gpt(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_openai_gpt)
+
+
+class PegasusForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class PegasusForConditionalGeneration:
