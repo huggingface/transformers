@@ -325,6 +325,7 @@ class BlenderbotStandaloneDecoderModelTester:
         decoder_attention_heads=4,
         max_position_embeddings=30,
         is_encoder_decoder=False,
+        encoder_no_repeat_ngram_size=0,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -355,6 +356,7 @@ class BlenderbotStandaloneDecoderModelTester:
         self.use_cache = use_cache
         self.max_position_embeddings = max_position_embeddings
         self.is_encoder_decoder = is_encoder_decoder
+        self.encoder_no_repeat_ngram_size = encoder_no_repeat_ngram_size
 
         self.scope = None
         self.decoder_key_length = decoder_seq_length
@@ -386,6 +388,7 @@ class BlenderbotStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
+            encoder_no_repeat_ngram_size=self.encoder_no_repeat_ngram_size,
         )
 
         return (
