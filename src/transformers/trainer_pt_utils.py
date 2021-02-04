@@ -28,8 +28,14 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_torch_tpu_available
+from .file_utils import is_sagemaker_distributed_available, is_torch_tpu_available
 from .utils import logging
+
+
+if is_sagemaker_distributed_available():
+    import smdistributed.dataparallel.torch.distributed as dist
+else:
+    import torch.distributed as dist
 
 
 if is_torch_tpu_available():
@@ -121,8 +127,8 @@ def distributed_concat(tensor: "torch.Tensor", num_total_examples: Optional[int]
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
-        output_tensors = [tensor.clone() for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(output_tensors, tensor)
+        output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
+        dist.all_gather(output_tensors, tensor)
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -138,8 +144,8 @@ def distributed_broadcast_scalars(
 ) -> torch.Tensor:
     try:
         tensorized_scalar = torch.tensor(scalars).cuda()
-        output_tensors = [tensorized_scalar.clone() for _ in range(torch.distributed.get_world_size())]
-        torch.distributed.all_gather(output_tensors, tensorized_scalar)
+        output_tensors = [tensorized_scalar.clone() for _ in range(dist.get_world_size())]
+        dist.all_gather(output_tensors, tensorized_scalar)
         concat = torch.cat(output_tensors, dim=0)
 
         # truncate the dummy elements added by SequentialDistributedSampler
@@ -167,10 +173,10 @@ def torch_distributed_zero_first(local_rank: int):
         local_rank (:obj:`int`): The rank of the local process.
     """
     if local_rank not in [-1, 0]:
-        torch.distributed.barrier()
+        dist.barrier()
     yield
     if local_rank == 0:
-        torch.distributed.barrier()
+        dist.barrier()
 
 
 class SequentialDistributedSampler(Sampler):
@@ -185,13 +191,13 @@ class SequentialDistributedSampler(Sampler):
 
     def __init__(self, dataset, num_replicas=None, rank=None):
         if num_replicas is None:
-            if not torch.distributed.is_available():
+            if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            num_replicas = torch.distributed.get_world_size()
+            num_replicas = dist.get_world_size()
         if rank is None:
-            if not torch.distributed.is_available():
+            if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            rank = torch.distributed.get_rank()
+            rank = dist.get_rank()
         self.dataset = dataset
         self.num_replicas = num_replicas
         self.rank = rank
@@ -380,17 +386,26 @@ class LabelSmoother:
     ignore_index: int = -100
 
     def __call__(self, model_output, labels):
-        model_loss = model_output["loss"] if isinstance(model_output, dict) else model_output[0]
-        logits = model_output["logits"] if isinstance(model_output, dict) else model_output[1]
+        logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
         log_probs = -torch.nn.functional.log_softmax(logits, dim=-1)
+        if labels.dim() == log_probs.dim() - 1:
+            labels = labels.unsqueeze(-1)
 
-        # Look at the ignored index and mask the corresponding log_probs.
-        padding_mask = labels.unsqueeze(-1).eq(self.ignore_index)
-        log_probs.masked_fill_(padding_mask, 0.0)
+        padding_mask = labels.eq(self.ignore_index)
+        # In case the ignore_index is -100, the gather will fail, so we replace labels by 0. The padding_mask
+        # will ignore them in any case.
+        labels.clamp_min_(0)
+        nll_loss = log_probs.gather(dim=-1, index=labels)
+        smoothed_loss = log_probs.sum(dim=-1, keepdim=True)
+
+        nll_loss.masked_fill_(padding_mask, 0.0)
+        smoothed_loss.masked_fill_(padding_mask, 0.0)
 
         # Take the mean over the label dimensions, then divide by the number of active elements (i.e. not-padded):
-        smoothed_loss = log_probs.mean(dim=-1).sum() / (padding_mask.numel() - padding_mask.long().sum())
-        return (1 - self.epsilon) * model_loss + self.epsilon * smoothed_loss
+        num_active_elements = padding_mask.numel() - padding_mask.long().sum()
+        nll_loss = nll_loss.sum() / num_active_elements
+        smoothed_loss = smoothed_loss.sum() / (num_active_elements * log_probs.shape[-1])
+        return (1 - self.epsilon) * nll_loss + self.epsilon * smoothed_loss
 
 
 def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, generator=None):
@@ -471,13 +486,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         lengths: Optional[List[int]] = None,
     ):
         if num_replicas is None:
-            if not torch.distributed.is_available():
+            if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            num_replicas = torch.distributed.get_world_size()
+            num_replicas = dist.get_world_size()
         if rank is None:
-            if not torch.distributed.is_available():
+            if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
-            rank = torch.distributed.get_rank()
+            rank = dist.get_rank()
         self.dataset = dataset
         self.batch_size = batch_size
         self.num_replicas = num_replicas

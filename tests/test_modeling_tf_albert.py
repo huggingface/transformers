@@ -240,6 +240,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFAlbertModelTester(self)
@@ -293,8 +294,35 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
+    def test_mixed_precision(self):
+        # TODO JP: Make ALBERT float16 compliant
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFAlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_tf
+class TFAlbertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = [1, 6, 30000]
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = tf.constant(
+            [
+                [
+                    [4.595668, 0.74462754, -1.818147],
+                    [4.5954347, 0.7454184, -1.8188258],
+                    [4.5954905, 0.7448235, -1.8182316],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)

@@ -22,7 +22,7 @@ from transformers import (
     is_torch_available,
     pipeline,
 )
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_torch, slow, torch_device
 
 from .test_pipelines_common import MonoInputPipelineCommonMixin
 
@@ -35,6 +35,7 @@ if is_torch_available():
 DEFAULT_DEVICE_NUM = -1 if torch_device == "cpu" else 0
 
 
+@is_pipeline_test
 class SimpleConversationPipelineTests(unittest.TestCase):
     def get_pipeline(self):
         # When
@@ -52,9 +53,11 @@ class SimpleConversationPipelineTests(unittest.TestCase):
         # Force model output to be L
         V, D = model.lm_head.weight.shape
         bias = torch.zeros(V, requires_grad=True)
+        weight = torch.zeros((V, D), requires_grad=True)
         bias[76] = 1
 
         model.lm_head.bias = torch.nn.Parameter(bias)
+        model.lm_head.weight = torch.nn.Parameter(weight)
 
         # # Created with:
         # import tempfile
@@ -272,6 +275,47 @@ class ConversationalPipelineTests(MonoInputPipelineCommonMixin, unittest.TestCas
         self.assertEqual(len(result.generated_responses), 2)
         self.assertEqual(result.past_user_inputs[1], "Is it an action movie?")
         self.assertEqual(result.generated_responses[1], "It's a comedy.")
+
+    @require_torch
+    @slow
+    def test_integration_torch_conversation_blenderbot_400M(self):
+        tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+        model = AutoModelForSeq2SeqLM.from_pretrained("facebook/blenderbot-400M-distill")
+        nlp = ConversationalPipeline(model=model, tokenizer=tokenizer)
+
+        conversation_1 = Conversation("hello")
+        result = nlp(
+            conversation_1,
+        )
+        self.assertEqual(
+            result.generated_responses[0],
+            # ParlAI implementation output, we have a different one, but it's our
+            # second best, you can check by using num_return_sequences=10
+            # " Hello! How are you? I'm just getting ready to go to work, how about you?",
+            " Hello! How are you doing today? I just got back from a walk with my dog.",
+        )
+
+        conversation_1 = Conversation(" Lasagne   hello")
+        result = nlp(conversation_1, encoder_no_repeat_ngram_size=3)
+        self.assertEqual(
+            result.generated_responses[0],
+            " Lasagne is my favorite Italian dish. Do you like lasagne?",
+        )
+
+        conversation_1 = Conversation(
+            "Lasagne   hello   Lasagne is my favorite Italian dish. Do you like lasagne?   I like lasagne."
+        )
+        result = nlp(
+            conversation_1,
+            encoder_no_repeat_ngram_size=3,
+        )
+        self.assertEqual(
+            result.generated_responses[0],
+            # ParlAI implementation output, we have a different one, but it's our
+            # second best, you can check by using num_return_sequences=10
+            # " Hello! How are you? I'm just getting ready to go to work, how about you?",
+            " Lasagne is a traditional Italian dish consisting of a yeasted flatbread typically topped with tomato sauce and cheese.",
+        )
 
     @require_torch
     @slow

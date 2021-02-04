@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 import torch
 
-from . import BertModel
+from transformers import BertModel
 
 
 def convert_pytorch_checkpoint_to_tf(model: BertModel, ckpt_dir: str, model_name: str):

@@ -44,6 +44,11 @@ from .utils import logging
 
 
 logger = logging.get_logger(__name__)
+tf_logger = tf.get_logger()
+
+TFModelInputType = Union[
+    List[tf.Tensor], List[np.ndarray], Dict[str, tf.Tensor], Dict[str, np.ndarray], np.ndarray, tf.Tensor
+]
 
 
 class TFModelUtilsMixin:
@@ -147,7 +152,7 @@ class TFCausalLanguageModelingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        # make sure only labels that are not equal to -100 do not affect loss
+        # make sure only labels that are not equal to -100 affect the loss
         active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
         reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
         labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
@@ -285,7 +290,7 @@ def booleans_processing(config, **kwargs):
             or kwargs["output_hidden_states"] is not None
             or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
         ):
-            tf.print(
+            tf_logger.warn(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
@@ -294,7 +299,7 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs["return_dict"] is not None:
-            tf.print("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
+            tf_logger.warn("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
@@ -322,6 +327,7 @@ def input_processing(func, config, input_ids, **kwargs):
     """
     signature = dict(inspect.signature(func).parameters)
     signature.pop("kwargs", None)
+    signature.pop("self", None)
     parameter_names = list(signature.keys())
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray)
@@ -346,6 +352,8 @@ def input_processing(func, config, input_ids, **kwargs):
             f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
         )
 
+    kwargs.pop("kwargs_call")
+
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
             output[k] = v
@@ -356,8 +364,8 @@ def input_processing(func, config, input_ids, **kwargs):
         for i, input in enumerate(input_ids):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
             if type(input) == tf.Tensor:
-                # Tensor names have always the pattern name:device_id then we check only the
-                # name and not the device id
+                # Tensor names have always the pattern `name:id` then we check only the
+                # `name` part
                 tensor_name = input.name.split(":")[0]
 
                 if tensor_name in parameter_names:
@@ -809,25 +817,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         return model_embeds
 
-    def _get_word_embedding_weight(self, embedding_layer):
-        if hasattr(embedding_layer, "word_embeddings"):
-            return embedding_layer.word_embeddings
-        elif hasattr(embedding_layer, "weight"):
-            return embedding_layer.weight
-        elif hasattr(embedding_layer, "decoder"):
-            return embedding_layer.decoder
-        else:
-            # Here we build the word embeddings weights if not exists.
-            # And then we retry to get the attribute once built.
-            self(self.dummy_inputs)
-            if hasattr(embedding_layer, "word_embeddings"):
-                return embedding_layer.word_embeddings
-            elif hasattr(embedding_layer, "weight"):
-                return embedding_layer.weight
-            elif hasattr(embedding_layer, "decoder"):
-                return embedding_layer.decoder
-            else:
-                return None
+    def _get_word_embedding_weight(model, embedding_layer):
+        embeds = getattr(embedding_layer, "weight", None)
+        if embeds is not None:
+            return embeds
+
+        embeds = getattr(embedding_layer, "decoder", None)
+        if embeds is not None:
+            return embeds
+
+        # The reason why the attributes don't exist might be
+        # because the model is not built, so retry getting
+        # the argument after building the model
+        model(model.dummy_inputs)
+
+        embeds = getattr(embedding_layer, "weight", None)
+        if embeds is not None:
+            return embeds
+
+        embeds = getattr(embedding_layer, "decoder", None)
+        if embeds is not None:
+            return embeds
+
+        return None
 
     def _resize_token_embeddings(self, new_num_tokens):
         old_embeddings = self._get_word_embedding_weight(self.get_input_embeddings())
@@ -1317,6 +1329,119 @@ class TFConv1D(tf.keras.layers.Layer):
         x = tf.reshape(x, [bz, sl, self.nf])
 
         return x
+
+
+class WordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.word_embeddings = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids):
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.word_embeddings, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+class TokenTypeEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.type_vocab_size = type_vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.token_type_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.type_vocab_size, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape=input_shape)
+
+    def get_config(self):
+        config = {
+            "type_vocab_size": self.type_vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, token_type_ids):
+        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
+        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
+        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(tensor=token_type_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(shape=token_type_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+class PositionEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape):
+        self.position_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(initializer_range=self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self):
+        config = {
+            "max_position_embeddings": self.max_position_embeddings,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, position_ids):
+        input_shape = shape_list(tensor=position_ids)
+        position_embeddings = self.position_embeddings[: input_shape[1], :]
+
+        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
 
 
 class TFSharedEmbeddings(tf.keras.layers.Layer):

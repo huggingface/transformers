@@ -54,7 +54,8 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 
 # Integration functions:
 def is_wandb_available():
-    if os.getenv("WANDB_DISABLED"):
+    # any value of WANDB_DISABLED disables wandb
+    if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
         return False
     return importlib.util.find_spec("wandb") is not None
 
@@ -125,13 +126,13 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
     import optuna
 
     def _objective(trial, checkpoint_dir=None):
-        model_path = None
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
         trainer.objective = None
-        trainer.train(model_path=model_path, trial=trial)
+        trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
         if getattr(trainer, "objective", None) is None:
             metrics = trainer.evaluate()
@@ -149,20 +150,20 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import ray
 
-    def _objective(trial, checkpoint_dir=None):
-        model_path = None
+    def _objective(trial, local_trainer, checkpoint_dir=None):
+        checkpoint = None
         if checkpoint_dir:
             for subdir in os.listdir(checkpoint_dir):
                 if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    model_path = os.path.join(checkpoint_dir, subdir)
-        trainer.objective = None
-        trainer.train(model_path=model_path, trial=trial)
+                    checkpoint = os.path.join(checkpoint_dir, subdir)
+        local_trainer.objective = None
+        local_trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
         # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
-            trainer._tune_save_checkpoint()
-            ray.tune.report(objective=trainer.objective, **metrics, done=True)
+        if getattr(local_trainer, "objective", None) is None:
+            metrics = local_trainer.evaluate()
+            local_trainer.objective = local_trainer.compute_objective(metrics)
+            local_trainer._tune_save_checkpoint()
+            ray.tune.report(objective=local_trainer.objective, **metrics, done=True)
 
     # The model and TensorBoard writer do not pickle so we have to remove them (if they exists)
     # while doing the ray hp search.
@@ -217,12 +218,32 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
                 "Trainer `args`.".format(cls=type(kwargs["scheduler"]).__name__)
             )
 
-    analysis = ray.tune.run(_objective, config=trainer.hp_space(None), num_samples=n_trials, **kwargs)
+    analysis = ray.tune.run(
+        ray.tune.with_parameters(_objective, local_trainer=trainer),
+        config=trainer.hp_space(None),
+        num_samples=n_trials,
+        **kwargs,
+    )
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3])
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
     if _tb_writer is not None:
         trainer.add_callback(_tb_writer)
     return best_run
+
+
+def get_available_reporting_integrations():
+    integrations = []
+    if is_azureml_available():
+        integrations.append("azure_ml")
+    if is_comet_available():
+        integrations.append("comet_ml")
+    if is_mlflow_available():
+        integrations.append("mlflow")
+    if is_tensorboard_available():
+        integrations.append("tensorboard")
+    if is_wandb_available():
+        integrations.append("wandb")
+    return integrations
 
 
 def rewrite_logs(d):
@@ -415,8 +436,9 @@ class TensorBoardCallback(TrainerCallback):
                     self._SummaryWriter = SummaryWriter
                 except ImportError:
                     self._SummaryWriter = None
+        else:
+            self._SummaryWriter = None
         self.tb_writer = tb_writer
-        self._SummaryWriter = SummaryWriter
 
     def _init_summary_writer(self, args, log_dir=None):
         log_dir = log_dir or args.logging_dir
@@ -495,6 +517,8 @@ class WandbCallback(TrainerCallback):
             else:
                 self._wandb = wandb
         self._initialized = False
+        # log outputs
+        self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
     def setup(self, args, state, model, reinit, **kwargs):
         """
@@ -512,7 +536,7 @@ class WandbCallback(TrainerCallback):
             WANDB_PROJECT (:obj:`str`, `optional`, defaults to :obj:`"huggingface"`):
                 Set this to a custom string to store results in a different project.
             WANDB_DISABLED (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to disable wandb entirely.
+                Whether or not to disable wandb entirely. Set `WANDB_DISABLED=true` to disable.
         """
         if self._wandb is None:
             return
@@ -548,9 +572,6 @@ class WandbCallback(TrainerCallback):
                     model, log=os.getenv("WANDB_WATCH", "gradients"), log_freq=max(100, args.logging_steps)
                 )
 
-            # log outputs
-            self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
-
     def on_train_begin(self, args, state, control, model=None, **kwargs):
         if self._wandb is None:
             return
@@ -562,7 +583,8 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         # commit last step
-        self._wandb.log({})
+        if state.is_world_process_zero:
+            self._wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
@@ -756,3 +778,21 @@ class MLflowCallback(TrainerCallback):
         # not let you start a new run before the previous one is killed
         if self._ml_flow.active_run is not None:
             self._ml_flow.end_run(status="KILLED")
+
+
+INTEGRATION_TO_CALLBACK = {
+    "azure_ml": AzureMLCallback,
+    "comet_ml": CometCallback,
+    "mlflow": MLflowCallback,
+    "tensorboard": TensorBoardCallback,
+    "wandb": WandbCallback,
+}
+
+
+def get_reporting_integration_callbacks(report_to):
+    for integration in report_to:
+        if integration not in INTEGRATION_TO_CALLBACK:
+            raise ValueError(
+                f"{integration} is not supported, only {', '.join(INTEGRATION_TO_CALLBACK.keys())} are supported."
+            )
+    return [INTEGRATION_TO_CALLBACK[integration] for integration in report_to]

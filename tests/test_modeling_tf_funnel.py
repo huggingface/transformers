@@ -338,6 +338,7 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFFunnelModelTester(self)
@@ -370,12 +371,17 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
+    def test_mixed_precision(self):
+        # TODO JP: Make Funnel float16 compliant
+        pass
+
 
 @require_tf
 class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (TFFunnelBaseModel, TFFunnelForMultipleChoice, TFFunnelForSequenceClassification) if is_tf_available() else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFFunnelModelTester(self, base=True)
@@ -398,4 +404,8 @@ class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
+        pass
+
+    def test_mixed_precision(self):
+        # TODO JP: Make Funnel float16 compliant
         pass
