@@ -23,6 +23,10 @@ from ...file_utils import add_start_docstrings
 from ...utils import logging
 
 # Add modeling imports here
+from ..detr.modeling_detr import (
+    DetrForObjectDetection,
+    DetrModel,
+)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -68,6 +72,10 @@ from ..camembert.modeling_camembert import (
 )
 
 # Add modeling imports here
+from ..detr.modeling_detr import (
+    DetrForObjectDetection,
+    DetrModel,
+)
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
     ConvBertForMultipleChoice,
@@ -258,6 +266,7 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
+    DetrConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -313,6 +322,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (DetrConfig, DetrModel),
         (Wav2Vec2Config, Wav2Vec2Model),
         (ConvBertConfig, ConvBertModel),
         (LEDConfig, LEDModel),
@@ -396,6 +406,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
@@ -495,6 +506,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
+
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),

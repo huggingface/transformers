@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    detr,
     albert,
     auto,
     bart,
