@@ -271,7 +271,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         # Make sure to create a mask with the proper shape:
         # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1]
-        masked_index = tf.tile(is_index_masked[:, :, None, None], (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1))
+        masked_index = tf.tile(
+            is_index_masked[:, :, None, None],
+            (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1),
+        )
         attn_probs = tf.where(
             masked_index,
             tf.zeros(shape_list(masked_index), dtype=tf.dtypes.float32),
@@ -325,7 +328,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         # make sure that local attention probabilities are set to 0 for indices of global attn
         # Make sure to create a mask with the proper shape:
         # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1]
-        masked_global_attn_index = tf.tile(is_index_global_attn[:, :, None, None], (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1))
+        masked_global_attn_index = tf.tile(
+            is_index_global_attn[:, :, None, None],
+            (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1),
+        )
         attn_probs = tf.where(
             masked_global_attn_index,
             tf.zeros(shape_list(masked_global_attn_index), dtype=tf.dtypes.float32),
@@ -413,8 +419,8 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
         first_chunk_mask = (
             tf.tile(
-                tf.range(chunks_count + 1)[None, :, None, None], 
-                (batch_size * num_heads, 1, window_overlap, window_overlap)
+                tf.range(chunks_count + 1)[None, :, None, None],
+                (batch_size * num_heads, 1, window_overlap, window_overlap),
             )
             < 1
         )
