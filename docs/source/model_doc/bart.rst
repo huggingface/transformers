@@ -130,6 +130,12 @@ BartForQuestionAnswering
 .. autoclass:: transformers.BartForQuestionAnswering
     :members: forward
 
+BartForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BartForCausalLM
+    :members: forward
+
 
 
 TFBartModel

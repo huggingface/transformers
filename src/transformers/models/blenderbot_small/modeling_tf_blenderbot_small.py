@@ -925,7 +925,7 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
-        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
+        if inputs["attention_mask"] is not None:
             combined_attention_mask = combined_attention_mask + _expand_mask(
                 inputs["attention_mask"], tgt_len=input_shape[-1]
             )

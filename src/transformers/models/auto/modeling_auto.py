@@ -33,6 +33,7 @@ from ..albert.modeling_albert import (
     AlbertModel,
 )
 from ..bart.modeling_bart import (
+    BartForCausalLM,
     BartForConditionalGeneration,
     BartForQuestionAnswering,
     BartForSequenceClassification,
@@ -50,8 +51,12 @@ from ..bert.modeling_bert import (
     BertModel,
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
-from ..blenderbot.modeling_blenderbot import BlenderbotForConditionalGeneration, BlenderbotModel
-from ..blenderbot_small.modeling_blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
+from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
+from ..blenderbot_small.modeling_blenderbot_small import (
+    BlenderbotSmallForCausalLM,
+    BlenderbotSmallForConditionalGeneration,
+    BlenderbotSmallModel,
+)
 from ..camembert.modeling_camembert import (
     CamembertForCausalLM,
     CamembertForMaskedLM,
@@ -138,8 +143,9 @@ from ..longformer.modeling_longformer import (
     LongformerModel,
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
-from ..marian.modeling_marian import MarianModel, MarianMTModel
+from ..marian.modeling_marian import MarianForCausalLM, MarianModel, MarianMTModel
 from ..mbart.modeling_mbart import (
+    MBartForCausalLM,
     MBartForConditionalGeneration,
     MBartForQuestionAnswering,
     MBartForSequenceClassification,
@@ -165,7 +171,7 @@ from ..mpnet.modeling_mpnet import (
 )
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
-from ..pegasus.modeling_pegasus import PegasusForConditionalGeneration, PegasusModel
+from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
 from ..rag.modeling_rag import (  # noqa: F401 - need to import all RagModels to be in globals() function
     RagModel,
@@ -425,6 +431,12 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (BertGenerationConfig, BertGenerationDecoder),
         (XLMProphetNetConfig, XLMProphetNetForCausalLM),
         (ProphetNetConfig, ProphetNetForCausalLM),
+        (BartConfig, BartForCausalLM),
+        (MBartConfig, MBartForCausalLM),
+        (PegasusConfig, PegasusForCausalLM),
+        (MarianConfig, MarianForCausalLM),
+        (BlenderbotConfig, BlenderbotForCausalLM),
+        (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
     ]
 )
 
