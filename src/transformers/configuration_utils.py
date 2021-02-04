@@ -119,8 +119,7 @@ class PretrainedConfig(object):
           can only occur once.
         - **encoder_no_repeat_ngram_size** (:obj:`int`, `optional`, defaults to 0) -- Value that will be used by
           default in the :obj:`generate` method of the model for ``encoder_no_repeat_ngram_size``. If set to int > 0,
-          all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the `decoder_input_ids` cannot
-          occur within the decoder_ids.
+          all ngrams of that size that occur in the ``encoder_input_ids`` cannot occur in the ``decoder_input_ids``.
         - **bad_words_ids** (:obj:`List[int]`, `optional`) -- List of token ids that are not allowed to be generated
           that will be used by default in the :obj:`generate` method of the model. In order to get the tokens of the
           words that should not appear in the generated text, use :obj:`tokenizer.encode(bad_word,
