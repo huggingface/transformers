@@ -488,7 +488,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor, floats_tensor
+from .test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -498,6 +498,7 @@ if is_torch_available():
         {{cookiecutter.camelcase_modelname}}Config,
         {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
         {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
+        {{cookiecutter.camelcase_modelname}}ForCausalLM,
         {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         {{cookiecutter.camelcase_modelname}}Model,
         {{cookiecutter.camelcase_modelname}}Tokenizer,

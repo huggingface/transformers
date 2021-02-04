@@ -121,6 +121,13 @@ Tips:
     :members: forward
 
 
+{{cookiecutter.camelcase_modelname}}ForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.{{cookiecutter.camelcase_modelname}}ForCausalLM
+    :members: forward
+
+
 {% endif -%}
 {% endif -%}
 {% if "TensorFlow" in cookiecutter.generate_tensorflow_and_pytorch -%}
@@ -180,5 +187,7 @@ TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
 
 .. autoclass:: transformers.TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration
     :members: call
+
+
 {% endif -%}
 {% endif -%}
