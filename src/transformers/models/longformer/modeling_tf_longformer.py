@@ -385,7 +385,7 @@ class TFLongformerTokenClassifierOutput(ModelOutput):
     global_attentions: Optional[Tuple[tf.Tensor]] = None
 
 
-def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_sep_token=False):
+def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_sep_token=True):
     """
     Computes global attention mask by putting attention on all tokens before `sep_token_id` if `before_sep_token is
     True` else after `sep_token_id`.
