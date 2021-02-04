@@ -251,6 +251,9 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             is_local_index_no_global_attn_nonzero,
         ) = self._get_global_attn_indices(is_index_global_attn)
 
+        # print("before", attn_scores.shape)
+        # print("max_num_global_attn_indices", max_num_global_attn_indices.numpy())
+        # print("self.one_sided_attn_window_size", self.one_sided_attn_window_size)
         # this function is only relevant for global attention
         attn_scores = tf.cond(
             is_global_attn,
@@ -265,7 +268,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             ),
             lambda: attn_scores,
         )
-
+        # print("after", attn_scores.shape)
         attn_probs = tf.nn.softmax(attn_scores, axis=-1)
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
