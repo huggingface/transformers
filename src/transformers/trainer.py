@@ -264,7 +264,12 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        if self.is_model_parallel:
+        # postpone switching to cuda when:
+        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway
+        if not self.is_model_parallel and not args.deepspeed:
+            model = model.to(args.device)
+        else:
             # Force n_gpu to 1 to avoid DataParallel.
             self.args._n_gpu = 1
 
@@ -771,9 +776,6 @@ class Trainer:
 
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
-
-        if not self.is_model_parallel:
-            self.model = self.model.to(self.args.device)
 
         model = self.model_wrapped
 
