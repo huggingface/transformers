@@ -38,11 +38,9 @@ class BartTokenizer(RobertaTokenizer):
     r"""
     Construct a BART tokenizer.
 
-    :class:`~transformers.BartTokenizer` is identical to :class:`~transformers.RobertaTokenizer` and adds a new
-    :meth:`~transformers.BartTokenizer.prepare_seq2seq_batch`
-
-    Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning the
-    initialization parameters and other methods.
+    :class:`~transformers.BartTokenizer` is identical to :class:`~transformers.RobertaTokenizer`. Refer to superclass
+    :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning the initialization
+    parameters and other methods.
     """
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}

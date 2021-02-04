@@ -80,8 +80,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, *args, **kwargs):
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
+        from_slow = kwargs.pop("from_slow", False)
 
-        if fast_tokenizer_file is not None:
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+            raise ValueError(
+                "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
+                "have sentencepiece installed."
+            )
+
+        if fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:

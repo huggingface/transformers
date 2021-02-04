@@ -37,6 +37,13 @@ _all_bart_models = [
 
 
 class BartTokenizerFast(RobertaTokenizerFast):
+    r"""
+    Construct a "fast" BART tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.BartTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer to
+    superclass :class:`~transformers.RobertaTokenizerFast` for usage examples and documentation concerning the
+    initialization parameters and other methods.
+    """
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
     pretrained_vocab_files_map = {
