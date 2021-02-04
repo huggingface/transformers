@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for M2M100MT."""
+import json
 from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
@@ -207,26 +208,36 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         self.sp_model = load_spm(spm_file)
 
         self.encoder_size = len(self.encoder)
-        self.lang_code_to_id = {code: self.encoder_size + i for i, code in enumerate(FAIRSEQ_LANGUAGE_CODES)}
-        self.id_to_lang_code = {v: k for k, v in self.lang_code_to_id.items()}
-        self.cur_lang_code = self.lang_code_to_id["en"]
-        self._additional_special_tokens = list(self.lang_code_to_id.keys())
+
+        self.lang_code_to_token = {lang_code: f"__{lang_code}__" for lang_code in FAIRSEQ_LANGUAGE_CODES}
+
+        self.lang_token_to_id = {
+            self.get_lang_token(lang_code): self.encoder_size + i for i, lang_code in enumerate(FAIRSEQ_LANGUAGE_CODES)
+        }
+        self.id_to_lang_token = {v: k for k, v in self.lang_token_to_id.items()}
+
+        self.cur_lang_id = self.lang_token_to_id["__en__"]
+        self._additional_special_tokens = list(self.lang_token_to_id.keys())
         self.set_src_lang_special_tokens(kwargs.get("src_lang", "en"))
 
         self.num_madeup_words = 8
 
     @property
     def vocab_size(self) -> int:
-        len(self.encoder) + len(self.lang_code_to_id) + self.num_madeup_words
+        return len(self.encoder) + len(self.lang_token_to_id) + self.num_madeup_words
 
     def _tokenize(self, text: str) -> List[str]:
         return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
+        if token in self.lang_token_to_id:
+            return self.lang_token_to_id[token]
         return self.encoder.get(token, self.encoder[self.unk_token])
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the decoder."""
+        if index in self.id_to_lang_token:
+            return self.id_to_lang_token[index]
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
@@ -327,9 +338,9 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
-        src_lang: str = "en_XX",
+        src_lang: str = "en",
         tgt_texts: Optional[List[str]] = None,
-        tgt_lang: str = "ro_RO",
+        tgt_lang: str = "ro",
         **kwargs,
     ) -> BatchEncoding:
         self.src_lang = src_lang
@@ -349,20 +360,29 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
-        self.cur_lang_code = self.lang_code_to_id[src_lang]
-        self.prefix_tokens = [self.cur_lang_code]
+        lang_token = self.get_lang_token(src_lang)
+        self.cur_lang_id = self.lang_token_to_id[lang_token]
+        self.prefix_tokens = [self.cur_lang_id]
         self.suffix_tokens = [self.eos_token_id]
 
     def set_tgt_lang_special_tokens(self, lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
-        self.cur_lang_code = self.lang_code_to_id[lang]
-        self.prefix_tokens = [self.cur_lang_code]
+        lang_token = self.get_lang_token(lang)
+        self.cur_lang_id = self.lang_token_to_id[lang_token]
+        self.prefix_tokens = [self.cur_lang_id]
         self.suffix_tokens = [self.eos_token_id]
+
+    def get_lang_token(self, lang):
+        return self.lang_code_to_token[lang]
+
+    def get_lang_id(self, lang):
+        lang_token = self.get_lang_token(lang)
+        return self.lang_token_to_id[lang_token]
 
 
 def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:
     spm = sentencepiece.SentencePieceProcessor()
-    spm.Load(path)
+    spm.Load(str(path))
     return spm
 
 
