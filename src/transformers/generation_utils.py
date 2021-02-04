@@ -678,7 +678,8 @@ class GenerationMixin:
             no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             encoder_no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
-                If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the `decoder_input_ids`
+                If set to int > 0, all ngrams of that size that occur in the `encoder_input_ids` cannot occur in the
+                `decoder_input_ids`
             bad_words_ids(:obj:`List[List[int]]`, `optional`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use :obj:`tokenizer(bad_word,

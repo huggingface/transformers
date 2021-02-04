@@ -298,8 +298,8 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
 
 class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
     r"""
-    :class:`transformers.LogitsProcessor` that enforces no repetition of encoder input ids n-grams for the decoder ids. See `ParlAI
-    <https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/torch_generator_agent.py#L1350>`__.
+    :class:`transformers.LogitsProcessor` that enforces no repetition of encoder input ids n-grams for the decoder ids.
+    See `ParlAI <https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/torch_generator_agent.py#L1350>`__.
 
     Args:
         encoder_ngram_size (:obj:`int`):
