@@ -264,10 +264,7 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # Model parallel
-        if not self.is_model_parallel:
-            model = model.to(args.device)
-        else:
+        if self.is_model_parallel:
             # Force n_gpu to 1 to avoid DataParallel.
             self.args._n_gpu = 1
 
@@ -775,6 +772,9 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
+        if not self.is_model_parallel:
+            self.model = self.model.to(self.args.device)
+
         model = self.model_wrapped
 
         # Mixed precision training with apex (torch < 1.6)
@@ -790,6 +790,8 @@ class Trainer:
             model = ShardedDDP(model, self.optimizer)
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+        if self.deepspeed:
+            pass  # already initialized its own DDP earlier
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
                 find_unused_parameters = self.args.ddp_find_unused_parameters
