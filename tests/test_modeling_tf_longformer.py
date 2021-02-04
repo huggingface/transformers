@@ -338,6 +338,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
+    """
     @slow
     def test_saved_model_with_attentions_output(self):
         # This test don't pass because of the error:
@@ -350,6 +351,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         # This is due to the tf.concat call line 703 that adds one dimension
         # Need to check with PVP how to properly fix this
         pass
+    """
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
