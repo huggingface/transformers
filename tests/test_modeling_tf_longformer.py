@@ -347,7 +347,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
     def test_xla_mode(self):
-        # TODO JP: Make Blenderbot XLA compliant
+        # TODO JP: Make Longformer XLA compliant
         pass
 
 
