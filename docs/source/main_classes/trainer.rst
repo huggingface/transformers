@@ -559,8 +559,11 @@ Notes:
 - ``"overlap_comm": true`` trades off increased GPU RAM usage to lower all-reduce latency. ``overlap_comm`` uses 4.5x
   the ``allgather_bucket_size`` and ``reduce_bucket_size`` values. So if they are set to 5e8, this requires a 9GB
   footprint (``5e8 x 2Bytes x 2 x 4.5``). Therefore, if you have a GPU with 8GB or less RAM, to avoid getting
-  OOM-errors you will need to reduce those parameters to about ``2e8``, which would require 3.6GB. You will want to do the same on larger capacity GPU as well, if you're starting to hit OOM.
-- when reducing these buffers you're trading communication speed to avail more GPU RAM. The smaller the buffer size, the slower the communication, and the more GPU RAM will be available to other tasks. So if a bigger batch size is important, getting a slightly slower training time could be a good trade.
+  OOM-errors you will need to reduce those parameters to about ``2e8``, which would require 3.6GB. You will want to do
+  the same on larger capacity GPU as well, if you're starting to hit OOM.
+- when reducing these buffers you're trading communication speed to avail more GPU RAM. The smaller the buffer size,
+  the slower the communication, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
+  important, getting a slightly slower training time could be a good trade.
 
 This section has to be configured exclusively via DeepSpeed configuration - the :class:`~transformers.Trainer` provides
 no equivalent command line arguments.
