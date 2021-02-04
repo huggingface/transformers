@@ -43,8 +43,6 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
-task_to_keys = {"xnli": ("premise", "hypothesis")}
-
 logger = logging.getLogger(__name__)
 
 
@@ -130,7 +128,6 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    task_name = "xnli"
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -184,24 +181,27 @@ def main():
 
     # In distributed training, the load_dataset function guarantees that only one local process can concurrently
     # download the dataset.
-
     # Downloading and loading xnli dataset from the hub.
-    train_dataset = load_dataset(task_name, model_args.train_language, split="train")
-    eval_dataset = load_dataset(task_name, model_args.language, split="validation")
+    if model_args.train_language is None:
+        train_dataset = load_dataset("xnli", model_args.language, split="train")
+    else:
+        train_dataset = load_dataset("xnli", model_args.train_language, split="train")
+
+    eval_dataset = load_dataset("xnli", model_args.language, split="validation")
     # Labels
     label_list = train_dataset.features["label"].names
     num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
     if training_args.local_rank not in [-1, 0]:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocabr
+        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
 
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config = AutoConfig.from_pretrained(
         model_args.config_name if model_args.config_name else model_args.model_name_or_path,
         num_labels=num_labels,
-        finetuning_task=task_name,
+        finetuning_task="xnli",
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
@@ -224,8 +224,6 @@ def main():
     )
 
     # Preprocessing the datasets
-    sentence1_key, sentence2_key = task_to_keys[task_name]
-
     # Padding strategy
     if data_args.pad_to_max_length:
         padding = "max_length"
@@ -235,11 +233,13 @@ def main():
 
     def preprocess_function(examples):
         # Tokenize the texts
-        args = (
-            (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
+        return tokenizer(
+            examples["premise"],
+            examples["hypothesis"],
+            padding=padding,
+            max_length=data_args.max_seq_length,
+            truncation=True,
         )
-        result = tokenizer(*args, padding=padding, max_length=data_args.max_seq_length, truncation=True)
-        return result
 
     train_dataset = train_dataset.map(
         preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
@@ -253,17 +253,14 @@ def main():
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
     # Get the metric function
-    metric = load_metric(task_name)
+    metric = load_metric("xnli")
 
     # You can define your custom compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.
     def compute_metrics(p: EvalPrediction):
         preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
         preds = np.argmax(preds, axis=1)
-        result = metric.compute(predictions=preds, references=p.label_ids)
-        if len(result) > 1:
-            result["combined_score"] = np.mean(list(result.values())).item()
-        return result
+        return metric.compute(predictions=preds, references=p.label_ids)
 
     # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
     if data_args.pad_to_max_length:
@@ -314,11 +311,11 @@ def main():
         logger.info("*** Evaluate ***")
 
         eval_result = trainer.evaluate(eval_dataset=eval_dataset)
-        output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{task_name}.txt")
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results_xnli.txt")
 
         if trainer.is_world_process_zero():
             with open(output_eval_file, "w") as writer:
-                logger.info(f"***** Eval results {task_name} *****")
+                logger.info("***** Eval results xnli *****")
                 for key, value in sorted(eval_result.items()):
                     logger.info(f"  {key} = {value}")
                     writer.write(f"{key} = {value}\n")
