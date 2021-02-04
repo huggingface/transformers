@@ -36,7 +36,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
     Construct a Blenderbot tokenizer.
 
     :class:`~transformers.Blenderbot` is nearly identical to :class:`~transformers.RobertaTokenizer` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesnt add BOS token
+    end-to-end tokenization: punctuation splitting and wordpiece. The only difference is that it doesn't add BOS token
     to the beginning of sequences.
 
     Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
