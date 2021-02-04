@@ -74,6 +74,23 @@ class BlenderbotTokenizer(RobertaTokenizer):
         """
         return token_ids_0 + [self.eos_token_id]
 
+    def _build_conversation_input_ids(self, conversation) -> List[int]:
+        inputs = []
+        for is_user, text in conversation.iter_texts():
+            if is_user:
+                # We need to space prefix as it's being done within blenderbot
+                inputs.append(" " + text)
+            else:
+                # Generated responses should contain them already.
+                inputs.append(text)
+
+        full_string = "  ".join(inputs)
+        input_ids = self.encode(full_string)
+        if len(input_ids) > self.model_max_length:
+            input_ids = input_ids[-self.model_max_length :]
+            logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
+        return input_ids
+
 
 def get_pairs(word):
     """
