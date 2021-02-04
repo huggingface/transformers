@@ -1603,7 +1603,6 @@ class GenerationMixin:
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            encoder_hidden_states = model_inputs["encoder_outputs"].last_hidden_state
             outputs = self(
                 **model_inputs,
                 return_dict=True,
