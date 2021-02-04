@@ -32,6 +32,7 @@ if is_torch_available():
         "BlenderbotForConditionalGeneration",
         "BlenderbotModel",
         "BlenderbotPreTrainedModel",
+        "BlenderbotForCausalLM",
     ]
 
 
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlenderbotForCausalLM,
             BlenderbotForConditionalGeneration,
             BlenderbotModel,
             BlenderbotPreTrainedModel,

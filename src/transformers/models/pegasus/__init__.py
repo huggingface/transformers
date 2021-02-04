@@ -42,6 +42,7 @@ if is_torch_available():
         "PegasusForConditionalGeneration",
         "PegasusModel",
         "PegasusPreTrainedModel",
+        "PegasusForCausalLM",
     ]
 
 if is_tf_available():
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_pegasus import (
             PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PegasusForCausalLM,
             PegasusForConditionalGeneration,
             PegasusModel,
             PegasusPreTrainedModel,
