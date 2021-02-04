@@ -793,7 +793,7 @@ class Trainer:
             model = ShardedDDP(model, self.optimizer)
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        if self.deepspeed:
+        elif self.deepspeed:
             pass  # already initialized its own DDP earlier
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
