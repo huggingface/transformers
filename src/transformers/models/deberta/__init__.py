@@ -24,6 +24,7 @@ from ...file_utils import _BaseLazyModule, is_torch_available
 _import_structure = {
     "configuration_deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig"],
     "tokenization_deberta": ["DebertaTokenizer"],
+    "tokenization_debertav2": ["DebertaTokenizerV2"],
 }
 
 if is_torch_available():
