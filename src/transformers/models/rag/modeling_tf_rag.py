@@ -919,6 +919,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         do_marginalize=None,
         labels=None,
         reduce_loss=None,
+        return_dict=None,
         training=False,
         **kwargs  # needs kwargs for generation
     ):
@@ -985,6 +986,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             do_marginalize=do_marginalize,
             labels=labels,
             reduce_loss=reduce_loss,
+            return_dict=return_dict,
             training=training,
             kwargs_call=kwargs,
         )
@@ -1946,6 +1948,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         exclude_bos_score=None,
         labels=None,
         reduce_loss=None,
+        return_dict=None,
         training=False,
         **kwargs  # needs kwargs for generation
     ):
@@ -2013,6 +2016,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             labels=labels,
             reduce_loss=reduce_loss,
             training=training,
+            return_dict=return_dict,
             kwargs_call=kwargs,
         )
 
