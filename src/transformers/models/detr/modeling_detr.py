@@ -18,7 +18,7 @@
 import math
 import random
 from dataclasses import dataclass
-from typing import Optional, Tuple, Dict, List
+from typing import Optional, Tuple, Dict, List, Union
 from scipy.optimize import linear_sum_assignment
 
 import torch
@@ -186,6 +186,7 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
 
         # TODO make it support different-sized images
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+        print('Max size', max_size)
         # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
         batch_shape = [len(tensor_list)] + max_size
         b, c, h, w = batch_shape
@@ -289,6 +290,17 @@ class BackboneBase(nn.Module):
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
         self.num_channels = num_channels
 
+    # def forward_new(self, pixel_values: Union[torch.Tensor, list[torch.Tensor]], pixel_mask: Optional[torch.Tensor]):
+    #     xs = self.body(pixel_values)
+    #     out: Dict[str, NestedTensor] = {}
+    #     for name, x in xs.items():
+    #         m = pixel_mask
+    #         assert m is not None
+    #         mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
+    #         out[name] = NestedTensor(x, mask)
+    #     return out
+    
+    # this one should be removed in the future
     def forward(self, tensor_list: NestedTensor):
         xs = self.body(tensor_list.tensors)
         out: Dict[str, NestedTensor] = {}

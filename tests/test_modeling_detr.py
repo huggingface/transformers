@@ -270,16 +270,6 @@ def prepare_detr_inputs_dict(
 #             with torch.no_grad():
 #                 model(**inputs)[0]
 
-#     def test_generate_fp16(self):
-#         config, input_dict = self.model_tester.prepare_config_and_inputs()
-#         input_ids = input_dict["input_ids"]
-#         attention_mask = input_ids.ne(1).to(torch_device)
-#         model = DetrForConditionalGeneration(config).eval().to(torch_device)
-#         if torch_device == "cuda":
-#             model.half()
-#         model.generate(input_ids, attention_mask=attention_mask)
-#         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
-
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""

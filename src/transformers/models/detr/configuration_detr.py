@@ -108,7 +108,8 @@ class DetrConfig(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (:obj:`float`, `optional`, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
-        Example::
+
+    Examples::
 
         >>> from transformers import DetrModel, DetrConfig
 
