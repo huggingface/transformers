@@ -288,7 +288,8 @@ cd ..
 ```
 
 4.  We recommend adding the PyTorch version of *BigBird* to
-    Transformers. To install PyTorch, please follow the instructions [here](https://pytorch.org/get-started/locally/).
+    Transformers. To install PyTorch, please follow the instructions on
+    <https://pytorch.org/get-started/locally/>.
 
 **Note:** You don't need to have CUDA installed. Making the new model
 work on CPU is sufficient.
@@ -335,7 +336,7 @@ code-base. You need to figure out the following:
     the model's class? Are there model sub-classes, *e.g.*,
     EncoderModel, DecoderModel? Where is the self-attention layer? Are
     there multiple different attention layers, *e.g.*, *self-attention*,
-    *cross-attention*...?
+    *cross-attention*\...?
 -   How can you debug the model in the original environment of the repo?
     Do you have to add `print` statements, can you work with
     an interactive debugger like [ipdb](https://pypi.org/project/ipdb/), or should you use
@@ -526,7 +527,7 @@ to make your debugging environment as efficient as possible.
     due to multiple dropout layers in the model. Make sure that the
     forward pass in your debugging environment is **deterministic** so
     that the dropout layers are not used. Or use
-    `transformers.file_utils.set_seed` if the old and new
+    [transformers.file\_utils.set\_seed]{.title-ref} if the old and new
     implementations are in the same framework.
 
 #### (Important) More details on how to create a debugging environment for BigBird 
@@ -612,9 +613,9 @@ You should do the following:
 ```
 
 5.  Once you are satisfied, go to the webpage of your fork on GitHub.
-    Click on "Pull request". Make sure to add the GitHub handle of Patrick 
-		as one reviewer, so that the Hugging Face team gets notified for future changes.
-
+    Click on "Pull request". Make sure to add the GitHub handle of some
+    members of Patrick as reviewers, so that the Hugging
+    Face team gets notified for future changes.
 6.  Change the PR into a draft by clicking on "Convert to draft" on the
     right of the GitHub pull request web page.
 
@@ -858,10 +859,10 @@ using the original repository. Now you should write an analogous script
 using the 🤗 Transformers implementation instead of the original one. It
 should look as follows:
 
-[Here the model name might have to be adapted, *e.g.*, maybe BigBirdForConditionalGeneration instead of BigBirdModel]
+[Here the model name might have to be adapted, *e.g.*, maybe big_birdForConditionalGeneration instead of big_birdModel]
 
 ```python
-model = BigBirdModel.from_pretrained("/path/to/converted/checkpoint/folder")
+model = BigBirdModel.from_pretrained(/path/to/converted/checkpoint/folder)
 input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
 output = model(input_ids).last_hidden_states
 ```
@@ -1005,7 +1006,7 @@ returns the `input_ids`. It could look similar to this (in pseudo-code):
 
 ```bash
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-model = BigBirdModel.load_pretrained_checkpoint("/path/to/checkpoint/")
+model = BigBirdModel.load_pretrained_checkpoint(/path/to/checkpoint/)
 input_ids = model.tokenize(input_str)
 ```
 
