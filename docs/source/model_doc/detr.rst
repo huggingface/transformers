@@ -48,7 +48,7 @@ the hidden dimension of the Transformer of DETR, which is :obj:`256` by default,
 :obj:`d_model` (which in NLP is typically 768 or higher). 
 
 Next, this is sent through the encoder, outputting :obj:`encoder_hidden_states` of the same shape (you can consider these as image features). Next, so-called 
-**object queries** are sent through the decoder. This is a tensor of shape :obj:`(batch_size, num_queries, d_model)`, with `num_queries` typically set 
+**object queries** are sent through the decoder. This is a tensor of shape :obj:`(batch_size, num_queries, d_model)`, with :obj:`num_queries` typically set 
 to 100 and is initialized with zeros. Each object query looks for a particular object in the image. Next, the decoder updates these object queries through
 multiple self-attention and encoder-decoder attention layers to output :obj:`decoder_hidden_states` of the same shape: :obj:`(batch_size, num_queries, d_model)`. 
 Next, two heads are added on top for object detection: a linear layer for classifying each object query into one of the objects or "no object", and a MLP 
@@ -64,11 +64,12 @@ Tips:
 
 - DETR uses so-called **object queries** to detect objects in an image. The number of queries determines the maximum number of objects that 
   can be detected in a single image, and is set to 100 by default (see parameter :obj:`num_queries` of :class:`~transformers.DetrConfig`).
+  Note that it's good to have some slack (in COCO, the authors used 100, while the maximum number of objects in a COCO image is ~70).
 - The decoder of DETR updates the query embeddings in parallel. This is different from language models like GPT-2, which use autoregressive decoding 
   instead of parallel. Hence, no causal attention mask is used. 
 - DETR adds position embeddings to the hidden states at each self-attention and cross-attention layer before projecting to queries and keys.
   For the position embeddings of the image, one can choose between fixed sinusoidal or learned absolute position embeddings. By default, 
-  the parameter :obj:`position_embedding_type` of :class:`~transformers.DetrConfig` is set to :obj:`sine`.
+  the parameter :obj:`position_embedding_type` of :class:`~transformers.DetrConfig` is set to :obj:`"sine"`.
 - During training, the authors of DETR did find it helpful to use auxiliary losses in the decoder, especially to help the model output the correct
   number of objects of each class. If you set the parameter :obj:`auxiliary_loss` of :class:`~transformers.DetrConfig` to :obj:`True`, then prediction
   feedforward neural networks and Hungarian losses are added after each decoder layer (with the FFNs sharing parameters). 

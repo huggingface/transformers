@@ -346,7 +346,7 @@ class DetrTokenizer(PreTrainedTokenizer):
             size (:obj:`int`, `optional`, defaults to :obj:`800`): 
                 Resize the input image to the given size. Only has an effect if :obj:`resize` is set to :obj:`True`. 
             max_size (:obj:`int`, `optional`, defaults to :obj:`1333`): 
-                Resize up to a certain max size. In COCO, the authors of DETR used a :obj:`max_size` of 1333.
+                The largest size an image dimension can have (otherwise it's capped). In COCO, the authors of DETR used a :obj:`max_size` of 1333.
             normalize (:obj:`bool`, `optional`, defaults to :obj:`True`): 
                 Whether to apply standard ImageNet mean/std normalization of images. 
         """
