@@ -3,6 +3,7 @@ cd docs
 function deploy_doc(){
 	echo "Creating doc at commit $1 and pushing to folder $2"
 	git checkout $1
+	pip install -U .
 	if [ ! -z "$2" ]
 	then
 		if [ "$2" == "master" ]; then
