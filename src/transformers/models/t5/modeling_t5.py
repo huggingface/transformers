@@ -1608,7 +1608,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             "use_cache": use_cache,
         }
 
-    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor, **kwargs):
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return self._shift_right(labels)
 
     def _reorder_cache(self, past, beam_idx):

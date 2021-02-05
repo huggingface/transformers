@@ -2406,8 +2406,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor, pad_token_id: int):
-        return shift_tokens_right(labels, pad_token_id, self.config.decoder_start_token_id)
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
