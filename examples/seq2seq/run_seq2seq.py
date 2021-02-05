@@ -26,7 +26,6 @@ from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
-from torch import nn
 
 import transformers
 from transformers import (
@@ -387,8 +386,8 @@ def main():
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
         logger.warn(
-            f"label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
-            "`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
+            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
+            f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )
 
     def preprocess_function(examples):
@@ -413,12 +412,6 @@ def main():
             ]
 
         model_inputs["labels"] = labels["input_ids"]
-
-        # prepare decoder_input_ids
-        if hasattr(model, "prepare_decoder_input_ids_from_labels"):
-            decoder_input_ids = model.prepare_decoder_input_ids_from_labels(labels=model_inputs["labels"])
-            model["decoder_input_ids"] = decoder_input_ids
-
         return model_inputs
 
     if training_args.do_train:
@@ -453,6 +446,7 @@ def main():
     else:
         data_collator = DataCollatorForSeq2Seq(
             tokenizer,
+            model=model,
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=8 if training_args.fp16 else None,
         )
