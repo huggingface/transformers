@@ -20,6 +20,7 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -98,15 +99,12 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-
-    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
-    conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BarthezTokenizer
 
     def __init__(
@@ -122,6 +120,9 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,

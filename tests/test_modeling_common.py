@@ -473,7 +473,6 @@ class ModelTesterMixin:
                 arg_names = [*signature.parameters.keys()]
                 if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
-
             outputs = model(**inputs, return_dict=True)
 
             # Test that we can get a gradient back for importance score computation

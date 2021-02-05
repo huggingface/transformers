@@ -132,6 +132,7 @@ class BlenderbotConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         forced_eos_token_id=2,
+        encoder_no_repeat_ngram_size=3,
         **kwargs
     ):
         super().__init__(
@@ -141,6 +142,7 @@ class BlenderbotConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
             forced_eos_token_id=forced_eos_token_id,
+            encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
             **kwargs,
         )
 
