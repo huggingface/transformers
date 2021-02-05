@@ -710,8 +710,8 @@ class MLflowCallback(TrainerCallback):
     def __init__(self):
         assert is_mlflow_available(), "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
         import mlflow
-        self.MAX_PARAM_VAL_LENGTH =  mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
-        self.MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
+        self._MAX_PARAM_VAL_LENGTH =  mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
+        self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
 
         self._initialized = False
         self._log_artifacts = False
@@ -738,10 +738,21 @@ class MLflowCallback(TrainerCallback):
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
+            # remove params that are too long for MLflow
+            for name, value in list(combined_dict.items()):
+                # internally, all values are converted to str in MLflow
+                if len(str(value)) > self._MAX_PARAM_VAL_LENGTH:
+                    logger.warning(
+                        f"Trainer is attempting to log a value of "
+                        f'"{value}" for key "{name}" as a parameter. '
+                        f"MLflow's log_param() only accepts values no longer than "
+                        f"250 characters so we dropped this attribute."
+                    )
+                    del combined_dict[name]
             # MLflow cannot log more than 100 values in one go, so we have to split it
             combined_dict_items = list(combined_dict.items())
-            for i in range(0, len(combined_dict_items), self.MAX_PARAMS_TAGS_PER_BATCH):
-                self._ml_flow.log_params(dict(combined_dict_items[i : i + self.MAX_PARAMS_TAGS_PER_BATCH]))
+            for i in range(0, len(combined_dict_items), self._MAX_PARAMS_TAGS_PER_BATCH):
+                self._ml_flow.log_params(dict(combined_dict_items[i : i + self._MAX_PARAMS_TAGS_PER_BATCH]))
         self._initialized = True
 
     def on_train_begin(self, args, state, control, model=None, **kwargs):
