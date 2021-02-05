@@ -81,12 +81,6 @@ class ModelArguments:
             "with private models)."
         },
     )
-    freeze_encoder: bool = field(
-        default=False, metadata={"help": "Whether tp freeze the encoder for faster training."}
-    )
-    freeze_embeds: bool = field(
-        default=False, metadata={"help": "Whether  to freeze the embeddings for faster training."}
-    )
 
 
 @dataclass
@@ -219,31 +213,6 @@ summarization_name_mapping = {
 }
 
 
-def freeze_params(model: nn.Module):
-    """Set requires_grad=False for each of model.parameters()"""
-    for par in model.parameters():
-        par.requires_grad = False
-
-
-def freeze_embeds(model):
-    """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
-    model_type = model.config.model_type
-
-    if model_type == "t5":
-        freeze_params(model.shared)
-        for d in [model.encoder, model.decoder]:
-            freeze_params(d.embed_tokens)
-    elif model_type == "fsmt":
-        for d in [model.model.encoder, model.model.decoder]:
-            freeze_params(d.embed_positions)
-            freeze_params(d.embed_tokens)
-    else:
-        freeze_params(model.model.shared)
-        for d in [model.model.encoder, model.model.decoder]:
-            freeze_params(d.embed_positions)
-            freeze_params(d.embed_tokens)
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -347,12 +316,6 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
 
-    # freeze encoder or embedddings
-    if model_args.freeze_embeds:
-        freeze_embeds(model)
-    if model_args.freeze_encoder:
-        freeze_params(model.get_encoder())
-
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
         model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
@@ -422,6 +385,12 @@ def main():
     max_target_length = data_args.max_target_length
     padding = "max_length" if data_args.pad_to_max_length else False
 
+    if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
+        logger.warn(
+            f"label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
+            "`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
+        )
+
     def preprocess_function(examples):
         if data_args.task.startswith("translation"):
             inputs = [ex[source_lang] for ex in examples["translation"]]
@@ -447,9 +416,7 @@ def main():
 
         # prepare decoder_input_ids
         if hasattr(model, "prepare_decoder_input_ids_from_labels"):
-            decoder_input_ids = model.prepare_decoder_input_ids_from_labels(
-                labels=model_inputs["labels"], pad_token_id=tokenizer.pad_token_id
-            )
+            decoder_input_ids = model.prepare_decoder_input_ids_from_labels(labels=model_inputs["labels"])
             model["decoder_input_ids"] = decoder_input_ids
 
         return model_inputs
