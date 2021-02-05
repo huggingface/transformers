@@ -109,7 +109,7 @@ mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer` and the
     To generate using the mBART-50 multilingual translation models, :obj:`eos_token_id` is used as the
     `:obj:`decoder_start_token_id` and the target language id is forced as the first generated token. To force the
     target language id as the first generated token, pass the `forced_bos_token_id` parameter to the `generate` method.
-    The following example shows how to translate between Hindi to English and English to Hindi using the
+    The following example shows how to translate between Hindi to French and Arabic to English using the
     `facebook/mbart-50-large-many-to-many` model.
 
 .. code-block::
