@@ -24,7 +24,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
-import torch
 from datasets import load_dataset, load_metric
 
 import transformers
@@ -193,9 +192,6 @@ def main():
     num_labels = len(label_list)
 
     # Load pretrained model and tokenizer
-    if training_args.local_rank not in [-1, 0]:
-        torch.distributed.barrier()  # Make sure only the first process in distributed training will download model & vocab
-
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
     config = AutoConfig.from_pretrained(
