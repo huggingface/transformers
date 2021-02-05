@@ -757,13 +757,10 @@ class MLflowCallback(TrainerCallback):
                     self._ml_flow.log_metric(k, v, step=state.global_step)
                 else:
                     logger.warning(
-                        "Trainer is attempting to log a value of "
-                        '"%s" of type %s for key "%s" as a metric. '
-                        "MLflow's log_metric() only accepts float and "
-                        "int types so we dropped this attribute.",
-                        v,
-                        type(v),
-                        k,
+                        f"Trainer is attempting to log a value of "
+                        f'"{v}" of type {type(v)} for key "{k}" as a metric. '
+                        f"MLflow's log_metric() only accepts float and "
+                        f"int types so we dropped this attribute."
                     )
 
     def on_train_end(self, args, state, control, **kwargs):
