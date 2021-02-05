@@ -16,6 +16,7 @@
 
 import copy
 import inspect
+import json
 import os
 import random
 import tempfile
@@ -200,6 +201,19 @@ class TFModelTesterMixin:
             model.save_pretrained(tmpdirname, saved_model=True)
             saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
+
+    def test_onnx_compliancy(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        with open(os.path.join("tests", "fixtures", "tf_ops", "onnx.json")) as f:
+            onnx_ops = json.load(f)["Keras2ONNX"]["opset12"]
+
+        for model_class in self.all_model_classes:
+            with tf.Graph().as_default() as g:
+                model = model_class(config)
+                model(self._prepare_for_class(inputs_dict, model_class))
+
+                print(len(g.get_operations()))
 
     @slow
     def test_saved_model_creation_extended(self):

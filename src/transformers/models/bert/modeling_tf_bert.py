@@ -128,6 +128,120 @@ class TFBertPreTrainingLoss:
         return masked_lm_loss + next_sentence_loss
 
 
+class TFBertWordEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape: tf.TensorShape):
+        self.weight = self.add_weight(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self) -> Dict[str, Any]:
+        config = {
+            "vocab_size": self.vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
+        print(input_ids)
+        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
+        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+class TFBertTokenTypeEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.type_vocab_size = type_vocab_size
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape: tf.TensorShape):
+        self.token_type_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.type_vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self) -> Dict[str, Any]:
+        config = {
+            "type_vocab_size": self.type_vocab_size,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, token_type_ids: tf.Tensor) -> tf.Tensor:
+        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
+        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
+        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
+        embeddings = tf.reshape(
+            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
+        )
+
+        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
+
+        return embeddings
+
+
+class TFBertPositionEmbeddings(tf.keras.layers.Layer):
+    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
+        super().__init__(**kwargs)
+
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.initializer_range = initializer_range
+
+    def build(self, input_shape: tf.TensorShape):
+        self.position_embeddings = self.add_weight(
+            name="embeddings",
+            shape=[self.max_position_embeddings, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
+
+        super().build(input_shape)
+
+    def get_config(self) -> Dict[str, Any]:
+        config = {
+            "max_position_embeddings": self.max_position_embeddings,
+            "hidden_size": self.hidden_size,
+            "initializer_range": self.initializer_range,
+        }
+        base_config = super().get_config()
+
+        return dict(list(base_config.items()) + list(config.items()))
+
+    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
+        input_shape = shape_list(position_ids)
+        position_embeddings = self.position_embeddings[: input_shape[1], :]
+
+        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
+
+
 class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
