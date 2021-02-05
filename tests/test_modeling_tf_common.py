@@ -213,7 +213,7 @@ class TFModelTesterMixin:
             "VarIsInitializedOp",
         ]
 
-        with open(os.path.join("tests", "fixtures", "tf_ops", "onnx.json")) as f:
+        with open(os.path.join(".", "utils", "tf_ops", "onnx.json")) as f:
             onnx_ops = json.load(f)["Keras2ONNX"]["opset12"]
 
         for model_class in self.all_model_classes:
