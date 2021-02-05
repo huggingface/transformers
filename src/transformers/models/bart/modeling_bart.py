@@ -1341,6 +1341,9 @@ class BartForConditionalGeneration(BartPretrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         if cur_len == 1 and self.config.force_bos_token_to_be_generated:
             self._force_token_id_to_be_generated(logits, self.config.bos_token_id)

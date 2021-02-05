@@ -1320,6 +1320,9 @@ class MarianMTModel(MarianPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+
     def adjust_logits_during_generation(self, logits, cur_len, max_length):
         logits[:, self.config.pad_token_id] = float("-inf")  # never predict pad token.
         if cur_len == max_length - 1 and self.config.eos_token_id is not None:
