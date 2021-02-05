@@ -322,7 +322,7 @@ pip install -e .
 Now you have set up a development environment to port *[camelcase name of model]*
 to 🤗 Transformers.
 
-### 3.-4. Run a pretrained checkpoint using the original repository
+### Run a pretrained checkpoint using the original repository
 
 At first, you will work on the original *[camelcase name of model]* repository.
 Often, the original implementation is very "researchy". Meaning that
