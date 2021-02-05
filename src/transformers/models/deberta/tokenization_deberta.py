@@ -17,9 +17,13 @@
 import os
 from typing import Optional, Tuple
 
+from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils import PreTrainedTokenizer
 from .gpt2_tokenizer import GPT2Tokenizer
-from .spm_tokenizer import SPMTokenizer
+
+
+if is_sentencepiece_available():
+    from .spm_tokenizer import SPMTokenizer
 
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -113,6 +117,7 @@ class DebertaTokenizer(PreTrainedTokenizer):
     ):
         super().__init__(
             do_lower_case=do_lower_case,
+            vocab_type="gpt2",
             unk_token=unk_token,
             sep_token=sep_token,
             pad_token=pad_token,
