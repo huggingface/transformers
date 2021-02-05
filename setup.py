@@ -102,7 +102,7 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.0",
+    "jax>=0.2.8",
     "jaxlib>=0.1.59",
     "keras2onnx",
     "numpy>=1.17",
