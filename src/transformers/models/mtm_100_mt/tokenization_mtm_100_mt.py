@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Suraj Patil and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -31,7 +30,7 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
-    "sp_model": "sentencepiece.bpe.model",
+    "spm_file": "sentencepiece.bpe.model",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -318,7 +317,7 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         self.__dict__ = d
         self.sp_model = load_spm(self.spm_file)
 
-    def save_vocabulary(save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         vocab_save_path = save_dir / (
@@ -333,7 +332,7 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         if not spm_save_path.exists():
             copyfile(self.spm_file, spm_save_path)
 
-        return (vocab_save_path, spm_save_path)
+        return (str(vocab_save_path), str(spm_save_path))
 
     def prepare_seq2seq_batch(
         self,
