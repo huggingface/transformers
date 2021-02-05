@@ -1,1 +1,6 @@
+# Set the default behavior, in case people don't have core.autocrlf set
 * text=auto
+
+*.py	eol=lf
+*.rst	eol=lf
+*.md	eol=lf
