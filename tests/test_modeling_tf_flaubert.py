@@ -338,6 +338,10 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Flaubert XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Flaubert
+        pass
+
 
 @require_tf
 @require_sentencepiece

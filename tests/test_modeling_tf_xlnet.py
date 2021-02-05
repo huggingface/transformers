@@ -390,6 +390,10 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFXLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for XLNET
+        pass
+
 
 @require_tf
 class TFXLNetModelLanguageGenerationTest(unittest.TestCase):

@@ -1668,7 +1668,6 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-    """
     dynamic = tf.shape(tensor)
 
     if tensor.shape == tf.TensorShape(None):
@@ -1677,23 +1676,6 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
     static = tensor.shape.as_list()
 
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
-    """
-    shape = tensor.shape.as_list()
-
-    non_static_indexes = []
-    for (index, dim) in enumerate(shape):
-        if dim is None:
-            non_static_indexes.append(index)
-
-    if not non_static_indexes:
-        return shape
-
-    dyn_shape = tf.shape(tensor)
-    
-    for index in non_static_indexes:
-        shape[index] = dyn_shape[index]
-    
-    return shape
 
 
 def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:

@@ -298,6 +298,10 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make ALBERT float16 compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for ALBERT
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

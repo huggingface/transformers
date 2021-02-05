@@ -375,6 +375,10 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Funnel float16 compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Funnel
+        pass
+
 
 @require_tf
 class TFFunnelBaseModelTest(TFModelTesterMixin, unittest.TestCase):

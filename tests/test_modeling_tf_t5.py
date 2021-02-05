@@ -314,6 +314,10 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make T5 XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for T5
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")
@@ -449,6 +453,10 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make T5 XLA compliant
+        pass
+
+    def test_onnx_compliancy(self):
+        # Not mandatory for T5
         pass
 
 

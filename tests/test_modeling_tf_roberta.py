@@ -220,6 +220,10 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFRobertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Roberta
+        pass
+
 
 @require_tf
 @require_sentencepiece

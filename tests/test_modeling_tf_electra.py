@@ -249,6 +249,10 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for ELECTRA
+        pass
+
 
 @require_tf
 class TFElectraModelIntegrationTest(unittest.TestCase):

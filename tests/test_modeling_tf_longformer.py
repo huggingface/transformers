@@ -375,6 +375,10 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Blenderbot XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Longformer
+        pass
+
 
 @require_tf
 @require_sentencepiece

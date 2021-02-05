@@ -226,6 +226,10 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFDPRReader.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for DPR
+        pass
+
 
 @require_tf
 class TFDPRModelIntegrationTest(unittest.TestCase):

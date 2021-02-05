@@ -253,6 +253,10 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make OpenAIGPT XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for OpenAIGPT
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

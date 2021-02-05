@@ -708,6 +708,10 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Lxmert float16 compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Lxmert
+        pass
+
     @slow
     def test_saved_model_with_hidden_states_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

@@ -204,16 +204,36 @@ class TFModelTesterMixin:
 
     def test_onnx_compliancy(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        INTERNAL_OPS = [
+            "AssignVariableOp",
+            "ReadVariableOp",
+            "ResourceGather",
+            "TruncatedNormal",
+            "VarHandleOp",
+            "VarIsInitializedOp",
+        ]
 
         with open(os.path.join("tests", "fixtures", "tf_ops", "onnx.json")) as f:
             onnx_ops = json.load(f)["Keras2ONNX"]["opset12"]
 
         for model_class in self.all_model_classes:
+            model_op_names = set()
+
             with tf.Graph().as_default() as g:
                 model = model_class(config)
-                model(self._prepare_for_class(inputs_dict, model_class))
+                model(model.dummy_inputs)
 
-                print(len(g.get_operations()))
+                for op in g.get_operations():
+                    model_op_names.add(op.node_def.op)
+
+            model_op_names = sorted(model_op_names)
+            incompatible_ops = []
+
+            for op in model_op_names:
+                if op not in onnx_ops and op not in INTERNAL_OPS:
+                    incompatible_ops.append(op)
+
+            self.assertEqual(len(incompatible_ops), 0)
 
     @slow
     def test_saved_model_creation_extended(self):

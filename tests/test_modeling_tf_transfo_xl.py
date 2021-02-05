@@ -212,6 +212,10 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make TransfoXL XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for TransfoXL
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

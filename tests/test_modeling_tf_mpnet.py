@@ -235,6 +235,10 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make MPNet XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for MPNet
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["microsoft/mpnet-base"]:

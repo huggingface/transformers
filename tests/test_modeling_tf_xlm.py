@@ -334,6 +334,10 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make XLM XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for XLM
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

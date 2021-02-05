@@ -222,6 +222,10 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFDistilBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for DistilBert
+        pass
+
 
 @require_tf
 class TFDistilBertModelIntegrationTest(unittest.TestCase):

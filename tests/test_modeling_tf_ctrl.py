@@ -229,6 +229,10 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make CTRL XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for CTRL
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

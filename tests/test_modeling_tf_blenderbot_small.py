@@ -286,6 +286,10 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Blenderbot Small XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Blenderbot Small
+        pass
+
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
     """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""

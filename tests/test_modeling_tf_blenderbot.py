@@ -221,6 +221,10 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make Blenderbot XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for Blenderbot
+        pass
+
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

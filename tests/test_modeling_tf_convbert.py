@@ -305,6 +305,10 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make ConvBert XLA compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for ConvBert
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = TFConvBertModel.from_pretrained("YituTech/conv-bert-base")

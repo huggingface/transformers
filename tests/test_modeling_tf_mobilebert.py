@@ -313,6 +313,10 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make MobileBert float16 compliant
         pass
 
+    def test_onnx_compliancy(self):
+        # Not mandatory for MobileBert
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         # for model_name in TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
