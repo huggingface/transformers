@@ -101,7 +101,7 @@ def _is_start_of_word(text):
     return bool(_is_control(first_char) | _is_punctuation(first_char) | _is_whitespace(first_char))
 
 
-@add_end_docstrings(INIT_TOKENIZER_DOCSTRING, """    .. automethod:: __call__""")
+@add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
     Base class for all slow tokenizers.
