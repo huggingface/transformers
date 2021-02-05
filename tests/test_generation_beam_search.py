@@ -190,7 +190,7 @@ class BeamSearchTester:
         input_ids = torch.cat([input_ids[output_indices, :], output_tokens.unsqueeze(-1)], dim=-1)
 
         # finalize
-        decoded = beam_scorer.finalize(
+        sequence_output = beam_scorer.finalize(
             input_ids,
             output_scores,
             output_tokens,
@@ -198,19 +198,27 @@ class BeamSearchTester:
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
         )
+
+        sequences = sequence_output["sequences"]
+        sequence_scores = sequence_output["sequence_scores"]
+
         # since `num_beam_hyps_to_keep` = 1 => only return `batch_size` x `max_length`
-        self.parent.assertListEqual(list(decoded.shape), [self.batch_size, max_length])
+        self.parent.assertListEqual(list(sequences.shape), [self.batch_size, max_length])
+        self.parent.assertListEqual(list(sequence_scores.shape), [self.batch_size])
+
+        # check sequence_scores
+        self.parent.assertFalse((sequence_scores > 0).any().item())
 
         # first batch has to finish with eos_token
-        self.parent.assertEqual(decoded[0, -1].item(), self.eos_token_id)
+        self.parent.assertEqual(sequences[0, -1].item(), self.eos_token_id)
 
         # other batches cannot finish with eos token
-        self.parent.assertNotEqual(decoded[1, -1].item(), self.eos_token_id)
-        self.parent.assertNotEqual(decoded[2, -1].item(), self.eos_token_id)
+        self.parent.assertNotEqual(sequences[1, -1].item(), self.eos_token_id)
+        self.parent.assertNotEqual(sequences[2, -1].item(), self.eos_token_id)
 
         # now test that if `num_beam_hyps_to_keep` is 3 => all beams are returned
         beam_scorer.num_beam_hyps_to_keep = self.num_beams
-        decoded = beam_scorer.finalize(
+        sequence_output = beam_scorer.finalize(
             input_ids,
             output_scores,
             output_tokens,
@@ -218,7 +226,11 @@ class BeamSearchTester:
             pad_token_id=self.pad_token_id,
             eos_token_id=self.eos_token_id,
         )
-        self.parent.assertListEqual(list(decoded.shape), [self.num_beams * self.batch_size, max_length])
+        sequences = sequence_output["sequences"]
+        sequence_scores = sequence_output["sequence_scores"]
+
+        self.parent.assertListEqual(list(sequences.shape), [self.num_beams * self.batch_size, max_length])
+        self.parent.assertListEqual(list(sequence_scores.shape), [self.num_beams * self.batch_size])
 
 
 @require_torch

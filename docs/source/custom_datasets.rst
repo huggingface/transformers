@@ -75,7 +75,7 @@ read this in.
     test_texts, test_labels = read_imdb_split('aclImdb/test')
 
 We now have a train and test dataset, but let's also also create a validation set which we can use for for evaluation
-and tuning without training our test set results. Sklearn has a convenient utility for creating such splits:
+and tuning without tainting our test set results. Sklearn has a convenient utility for creating such splits:
 
 .. code-block:: python
 

@@ -198,6 +198,7 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TFMPNetModelTester(self)
@@ -230,8 +231,35 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_token_classification(*config_and_inputs)
 
+    def test_xla_mode(self):
+        # TODO JP: Make MPNet XLA compliant
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["microsoft/mpnet-base"]:
             model = TFMPNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_tf
+class TFMPNetModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TFMPNetModel.from_pretrained("microsoft/mpnet-base")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = [1, 6, 768]
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = tf.constant(
+            [
+                [
+                    [-0.1067172, 0.08216473, 0.0024543],
+                    [-0.03465879, 0.8354118, -0.03252288],
+                    [-0.06569476, -0.12424111, -0.0494436],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
