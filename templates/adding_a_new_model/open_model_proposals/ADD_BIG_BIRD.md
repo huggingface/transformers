@@ -305,7 +305,9 @@ pip install -e .
 Now you have set up a development environment to port *BigBird*
 to 🤗 Transformers.
 
-### 3.-4. Run a pretrained checkpoint using the original repository
+### Run a pretrained checkpoint using the original repository
+
+**3. Set up debugging environment**
 
 At first, you will work on the original *BigBird* repository.
 Often, the original implementation is very "researchy". Meaning that
@@ -375,6 +377,8 @@ The obvious disadvantage of Jupyther notebooks is that if you are not
 used to working with them you will have to spend some time adjusting to
 the new programming environment and that you might not be able to use
 your known debugging tools anymore, like `ipdb`.
+
+**4. Successfully run forward pass**
 
 For each code-base, a good first step is always to load a **small**
 pretrained checkpoint and to be able to reproduce a single forward pass
@@ -544,7 +548,7 @@ to make your debugging environment as efficient as possible.
 - The first goal should be to successfully run a forward pass using the RoBERTa checkpoint `bigbr_base/model.ckpt-0.data-00000-of-00001` and `bigbr_base/model.ckpt-0.index`.
 
 
-### 5.-14. Port BigBird to 🤗 Transformers
+### Port BigBird to 🤗 Transformers
 
 Next, you can finally start adding new code to 🤗 Transformers. Go into
 the clone of your 🤗 Transformers' fork:

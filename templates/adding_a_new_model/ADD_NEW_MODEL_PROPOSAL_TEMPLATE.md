@@ -324,6 +324,8 @@ to 🤗 Transformers.
 
 ### Run a pretrained checkpoint using the original repository
 
+**3. Set up debugging environment**
+
 At first, you will work on the original *[camelcase name of model]* repository.
 Often, the original implementation is very "researchy". Meaning that
 documentation might be lacking and the code can be difficult to
@@ -392,6 +394,8 @@ The obvious disadvantage of Jupyther notebooks is that if you are not
 used to working with them you will have to spend some time adjusting to
 the new programming environment and that you might not be able to use
 your known debugging tools anymore, like `ipdb`.
+
+**4. Successfully run forward pass**
 
 For each code-base, a good first step is always to load a **small**
 pretrained checkpoint and to be able to reproduce a single forward pass
@@ -539,7 +543,7 @@ to make your debugging environment as efficient as possible.
 [TODO FILL: Here the mentor should add very specific information on what the student should do]
 [to set up an efficient environment for the special requirements of this model]
 
-### 5.-14. Port [camelcase name of model] to 🤗 Transformers
+### Port [camelcase name of model] to 🤗 Transformers
 
 Next, you can finally start adding new code to 🤗 Transformers. Go into
 the clone of your 🤗 Transformers' fork:
