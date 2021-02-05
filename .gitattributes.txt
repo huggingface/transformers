@@ -1,0 +1,3 @@
+*.py	eol=lf
+*.rst	eol=lf
+*.md	eol=lf
