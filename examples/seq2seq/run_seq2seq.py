@@ -384,6 +384,12 @@ def main():
     max_target_length = data_args.max_target_length
     padding = "max_length" if data_args.pad_to_max_length else False
 
+    if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
+        logger.warn(
+            "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
+            f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
+        )
+
     def preprocess_function(examples):
         if data_args.task.startswith("translation"):
             inputs = [ex[source_lang] for ex in examples["translation"]]
@@ -440,6 +446,7 @@ def main():
     else:
         data_collator = DataCollatorForSeq2Seq(
             tokenizer,
+            model=model,
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=8 if training_args.fp16 else None,
         )
