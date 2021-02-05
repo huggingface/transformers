@@ -779,13 +779,12 @@ class MLflowCallback(TrainerCallback):
             if self._log_artifacts:
                 logger.info("Logging artifacts. This may take time.")
                 self._ml_flow.log_artifacts(args.output_dir)
-            self._ml_flow.end_run()
 
     def __del__(self):
         # if the previous run is not terminated correctly, the fluent API will
         # not let you start a new run before the previous one is killed
         if self._ml_flow.active_run is not None:
-            self._ml_flow.end_run(status="KILLED")
+            self._ml_flow.end_run()
 
 
 INTEGRATION_TO_CALLBACK = {
