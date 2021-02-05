@@ -164,6 +164,7 @@ class M2M100MTSinusoidalPositionalEmbedding(nn.Module):
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+        self.weights = self.weights.to(input_ids)
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
@@ -434,7 +435,6 @@ class M2M100MTDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -453,7 +453,6 @@ class M2M100MTDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
@@ -906,11 +905,6 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
         all_cross_attentions = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -943,8 +937,6 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
                     combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    head_mask[idx] if head_mask is not None else None,
-                    encoder_head_mask[idx] if encoder_head_mask is not None else None,
                     None,
                 )
             else:
@@ -954,8 +946,6 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
                     attention_mask=combined_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
