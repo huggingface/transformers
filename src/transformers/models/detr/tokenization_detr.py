@@ -107,7 +107,8 @@ class NestedTensor(object):
 
 
 def nested_tensor_from_tensor_list(tensor_list: Union[List[Tensor], torch.Tensor]):
-    # TODO make this more general
+    # TODO make this more n
+    print(tensor_list[0].shape)
     if tensor_list[0].ndim == 3:
         if torchvision._is_tracing():
             # nested_tensor_from_tensor_list() does not export well to ONNX
@@ -164,6 +165,75 @@ def _onnx_nested_tensor_from_tensor_list(tensor_list: List[Tensor]) -> NestedTen
 
 ## Image + target transformations for object detection
 ## Taken from https://github.com/facebookresearch/detr/blob/master/datasets/transforms.py
+
+# this: extra transform, based on https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L21
+class ConvertCocoPolysToMask(object):
+    def __init__(self, return_masks=False):
+        self.return_masks = return_masks
+
+    def __call__(self, image, target):
+        w, h = image.size
+
+        #image_id = target["image_id"]
+        #image_id = torch.tensor([image_id])
+
+        #anno = target["annotations"]
+
+        #anno = [obj for obj in anno if 'iscrowd' not in obj or obj['iscrowd'] == 0]
+
+        #boxes = [obj["bbox"] for obj in anno]
+        if target is not None:
+            boxes = target["boxes"]
+            # guard against no boxes via resizing
+            boxes = torch.as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
+            boxes[:, 2:] += boxes[:, :2]
+            boxes[:, 0::2].clamp_(min=0, max=w)
+            boxes[:, 1::2].clamp_(min=0, max=h)
+
+            #classes = [obj["category_id"] for obj in anno]
+            #classes = torch.tensor(classes, dtype=torch.int64)
+
+            if self.return_masks:
+                segmentations = [obj["segmentation"] for obj in anno]
+                masks = convert_coco_poly_to_mask(segmentations, h, w)
+
+            # keypoints = None
+            # if anno and "keypoints" in anno[0]:
+            #     keypoints = [obj["keypoints"] for obj in anno]
+            #     keypoints = torch.as_tensor(keypoints, dtype=torch.float32)
+            #     num_keypoints = keypoints.shape[0]
+            #     if num_keypoints:
+            #         keypoints = keypoints.view(num_keypoints, -1, 3)
+
+            # keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
+            # boxes = boxes[keep]
+            # classes = classes[keep]
+            # if self.return_masks:
+            #     masks = masks[keep]
+            # if keypoints is not None:
+            #     keypoints = keypoints[keep]
+
+            target = {}
+            target["boxes"] = boxes
+            # target["labels"] = classes
+            # if self.return_masks:
+            #     target["masks"] = masks
+            # target["image_id"] = image_id
+            # if keypoints is not None:
+            #     target["keypoints"] = keypoints
+
+            # # for conversion to coco api
+            # area = torch.tensor([obj["area"] for obj in anno])
+            # iscrowd = torch.tensor([obj["iscrowd"] if "iscrowd" in obj else 0 for obj in anno])
+            # target["area"] = area[keep]
+            # target["iscrowd"] = iscrowd[keep]
+
+            target["orig_size"] = torch.as_tensor([int(h), int(w)])
+            target["size"] = torch.as_tensor([int(h), int(w)])
+        
+            return image, target
+        return image, None
+
 
 def resize(image, target, size, max_size=None):
     # size can be min_size (scalar) or (w, h) tuple
@@ -224,15 +294,20 @@ def resize(image, target, size, max_size=None):
     return rescaled_image, target
 
 
-class RandomResize(object):
-    def __init__(self, sizes, max_size=None):
-        assert isinstance(sizes, (list, tuple))
-        self.sizes = sizes
+class Resize(object):
+    def __init__(self, size, max_size=None):
+        self.size = size
         self.max_size = max_size
 
     def __call__(self, img, target=None):
-        size = random.choice(self.sizes)
-        return resize(img, target, size, self.max_size)
+        return resize(img, target, self.size, self.max_size)
+
+# copied from https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/util/box_ops.py
+def box_xyxy_to_cxcywh(x):
+    x0, y0, x1, y1 = x.unbind(-1)
+    b = [(x0 + x1) / 2, (y0 + y1) / 2,
+         (x1 - x0), (y1 - y0)]
+    return torch.stack(b, dim=-1)
 
 
 class Normalize(object):
@@ -258,7 +333,7 @@ class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image, target):
+    def __call__(self, image, target=None):
         for t in self.transforms:
             image, target = t(image, target)
         return image, target
@@ -358,24 +433,22 @@ class DetrTokenizer(PreTrainedTokenizer):
 
         # make images a list of PIL images no matter what
         if is_batched:
-            if isinstance(images[0], np.array):
+            if isinstance(images[0], np.ndarray):
                 images = [Image.fromarray(image) for image in images]
-                if annotations is not None:
-                    assert len(images) == len(annotations)
-            
             elif isinstance(images[0], torch.Tensor):
                 images = [T.ToPILImage()(image).convert("RGB") for image in images]
-                if annotations is not None:
-                    assert len(images) == len(annotations)
+            if annotations is not None:
+                assert len(images) == len(annotations)
         else:
             if isinstance(images, PIL.Image.Image):
                 images = [images]
+            if annotations is not None:
                 annotations = [annotations]
 
-        # next up: apply image transformations (resizing + normalization)
-        transformations = []
+        # next: apply transformations (resizing + normalization) to both images and annotations
+        transformations = [ConvertCocoPolysToMask(),]
         if resize and size is not None: 
-            transformations.append(RandomResize(sizes=[size], max_size=max_size))
+            transformations.append(Resize(size=size, max_size=max_size))
         if normalize:
             normalize = Compose([
                 ToTensor(),
@@ -383,16 +456,22 @@ class DetrTokenizer(PreTrainedTokenizer):
             ])
             transformations.append(normalize)
         transforms = Compose(transformations)
-        transformed_images = []
-        for image, annotation in zip(images, annotations):
-            image, annotation = transforms(image, annotation)
-            transformed_images.append(image)
 
-        # next, create NestedTensor which takes care of padding up to biggest image
-        samples = nested_tensor_from_tensor_list(transformed_images)
+        if annotations is not None:
+            transformed_images = []
+            for image, annotation in zip(images, annotations):
+                image, annotation = transforms(image, annotation)
+                transformed_images.append(image)
+        else:
+            transformed_images = [transforms(image, None) for image in images]
+        
+        # next, create NestedTensor which takes care of padding the pixels up to biggest image
+        # we don't need the transformed targets for this
+        samples = nested_tensor_from_tensor_list([x[0] for x in transformed_images])
 
         # return as dict
-        data = {"pixel_values": samples.tensors, 'pixel_mask': samples.mask}
+        data = {'pixel_values': samples.tensors, 'pixel_mask': samples.mask, 
+                'labels': [x[1] for x in transformed_images] if annotations is not None else None}
         encoded_inputs = BatchEncoding(data=data)
 
         return encoded_inputs
