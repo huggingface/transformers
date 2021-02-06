@@ -427,7 +427,16 @@ repo <https://github.com/microsoft/DeepSpeedExamples>`__:
 
   git clone https://github.com/microsoft/DeepSpeedExamples
   cd DeepSpeedExamples
-  find . | grep 'json$'
+  find . -name '*json'
+
+Continuing the code from above, let's say you're looking to configure the Lamb optimizer. So you can search through the
+example ``.json`` files with:
+
+.. code-block:: bash
+
+  grep -i Lamb $(find . -name '*json')
+
+Some more examples are to be found in the `main repo <https://github.com/microsoft/DeepSpeed>`__ as well.
 
 While you always have to supply the DeepSpeed configuration file, you can configure the DeepSpeed integration in
 several ways:
