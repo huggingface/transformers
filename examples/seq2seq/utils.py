@@ -82,10 +82,10 @@ def build_compute_metrics_fn(task_name: str, tokenizer: PreTrainedTokenizer) -> 
         return np.count_nonzero(tokens != tokenizer.pad_token_id)
 
     def decode_pred(pred: EvalPrediction) -> Tuple[List[str], List[str]]:
-        labels_ids = pred.label_ids
         pred_ids = pred.predictions
+        label_ids = pred.label_ids
         pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
-        labels_ids[labels_ids == -100] = tokenizer.pad_token_id
+        label_ids[label_ids == -100] = tokenizer.pad_token_id
         label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
         pred_str = lmap(str.strip, pred_str)
         label_str = lmap(str.strip, label_str)
