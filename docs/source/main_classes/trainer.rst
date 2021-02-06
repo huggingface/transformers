@@ -420,6 +420,15 @@ Configuration
 For the complete guide to the DeepSpeed configuration options that can be used in its configuration file please refer
 to the `following documentation <https://www.deepspeed.ai/docs/config-json/>`__.
 
+You can find dozens of DeepSpeed configuration examples that address various practical needs in `the DeepSpeedExamples
+repo <https://github.com/microsoft/DeepSpeedExamples>`__:
+
+.. code-block:: bash
+
+  git clone https://github.com/microsoft/DeepSpeedExamples
+  cd DeepSpeedExamples
+  find . | grep 'json$'
+
 While you always have to supply the DeepSpeed configuration file, you can configure the DeepSpeed integration in
 several ways:
 
