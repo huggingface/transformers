@@ -710,7 +710,8 @@ class MLflowCallback(TrainerCallback):
     def __init__(self):
         assert is_mlflow_available(), "MLflowCallback requires mlflow to be installed. Run `pip install mlflow`."
         import mlflow
-        self._MAX_PARAM_VAL_LENGTH =  mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
+
+        self._MAX_PARAM_VAL_LENGTH = mlflow.utils.validation.MAX_PARAM_VAL_LENGTH
         self._MAX_PARAMS_TAGS_PER_BATCH = mlflow.utils.validation.MAX_PARAMS_TAGS_PER_BATCH
 
         self._initialized = False
