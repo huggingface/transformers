@@ -209,6 +209,15 @@ class MT5TokenizerFast:
         requires_tokenizers(self)
 
 
+class M2M100MTTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class OpenAIGPTTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)

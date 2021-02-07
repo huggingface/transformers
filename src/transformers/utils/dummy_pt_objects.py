@@ -1745,6 +1745,27 @@ class MT5Model:
         requires_pytorch(self)
 
 
+M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class M2M100MTForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class M2M100MTModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

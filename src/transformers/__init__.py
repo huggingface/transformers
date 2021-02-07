@@ -381,8 +381,6 @@ if is_torch_available():
         [
             "M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "M2M100MTForConditionalGeneration",
-            "M2M100MTForQuestionAnswering",
-            "M2M100MTForSequenceClassification",
             "M2M100MTModel",
         ]
     )
@@ -1755,8 +1753,6 @@ if TYPE_CHECKING:
         from .models.mtm_100_mt import (
             M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST,
             M2M100MTForConditionalGeneration,
-            M2M100MTForQuestionAnswering,
-            M2M100MTForSequenceClassification,
             M2M100MTModel,
         )
         from .models.openai import (
