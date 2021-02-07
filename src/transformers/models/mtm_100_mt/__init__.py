@@ -32,8 +32,6 @@ if is_torch_available():
     _import_structure["modeling_mtm_100_mt"] = [
         "M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "M2M100MTForConditionalGeneration",
-        "M2M100MTForQuestionAnswering",
-        "M2M100MTForSequenceClassification",
         "M2M100MTModel",
         "M2M100MTPreTrainedModel",
     ]
@@ -50,8 +48,6 @@ if TYPE_CHECKING:
         from .modeling_mtm_100_mt import (
             M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST,
             M2M100MTForConditionalGeneration,
-            M2M100MTForQuestionAnswering,
-            M2M100MTForSequenceClassification,
             M2M100MTModel,
             M2M100MTPreTrainedModel,
         )

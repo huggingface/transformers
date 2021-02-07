@@ -31,14 +31,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (
-        M2M100MTConfig,
-        M2M100MTForConditionalGeneration,
-        M2M100MTForQuestionAnswering,
-        M2M100MTForSequenceClassification,
-        M2M100MTModel,
-        M2M100MTTokenizer,
-    )
+    from transformers import M2M100MTConfig, M2M100MTForConditionalGeneration, M2M100MTModel, M2M100MTTokenizer
     from transformers.models.mtm_100_mt.modeling_mtm_100_mt import M2M100MTDecoder, M2M100MTEncoder
 
 
@@ -205,8 +198,6 @@ class M2M100MTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         (
             M2M100MTModel,
             M2M100MTForConditionalGeneration,
-            M2M100MTForSequenceClassification,
-            M2M100MTForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -242,11 +233,10 @@ class M2M100MTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # M2M100MTForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (M2M100MTModel, M2M100MTForConditionalGeneration, M2M100MTForQuestionAnswering):
+        for model_class in (M2M100MTModel, M2M100MTForConditionalGeneration):
             model = model_class(config)
             model.to(torch_device)
             model.eval()

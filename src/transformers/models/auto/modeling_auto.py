@@ -184,12 +184,7 @@ from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 
 # Add modeling imports here
 # Add modeling imports here
-from ..mtm_100_mt.modeling_mtm_100_mt import (
-    M2M100MTForConditionalGeneration,
-    M2M100MTForQuestionAnswering,
-    M2M100MTForSequenceClassification,
-    M2M100MTModel,
-)
+from ..mtm_100_mt.modeling_mtm_100_mt import M2M100MTForConditionalGeneration, M2M100MTModel
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
@@ -523,7 +518,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (M2M100MTConfig, M2M100MTForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
@@ -559,7 +553,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-        (M2M100MTConfig, M2M100MTForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
