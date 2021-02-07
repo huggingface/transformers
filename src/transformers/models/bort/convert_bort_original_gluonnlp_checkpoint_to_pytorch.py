@@ -48,7 +48,7 @@ if version.parse(mx.__version__) != version.parse("1.5.0"):
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-SAMPLE_TEXT = "The Nymphenburg Palace is a beautiful palace in Munich!"
+SAMPLE_TEXT = "The Nymphenburg Palace is a <mask> palace in Munich!"
 
 
 def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_folder_path: str):
@@ -114,10 +114,10 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
         use_token_type_embed=False,
         token_type_vocab_size=predefined_args["token_type_vocab_size"],
         use_classifier=False,
-        use_decoder=False,
+        use_decoder=True,
     )
 
-    original_bort.load_parameters(bort_checkpoint_path, cast_dtype=True, ignore_extra=True)
+    original_bort.load_parameters(bort_checkpoint_path, cast_dtype=True, ignore_extra=False)
     params = original_bort._collect_params_with_prefix()
 
     # Build our config 🤗
@@ -278,11 +278,21 @@ def convert_bort_checkpoint_to_pytorch(bort_checkpoint_path: str, pytorch_dump_f
     # Compare output of both models
     tokenizer = RobertaTokenizer.from_pretrained("roberta-base")
 
-    input_ids = tokenizer.encode_plus(SAMPLE_TEXT)["input_ids"]
-
     # Get gluon output
+    input_ids = tokenizer.encode_plus(SAMPLE_TEXT, add_special_tokens=False)["input_ids"]
+
+    # tried out a bunch of different token its -> all unsucessful
+    #    real_mask_token_id = 3
+    real_mask_token_id = tokenizer.mask_token_id
+    input_ids = [real_mask_token_id if x == tokenizer.mask_token_id else x for x in input_ids]
+
     gluon_input_ids = mx.nd.array([input_ids])
-    output_gluon = original_bort(inputs=gluon_input_ids, token_types=[])
+    masked_positions = mx.nd.array([[input_ids.index(real_mask_token_id)]])
+    output_gluon = original_bort(inputs=gluon_input_ids, token_types=[], masked_positions=masked_positions)
+    lm_out = original_bort._decode(mx.ndarray, output_gluon[0], masked_positions)
+    pred_token = mx.nd.argmax(lm_out[0], axis=-1)
+
+    print("Token", tokenizer.convert_ids_to_tokens((pred_token.asnumpy().tolist())))
 
     # Get Transformer output (save and reload model again)
     hf_bort_model.save_pretrained(pytorch_dump_folder_path)
