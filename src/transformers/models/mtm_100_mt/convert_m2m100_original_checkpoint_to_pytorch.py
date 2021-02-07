@@ -26,8 +26,10 @@ def remove_ignore_keys_(state_dict):
         "decoder.version",
         "model.encoder.version",
         "model.decoder.version",
-        "_float_tensor",
         "decoder.output_projection.weight",
+        "_float_tensor",
+        "encoder.embed_positions._float_tensor",
+        "decoder.embed_positions._float_tensor",
     ]
     for k in ignore_keys:
         state_dict.pop(k, None)
