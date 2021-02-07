@@ -193,6 +193,7 @@ _import_structure = {
     "models.byt5": ["ByT5Tokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.canine": ["CANINE_PRETRAINED_CONFIG_ARCHIVE_MAP", "CanineConfig", "CanineTokenizer"],
+    "models.character_bert": ["CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CharacterBertConfig", "CharacterBertTokenizer"],
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
@@ -807,6 +808,24 @@ if is_torch_available():
             "CanineModel",
             "CaninePreTrainedModel",
             "load_tf_weights_in_canine",
+        ]
+    )
+    _import_structure["models.character_bert"].extend(
+        [
+            "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "CharacterCnn",
+            "CharacterBertForMaskedLM",
+            "CharacterBertForMultipleChoice",
+            "CharacterBertForNextSentencePrediction",
+            "CharacterBertForPreTraining",
+            "CharacterBertForQuestionAnswering",
+            "CharacterBertForSequenceClassification",
+            "CharacterBertForTokenClassification",
+            "CharacterBertLayer",
+            "CharacterBertLMHeadModel",
+            "CharacterBertModel",
+            "CharacterBertPreTrainedModel",
+            "load_tf_weights_in_character_bert",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -2302,6 +2321,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.character_bert import CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CharacterBertConfig, CharacterBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -2537,6 +2557,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        #from .models.character_bert import CharacterBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -2659,6 +2680,24 @@ if TYPE_CHECKING:
         from .utils.dummy_pytorch_quantization_and_torch_objects import *
 
     if is_torch_available():
+
+        from .models.character_bert import (
+            CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            CharacterCnn,
+            CharacterBertForMaskedLM,
+            CharacterBertForMultipleChoice,
+            CharacterBertForNextSentencePrediction,
+            CharacterBertForPreTraining,
+            CharacterBertForQuestionAnswering,
+            CharacterBertForSequenceClassification,
+            CharacterBertForTokenClassification,
+            CharacterBertLayer,
+            CharacterBertLMHeadModel,
+            CharacterBertModel,
+            CharacterBertPreTrainedModel,
+            load_tf_weights_in_character_bert,
+        )
+
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments

@@ -120,6 +120,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
 
 CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
     [
+        ("visual_bert", VisualBertConfig),
         # Add archive maps here
         ("swin", "SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("vilt", "VILT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -243,6 +244,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("albert", "ALBERT"),
         ("bert-generation", "Bert Generation"),
         ("camembert", "CamemBERT"),
+        ("character_bert", "CharacterBERT"),
         ("xlm-roberta", "XLM-RoBERTa"),
         ("pegasus", "Pegasus"),
         ("blenderbot", "Blenderbot"),
