@@ -13,8 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import numpy as np
 import tempfile
 import unittest
+
 
 from transformers import LxmertConfig, is_tf_available
 from transformers.testing_utils import require_tf, slow
