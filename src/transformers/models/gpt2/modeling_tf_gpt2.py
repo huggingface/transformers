@@ -312,7 +312,10 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            inputs["attention_mask"] = tf.reshape(inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1]))
+            attention_mask_shape = shape_list(inputs["attention_mask"])
+            inputs["attention_mask"] = tf.reshape(
+                inputs["attention_mask"], (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+            )
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
