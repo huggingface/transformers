@@ -17,7 +17,7 @@
 
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
@@ -107,122 +107,6 @@ class TFNoNorm(tf.keras.layers.Layer):
 NORM2FN = {"layer_norm": TFLayerNorm, "no_norm": TFNoNorm}
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
-class TFMobileBertWordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.weight = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
-class TFMobileBertTokenTypeEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.token_type_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "type_vocab_size": self.type_vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, token_type_ids: tf.Tensor) -> tf.Tensor:
-        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
-        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
-        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
-class TFMobileBertPositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
-        input_shape = shape_list(position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
-
-
 class TFMobileBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -231,25 +115,11 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
 
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
+        self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.word_embeddings = TFMobileBertWordEmbeddings(
-            vocab_size=config.vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="word_embeddings",
-        )
-        self.position_embeddings = TFMobileBertPositionEmbeddings(
-            max_position_embeddings=config.max_position_embeddings,
-            hidden_size=config.hidden_size,
-            initializer_range=config.initializer_range,
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = TFMobileBertTokenTypeEmbeddings(
-            type_vocab_size=config.type_vocab_size,
-            hidden_size=config.hidden_size,
-            initializer_range=config.initializer_range,
-            name="token_type_embeddings",
-        )
+        self.type_vocab_size = config.type_vocab_size
+        self.max_position_embeddings = config.max_position_embeddings
+        self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
@@ -259,6 +129,30 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+
+    def build(self, input_shape):
+        with tf.name_scope("word_embeddings"):
+            self.weight = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.embedding_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        with tf.name_scope("token_type_embeddings"):
+            self.token_type_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.type_vocab_size, self.hidden_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.hidden_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        super().build(input_shape)
 
     def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
@@ -270,10 +164,11 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if self.trigram_input:
@@ -297,11 +192,11 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
             inputs_embeds = self.embedding_transformation(inputs_embeds)
 
         if position_ids is None:
-            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
-        else:
-            position_embeds = self.position_embeddings(position_ids=position_ids)
+            position_ids = tf.range(start=0, limit=input_shape[-1])[tf.newaxis, :]
 
-        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -337,6 +232,7 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
@@ -772,11 +668,11 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         self.pooler = TFMobileBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
