@@ -16,6 +16,7 @@
 """TF general model utils."""
 
 import functools
+import inspect
 import os
 import re
 import warnings
