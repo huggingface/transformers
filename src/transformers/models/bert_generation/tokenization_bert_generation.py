@@ -58,6 +58,7 @@ class BertGenerationTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = {"vocab_file": {"bert_for_seq_generation": tokenizer_url}}
     max_model_input_sizes = {"bert_for_seq_generation": 512}
     prefix_tokens: List[int] = []
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
