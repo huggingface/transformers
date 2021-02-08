@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 
+import tensorflow as tf
+import tensorflow_datasets as tfds
 
 from transformers import (  # isort: split
     AutoConfig,
@@ -42,13 +44,6 @@ from transformers.utils import logging as hf_logging
 hf_logging.set_verbosity_info()
 hf_logging.enable_default_handler()
 hf_logging.enable_explicit_format()
-
-import tensorflow as tf
-import tensorflow_datasets as tfds
-
-
-logging.set_verbosity_info()
-logging.enable_explicit_format()
 
 
 class Split(Enum):
