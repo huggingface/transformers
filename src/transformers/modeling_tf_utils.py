@@ -1240,7 +1240,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         # composed models, *e.g.* TFRag, require special treatment when it comes to loading
         # pre-trained weights.
-        if "load_weight_prefix" in inspect.signature(cls.__init__).parameters.keys():
+        if (
+            "load_weight_prefix" in inspect.signature(cls.__init__).parameters.keys()
+            and model_kwargs.get("name") is not None
+        ):
             model_kwargs["load_weight_prefix"] = load_weight_prefix + "/" + model_kwargs.get("name")
 
         # Instantiate model.
