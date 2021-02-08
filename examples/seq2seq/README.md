@@ -33,7 +33,9 @@ This directory is in a bit of messy state and is undergoing some cleaning, pleas
 
 ## New script
 
-The new script for fine-tuning a model on a summarization or translation task is `run_seq2seq.py`. It is a lightweight example of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (json or csv), then fine-tune one of the architectures above on it.
+The new script for fine-tuning a model on a summarization or translation task is `run_seq2seq.py`. It is a lightweight example of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
+
+For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets.html#json-files
 
 Here is an example on a summarization task:
 ```bash
@@ -50,22 +52,22 @@ python examples/seq2seq/run_seq2seq.py \
     --predict_with_generate
 ```
 
-And here is how you would use it on your own files (replace `path_to_csv_or_json_file`, `text_column_name` and `summary_column_name` by the relevant values):
+And here is how you would use it on your own files (replace `path_to_csv_or_jsonlines_file`, `text_column_name` and `summary_column_name` by the relevant values):
 ```bash
 python examples/seq2seq/run_seq2seq.py \
-    -model_name_or_path t5-small \
+    --model_name_or_path t5-small \
     --do_train \
     --do_eval \
     --task summarization \
-    --train_file path_to_csv_or_json_file \
-    --validation_file path_to_csv_or_json_file \
+    --train_file path_to_csv_or_jsonlines_file \
+    --validation_file path_to_csv_or_jsonlines_file \
     --output_dir ~/tmp/tst-summarization \
     --overwrite_output_dir \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --predict_with_generate \
     --text_column text_column_name \
-    --summary_column summary_column_name 
+    --summary_column summary_column_name
 ```
 The training and validation files should have a column for the inputs texts and a column for the summaries.
 
@@ -87,7 +89,7 @@ python examples/seq2seq/run_seq2seq.py \
     --predict_with_generate
 ```
 
-And here is how you would use it on your own files (replace `path_to_json_file`, by the relevant values):
+And here is how you would use it on your own files (replace `path_to_jsonlines_file`, by the relevant values):
 ```bash
 python examples/seq2seq/run_seq2seq.py \
     --model_name_or_path sshleifer/student_marian_en_ro_6_1 \
@@ -98,15 +100,15 @@ python examples/seq2seq/run_seq2seq.py \
     --dataset_config_name ro-en \
     --source_lang en_XX \
     --target_lang ro_RO\
-    --train_file path_to_json_file \
-    --validation_file path_to_json_file \
+    --train_file path_to_jsonlines_file \
+    --validation_file path_to_jsonlines_file \
     --output_dir ~/tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
     --predict_with_generate
 ```
-Here the files are expected to be JSON files, with each input being a dictionary with a key `"translation"` containing one key per language (here `"en"` and `"ro"`).
+Here the files are expected to be JSONLINES files, with each input being a dictionary with a key `"translation"` containing one key per language (here `"en"` and `"ro"`).
 
 ## Old script
 
@@ -162,7 +164,7 @@ https://github.com/huggingface/transformers/tree/master/scripts/fsmt
 
 #### Pegasus (multiple datasets)
 
-Multiple eval datasets are available for download from: 
+Multiple eval datasets are available for download from:
 https://github.com/stas00/porting/tree/master/datasets/pegasus
 
 
@@ -294,8 +296,8 @@ th 56 \
 ```
 
 ### Multi-GPU Evaluation
-here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases 
-because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have 
+here is a command to run xsum evaluation on 8 GPUS. It is more than linearly faster than run_eval.py in some cases
+because it uses SortishSampler to minimize padding. You can also use it on 1 GPU. `data_dir` must have
 `{type_path}.source` and `{type_path}.target`. Run `./run_distributed_eval.py --help` for all clargs.
 
 ```bash
@@ -320,17 +322,17 @@ When using `run_eval.py`, the following features can be useful:
    `--info` is an additional argument available for the same purpose of tracking the conditions of the experiment. It's useful to pass things that weren't in the argument list, e.g. a language pair `--info "lang:en-ru"`. But also if you pass `--info` without a value it will fallback to the current date/time string, e.g. `2020-09-13 18:44:43`.
 
    If using `--dump-args --info`, the output will be:
-   
+
    ```
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': '2020-09-13 18:44:43'}
    ```
 
    If using `--dump-args --info "pair:en-ru chkpt=best`, the output will be:
-   
+
    ```
    {'bleu': 26.887, 'n_obs': 10, 'runtime': 1, 'seconds_per_sample': 0.1, 'num_beams': 8, 'early_stopping': True, 'info': 'pair=en-ru chkpt=best'}
    ```
-      
+
 
 * if you need to perform a parametric search in order to find the best ones that lead to the highest BLEU score, let `run_eval_search.py` to do the searching for you.
 
@@ -341,14 +343,14 @@ When using `run_eval.py`, the following features can be useful:
     --search "num_beams=5:10 length_penalty=0.8:1.0:1.2 early_stopping=true:false"
    ```
    which will generate `12` `(2*3*2)` searches for a product of each hparam. For example the example that was just used will invoke `run_eval.py` repeatedly with:
-   
+
    ```
     --num_beams 5 --length_penalty 0.8 --early_stopping true
     --num_beams 5 --length_penalty 0.8 --early_stopping false
     [...]
     --num_beams 10 --length_penalty 1.2 --early_stopping false
    ```
-   
+
    On completion, this function prints a markdown table of the results sorted by the best BLEU score and the winning arguments.
 
 ```
@@ -381,7 +383,7 @@ pytest examples/seq2seq/
 ### Converting pytorch-lightning checkpoints
 pytorch lightning ``-do_predict`` often fails, after you are done training, the best way to evaluate your model is to convert it.
 
-This should be done for you, with a file called `{save_dir}/best_tfmr`. 
+This should be done for you, with a file called `{save_dir}/best_tfmr`.
 
 If that file doesn't exist but you have a lightning `.ckpt` file, you can run
 ```bash
@@ -390,7 +392,7 @@ python convert_pl_checkpoint_to_hf.py PATH_TO_CKPT  randomly_initialized_hf_mode
 Then either `run_eval` or `run_distributed_eval` with `save_dir/best_tfmr` (see previous sections)
 
 
-# Experimental Features 
+# Experimental Features
 These features are harder to use and not always useful.
 
 ###  Dynamic Batch Size for MT
@@ -401,7 +403,7 @@ This feature can only be used:
 - without sortish sampler
 - after calling `./save_len_file.py $tok $data_dir`
 
-For example, 
+For example,
 ```bash
 ./save_len_file.py Helsinki-NLP/opus-mt-en-ro  wmt_en_ro
 ./dynamic_bs_example.sh --max_tokens_per_batch=2000 --output_dir benchmark_dynamic_bs
@@ -417,4 +419,3 @@ uses 12,723 batches of length 48 and takes slightly more time 9.5 minutes.
 The feature is still experimental, because:
 + we can make it much more robust if we have memory mapped/preprocessed datasets.
 + The speedup over sortish sampler is not that large at the moment.
-
