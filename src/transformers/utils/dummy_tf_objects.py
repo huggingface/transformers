@@ -1712,28 +1712,3 @@ def create_optimizer(*args, **kwargs):
 class TFTrainer:
     def __init__(self, *args, **kwargs):
         requires_tf(self)
-
-
-class KeepNCheckpoints:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
-class LearningRateLoggingCallback:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
-class PastStateCallback:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
-class F1AndAccuracyMeanScore:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
-
-
-class F1Score:
-    def __init__(self, *args, **kwargs):
-        requires_tf(self)
