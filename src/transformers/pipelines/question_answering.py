@@ -196,8 +196,9 @@ class QuestionAnsweringPipeline(Pipeline):
             A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **score** (:obj:`float`) -- The probability associated to the answer.
-            - **start** (:obj:`int`) -- The start index of the answer (in the tokenized version of the input).
-            - **end** (:obj:`int`) -- The end index of the answer (in the tokenized version of the input).
+            - **start** (:obj:`int`) -- The character start index of the answer (in the tokenized version of the
+              input).
+            - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
