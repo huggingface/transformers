@@ -1,8 +1,7 @@
 import uuid
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
-from ..tokenization_utils import TruncationStrategy
 from ..utils import logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -70,8 +69,6 @@ class Conversation:
         self.past_user_inputs: List[str] = past_user_inputs
         self.generated_responses: List[str] = generated_responses
         self.new_user_input: Optional[str] = text
-        self._index: int = 0
-        self._history: List[int] = []
 
     def __eq__(self, other):
         if not isinstance(other, Conversation):
@@ -128,6 +125,19 @@ class Conversation:
         """
         self.generated_responses.append(response)
 
+    def iter_texts(self):
+        """
+        Iterates over all blobs of the conversation.
+
+        Retuns: Iterator of (is_user, text_chunk) in chronological order of the conversation. ``is_user`` is a
+        :obj:`bool`, ``text_chunks`` is a :obj:`str`.
+        """
+        for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
+            yield True, user_input
+            yield False, generated_response
+        if self.new_user_input:
+            yield True, self.new_user_input
+
     def __repr__(self):
         """
         Generates a string representation of the conversation.
@@ -139,11 +149,9 @@ class Conversation:
             suggestions? bot >> The Big Lebowski
         """
         output = "Conversation id: {} \n".format(self.uuid)
-        for user_input, generated_response in zip(self.past_user_inputs, self.generated_responses):
-            output += "user >> {} \n".format(user_input)
-            output += "bot >> {} \n".format(generated_response)
-        if self.new_user_input is not None:
-            output += "user >> {} \n".format(self.new_user_input)
+        for is_user, text in self.iter_texts():
+            name = "user" if is_user else "bot"
+            output += "{} >> {} \n".format(name, text)
         return output
 
 
@@ -191,34 +199,6 @@ class ConversationalPipeline(Pipeline):
 
         self.min_length_for_response = min_length_for_response
 
-    def _get_history(self, conversation):
-        """
-        Private function (subject to change) that simply tokenizes and concatenates past inputs. Also saves that
-        tokenization into the conversation state.
-
-        Args:
-            conversation (:class:`~transformers.Conversation`)
-
-        Returns:
-            :obj:`List[int]`: The list of tokens for the past input of that conversation.
-        """
-        # Make a copy to prevent messing cache up if there's an error
-        # within this function
-        history = conversation._history.copy()
-        index = conversation._index
-        new_index = index
-        for i, (past_user_input, generated_response) in enumerate(
-            zip(conversation.past_user_inputs[index:], conversation.generated_responses[index:])
-        ):
-            for el in (past_user_input, generated_response):
-                new_history = self._parse_and_tokenize([el])[0]
-                history.extend(new_history)
-            new_index = i + index + 1
-        conversation._index = new_index
-        conversation._history = history
-        # Hand back a copy to caller so they can't accidently modify our cache.
-        return history.copy()
-
     def __call__(
         self,
         conversations: Union[Conversation, List[Conversation]],
@@ -249,7 +229,7 @@ class ConversationalPipeline(Pipeline):
             for conversation in conversations:
                 assert isinstance(
                     conversation, Conversation
-                ), "DialoguePipeline expects a Conversation or list of Conversations as an input"
+                ), "ConversationalPipeline expects a Conversation or list of Conversations as an input"
                 if conversation.new_user_input is None:
                     raise ValueError(
                         "Conversation with UUID {} does not contain new user input to process. "
@@ -261,14 +241,11 @@ class ConversationalPipeline(Pipeline):
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
             ), "Please make sure that the tokenizer has a pad_token_id or eos_token_id when using a batch input"
         else:
-            raise ValueError("DialoguePipeline expects a Conversation or list of Conversations as an input")
+            raise ValueError("ConversationalPipeline expects a Conversation or list of Conversations as an input")
 
         with self.device_placement():
 
-            inputs = self._parse_and_tokenize([conversation.new_user_input for conversation in conversations])
-            histories = [self._get_history(conversation) for conversation in conversations]
-            max_length = generate_kwargs.get("max_length", self.model.config.max_length)
-            inputs = self._concat_inputs_history(inputs, histories, max_length)
+            inputs = self._parse_and_tokenize(conversations)
 
             if self.framework == "pt":
                 inputs = self.ensure_tensor_on_device(**inputs)
@@ -277,11 +254,6 @@ class ConversationalPipeline(Pipeline):
             elif self.framework == "tf":
                 input_length = tf.shape(inputs["input_ids"])[-1].numpy()
 
-            if input_length > 0.9 * max_length:
-                logger.warning(
-                    "Longest conversation length: {} is bigger than 0.9 * max_length: {}. "
-                    "You might consider trimming the early phase of the conversation".format(input_length, max_length)
-                )
             generated_responses = self.model.generate(
                 inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
@@ -318,18 +290,6 @@ class ConversationalPipeline(Pipeline):
             else:
                 return output
 
-    def _parse_and_tokenize(
-        self, inputs, add_special_tokens=False, padding=False, truncation=TruncationStrategy.DO_NOT_TRUNCATE, **kwargs
-    ):
-        """
-        Parse arguments and tokenize, adding an EOS token at the end of the user input
-        """
-        # Parse arguments
-        inputs = self.tokenizer(inputs, add_special_tokens=add_special_tokens, padding=padding).get("input_ids", [])
-        for input in inputs:
-            input.append(self.tokenizer.eos_token_id)
-        return inputs
-
     def _clean_padding_history(self, generated_tensor) -> List[List[int]]:
         """
         Cleans the padding history. Padding may be generated in two places when multiple conversations are provided as
@@ -363,28 +323,23 @@ class ConversationalPipeline(Pipeline):
             outputs.append(sequence_tokens)
         return outputs
 
-    def _concat_inputs_history(self, inputs: List[List[int]], histories: List[Optional[List[int]]], max_length: int):
-        """
-        Builds an input prepended by the history for this conversation, allowing multi-turn conversation with context
-        """
-        outputs = []
-        for new_input, history in zip(inputs, histories):
-            if history is not None:
-                new_input = history + new_input
-            if len(new_input) > max_length - self.min_length_for_response:
-                cutoff_eos_index = 0
-                while len(new_input) - cutoff_eos_index > max_length - self.min_length_for_response:
-                    if cutoff_eos_index >= len(new_input):
-                        break
-                    cutoff_eos_index = new_input[cutoff_eos_index:].index(self.tokenizer.eos_token_id)
-                    if cutoff_eos_index == 0 or cutoff_eos_index == len(new_input) - 1:
-                        break
-                    else:
-                        logger.warning(
-                            f"Cutting history off because it's too long ({len(new_input)} > {max_length - self.min_length_for_response}) for underlying model"
-                        )
-            outputs.append(new_input)
-        padded_outputs = self.tokenizer.pad(
-            {"input_ids": outputs}, padding="longest", return_attention_mask=True, return_tensors=self.framework
+    def _legacy_parse_and_tokenize(self, conversation: List[Conversation]) -> List[int]:
+        eos_token_id = self.tokenizer.eos_token_id
+        input_ids = []
+        for is_user, text in conversation.iter_texts():
+            input_ids.extend(self.tokenizer.encode(text, add_special_tokens=False) + [eos_token_id])
+
+        if len(input_ids) > self.tokenizer.model_max_length:
+            input_ids = input_ids[-self.model_max_length :]
+        return input_ids
+
+    def _parse_and_tokenize(self, conversations: List[Conversation]) -> Dict[str, Any]:
+        if hasattr(self.tokenizer, "_build_conversation_input_ids"):
+            input_ids = [self.tokenizer._build_conversation_input_ids(conversation) for conversation in conversations]
+        else:
+            # If the tokenizer cannot handle conversations, we default to only the old version
+            input_ids = [self._legacy_parse_and_tokenize(conversation) for conversation in conversations]
+        inputs = self.tokenizer.pad(
+            {"input_ids": input_ids}, padding="longest", return_attention_mask=True, return_tensors="pt"
         )
-        return padded_outputs
+        return inputs
