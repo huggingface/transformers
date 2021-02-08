@@ -277,10 +277,6 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_onnx_compliancy(self):
-        # Not mandatory for BART
-        pass
-
     def test_mixed_precision(self):
         # TODO JP: Make BART float16 compliant
         pass

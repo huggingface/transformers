@@ -205,7 +205,9 @@ class TFModelTesterMixin:
     def test_onnx_compliancy(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         INTERNAL_OPS = [
+            "Assert",
             "AssignVariableOp",
+            "EmptyTensorList",
             "ReadVariableOp",
             "ResourceGather",
             "TruncatedNormal",
@@ -233,7 +235,7 @@ class TFModelTesterMixin:
                 if op not in onnx_ops and op not in INTERNAL_OPS:
                     incompatible_ops.append(op)
 
-            self.assertEqual(len(incompatible_ops), 0)
+            self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
 
     @slow
     def test_saved_model_creation_extended(self):

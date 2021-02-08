@@ -395,10 +395,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make GPT2 XLA compliant
         pass
 
-    def test_onnx_compliancy(self):
-        # Not mandatory for GPT2
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

@@ -26,7 +26,9 @@ REPO_PATH = "."
 
 # Internal TensorFlow ops that can be safely ignored (mostly specific to a saved model)
 INTERNAL_OPS = [
+    "Assert",
     "AssignVariableOp",
+    "EmptyTensorList",
     "MergeV2Checkpoints",
     "ReadVariableOp",
     "ResourceGather",
