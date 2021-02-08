@@ -1593,9 +1593,12 @@ class Trainer:
         )
 
         if self.args.deepspeed and not self.args.do_train:
-            # In the future we probably can run deepspeed for inference too, but this will require some thinking about how to best run it - since while it works DeepSpeed wasn't designed for inference
+            # In the future we probably can run deepspeed for inference too, but this will require
+            # some thinking about how to best run it - since while it works DeepSpeed wasn't
+            # designed for inference
 
-            # since we have to postpone model.to() till training for DeepSpeed, if there was no training, we must put the model on the right device
+            # since we have to postpone model.to() till training for DeepSpeed, if there was no
+            # training, we must put the model on the right device
             self.model = self.model.to(self.args.device)
 
         model = self.model
