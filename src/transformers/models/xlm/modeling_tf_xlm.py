@@ -97,7 +97,7 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
         attn_mask = tf.less_equal(
-            tf.tile(tf.expand_dims(alen, axis=0), (bs, slen, 1)), tf.expand_dims(tf.expand_dims(alen, axis=1), axis=0)
+            tf.tile(tf.reshape(alen, (1, 1, slen)), (bs, slen, 1)), tf.reshape(alen, (1, slen, 1))
         )
     else:
         attn_mask = mask
