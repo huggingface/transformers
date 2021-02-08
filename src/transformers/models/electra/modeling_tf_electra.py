@@ -14,9 +14,10 @@
 # limitations under the License.
 """ TF Electra model. """
 
+import math
 import warnings
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -70,122 +71,6 @@ TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertWordEmbeddings
-class TFElectraWordEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.weight = self.add_weight(
-            name="weight",
-            shape=[self.vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "vocab_size": self.vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, input_ids: tf.Tensor) -> tf.Tensor:
-        flat_input_ids = tf.reshape(tensor=input_ids, shape=[-1])
-        embeddings = tf.gather(params=self.weight, indices=flat_input_ids)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(input_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(input_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertTokenTypeEmbeddings
-class TFElectraTokenTypeEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, type_vocab_size: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.type_vocab_size = type_vocab_size
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.token_type_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.type_vocab_size, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "type_vocab_size": self.type_vocab_size,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, token_type_ids: tf.Tensor) -> tf.Tensor:
-        flat_token_type_ids = tf.reshape(tensor=token_type_ids, shape=[-1])
-        one_hot_data = tf.one_hot(indices=flat_token_type_ids, depth=self.type_vocab_size, dtype=self._compute_dtype)
-        embeddings = tf.matmul(a=one_hot_data, b=self.token_type_embeddings)
-        embeddings = tf.reshape(
-            tensor=embeddings, shape=tf.concat(values=[shape_list(token_type_ids), [self.hidden_size]], axis=0)
-        )
-
-        embeddings.set_shape(token_type_ids.shape.as_list() + [self.hidden_size])
-
-        return embeddings
-
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPositionEmbeddings
-class TFElectraPositionEmbeddings(tf.keras.layers.Layer):
-    def __init__(self, max_position_embeddings: int, hidden_size: int, initializer_range: float, **kwargs):
-        super().__init__(**kwargs)
-
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.initializer_range = initializer_range
-
-    def build(self, input_shape: tf.TensorShape):
-        self.position_embeddings = self.add_weight(
-            name="embeddings",
-            shape=[self.max_position_embeddings, self.hidden_size],
-            initializer=get_initializer(self.initializer_range),
-        )
-
-        super().build(input_shape)
-
-    def get_config(self) -> Dict[str, Any]:
-        config = {
-            "max_position_embeddings": self.max_position_embeddings,
-            "hidden_size": self.hidden_size,
-            "initializer_range": self.initializer_range,
-        }
-        base_config = super().get_config()
-
-        return dict(list(base_config.items()) + list(config.items()))
-
-    def call(self, position_ids: tf.Tensor) -> tf.Tensor:
-        input_shape = shape_list(position_ids)
-        position_embeddings = self.position_embeddings[: input_shape[1], :]
-
-        return tf.broadcast_to(input=position_embeddings, shape=input_shape)
-
-
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Electra
 class TFElectraSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: ElectraConfig, **kwargs):
@@ -197,30 +82,28 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
                 f"of attention heads ({config.num_attention_heads})"
             )
 
+        self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
 
-        self.query = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cde->abde",
-            output_shape=(None, config.num_attention_heads, self.attention_head_size),
-            bias_axes="de",
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="query",
+        self.query = tf.keras.layers.Dense(
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
-        self.key = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cde->abde",
-            output_shape=(None, config.num_attention_heads, self.attention_head_size),
-            bias_axes="de",
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="key",
+        self.key = tf.keras.layers.Dense(
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
-        self.value = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cde->abde",
-            output_shape=(None, config.num_attention_heads, self.attention_head_size),
-            bias_axes="de",
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="value",
+        self.value = tf.keras.layers.Dense(
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
+
+    def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
+
+        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
+        return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def call(
         self,
@@ -230,15 +113,20 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         output_attentions: bool,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
-        query_layer = self.query(inputs=hidden_states)
-        key_layer = self.key(inputs=hidden_states)
-        value_layer = self.value(inputs=hidden_states)
+        batch_size = shape_list(hidden_states)[0]
+        mixed_query_layer = self.query(inputs=hidden_states)
+        mixed_key_layer = self.key(inputs=hidden_states)
+        mixed_value_layer = self.value(inputs=hidden_states)
+        query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
+        key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
+        value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
-        dk = tf.cast(self.attention_head_size, dtype=query_layer.dtype)
-        query_layer = tf.multiply(query_layer, tf.math.rsqrt(dk))
-        attention_scores = tf.einsum("aecd,abcd->acbe", key_layer, query_layer)
+        # (batch size, num_heads, seq_len_q, seq_len_k)
+        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
+        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
+        attention_scores = tf.divide(attention_scores, dk)
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFElectraModel call() function)
@@ -255,7 +143,11 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         if head_mask is not None:
             attention_probs = tf.multiply(attention_probs, head_mask)
 
-        attention_output = tf.einsum("acbe,aecd->abcd", attention_probs, value_layer)
+        attention_output = tf.matmul(attention_probs, value_layer)
+        attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
+
+        # (batch_size, seq_len_q, all_head_size)
+        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
         outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         return outputs
@@ -266,21 +158,8 @@ class TFElectraSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: ElectraConfig, **kwargs):
         super().__init__(**kwargs)
 
-        if config.hidden_size % config.num_attention_heads != 0:
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
-                f"of attention heads ({config.num_attention_heads})"
-            )
-
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = config.num_attention_heads * self.attention_head_size
-
-        self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation="abcd,cde->abe",
-            output_shape=(None, self.all_head_size),
-            bias_axes="e",
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
@@ -332,12 +211,8 @@ class TFElectraIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: ElectraConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cd->abd",
-            output_shape=(None, config.intermediate_size),
-            bias_axes="d",
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = tf.keras.layers.Dense(
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -357,12 +232,8 @@ class TFElectraOutput(tf.keras.layers.Layer):
     def __init__(self, config: ElectraConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.dense = tf.keras.layers.experimental.EinsumDense(
-            equation="abc,cd->abd",
-            bias_axes="d",
-            output_shape=(None, config.hidden_size),
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
@@ -485,35 +356,46 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
-        self.word_embeddings = TFElectraWordEmbeddings(
-            vocab_size=config.vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="word_embeddings",
-        )
-        self.position_embeddings = TFElectraPositionEmbeddings(
-            max_position_embeddings=config.max_position_embeddings,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = TFElectraTokenTypeEmbeddings(
-            type_vocab_size=config.type_vocab_size,
-            hidden_size=config.embedding_size,
-            initializer_range=config.initializer_range,
-            name="token_type_embeddings",
-        )
+        self.vocab_size = config.vocab_size
+        self.type_vocab_size = config.type_vocab_size
+        self.embedding_size = config.embedding_size
+        self.max_position_embeddings = config.max_position_embeddings
+        self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
+    def build(self, input_shape: tf.TensorShape):
+        with tf.name_scope("word_embeddings"):
+            self.weight = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.embedding_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        with tf.name_scope("token_type_embeddings"):
+            self.token_type_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.type_vocab_size, self.embedding_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.embedding_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        super().build(input_shape)
+
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertEmbeddings.call
     def call(
         self,
-        input_ids: tf.Tensor,
-        position_ids: tf.Tensor,
-        token_type_ids: tf.Tensor,
-        inputs_embeds: tf.Tensor,
+        input_ids: tf.Tensor = None,
+        position_ids: tf.Tensor = None,
+        token_type_ids: tf.Tensor = None,
+        inputs_embeds: tf.Tensor = None,
         training: bool = False,
     ) -> tf.Tensor:
         """
@@ -525,18 +407,19 @@ class TFElectraEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = self.word_embeddings(input_ids=input_ids)
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            input_shape = shape_list(tensor=inputs_embeds)[:-1]
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
-            position_embeds = self.position_embeddings(position_ids=inputs_embeds)
-        else:
-            position_embeds = self.position_embeddings(position_ids=position_ids)
+            position_ids = tf.range(start=0, limit=input_shape[-1])[tf.newaxis, :]
 
-        token_type_embeds = self.token_type_embeddings(token_type_ids=token_type_ids)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
@@ -605,11 +488,11 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         self.config = config
 
     def get_input_embeddings(self):
-        return self.embeddings.word_embeddings
+        return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings.weight = value
-        self.embeddings.word_embeddings.vocab_size = shape_list(value)[0]
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -1057,9 +940,7 @@ class TFElectraForMaskedLM(TFElectraPreTrainedModel, TFMaskedLanguageModelingLos
         else:
             self.activation = config.hidden_act
 
-        self.generator_lm_head = TFElectraMaskedLMHead(
-            config, self.electra.embeddings.word_embeddings, name="generator_lm_head"
-        )
+        self.generator_lm_head = TFElectraMaskedLMHead(config, self.electra.embeddings, name="generator_lm_head")
 
     def get_lm_head(self):
         return self.generator_lm_head

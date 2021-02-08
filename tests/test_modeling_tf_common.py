@@ -866,7 +866,8 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs = copy.deepcopy(inputs_dict)
+
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -881,6 +882,8 @@ class TFModelTesterMixin:
             else:
                 inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
 
             model(inputs)
 
@@ -890,7 +893,8 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs = copy.deepcopy(inputs_dict)
+
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -905,6 +909,8 @@ class TFModelTesterMixin:
             else:
                 inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
 
             @tf.function
             def run_in_graph_mode():
