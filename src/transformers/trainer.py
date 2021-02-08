@@ -932,7 +932,11 @@ class Trainer:
                 if (step + 1) % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
-                if ((step + 1) % self.args.gradient_accumulation_steps != 0) and self.args.local_rank != -1:
+                if (
+                    ((step + 1) % self.args.gradient_accumulation_steps != 0)
+                    and self.args.local_rank != -1
+                    and not self.args.deepspeed
+                ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
                         tr_loss += self.training_step(model, inputs)
@@ -1588,7 +1592,17 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
+        if self.args.deepspeed and not self.args.do_train:
+            # In the future we probably can run deepspeed for inference too, but this will require
+            # some thinking about how to best run it - since while it works DeepSpeed wasn't
+            # designed for inference
+
+            # since we have to postpone model.to() till training for DeepSpeed, if there was no
+            # training, we must put the model on the right device
+            self.model = self.model.to(self.args.device)
+
         model = self.model
+
         # multi-gpu eval
         if self.args.n_gpu > 1:
             model = torch.nn.DataParallel(model)
