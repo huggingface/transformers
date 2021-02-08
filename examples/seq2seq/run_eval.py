@@ -132,8 +132,14 @@ def run_generate(verbose=True):
     if args.n_obs > 0:
         examples = examples[: args.n_obs]
     Path(args.save_path).parent.mkdir(exist_ok=True)
+
     if args.reference_path is None and Path(args.score_path).exists():
         warnings.warn(f"score_path {args.score_path} will be overwritten unless you type ctrl-c.")
+
+    if args.device == "cpu" and args.fp16:
+        # this mix leads to RuntimeError: "threshold_cpu" not implemented for 'Half'
+        raise ValueError("Can't mix --fp16 and --device cpu")
+
     runtime_metrics = generate_summaries_or_translations(
         examples,
         args.save_path,
