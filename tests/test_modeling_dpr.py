@@ -261,10 +261,11 @@ class DPRModelIntegrationTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(output[:, :10], expected_slice, atol=1e-4))
 
-    @slow
+    # @slow
     def test_reader_inference(self):
         tokenizer = DPRReaderTokenizer.from_pretrained("facebook/dpr-reader-single-nq-base")
         model = DPRReader.from_pretrained("facebook/dpr-reader-single-nq-base")
+        model.to(torch_device)
 
         encoded_inputs = tokenizer(
             questions="What is love ?",
@@ -273,6 +274,7 @@ class DPRModelIntegrationTest(unittest.TestCase):
             padding=True,
             return_tensors="pt",
         )
+        encoded_inputs.to(torch_device)
 
         outputs = model(**encoded_inputs)
 
