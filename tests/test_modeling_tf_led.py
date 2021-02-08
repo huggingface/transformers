@@ -353,10 +353,6 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
 
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
     def test_mixed_precision(self):
         # TODO JP: Make LED float16 compliant
         pass
@@ -375,6 +371,22 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
         # This is due to the tf.concat call line 703 that adds one dimension
         # Need to check with PVP how to properly fix this
+        pass
+
+    @slow
+    def test_saved_model_with_hidden_states_output(self):
+        # Temporarily disable this test in order to find
+        # how to better handle it without timing out the CI
+        pass
+
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
+
+    @slow
+    def test_saved_model_creation_extended(self):
+        # Temporarily disable this test in order to find
+        # how to better handle it without timing out the CI
         pass
 
 
