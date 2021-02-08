@@ -1730,7 +1730,6 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
     Returns:
         :obj:`List[int]`: The shape of the tensor as a list.
     """
-<<<<<<< HEAD
     dynamic = tf.shape(tensor)
 
     if tensor.shape == tf.TensorShape(None):
@@ -1738,10 +1737,6 @@ def shape_list(tensor: tf.Tensor) -> List[int]:
 
     static = tensor.shape.as_list()
 
-=======
-    static = tensor.shape.as_list()
-    dynamic = tf.shape(tensor)
->>>>>>> b25eb9f0f... Start the new trainer version
     return [dynamic[i] if s is None else s for i, s in enumerate(static)]
 
 
