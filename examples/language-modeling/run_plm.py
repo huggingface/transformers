@@ -300,6 +300,13 @@ def main():
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+    if data_args.max_seq_length > tokenizer.model_max_length:
+        logger.warn(
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+        )
+    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+
     if data_args.line_by_line:
         # When using line_by_line, we just tokenize each nonempty line.
         padding = "max_length" if data_args.pad_to_max_length else False
@@ -307,7 +314,7 @@ def main():
         def tokenize_function(examples):
             # Remove empty lines
             examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-            return tokenizer(examples["text"], padding=padding, truncation=True, max_length=data_args.max_seq_length)
+            return tokenizer(examples["text"], padding=padding, truncation=True, max_length=max_seq_length)
 
         tokenized_datasets = datasets.map(
             tokenize_function,
@@ -328,13 +335,6 @@ def main():
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
-
-        if data_args.max_seq_length > tokenizer.model_max_length:
-            logger.warn(
-                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-            )
-        max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
         # Main data processing function that will concatenate all texts from our dataset and generate chunks of
         # max_seq_length.
