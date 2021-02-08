@@ -353,10 +353,6 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
 
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
     def test_mixed_precision(self):
         # TODO JP: Make LED float16 compliant
         pass
