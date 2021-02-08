@@ -176,7 +176,7 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    def _build_conversation_input_ids(self, conversation: Conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         """This corresponds to DialoGPT variants of models."""
         input_ids = []
         for is_user, text in conversation.iter_texts():

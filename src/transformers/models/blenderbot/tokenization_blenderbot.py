@@ -77,7 +77,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         """
         return token_ids_0 + [self.eos_token_id]
 
-    def _build_conversation_input_ids(self, conversation: Conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
         inputs = []
         for is_user, text in conversation.iter_texts():
             if is_user:
