@@ -56,12 +56,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 
 
-@add_end_docstrings(
-    INIT_TOKENIZER_DOCSTRING,
-    """
-    .. automethod:: __call__
-    """,
-)
+@add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
     Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
