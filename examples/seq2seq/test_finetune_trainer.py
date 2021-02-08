@@ -18,7 +18,7 @@ import unittest
 from unittest.mock import patch
 
 from transformers.file_utils import is_apex_available
-from transformers.integrations import is_deepspeed_available, is_fairscale_available
+from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
@@ -50,17 +50,6 @@ def require_fairscale(test_case):
 
 
 # a candidate for testing_utils
-def require_deepspeed(test_case):
-    """
-    Decorator marking a test that requires deepspeed
-    """
-    if not is_deepspeed_available():
-        return unittest.skip("test requires deepspeed")(test_case)
-    else:
-        return test_case
-
-
-# a candidate for testing_utils
 def require_apex(test_case):
     """
     Decorator marking a test that requires apex
@@ -72,8 +61,8 @@ def require_apex(test_case):
 
 
 class TestFinetuneTrainer(TestCasePlus):
-    def finetune_trainer_quick(self, distributed=None, deepspeed=False, extra_args_str=None):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, deepspeed, extra_args_str)
+    def finetune_trainer_quick(self, distributed=None, extra_args_str=None):
+        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, extra_args_str)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
         first_step_stats = eval_metrics[0]
@@ -107,16 +96,6 @@ class TestFinetuneTrainer(TestCasePlus):
     def test_finetune_trainer_apex(self):
         self.finetune_trainer_quick(extra_args_str="--fp16 --fp16_backend=apex")
 
-    @require_torch_multi_gpu
-    @require_deepspeed
-    def test_finetune_trainer_deepspeed(self):
-        self.finetune_trainer_quick(deepspeed=True)
-
-    @require_torch_multi_gpu
-    @require_deepspeed
-    def test_finetune_trainer_deepspeed_grad_acum(self):
-        self.finetune_trainer_quick(deepspeed=True, extra_args_str="--gradient_accumulation_steps 2")
-
     @slow
     def test_finetune_trainer_slow(self):
         # There is a missing call to __init__process_group somewhere
@@ -146,7 +125,6 @@ class TestFinetuneTrainer(TestCasePlus):
         model_name: str,
         num_train_epochs: int,
         distributed: bool = False,
-        deepspeed: bool = False,
         extra_args_str: str = None,
     ):
         data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
@@ -186,15 +164,7 @@ class TestFinetuneTrainer(TestCasePlus):
         if extra_args_str is not None:
             args.extend(extra_args_str.split())
 
-        if deepspeed:
-            ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config.json".split()
-            distributed_args = f"""
-                {self.test_file_dir}/finetune_trainer.py
-            """.split()
-            cmd = ["deepspeed"] + distributed_args + args + ds_args
-            execute_subprocess_async(cmd, env=self.get_env())
-
-        elif distributed:
+        if distributed:
             n_gpu = get_gpu_count()
             distributed_args = f"""
                 -m torch.distributed.launch
@@ -203,7 +173,6 @@ class TestFinetuneTrainer(TestCasePlus):
             """.split()
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
-
         else:
             testargs = ["finetune_trainer.py"] + args
             with patch.object(sys, "argv", testargs):
