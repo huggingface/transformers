@@ -22,15 +22,11 @@ if is_tf_available() and is_datasets_available() and is_faiss_available():
 
     from transformers import (
         AutoConfig,
-        BartTokenizer,
-        DPRQuestionEncoderTokenizer,
         RagConfig,
         RagRetriever,
         RagTokenizer,
         TFAutoModel,
         TFAutoModelForSeq2SeqLM,
-        TFBartForConditionalGeneration,
-        TFDPRQuestionEncoder,
         TFRagModel,
         TFRagSequenceForGeneration,
         TFRagTokenForGeneration,
@@ -935,7 +931,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         )
 
         input_ids = input_dict.input_ids
-        attention_mask = input_dict.attention_mask
 
         question_hidden_states = rag_sequence.question_encoder(input_ids)[0]
         docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
