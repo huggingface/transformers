@@ -14,11 +14,14 @@
 # limitations under the License.
 """Tokenization class for Blenderbot."""
 
-from typing import List
+from typing import TYPE_CHECKING, List
 
 from ...utils import logging
 from ..roberta.tokenization_roberta import RobertaTokenizer
 
+
+if TYPE_CHECKING:
+    from transformers.pipelines.conversational import Conversation
 
 logger = logging.get_logger(__name__)
 
@@ -74,7 +77,7 @@ class BlenderbotTokenizer(RobertaTokenizer):
         """
         return token_ids_0 + [self.eos_token_id]
 
-    def _build_conversation_input_ids(self, conversation) -> List[int]:
+    def _build_conversation_input_ids(self, conversation: Conversation) -> List[int]:
         inputs = []
         for is_user, text in conversation.iter_texts():
             if is_user:
