@@ -39,6 +39,7 @@ if is_torch_available():
         "MarianModel",
         "MarianMTModel",
         "MarianPreTrainedModel",
+        "MarianForCausalLM",
     ]
 
 if is_tf_available():
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_marian import (
             MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MarianForCausalLM,
             MarianModel,
             MarianMTModel,
             MarianPreTrainedModel,

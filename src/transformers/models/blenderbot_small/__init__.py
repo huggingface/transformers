@@ -31,6 +31,7 @@ if is_torch_available():
         "BlenderbotSmallForConditionalGeneration",
         "BlenderbotSmallModel",
         "BlenderbotSmallPreTrainedModel",
+        "BlenderbotSmallForCausalLM",
     ]
 
 if is_tf_available():
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_blenderbot_small import (
             BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BlenderbotSmallForCausalLM,
             BlenderbotSmallForConditionalGeneration,
             BlenderbotSmallModel,
             BlenderbotSmallPreTrainedModel,

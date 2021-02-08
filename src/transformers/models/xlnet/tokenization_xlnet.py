@@ -23,7 +23,7 @@ from typing import List, Optional, Tuple
 import sentencepiece as spm
 
 from ...file_utils import SPIECE_UNDERLINE
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -126,6 +126,9 @@ class XLNetTokenizer(PreTrainedTokenizer):
         additional_special_tokens=["<eop>", "<eod>"],
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             do_lower_case=do_lower_case,
             remove_space=remove_space,

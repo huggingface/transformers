@@ -21,7 +21,7 @@
 
 from typing import Dict, List, Tuple
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
 from .file_utils import requires_protobuf, requires_sentencepiece
@@ -340,7 +340,12 @@ class SpmConverter(Converter):
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        return normalizers.Precompiled(precompiled_charsmap)
+        return normalizers.Sequence(
+            [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
+        )
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
 
     def post_processor(self):
         return None
@@ -353,12 +358,7 @@ class SpmConverter(Converter):
 
         replacement = "▁"
         add_prefix_space = True
-        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.WhitespaceSplit(),
-                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
-            ]
-        )
+        tokenizer.pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
         tokenizer.decoder = decoders.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
         post_processor = self.post_processor()
         if post_processor:
@@ -375,7 +375,11 @@ class AlbertConverter(SpmConverter):
         ]
 
     def normalizer(self, proto):
-        list_normalizers = [normalizers.Replace("``", '"'), normalizers.Replace("''", '"')]
+        list_normalizers = [
+            normalizers.Replace("``", '"'),
+            normalizers.Replace("''", '"'),
+            normalizers.Replace(Regex(" {2,}"), " "),
+        ]
         if not self.original_tokenizer.keep_accents:
             list_normalizers.append(normalizers.NFKD())
             list_normalizers.append(normalizers.StripAccents())
@@ -529,7 +533,11 @@ class XLNetConverter(SpmConverter):
         ]
 
     def normalizer(self, proto):
-        list_normalizers = [normalizers.Replace("``", '"'), normalizers.Replace("''", '"')]
+        list_normalizers = [
+            normalizers.Replace("``", '"'),
+            normalizers.Replace("''", '"'),
+            normalizers.Replace(Regex(" {2,}"), " "),
+        ]
         if not self.original_tokenizer.keep_accents:
             list_normalizers.append(normalizers.NFKD())
             list_normalizers.append(normalizers.StripAccents())
@@ -573,6 +581,14 @@ class PegasusConverter(SpmConverter):
 
     def unk_id(self, proto):
         return proto.trainer_spec.unk_id + self.original_tokenizer.offset
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space),
+            ]
+        )
 
     def post_processor(self):
         eos = self.original_tokenizer.eos_token

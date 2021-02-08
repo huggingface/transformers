@@ -252,6 +252,7 @@ NO_CONFIG_TOKENIZER = [
     HerbertTokenizerFast,
     PhobertTokenizer,
     BarthezTokenizer,
+    BarthezTokenizerFast,
 ]
 
 

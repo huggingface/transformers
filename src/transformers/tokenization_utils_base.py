@@ -1793,12 +1793,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def _from_pretrained(
         cls, resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
     ):
-        # We instantiate fast tokenizers based on a slow tokenizer for now
-        # In the future we can also use a direct way based on saving/instantiating
-        # tokenizer's Tokenizer directly from it's serialization JSON
-        if (
-            "tokenizer_file" not in resolved_vocab_files or resolved_vocab_files["tokenizer_file"] is None
-        ) and cls.slow_tokenizer_class is not None:
+        # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
+        # file or if `from_slow` is set to True.
+        from_slow = kwargs.get("from_slow", False)
+        has_tokenizer_file = resolved_vocab_files.get("tokenizer_file", None) is not None
+        if (from_slow or not has_tokenizer_file) and cls.slow_tokenizer_class is not None:
             slow_tokenizer = (cls.slow_tokenizer_class)._from_pretrained(
                 copy.deepcopy(resolved_vocab_files),
                 pretrained_model_name_or_path,
@@ -2057,7 +2056,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Whether or not to add the special tokens associated with the corresponding model.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the underlying model specific encode method. See details in
-                :meth:`~transformers.PreTrainedTokenizer.__call__`
+                :meth:`~transformers.PreTrainedTokenizerBase.__call__`
 
         Returns:
             :obj:`List[str]`: The list of tokens.
