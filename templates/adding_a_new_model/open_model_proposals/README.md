@@ -1,3 +1,3 @@
 Currently the following model proposals are available:
 
-- TODO(PVP) add BigBird
+- [BigBird (Google)](./ADD_BIG_BIRD.md)

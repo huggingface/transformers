@@ -2056,7 +2056,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 Whether or not to add the special tokens associated with the corresponding model.
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the underlying model specific encode method. See details in
-                :meth:`~transformers.PreTrainedTokenizer.__call__`
+                :meth:`~transformers.PreTrainedTokenizerBase.__call__`
 
         Returns:
             :obj:`List[str]`: The list of tokens.
