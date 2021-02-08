@@ -18,27 +18,22 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import tensorflow as tf
 
-from ...activations_tf import ACT2FN
 from ...configuration_utils import PretrainedConfig
-from ...file_utils import (
-    ModelOutput,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
+from ...file_utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...generation_tf_utils import (
+    BeamHypotheses,
+    _create_next_token_logits_penalties,
+    calc_banned_bad_words_ids,
+    calc_banned_ngram_tokens,
+    sample_without_replacement,
+    set_tensor_by_indices_to_value,
+    tf_top_k_top_p_filtering,
 )
-from ...generation_tf_utils import *  # this is needed since we adjust _generate_no_beam and _generate_with_beam to TFRag
-from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPast, TFSeq2SeqLMOutput
-from ...modeling_tf_utils import (
-    DUMMY_INPUTS,
-    TFCausalLanguageModelingLoss,
-    TFPreTrainedModel,
-    input_processing,
-    keras_serializable,
-    shape_list,
-)
-from ...tokenization_utils import BatchEncoding
+from ...modeling_tf_outputs import TFBaseModelOutput
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, input_processing, shape_list
 from ...utils import logging
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
@@ -1851,7 +1846,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             reduction=tf.keras.losses.Reduction.SUM,
         )
 
-        if from_logits == False:  # convert to logits
+        if from_logits is False:  # convert to logits
             eps = 1e-9
             y_pred = tf.clip_by_value(y_pred, clip_value_min=eps, clip_value_max=1 - eps)
             y_pred = tf.math.log(y_pred)
