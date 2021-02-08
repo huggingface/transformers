@@ -660,6 +660,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 The output returned by the model.
         """
         raise NotImplementedError
+
     def compile(
         self,
         optimizer="rmsprop",
