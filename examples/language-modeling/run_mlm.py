@@ -303,6 +303,22 @@ def main():
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+    if data_args.max_seq_length is None:
+        max_seq_length = tokenizer.model_max_length
+        if max_seq_length > 1024:
+            logger.warn(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+            )
+            max_seq_length = 1024
+    else:
+        if data_args.max_seq_length > tokenizer.model_max_length:
+            logger.warn(
+                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+            )
+        max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+
     if data_args.line_by_line:
         # When using line_by_line, we just tokenize each nonempty line.
         padding = "max_length" if data_args.pad_to_max_length else False
@@ -314,7 +330,7 @@ def main():
                 examples["text"],
                 padding=padding,
                 truncation=True,
-                max_length=data_args.max_seq_length,
+                max_length=max_seq_length,
                 # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
                 # receives the `special_tokens_mask`.
                 return_special_tokens_mask=True,
@@ -341,22 +357,6 @@ def main():
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
-
-        if data_args.max_seq_length is None:
-            max_seq_length = tokenizer.model_max_length
-            if max_seq_length > 1024:
-                logger.warn(
-                    f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                    "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
-                )
-                max_seq_length = 1024
-        else:
-            if data_args.max_seq_length > tokenizer.model_max_length:
-                logger.warn(
-                    f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-                    f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-                )
-            max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
         # Main data processing function that will concatenate all texts from our dataset and generate chunks of
         # max_seq_length.
