@@ -15,6 +15,7 @@
 """ PyTorch Wav2Vec2 model. """
 
 
+import warnings
 from typing import Optional, Tuple
 
 import torch
@@ -24,7 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_wav2vec2 import Wav2Vec2Config
@@ -665,6 +666,10 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
+        warnings.warn(
+            "The class `Wav2Vec2ForMaskedLM` is deprecated. Please use `Wav2Vec2ForCTC` instead.", FutureWarning
+        )
+
         self.wav2vec2 = Wav2Vec2Model(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
@@ -729,3 +734,77 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             return output
 
         return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+
+
+@add_start_docstrings(
+    """Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC). """,
+    WAV_2_VEC_2_START_DOCSTRING,
+)
+class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.wav2vec2 = Wav2Vec2Model(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_values,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+    ):
+        r"""
+        labels (:obj:`Float.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            TODO(PVP): Fill out when adding training
+
+        Returns:
+
+        Example::
+
+            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
+            >>> from datasets import load_dataset
+            >>> import soundfile as sf
+
+            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
+
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
+
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> logits = model(input_values).logits
+
+            >>> predicted_ids = torch.argmax(logits, dim=-1)
+            >>> transcription = tokenizer.decode(predicted_ids[0])
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.wav2vec2(
+            input_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
+        logits = self.lm_head(hidden_states)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return output
+
+        return CausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
