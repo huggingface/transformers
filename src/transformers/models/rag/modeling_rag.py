@@ -1089,9 +1089,6 @@ class RagTokenForGeneration(RagPreTrainedModel):
     def set_retriever(self, retriever: RagRetriever):
         self.rag.retriever = retriever
 
-    def adjust_logits_during_generation(self, logits, cur_len, max_length):
-        return self.rag.generator.adjust_logits_during_generation(logits, cur_len=cur_len, max_length=max_length)
-
     def prepare_inputs_for_generation(
         self,
         decoder_input_ids,
@@ -1306,6 +1303,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         eos_token_id=None,
         length_penalty=None,
         no_repeat_ngram_size=None,
+        encoder_no_repeat_ngram_size=None,
         repetition_penalty=None,
         bad_words_ids=None,
         num_return_sequences=None,
@@ -1372,6 +1370,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 order to encourage the model to produce longer sequences.
             no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
+            encoder_no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
+                If set to int > 0, all ngrams of that size that occur in the ``encoder_input_ids`` cannot occur in the
+                ``decoder_input_ids``.
             bad_words_ids(:obj:`List[int]`, `optional`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use :obj:`tokenizer.encode(bad_word, add_prefix_space=True)`.
@@ -1490,6 +1491,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
         pre_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
+            encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
+            encoder_input_ids=context_input_ids,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             eos_token_id=eos_token_id,
