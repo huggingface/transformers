@@ -245,6 +245,11 @@ def convert_detr_checkpoint(task, backbone, dilation, pytorch_dump_folder_path):
         # rename classification heads
         for src, dest in rename_keys_object_detection_model:
             rename_key(state_dict, src, dest)
+        # important: we need to prepend "model." to each of the base model keys as DetrForObjectDetection calls the base model like this
+        for key in state_dict.copy().keys():
+            if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
+                val = state_dict.pop(key)
+                state_dict["model." + key] = val
         # finally, create model and load state dict
         model = DetrForObjectDetection(config).eval()
         model.load_state_dict(state_dict)

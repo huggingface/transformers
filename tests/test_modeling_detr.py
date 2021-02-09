@@ -323,7 +323,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
     #     return DetrTokenizer.from_pretrained('facebook/detr-resnet-50')
 
     def test_inference_no_head(self):
-        model = DetrModel.from_pretrained('nielsr/detr-resnet-50').to(torch_device)
+        model = DetrModel.from_pretrained('nielsr/detr-resnet-50-new').to(torch_device)
         model.eval()
         img = prepare_img().to(torch_device)
         
@@ -339,7 +339,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
 
 
     def test_inference_object_detection_head(self):    
-        model = DetrForObjectDetection.from_pretrained('nielsr/detr-resnet-50').to(torch_device)
+        model = DetrForObjectDetection.from_pretrained('nielsr/detr-resnet-50-new').to(torch_device)
         model.eval()
         img = prepare_img().to(torch_device)
 

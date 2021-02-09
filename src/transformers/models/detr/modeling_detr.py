@@ -75,6 +75,17 @@ class BaseModelOutputWithCrossAttentionsAndIntermediateHiddenStates(BaseModelOut
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
 
 @dataclass
+class Seq2SeqModelOutputWithIntermediateHiddenStates(Seq2SeqModelOutput):
+    """
+    This class adds one attribute to Seq2SeqModelOutput, namely an optional stack of intermediate decoder 
+    activations, i.e. the output of each decoder layer, each of them gone through a layernorm.
+    Args:
+        intermediate_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(config.decoder_layers, batch_size, sequence_length, hidden_size)`):
+    """
+
+    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+
+@dataclass
 class DetrObjectDetectionOutput(ModelOutput):
     """
     Output type of :class:`~transformers.DetrForObjectDetection`.
@@ -1422,12 +1433,12 @@ class DetrModel(DetrPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/detr-resnet-50",
-        output_type=Seq2SeqModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    # @add_code_sample_docstrings(
+    #     tokenizer_class=_TOKENIZER_FOR_DOC,
+    #     checkpoint="facebook/detr-resnet-50",
+    #     output_type=Seq2SeqModelOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    # )
     def forward(
         self,
         samples: NestedTensor=None,
@@ -1453,14 +1464,6 @@ class DetrModel(DetrPreTrainedModel):
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
         # tensors are of shape (batch_size, num_channels, height, width)
-        print("Shape of tensors:")
-        print(samples.tensors.shape)
-        print("First few elements:")
-        print(samples.tensors[0,:3,:3,:3])
-        print("Shape of mask:")
-        print(samples.mask.shape)
-        print("First few elements of mask:")
-        print(samples.tensors[0,:3,:3])
         features, position_embeddings_list = self.backbone(samples)
 
         src, mask = features[-1].decompose()
@@ -1518,7 +1521,7 @@ class DetrModel(DetrPreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs
 
-        return Seq2SeqModelOutput(
+        return Seq2SeqModelOutputWithIntermediateHiddenStates(
             last_hidden_state=decoder_outputs.last_hidden_state,
             #past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1527,6 +1530,7 @@ class DetrModel(DetrPreTrainedModel):
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
         )
 
 
@@ -1539,18 +1543,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
-        # Create backbone + positional encoding
-        backbone = Backbone(config.backbone, config.train_backbone, config.masks, config.dilation)
-        position_embeddings = build_position_encoding(config)
-        self.backbone = Joiner(backbone, position_embeddings)
-
-        # Create projection layer
-        self.input_projection = nn.Conv2d(backbone.num_channels, config.d_model, kernel_size=1)
-
-        self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
-        
-        self.encoder = DetrEncoder(config)
-        self.decoder = DetrDecoder(config)
+        # DETR base model
+        self.model = DetrModel(config)
 
         # Object detection heads
         self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels + 1)
@@ -1558,20 +1552,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
                                   output_dim=4, num_layers=3)
 
         self.init_weights()
-
-    # def get_input_embeddings(self):
-    #     return self.shared
-
-    # def set_input_embeddings(self, value):
-    #     self.shared = value
-    #     self.encoder.embed_tokens = self.shared
-    #     self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
 
     # copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
@@ -1611,75 +1591,15 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             be a :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the image,)` and the boxes a :obj:`torch.FloatTensor` 
             of shape :obj:`(number of bounding boxes in the image, 4)`.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # First, sent images through Backbone to obtain the features (includes features map, mask and position embeddings)
-        if isinstance(samples, (list, torch.Tensor)):
-            samples = nested_tensor_from_tensor_list(samples)
-        features, position_embeddings_list = self.backbone(samples)
-
-        src, mask = features[-1].decompose()
-        assert mask is not None
-
-        # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        src = self.input_projection(src)
-        
-        # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
-        # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        batch_size, c, h, w = src.shape
-        src = src.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
-        mask = ~mask.flatten(1)
-
-        # Fourth, sent src + mask + position embeddings through encoder 
-        # src is a Tensor of shape (batch_size, heigth*width, hidden_size) 
-        # mask is a Tensor of shape (batch_size, heigth*width)
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                inputs_embeds=src, 
-                attention_mask=mask,
-                position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-        
-        # Fifth, sent queries i.e. tgt (initialized with zeros), query position embeddings + position embeddings 
-        # through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        tgt = torch.zeros_like(query_position_embeddings)
-
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
-        decoder_outputs = self.decoder(
-            inputs_embeds=tgt,
-            attention_mask=None,
-            position_embeddings=position_embeddings,
-            query_position_embeddings=query_position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        # First, sent images through DETR base model to obtain encoder + decoder outputs
+        outputs = self.model(samples)
 
         # class logits + predicted bounding boxes
         # to do: make this as efficient as the original implementation
-        pred_logits = self.class_labels_classifier(decoder_outputs[0])
-        pred_boxes = self.bbox_predictor(decoder_outputs[0]).sigmoid()
+        pred_logits = self.class_labels_classifier(outputs.last_hidden_state)
+        pred_boxes = self.bbox_predictor(outputs.last_hidden_state).sigmoid()
 
         loss, auxiliary_outputs = None, None
         if labels is not None:
@@ -1722,7 +1642,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             outputs['pred_logits'] = pred_logits
             outputs['pred_boxes'] = pred_boxes
             if self.config.auxiliary_loss:
-                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[5]
+                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[6]
                 outputs_class = self.class_labels_classifier(intermediate)
                 outputs_coord = self.bbox_predictor(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
@@ -1746,14 +1666,14 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
             #past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
         )
-
+            
 
 # copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class SetCriterion(nn.Module):
