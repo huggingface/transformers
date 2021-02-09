@@ -525,6 +525,7 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
 class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` that enforces the specified token as the first generated token.
+
     Args:
         bos_token_id (:obj:`int`):
             The id of the token to force as the first generated token.
@@ -546,6 +547,7 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` that enforces the specified token as the last generated token when
     `max_length` is reached.
+
     Args:
         max_length (:obj:`int`):
             The maximum length of the sequence to be generated.

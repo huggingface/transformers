@@ -23,9 +23,9 @@ from torch.nn import functional as F
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
 from .generation_logits_process import (
+    EncoderNoRepeatNGramLogitsProcessor,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
-    EncoderNoRepeatNGramLogitsProcessor,
     HammingDiversityLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -737,9 +737,10 @@ class GenerationMixin:
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             forced_bos_token_id (:obj:`int`, `optional`):
-                The id of the token to force as the first generated token after the :obj:`decoder_start_token_id`. Useful
-                for multilingual models like `mBART <https://huggingface.co/transformers/model_doc/mbart.html>`__ where
-                the first generated token needs to be the target language token.
+                The id of the token to force as the first generated token after the :obj:`decoder_start_token_id`.
+                Useful for multilingual models like `mBART
+                <https://huggingface.co/transformers/model_doc/mbart.html>`__ where the first generated token needs to
+                be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
 

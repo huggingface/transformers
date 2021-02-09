@@ -1444,4 +1444,3 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
                 + layer_past_key_values[2:],
             )
         return (past[0], reordered_past)
-
