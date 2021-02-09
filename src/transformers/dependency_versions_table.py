@@ -6,7 +6,7 @@ deps = {
     "cookiecutter": "cookiecutter==1.7.2",
     "dataclasses": "dataclasses",
     "datasets": "datasets",
-    "faiss-cpu": "faiss-cpu",
+    "faiss": "faiss",
     "fastapi": "fastapi",
     "filelock": "filelock",
     "flake8": "flake8>=3.8.3",

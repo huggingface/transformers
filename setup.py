@@ -93,7 +93,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
-    "faiss-cpu",
+    "faiss",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",

@@ -7,7 +7,7 @@ tensorflow_datasets
 pytorch-lightning==1.0.4
 matplotlib
 git-python==1.0.3
-faiss-cpu
+faiss
 streamlit
 elasticsearch
 nltk
