@@ -176,7 +176,13 @@ class DataTrainingArguments:
     )
     source_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
     target_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
-    eval_beams: Optional[int] = field(default=None, metadata={"help": "Number of beams to use for evaluation."})
+    eval_beams: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "Number of beams to use for evaluation. This argument is used to override the ``num_beams`` "
+            "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        },
+    )
     ignore_pad_token_for_loss: bool = field(
         default=True,
         metadata={
