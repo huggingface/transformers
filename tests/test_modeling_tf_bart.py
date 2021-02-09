@@ -179,7 +179,7 @@ class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     test_pruning = False
     test_onnx = True
-    onnx_min_opset = 12
+    onnx_min_opset = 10
 
     def setUp(self):
         self.model_tester = TFBartModelTester(self)
