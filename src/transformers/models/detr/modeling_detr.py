@@ -341,8 +341,11 @@ class Joiner(nn.Sequential):
 
     def forward(self, tensor_list: NestedTensor):
         xs = self[0](tensor_list)
-        print("Shape of backbone output:")
-        print(xs["0"].shape)
+        print("The backbone outputs a NestedTensor with a Tensor and a Mask.")
+        print("Shape of backbone tensor:")
+        print(xs["0"].tensors.shape)
+        print("Shape of backbone mask:")
+        print(xs["0"].mask.shape)
         out: List[NestedTensor] = []
         pos = []
         for name, x in xs.items():
