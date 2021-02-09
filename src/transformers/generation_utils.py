@@ -544,6 +544,7 @@ class GenerationMixin:
         encoder_input_ids: torch.LongTensor,
         bad_words_ids: List[List[int]],
         min_length: int,
+        max_length: int,
         eos_token_id: int,
         forced_bos_token_id: int,
         forced_eos_token_id: int,
@@ -606,9 +607,9 @@ class GenerationMixin:
         if prefix_allowed_tokens_fn is not None:
             processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
         if forced_bos_token_id is not None:
-            processors.append(ForcedBosTokenLogitsProcessor(forced_bos_token_id))
+            processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
-            processors.append(ForcedEosTokenLogitsProcessor(max_length, forced_eos_token_id))
+            processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
         return processors
 
     @torch.no_grad()
@@ -911,6 +912,7 @@ class GenerationMixin:
             encoder_input_ids=encoder_input_ids,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
+            max_length=max_length,
             eos_token_id=eos_token_id,
             forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
