@@ -54,7 +54,7 @@ deploy_doc "3ebb1b3" v3.2.0
 deploy_doc "0613f05" v3.3.1
 deploy_doc "eb0e0ce" v3.4.0
 deploy_doc "818878d" v3.5.1
-deploy_doc "c781171" v4.0.0
+deploy_doc "c781171" v4.0.1
 deploy_doc "bfa4ccf" v4.1.1
-deploy_doc "7d9a9d0" v4.2.0
+deploy_doc "7d9a9d0" v4.2.2
 deploy_doc "800f385" # v4.3.0 Latest stable release
