@@ -547,9 +547,9 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
                 position_ids = self.create_position_ids_from_input_ids(input_ids=input_ids)
             else:
-                position_ids = tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1)[
-                    tf.newaxis, :
-                ]
+                position_ids = tf.expand_dims(
+                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1), axis=0
+                )
                 position_ids = tf.tile(input=position_ids, multiples=(input_shape[0], 1))
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
@@ -1661,7 +1661,10 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = inputs["attention_mask"][:, :, tf.newaxis, tf.newaxis]
+        attention_mask_shape = shape_list(inputs["attention_mask"])
+        extended_attention_mask = tf.reshape(
+            inputs["attention_mask"], (attention_mask_shape[0], attention_mask_shape[1], 1, 1)
+        )
 
         # Since attention_mask is 1.0 for positions we want to locall attend locally and 0.0 for
         # masked and global attn positions, this operation will create a tensor which is 0.0 for
