@@ -170,6 +170,8 @@ import wandb
 wandb.login()
 ```
 
+To enable logging to W&B, set `report_to` to `wandb` in your `TrainingArguments` or script.
+
 Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
 
 Advanced configuration is possible by setting environment variables:
