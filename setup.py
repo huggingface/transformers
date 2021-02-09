@@ -219,7 +219,7 @@ if os.name == "nt":  # windows
     extras["retrieval"] = deps_list("datasets")  # faiss is not supported on windows
     extras["flax"] = []  # jax is not supported on windows
 else:
-    extras["retrieval"] = deps_list("faiss-cpu", "datasets")
+    extras["retrieval"] = deps_list("faiss", "datasets")
     extras["flax"] = deps_list("jax", "jaxlib", "flax")
 
 extras["tokenizers"] = deps_list("tokenizers")
