@@ -312,9 +312,9 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
         else:
             past_length = shape_list(inputs["past"][0][0])[-2]
         if inputs["position_ids"] is None:
-            inputs["position_ids"] = tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32)[
-                tf.newaxis, :
-            ]
+            inputs["position_ids"] = tf.expand_dims(
+                tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32), axis=0
+            )
             inputs["position_ids"] = tf.tile(inputs["position_ids"], [input_shape[0], 1])
 
         # Attention mask.
@@ -324,7 +324,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            inputs["attention_mask"] = inputs["attention_mask"][:, tf.newaxis, tf.newaxis, :]
+            inputs["attention_mask"] = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for

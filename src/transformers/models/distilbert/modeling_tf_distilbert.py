@@ -113,7 +113,7 @@ class TFEmbeddings(tf.keras.layers.Layer):
         input_shape = shape_list(inputs_embeds)[:-1]
 
         if position_ids is None:
-            position_ids = tf.range(start=0, limit=input_shape[-1])[tf.newaxis, :]
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
         position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))

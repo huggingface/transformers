@@ -1631,7 +1631,7 @@ class TFSequenceSummary(tf.keras.layers.Layer):
                 )  # A tensor full of shape [batch] or [batch, num choices] full of sequence length
             cls_shape = shape_list(cls_index)
             if len(cls_shape) <= len(hidden_shape) - 2:
-                cls_index = cls_index[..., tf.newaxis]
+                cls_index = tf.expand_dims(cls_index, axis=-1)
             # else:
             # cls_index = cls_index[..., tf.newaxis]
             # cls_index = cls_index.expand((-1,) * (cls_index.dim()-1) + (hidden_states.size(-1),))
