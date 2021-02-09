@@ -63,3 +63,10 @@ Wav2Vec2ForMaskedLM
 
 .. autoclass:: transformers.Wav2Vec2ForMaskedLM
     :members: forward
+
+
+Wav2Vec2ForCTC
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Wav2Vec2ForCTC
+    :members: forward
