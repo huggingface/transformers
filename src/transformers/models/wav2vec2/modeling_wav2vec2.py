@@ -690,10 +690,6 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         labels (:obj:`Float.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             TODO(PVP): Fill out when adding training
 
-        .. warning::
-
-            Wav2Vec2ForMaskedLM has been deprecated. Please use Wav2Vec2ForCTC instead.
-
         Returns:
 
         Example::
