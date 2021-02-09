@@ -473,11 +473,11 @@ class DetrTokenizer(PreTrainedTokenizer):
         samples = nested_tensor_from_tensor_list(transformed_images)
 
         # return as BatchEncoding
-        data = {'pixel_values': samples.tensors, 'pixel_mask': samples.mask}, 
+        data = {'pixel_values': samples.tensors, 'pixel_mask': samples.mask} 
         
         if annotations is not None:
             data['labels'] = transformed_annotations
-            
+
         encoded_inputs = BatchEncoding(data=data)
 
         return encoded_inputs
