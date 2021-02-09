@@ -86,7 +86,9 @@ def onnx_compliancy(saved_model_path, strict, opset):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--saved_model_path", help="Path of the saved model to check (the .pb file).")
-    parser.add_argument("--opset", default=12, type=int, help="The ONNX opset against which the model has to be tested.")
+    parser.add_argument(
+        "--opset", default=12, type=int, help="The ONNX opset against which the model has to be tested."
+    )
     parser.add_argument(
         "--framework", choices=["onnx"], default="onnx", help="Frameworks against which to test the saved model."
     )

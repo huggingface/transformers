@@ -25,7 +25,7 @@ from importlib import import_module
 from typing import List, Tuple
 
 from transformers import is_tf_available
-from transformers.testing_utils import _tf_gpu_memory_limit, require_onnx, is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_onnx, require_tf, slow
 
 
 if is_tf_available():
@@ -203,7 +203,7 @@ class TFModelTesterMixin:
             self.assertTrue(os.path.exists(saved_model_dir))
 
     def test_onnx_compliancy(self):
-        if not self.model_tester.test_onnx:
+        if not self.test_onnx:
             return
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -221,7 +221,7 @@ class TFModelTesterMixin:
 
         with open(os.path.join(".", "utils", "tf_ops", "onnx.json")) as f:
             onnx_opsets = json.load(f)["opsets"]
-        
+
         for i in range(1, self.onnx_min_opset + 1):
             onnx_ops.extend(onnx_opsets[str(i)])
 
@@ -243,17 +243,17 @@ class TFModelTesterMixin:
                     incompatible_ops.append(op)
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
-    
+
     @require_onnx
     @slow
     def test_onnx_runtime_quantize_optimize(self):
         if not self.test_onnx:
             return
 
+        import keras2onnx
         import onnx
         import onnxruntime
         from onnxruntime.quantization import QuantizationMode, quantize
-        import keras2onnx
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

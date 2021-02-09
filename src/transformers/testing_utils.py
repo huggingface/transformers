@@ -28,6 +28,7 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_onnx_available,
     is_pandas_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -36,7 +37,6 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
-    is_onnx_available,
 )
 from .integrations import is_optuna_available, is_ray_available
 
