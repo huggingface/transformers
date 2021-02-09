@@ -341,12 +341,16 @@ class Joiner(nn.Sequential):
 
     def forward(self, tensor_list: NestedTensor):
         xs = self[0](tensor_list)
+        print("Xs:")
+        print(xs)
         out: List[NestedTensor] = []
         pos = []
         for name, x in xs.items():
             out.append(x)
             # position encoding
             pos.append(self[1](x).to(x.tensors.dtype))
+            print("Pos:")
+            print(pos)
 
         return out, pos
 
