@@ -202,10 +202,6 @@ Advanced configuration is possible by setting environment variables:
       <td style="text-align:left">WANDB_PROJECT</td>
       <td style="text-align:left">Organize runs by project</td>
     </tr>
-    <tr>
-      <td style="text-align:left">WANDB_DISABLED</td>
-      <td style="text-align:left">Set to <b>true</b> to disable logging entirely</td>
-    </tr>
   </tbody>
 </table>
 
