@@ -767,7 +767,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         Returns:
 
         Example::
-        
+
             >>> import torch
             >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC
             >>> from datasets import load_dataset
