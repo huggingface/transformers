@@ -1622,7 +1622,17 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
-        outputs = self.model(pixel_values, pixel_mask)
+        outputs = self.model(pixel_values, pixel_mask,
+                                decoder_input_ids=decoder_input_ids,
+                                decoder_attention_mask=Nodecoder_attention_maskne,
+                                encoder_outputs=Nencoder_outputsone,
+                                #past_key_values=past_key_values,
+                                inputs_embeds=inputs_embeds,
+                                decoder_inputs_embeds=decoder_inputs_embeds,
+                                use_cache=use_cache,
+                                output_attentions=output_attentions,
+                                output_hidden_states=output_hidden_states,
+                                return_dict=return_dict,)
 
         # class logits + predicted bounding boxes
         # to do: make this as efficient as the original implementation
