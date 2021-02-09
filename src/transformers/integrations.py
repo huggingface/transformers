@@ -529,7 +529,7 @@ class WandbCallback(TrainerCallback):
         Setup the optional Weights & Biases (`wandb`) integration.
 
         One can subclass and override this method to customize the setup if needed. Find more information `here
-        <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
+        <https://docs.wandb.ai/integrations/huggingface>`__. You can also override the following environment variables:
 
         Environment:
             WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
