@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DeBERTa model configuration """
+""" DeBERTa-v2 model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,32 +20,28 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/config.json",
-    "microsoft/deberta-large": "https://huggingface.co/microsoft/deberta-large/resolve/main/config.json",
-    "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/config.json",
-    "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/config.json",
-    "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/config.json",
-    "microsoft/deberta-xlarge-mnli": "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/config.json",
+DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+    "microsoft/deberta-xlarge-v2": "https://huggingface.co/microsoft/deberta-xlarge-v2/resolve/main/config.json",
+    "microsoft/deberta-xxlarge-v2": "https://huggingface.co/microsoft/deberta-xxlarge-v2/resolve/main/config.json",
+    "microsoft/deberta-xlarge-v2-mnli": "https://huggingface.co/microsoft/deberta-xlarge-v2-mnli/resolve/main/config.json",
+    "microsoft/deberta-xxlarge-v2-mnli": "https://huggingface.co/microsoft/deberta-xxlarge-v2-mnli/resolve/main/config.json",
 }
 
 
-class DebertaConfig(PretrainedConfig):
+class DebertaV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.DebertaModel` or a
-    :class:`~transformers.TFDebertaModel`. It is used to instantiate a DeBERTa model according to the specified
-    arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
-    configuration to that of the DeBERTa `microsoft/deberta-base <https://huggingface.co/microsoft/deberta-base>`__
-    architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.DebertaV2Model`. It is used
+    to instantiate a DeBERTa-v2 model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the DeBERTa
+    `microsoft/deberta-base <https://huggingface.co/microsoft/deberta-base>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Arguments:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the DeBERTa model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.DebertaModel` or
-            :class:`~transformers.TFDebertaModel`.
+            Vocabulary size of the DeBERTa-v2 model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.DebertaV2Model`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
