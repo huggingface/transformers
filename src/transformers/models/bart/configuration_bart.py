@@ -146,7 +146,7 @@ class BartConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            fored_eos_token_id=forced_eos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 
