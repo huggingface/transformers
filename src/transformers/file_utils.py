@@ -144,7 +144,11 @@ try:
     _faiss_version = importlib_metadata.version("faiss")
     logger.debug(f"Successfully imported faiss version {_faiss_version}")
 except importlib_metadata.PackageNotFoundError:
-    _faiss_available = False
+    try:
+        _faiss_version = importlib_metadata.version("faiss-cpu")
+        logger.debug(f"Successfully imported faiss version {_faiss_version}")
+    except importlib_metadata.PackageNotFoundError:
+        _faiss_available = False
 
 
 _scatter_available = importlib.util.find_spec("torch_scatter") is not None
