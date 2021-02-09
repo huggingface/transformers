@@ -176,11 +176,11 @@ class DataTrainingArguments:
     )
     source_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
     target_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
-    eval_beams: Optional[int] = field(
+    num_beams: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Number of beams to use for evaluation. This argument is used to override the ``num_beams`` "
-            "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
+            "help": "Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
+            "which is used during ``evaluate`` and ``predict``."
         },
     )
     ignore_pad_token_for_loss: bool = field(
@@ -351,8 +351,11 @@ def main():
         column_names = datasets["train"].column_names
     elif training_args.do_eval:
         column_names = datasets["validation"].column_names
-    else:
+    elif training_args.do_predict:
         column_names = datasets["test"].column_names
+    else:
+        logger.info("There is nothing to do. Please pass `do_train`, `do_eval` and/or `do_predict`.")
+        return
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
@@ -551,7 +554,7 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        results = trainer.evaluate(max_length=data_args.val_max_target_length, num_beams=data_args.eval_beams)
+        results = trainer.evaluate(max_length=data_args.val_max_target_length, num_beams=data_args.num_beams)
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_seq2seq.txt")
         if trainer.is_world_process_zero():
@@ -568,7 +571,7 @@ def main():
             test_dataset,
             metric_key_prefix="test",
             max_length=data_args.val_max_target_length,
-            num_beams=data_args.eval_beams,
+            num_beams=data_args.num_beams,
         )
         test_metrics = test_results.metrics
 
