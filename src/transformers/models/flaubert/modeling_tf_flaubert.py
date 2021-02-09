@@ -181,12 +181,12 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
     else:
         # assert lengths.max().item() <= slen
         alen = tf.range(slen)
-        mask = tf.math.less(alen, lengths[:, tf.newaxis])
+        mask = tf.math.less(alen, tf.expand_dims(lengths, axis=1))
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
         attn_mask = tf.less_equal(
-            tf.tile(alen[tf.newaxis, tf.newaxis, :], (bs, slen, 1)), alen[tf.newaxis, :, tf.newaxis]
+            tf.tile(tf.reshape(alen, (1, 1, slen)), (bs, slen, 1)), tf.reshape(alen, (1, slen, 1))
         )
     else:
         attn_mask = mask
@@ -612,7 +612,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         tensor = self.layer_norm_emb(tensor)
         tensor = self.dropout(tensor, training=inputs["training"])
-        tensor = tensor * mask[..., tf.newaxis]
+        tensor = tensor * tf.expand_dims(mask, axis=-1)
 
         # hidden_states and attentions cannot be None in graph mode.
         hidden_states = () if inputs["output_hidden_states"] else None
@@ -682,7 +682,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                 tensor_normalized = self.layer_norm2[i](tensor)
                 tensor = tensor + self.ffns[i](tensor_normalized)
 
-            tensor = tensor * mask[..., tf.newaxis]
+            tensor = tensor * tf.expand_dims(mask, axis=-1)
 
         # Add last hidden state
         if inputs["output_hidden_states"]:
