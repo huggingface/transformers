@@ -249,6 +249,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFT5ModelTester(self)
@@ -312,10 +313,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make T5 XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for T5
         pass
 
     @slow
