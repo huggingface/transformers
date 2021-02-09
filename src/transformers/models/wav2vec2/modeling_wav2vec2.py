@@ -767,8 +767,9 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         Returns:
 
         Example::
-
-            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
+        
+            >>> import torch
+            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
