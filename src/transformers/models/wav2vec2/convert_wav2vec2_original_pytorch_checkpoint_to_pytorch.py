@@ -20,7 +20,7 @@ import argparse
 import fairseq
 import torch
 
-from transformers import Wav2Vec2Config, Wav2Vec2ForMaskedLM, logging
+from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, logging
 
 
 logging.set_verbosity_info()
@@ -141,7 +141,7 @@ def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, dict_
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    hf_wav2vec = Wav2Vec2ForMaskedLM(Wav2Vec2Config())
+    hf_wav2vec = Wav2Vec2ForCTC(Wav2Vec2Config())
 
     model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
         [checkpoint_path], arg_overrides={"data": dict_path}

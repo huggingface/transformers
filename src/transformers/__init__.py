@@ -367,6 +367,7 @@ if is_torch_available():
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Wav2Vec2ForCTC",
             "Wav2Vec2ForMaskedLM",
             "Wav2Vec2Model",
             "Wav2Vec2PreTrainedModel",
@@ -1813,6 +1814,7 @@ if TYPE_CHECKING:
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Wav2Vec2ForCTC,
             Wav2Vec2ForMaskedLM,
             Wav2Vec2Model,
             Wav2Vec2PreTrainedModel,
