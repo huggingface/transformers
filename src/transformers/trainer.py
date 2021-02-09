@@ -267,7 +267,7 @@ class Trainer:
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
         # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway
-        if not (self.is_model_parallel or args.deepspeed):
+        if not (self.is_model_parallel or args.deepspeed) and self.args.place_model_on_device:
             model = model.to(args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -679,6 +679,45 @@ class Trainer:
 
         return model
 
+    def _wrap_model(self, model, training=True):
+        # Mixed precision training with apex (torch < 1.6)
+        if self.use_apex and training:
+            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
+
+        # Multi-gpu training (should be after apex fp16 initialization)
+        if self.args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
+
+        # Note: in torch.distributed mode, there's no point in wrapping the model
+        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        if not training:
+            return model
+
+        # Distributed training (should be after apex fp16 initialization)
+        if self.sharded_dpp:
+            model = ShardedDDP(model, self.optimizer)
+        elif is_sagemaker_distributed_available():
+            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+        elif self.deepspeed:
+            pass  # already initialized its own DDP earlier
+        elif self.args.local_rank != -1:
+            if self.args.ddp_find_unused_parameters is not None:
+                find_unused_parameters = self.args.ddp_find_unused_parameters
+            elif isinstance(model, PreTrainedModel):
+                # find_unused_parameters breaks checkpointing as per
+                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+            else:
+                find_unused_parameters = True
+            model = torch.nn.parallel.DistributedDataParallel(
+                model,
+                device_ids=[self.args.local_rank],
+                output_device=self.args.local_rank,
+                find_unused_parameters=find_unused_parameters,
+            )
+
+        return model
+
     def train(
         self,
         resume_from_checkpoint: Optional[str] = None,
@@ -731,7 +770,7 @@ class Trainer:
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
-            if not self.is_model_parallel:
+            if not self.is_model_parallel and self.args.place_model_on_device:
                 self.model = self.model.to(self.args.device)
             self.model_wrapped = self.model
 
@@ -778,38 +817,7 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
-        model = self.model_wrapped
-
-        # Mixed precision training with apex (torch < 1.6)
-        if self.use_apex:
-            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
-
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
-
-        # Distributed training (should be after apex fp16 initialization)
-        if self.sharded_dpp:
-            model = ShardedDDP(model, self.optimizer)
-        elif is_sagemaker_distributed_available():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        elif self.deepspeed:
-            pass  # already initialized its own DDP earlier
-        elif self.args.local_rank != -1:
-            if self.args.ddp_find_unused_parameters is not None:
-                find_unused_parameters = self.args.ddp_find_unused_parameters
-            elif isinstance(model, PreTrainedModel):
-                # find_unused_parameters breaks checkpointing as per
-                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
-            else:
-                find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.args.local_rank],
-                output_device=self.args.local_rank,
-                find_unused_parameters=find_unused_parameters,
-            )
+        model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -1015,7 +1023,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not self.is_model_parallel:
+                if not self.is_model_parallel and self.args.place_model_on_device:
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
@@ -1592,7 +1600,7 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        if self.args.deepspeed and not self.args.do_train:
+        if self.args.deepspeed and not self.args.do_train and self.args.place_model_on_device:
             # In the future we probably can run deepspeed for inference too, but this will require
             # some thinking about how to best run it - since while it works DeepSpeed wasn't
             # designed for inference
@@ -1601,13 +1609,7 @@ class Trainer:
             # training, we must put the model on the right device
             self.model = self.model.to(self.args.device)
 
-        model = self.model
-
-        # multi-gpu eval
-        if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
-        # Note: in torch.distributed mode, there's no point in wrapping the model
-        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        model = self._wrap_model(self.model, training=False)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
