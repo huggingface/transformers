@@ -205,4 +205,272 @@ class TFEncoderDecoderModel(TFPretrainedModel):
     def set_output_embeddings(self, new_embeddings):
         return self.decoder.set_output_embeddings(new_embeddings)
 
-    def 
+    @classmethod
+    def from_encoder_decoder_pretrained(
+        cls,
+        encoder_pretrained_model_name_or_path: str = None,
+        decoder_pretrained_model_name_or_path: str = None,
+        *model_args,
+        **kwargs
+    ) -> TFPreTrainedModel:
+
+        r"""
+        Instantiate an encoder and a decoder from one or two base classes of the library from pretrained model
+        checkpoints.
+
+
+        The model is set in evaluation mode by default by keeping `training=False` while calling `call` method (Dropout modules are deactivated). To
+        train the model, you need to first set it back in training mode by setting `training=True` while calling `call` method.
+
+        Params:
+            encoder_pretrained_model_name_or_path (:obj: `str`, `optional`):
+                Information necessary to initiate the encoder. Can be either:
+
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
+                      this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
+                      as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
+                      a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            decoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+                Information necessary to initiate the decoder. Can be either:
+
+                    - A string, the `model id` of a pretrained model hosted inside a model repo on huggingface.co.
+                      Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
+                      a user or organization name, like ``dbmdz/bert-base-german-cased``.
+                    - A path to a `directory` containing model weights saved using
+                      :func:`~transformers.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                    - A path or url to a `tensorflow index checkpoint file` (e.g, ``./tf_model/model.ckpt.index``). In
+                      this case, ``from_tf`` should be set to :obj:`True` and a configuration object should be provided
+                      as ``config`` argument. This loading path is slower than converting the TensorFlow checkpoint in
+                      a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
+
+            model_args (remaining positional arguments, `optional`):
+                All remaning positional arguments will be passed to the underlying model's ``__init__`` method.
+
+            kwargs (remaining dictionary of keyword arguments, `optional`):
+                Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
+                :obj:`output_attentions=True`).
+
+                - To update the encoder configuration, use the prefix `encoder_` for each configuration parameter.
+                - To update the decoder configuration, use the prefix `decoder_` for each configuration parameter.
+                - To update the parent model configuration, do not use a prefix for each configuration parameter.
+
+                Behaves differently depending on whether a :obj:`config` is provided or automatically loaded.
+
+        Example::
+
+            >>> from transformers import TFEncoderDecoderModel
+            >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
+            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased')
+            >>> # saving model after fine-tuning
+            >>> model.save_pretrained("./bert2bert")
+            >>> # load fine-tuned model
+            >>> model = TFEncoderDecoderModel.from_pretrained("./bert2bert")
+
+        """
+
+        kwargs_encoder = {
+        key[len("encoder_"):]: values for key, values in kwargs.items() if key.startswith("encoder_")
+        }
+        print(kwargs_encoder)
+
+        kwargs_decoder = {
+            key[len("decoder_"):]: values for key, values in kwargs.items() if key.startswith("decoder_")
+        }
+        print(kwargs_decoder)
+
+        for key in kwargs:
+            if key.startswith("encoder_") or key.startswith("decoder_")""
+                kwargs.pop(key)
+        print(kwargs)
+
+        encoder = kwargs_decoder.pop("model", None)
+        if encoder is None:
+            assert (
+                encoder_pretrained_model_name_or_path is not None
+            ), "If `model` is not defined as an argument, a `encoder_pretrained_model_name_or_path` has to be defined"
+            from ..auto.modeling_tf_auto import TFAutoModel
+
+            if "config" not in kwargs_encoder:
+                from ..auto.configuration_auto import AutoConfig
+
+                encoder_config = AutoConfig.from_pretrained(encoder_pretrained_model_name_or_path)
+                if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
+
+                    logging.info(
+                        f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model from a decoder model. Cross-attention and casual mask are disabled."
+                    )
+                    encoder_config.is_decoder = False
+                    encoder_config.add_cross_attention = False
+
+                kwargs_encoder["config"] = encoder_config
+
+            encoder = TFAutoModel.from_pretrained(encoder_pretrained_model_name_or_path, *model_args, **kwargs_encoder)
+
+        decoder = decoder_kwargs.pop("model", None)
+        if decoder is None:
+            assert (
+                decoder_pretrained_model_name_or_path is not None
+            ), "If `decoder_model` is not defined as an argument, a `decoder_pretrained_model_name_or_path` has to be defined"
+            from ..auto.modeling_tf_auto import TFAutoModelForCausalLM
+
+            if "config" not in kwargs_decoder:
+                from ..auto.configuration_auto import AutoConfig
+
+                decoder_config = AutoConfig.from_pretrained(decoder_pretrained_model_name_or_path)
+                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
+                    logger.info(
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
+                    )
+                decoder_config.is_decoder = True
+                decoder_config.add_cross_attention = True
+
+                kwargs_decoder["config"] = decoder_config
+
+            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
+                logger.warning(
+                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a `decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+                )
+
+            decoder = TFAutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
+
+        config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config, **kwargs)
+
+        return cls(encoder=encoder, decoder=decoder, config=config)
+
+    # TODO: checkout decorators
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        encoder_outputs=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False
+        **kwargs
+    ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import TFEncoderDecoderModel, BertTokenizer
+            >>> import tensorflow as tf
+
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+            >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained('bert-base-uncased', 'bert-base-uncased') # initialize Bert2Bert from pre-trained checkpoints
+
+            >>> # forward
+            >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)  # Batch size 1
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids)
+
+            >>> # training
+            >>> outputs = model(input_ids=input_ids, decoder_input_ids=input_ids, labels=input_ids)
+            >>> loss, logits = outputs.loss, outputs.logits
+
+            >>> # save and load from pretrained
+            >>> model.save_pretrained("bert2bert")
+            >>> model = TFEncoderDecoderModel.from_pretrained("bert2bert")
+
+            >>> # generation
+            >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.pad_token_id)
+
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        kwargs_encoder = {
+        key: values for key, values in kwargs.items() if not key.startswith("decoder_")
+        }
+        print(kwargs_encoder)
+
+        kwargs_decoder = {
+            key[len("decoder_"):]: values for key, values in kwargs.items() if key.startswith("decoder_")
+        }
+        print(kwargs_decoder)
+
+        if encoder_outputs is None:
+            encoder_outputs = self.encoder(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                training=training,
+                **kwargs_encoder,
+            )
+
+        encoder_hidden_states = encoder_outputs[0]
+
+        # past
+
+        # Decode
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            # encoder_hidden_states=encoder_hidden_states,
+            # encoder_attention_mask=attention_mask,
+            inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            use_cache=use_cache,
+            # past_key_values=past_key_values,
+            return_dict=return_dict,
+            training=training,
+            **kwargs_decoder,
+        )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return TFSeq2SeqLMOutput(
+            loss=decoder_outputs.loss,
+            logits=decoder_outputs.logits,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+
+    def prepare_inputs_for_generation(
+        self, input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+    ):
+
+        # TODO: use_cache is called in decoder.prepare....()
+        # TODO: past_key_values not in decoder_inputs
+
+        raise NotImplementedError
+
+        # decoder_inputs = self.decoder.prepare_inputs_for_generation(input_ids, past=past)
+        # decoder_attention_mask = decoder_inputs["attention_mask"] if "attention_mask" in decoder_inputs else None
+        # input_dict = {
+        #     "attention_mask": attention_mask,
+        #     "decoder_attention_mask": decoder_attention_mask,
+        #     "decoder_input_ids": decoder_inputs["input_ids"],
+        #     "encoder_outputs": encoder_outputs,
+        #     "past_key_values": decoder_inputs["past_key_values"],
+        #     "use_cache": use_cache,
+        # }
+        # return input_dict
+
+    def _reorder_cache(self, past, beam_idx):
+        raise NotImplementedError
+        # return self.decoder._reorder_cache(past, beam_idx)
