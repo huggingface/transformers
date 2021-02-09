@@ -239,9 +239,10 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
-        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+        report_to (:obj:`str` or :obj:`List[str]`, `optional`, defaults to :obj:`"all"`):
             The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
-            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`. Use :obj:`"all"` to report to
+            all integrations installed, :obj:`"none"` for no integrations.
         ddp_find_unused_parameters (:obj:`bool`, `optional`):
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
@@ -478,10 +479,21 @@ class TrainingArguments:
         if is_torch_available() and self.device.type != "cuda" and self.fp16:
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
         if self.report_to is None:
+            logger.info(
+                "The default value for the training argument `--report_to` will change in v5 (from all installed "
+                "integrations to none). In v5, you will need to use `--report_to all` to get the same behavior as "
+                "now. You should start updating your code and make this info disappear :-)."
+            )
+            self.report_to = "all"
+        if self.report_to == "all" or self.report_to == ["all"]:
             # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
 
             self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
+            self.report_to = []
+        elif not isinstance(self.report_to, list):
+            self.report_to = [self.report_to]
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
