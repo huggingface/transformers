@@ -37,6 +37,7 @@ from ..fsmt.tokenization_fsmt import FSMTTokenizer
 from ..funnel.tokenization_funnel import FunnelTokenizer
 from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ..herbert.tokenization_herbert import HerbertTokenizer
+from ..ibert.tokenization_ibert import IBertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
 from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
@@ -74,6 +75,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    IBertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
@@ -145,6 +147,7 @@ if is_tokenizers_available():
     from ..funnel.tokenization_funnel_fast import FunnelTokenizerFast
     from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
     from ..herbert.tokenization_herbert_fast import HerbertTokenizerFast
+    from ..ibert.tokenization_ibert_fast import IBertTokenizerFast
     from ..layoutlm.tokenization_layoutlm_fast import LayoutLMTokenizerFast
     from ..led.tokenization_led_fast import LEDTokenizerFast
     from ..longformer.tokenization_longformer_fast import LongformerTokenizerFast
@@ -175,6 +178,7 @@ else:
     FunnelTokenizerFast = None
     GPT2TokenizerFast = None
     HerbertTokenizerFast = None
+    IBertTokenizerFast = None
     LayoutLMTokenizerFast = None
     LEDTokenizerFast = None
     LongformerTokenizerFast = None
@@ -241,6 +245,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
+        (IBertConfig, (IBertTokenizer, IBertTokenizerFast)),
     ]
 )
 
