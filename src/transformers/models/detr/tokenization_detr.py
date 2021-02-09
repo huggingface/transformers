@@ -299,8 +299,8 @@ class Resize(object):
         self.size = size
         self.max_size = max_size
 
-    def __call__(self, img, target=None):
-        return resize(img, target, self.size, self.max_size)
+    def __call__(self, image, target=None):
+        return resize(image, target, self.size, self.max_size)
 
 # copied from https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/util/box_ops.py
 def box_xyxy_to_cxcywh(x):
@@ -414,10 +414,10 @@ class DetrTokenizer(PreTrainedTokenizer):
             :obj:`List[PIL.Image]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch tensor.
             annotations (:obj:`Dict`, :obj:`List[Dict]`):
-                The annotations as either a single Python dictionary or a batch of Python dictionaries. Keys include "size", "area", 
-                "boxes" and "masks". 
+                The annotations as either a Python dictionary (in case of a single image) or a list of Python dictionaries (in case
+                of a batch of images). Keys include "boxes", "labels", "area" and "masks". 
             resize (:obj:`bool`, `optional`, defaults to :obj:`True`): 
-                Whether to resize images to a certain :obj:`size`.
+                Whether to resize images (and annotations) to a certain :obj:`size`.
             size (:obj:`int`, `optional`, defaults to :obj:`800`): 
                 Resize the input image to the given size. Only has an effect if :obj:`resize` is set to :obj:`True`. 
             max_size (:obj:`int`, `optional`, defaults to :obj:`1333`): 
@@ -431,7 +431,7 @@ class DetrTokenizer(PreTrainedTokenizer):
             and (isinstance(images[0], (PIL.Image.Image, np.ndarray, torch.Tensor)))
         )
 
-        # make images a list of PIL images no matter what
+        # step 1: make images a list of PIL images no matter what
         if is_batched:
             if isinstance(images[0], np.ndarray):
                 images = [Image.fromarray(image) for image in images]
@@ -445,33 +445,36 @@ class DetrTokenizer(PreTrainedTokenizer):
             if annotations is not None:
                 annotations = [annotations]
 
-        # next: apply transformations (resizing + normalization) to both images and annotations
+        # step 2: define transformations (resizing + normalization) 
         transformations = [ConvertCocoPolysToMask(),]
         if resize and size is not None: 
             transformations.append(Resize(size=size, max_size=max_size))
         if normalize:
-            normalize = Compose([
+            normalization = Compose([
                 ToTensor(),
                 Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
             ])
-            transformations.append(normalize)
+            transformations.append(normalization)
         transforms = Compose(transformations)
 
+        # step 3: apply transformations to both images and annotations
+        transformed_images = []
+        transformed_annotations = []
         if annotations is not None:
-            transformed_images = []
             for image, annotation in zip(images, annotations):
                 image, annotation = transforms(image, annotation)
                 transformed_images.append(image)
+                transformed_annotations.append(annotation)
         else:
-            transformed_images = [transforms(image, None) for image in images]
+            transformed_images = [transforms(image, None)[0] for image in images]
         
-        # next, create NestedTensor which takes care of padding the pixels up to biggest image
-        # we don't need the transformed targets for this
-        samples = nested_tensor_from_tensor_list([x[0] for x in transformed_images])
+        # step 4: create NestedTensor which takes care of padding the pixels up to biggest image
+        # and creation of mask. We don't need the transformed targets for this
+        samples = nested_tensor_from_tensor_list(transformed_images)
 
-        # return as dict
+        # return as BatchEncoding
         data = {'pixel_values': samples.tensors, 'pixel_mask': samples.mask, 
-                'labels': [x[1] for x in transformed_images] if annotations is not None else None}
+                'labels': transformed_annotations if annotations is not None else None}
         encoded_inputs = BatchEncoding(data=data)
 
         return encoded_inputs

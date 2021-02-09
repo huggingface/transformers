@@ -112,36 +112,34 @@ class DetrTokenizerTest(unittest.TestCase):
         return DetrTokenizer()
 
     # tests on single PIL image (inference only)
-    
-    def test_tokenizer_no_resize(self):
-        tokenizer = self.get_tokenizer()
-        encoding = tokenizer(self.img, resize=False)
-
-        self.assertEqual(encoding["pixel_values"].shape, (1,3,480,640))
-        self.assertEqual(encoding["pixel_mask"].shape, (1,480,640))
-
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
         encoding = tokenizer(self.img)
         
-        self.assertEqual(encoding["pixel_values"].shape, (1,3,800,1066))
-        self.assertEqual(encoding["pixel_mask"].shape, (1,800,1066))
+        self.assertEqual(encoding["pixel_values"].shape, (1, 3, 800, 1066))
+        self.assertEqual(encoding["pixel_mask"].shape, (1, 800, 1066))
 
-    # tests on list of PIL images (inference only)
+    # tests on single PIL image (inference only, with resize set to False)
+    def test_tokenizer_no_resize(self):
+        tokenizer = self.get_tokenizer()
+        encoding = tokenizer(self.img, resize=False)
 
+        self.assertEqual(encoding["pixel_values"].shape, (1, 3, 480, 640))
+        self.assertEqual(encoding["pixel_mask"].shape, (1, 480, 640))
+
+    # tests on batch of PIL images (inference only)
     def test_tokenizer_batch(self):
         tokenizer = self.get_tokenizer()
         encoding = tokenizer(self.images)
 
-        self.assertEqual(encoding["pixel_values"].shape, (3,3,800,1201))
-        self.assertEqual(encoding["pixel_mask"].shape, (3,800,1201))
+        self.assertEqual(encoding["pixel_values"].shape, (3, 3, 1120, 1332))
+        self.assertEqual(encoding["pixel_mask"].shape, (3, 1120, 1332))
 
-    # tests on list of PIL images (training)
-    # doesn't work yet (format of annotations?)
+    # tests on batch of PIL images (training, i.e. with annotations)
     def test_tokenizer_batch_training(self):
         tokenizer = self.get_tokenizer()
         encoding = tokenizer(self.images, self.annotations)
 
-        self.assertEqual(encoding["pixel_values"].shape, (3,3,800,1201))
-        self.assertEqual(encoding["pixel_mask"].shape, (3,800,1201))
+        self.assertEqual(encoding["pixel_values"].shape, (3, 3, 1120, 1332))
+        self.assertEqual(encoding["pixel_mask"].shape, (3, 1120, 1332))
 
