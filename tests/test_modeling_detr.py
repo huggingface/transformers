@@ -315,6 +315,17 @@ def prepare_img():
     return img
 
 
+def prepare_detr_inputs():
+    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    im = Image.open(requests.get(url, stream=True).raw)
+
+    tokenizer = DetrTokenizer()
+
+    encoding = tokenizer(im)
+
+    return encoding
+
+
 @require_torch
 @slow
 class DetrModelIntegrationTests(unittest.TestCase):
@@ -325,10 +336,13 @@ class DetrModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         model = DetrModel.from_pretrained('nielsr/detr-resnet-50-new').to(torch_device)
         model.eval()
-        img = prepare_img().to(torch_device)
+
+        encoding = prepare_detr_inputs()
+        pixel_values = encoding['pixel_values'].to(torch_device)
+        pixel_mask = encoding['pixel_mask'].to(torch_device)
         
         with torch.no_grad():
-            outputs = model(img)
+            outputs = model(pixel_values, pixel_mask)
         
         expected_shape = torch.Size((1, 100, 256))
         assert outputs.last_hidden_state.shape == expected_shape
@@ -341,10 +355,13 @@ class DetrModelIntegrationTests(unittest.TestCase):
     def test_inference_object_detection_head(self):    
         model = DetrForObjectDetection.from_pretrained('nielsr/detr-resnet-50-new').to(torch_device)
         model.eval()
-        img = prepare_img().to(torch_device)
+        
+        encoding = prepare_detr_inputs()
+        pixel_values = encoding['pixel_values'].to(torch_device)
+        pixel_mask = encoding['pixel_mask'].to(torch_device)
 
         with torch.no_grad():
-            outputs = model(img)
+            outputs = model(pixel_values, pixel_mask)
         
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
         self.assertEqual(outputs.pred_logits.shape, expected_shape_logits)

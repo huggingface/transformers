@@ -300,26 +300,26 @@ class BackboneBase(nn.Module):
         self.body = IntermediateLayerGetter(backbone, return_layers=return_layers)
         self.num_channels = num_channels
 
-    # def forward_new(self, pixel_values: Union[torch.Tensor, list[torch.Tensor]], pixel_mask: Optional[torch.Tensor]):
-    #     xs = self.body(pixel_values)
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the IntermediateLayerGetter
+        output_dict = self.body(pixel_values)
+        # currently there's no support for intermediate layers of the backbone
+        feature_map = output_dict["0"]
+        assert pixel_mask is not None
+        # we downsample the pixel_mask to match the feature map
+        mask = F.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+        return feature_map, mask
+    
+    # # this one should be removed in the future
+    # def forward(self, tensor_list: NestedTensor):
+    #     xs = self.body(tensor_list.tensors)
     #     out: Dict[str, NestedTensor] = {}
     #     for name, x in xs.items():
-    #         m = pixel_mask
+    #         m = tensor_list.mask
     #         assert m is not None
     #         mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
     #         out[name] = NestedTensor(x, mask)
     #     return out
-    
-    # this one should be removed in the future
-    def forward(self, tensor_list: NestedTensor):
-        xs = self.body(tensor_list.tensors)
-        out: Dict[str, NestedTensor] = {}
-        for name, x in xs.items():
-            m = tensor_list.mask
-            assert m is not None
-            mask = F.interpolate(m[None].float(), size=x.shape[-2:]).to(torch.bool)[0]
-            out[name] = NestedTensor(x, mask)
-        return out
 
 
 class Backbone(BackboneBase):
@@ -339,25 +339,38 @@ class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
-    def forward(self, tensor_list: NestedTensor):
-        xs = self[0](tensor_list)
-        print("The backbone outputs a NestedTensor with a Tensor and a Mask.")
-        print("Shape of backbone tensor:")
-        print(xs["0"].tensors.shape)
-        print("Shape of backbone mask:")
-        print(xs["0"].mask.shape)
-        out: List[NestedTensor] = []
-        pos = []
-        for name, x in xs.items():
-            out.append(x)
-            # position encoding
-            pos.append(self[1](x).to(x.tensors.dtype))
+    def forward(self, pixel_values, pixel_mask):
+        print("Hello we're here")
+        print(pixel_values.shape)
+        print(pixel_mask.shape)
         
-        print(len(pos))
-        print("Shape of position embeddings:")
-        print(pos[0].shape)
+        # first, send pixel_values and pixel_mask through backbone to obtain updated feature_map and pixel_mask
+        feature_map, pixel_mask = self[0](pixel_values, pixel_mask)
 
-        return out, pos
+        # next, create position embeddings for the outputs of the outputs_dict
+        pos = self[1](feature_map, pixel_mask).to(feature_map.dtype)
+
+        return feature_map, pixel_mask, pos
+    
+    # def forward(self, tensor_list: NestedTensor):
+    #     xs = self[0](tensor_list)
+    #     print("The backbone outputs a NestedTensor with a Tensor and a Mask.")
+    #     print("Shape of backbone tensor:")
+    #     print(xs["0"].tensors.shape)
+    #     print("Shape of backbone mask:")
+    #     print(xs["0"].mask.shape)
+    #     out: List[NestedTensor] = []
+    #     pos = []
+    #     for name, x in xs.items():
+    #         out.append(x)
+    #         # position encoding
+    #         pos.append(self[1](x).to(x.tensors.dtype))
+        
+    #     print(len(pos))
+    #     print("Shape of position embeddings:")
+    #     print(pos[0].shape)
+
+    #     return out, pos
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -422,9 +435,9 @@ class DetrSinePositionEmbedding(nn.Module):
             scale = 2 * math.pi
         self.scale = scale
 
-    def forward(self, tensor_list: NestedTensor):
-        x = tensor_list.tensors
-        mask = tensor_list.mask
+    def forward(self, pixel_values, pixel_mask):
+        x = pixel_values
+        mask = pixel_mask
         assert mask is not None
         not_mask = ~mask
         y_embed = not_mask.cumsum(1, dtype=torch.float32)
@@ -1450,7 +1463,9 @@ class DetrModel(DetrPreTrainedModel):
     # )
     def forward(
         self,
-        samples: NestedTensor=None,
+        #samples: NestedTensor=None,
+        pixel_values,
+        pixel_mask,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -1469,23 +1484,25 @@ class DetrModel(DetrPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # First, sent images through Backbone to obtain the features (includes features map, mask and position embeddings)
-        if isinstance(samples, (list, torch.Tensor)):
-            samples = nested_tensor_from_tensor_list(samples)
-        # tensors are of shape (batch_size, num_channels, height, width)
-        features, position_embeddings_list = self.backbone(samples)
+        # First, sent pixel_values + pixel_mask through Backbone to obtain the features 
+        # (includes features map, downsampled mask and position embeddings)
+        # pixel_values should be of shape (batch_size, num_channels, height, width)
+        # pixel_mask should be of shape (batch_size, height, width)
+        feature_map, mask, position_embeddings = self.backbone(pixel_values, pixel_mask)
 
-        src, mask = features[-1].decompose()
         assert mask is not None
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        src = self.input_projection(src)
+        src = self.input_projection(feature_map)
         
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         batch_size, c, h, w = src.shape
         src = src.flatten(2).permute(0, 2, 1)
-        position_embeddings = position_embeddings_list[-1].flatten(2).permute(0, 2, 1)
+        position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
+
+        print("Shape of position embeddings:")
+        print(position_embeddings.shape)
         mask = ~mask.flatten(1)
 
         # Fourth, sent src + mask + position embeddings through encoder 
@@ -1580,7 +1597,9 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     # )
     def forward(
         self,
-        samples: NestedTensor=None,
+        #samples: NestedTensor=None,
+        pixel_values,
+        pixel_mask,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -1603,7 +1622,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # First, sent images through DETR base model to obtain encoder + decoder outputs
-        outputs = self.model(samples)
+        outputs = self.model(pixel_values, pixel_mask)
 
         # class logits + predicted bounding boxes
         # to do: make this as efficient as the original implementation
