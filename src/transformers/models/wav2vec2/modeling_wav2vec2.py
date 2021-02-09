@@ -114,6 +114,9 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.dropout(hidden_states)
+        import ipdb
+
+        ipdb.set_trace()
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -191,7 +194,6 @@ class Wav2Vec2FeatureProjection(nn.Module):
         self.dropout = nn.Dropout(config.feat_extract_dropout)
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.transpose(1, 2)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -387,9 +389,11 @@ class Wav2Vec2EncoderLayer(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
-        hidden_states, attn_weights, _ = self.attention(hidden_states, output_attentions=output_attentions)
+        hidden_states, attn_weights, _ = self.attention(
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
@@ -414,10 +418,12 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(hidden_states, output_attentions=output_attentions)
+        hidden_states, attn_weights, _ = self.attention(
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
@@ -438,12 +444,23 @@ class Wav2Vec2Encoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        if attention_mask is not None:
+            # make sure padded tokens output 0
+            hidden_states[~attention_mask] = 0.0
+
+            # extend attention_mask
+            attention_mask = (1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)) * -10000.0
+            attention_mask = attention_mask.expand(
+                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
@@ -454,7 +471,9 @@ class Wav2Vec2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states, attn_weights = layer(hidden_states, output_attentions=output_attentions)
+            hidden_states, attn_weights = layer(
+                hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            )
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (attn_weights,)
@@ -486,12 +505,17 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
     def forward(
         self,
         hidden_states,
+        attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+
+        if attention_mask is not None:
+            # make sure padded tokens are not attended to
+            hidden_states[attention_mask] = 0
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
@@ -501,7 +525,9 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states, attn_weights = layer(hidden_states, output_attentions=output_attentions)
+            hidden_states, attn_weights = layer(
+                hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            )
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (attn_weights,)
@@ -606,6 +632,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
     def forward(
         self,
         input_values,
+        attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -641,10 +668,28 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.feature_extractor(input_values)
+        hidden_states = hidden_states.transpose(1, 2)
+
+        if attention_mask is not None:
+            batch_size, input_length = attention_mask.shape
+            output_length = hidden_states.shape[1]
+
+            superfluous_padding = input_length % output_length
+
+            if superfluous_padding > 0:
+                attention_mask = attention_mask[:, :-superfluous_padding]
+
+            # attention_mask from shape [batch_size, input_length] to [batch_size, output_length]
+            # and only pad hidden_states that correspond to a fully padded input
+            attention_mask = attention_mask.bool().view(batch_size, output_length, -1).all(-1)
+
         hidden_states = self.feature_projection(hidden_states)
+
+        #        print("hidden_states", hidden_states[:, :3, :3])
 
         encoder_outputs = self.encoder(
             hidden_states,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -681,6 +726,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
     def forward(
         self,
         input_values,
+        attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -755,6 +801,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     def forward(
         self,
         input_values,
+        attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -795,6 +842,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         outputs = self.wav2vec2(
             input_values,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,

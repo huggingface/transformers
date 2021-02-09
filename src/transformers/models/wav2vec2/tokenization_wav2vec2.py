@@ -55,6 +55,9 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
+            normalize (:obj:`bool`, defaults to :obj:`True`):
+                Performs zero-mean and unit-variance on the input values
+
             return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -100,7 +103,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
         },
     }
-    model_input_names = ["input_values"]
+    model_input_names = ["input_values", "attention_mask"]
 
     def __init__(
         self,
@@ -165,6 +168,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        normalize: bool = True,
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
@@ -201,7 +205,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=False,
+            return_attention_mask=True,
             return_tensors=return_tensors,
             verbose=verbose,
         )
