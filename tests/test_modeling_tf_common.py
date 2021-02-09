@@ -25,7 +25,7 @@ from importlib import import_module
 from typing import List, Tuple
 
 from transformers import is_tf_available
-from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import _tf_gpu_memory_limit, require_onnx, is_pt_tf_cross_test, require_tf, slow
 
 
 if is_tf_available():
@@ -203,6 +203,9 @@ class TFModelTesterMixin:
             self.assertTrue(os.path.exists(saved_model_dir))
 
     def test_onnx_compliancy(self):
+        if not self.model_tester.test_onnx:
+            return
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         INTERNAL_OPS = [
             "Assert",
@@ -214,9 +217,13 @@ class TFModelTesterMixin:
             "VarHandleOp",
             "VarIsInitializedOp",
         ]
+        onnx_ops = []
 
         with open(os.path.join(".", "utils", "tf_ops", "onnx.json")) as f:
-            onnx_ops = json.load(f)["Keras2ONNX"]["opset12"]
+            onnx_opsets = json.load(f)["opsets"]
+        
+        for i in range(1, self.onnx_min_opset + 1):
+            onnx_ops.extend(onnx_opsets[str(i)])
 
         for model_class in self.all_model_classes:
             model_op_names = set()
@@ -236,6 +243,43 @@ class TFModelTesterMixin:
                     incompatible_ops.append(op)
 
             self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
+    
+    @require_onnx
+    @slow
+    def test_onnx_runtime_quantize_optimize(self):
+        if not self.test_onnx:
+            return
+
+        import onnx
+        import onnxruntime
+        from onnxruntime.quantization import QuantizationMode, quantize
+        import keras2onnx
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model(model.dummy_inputs)
+
+            onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                keras2onnx.save_model(onnx_model, os.path.join(tmpdirname, "model.onnx"))
+                sess_option = onnxruntime.SessionOptions()
+                sess_option.optimized_model_filepath = os.path.join(tmpdirname, "model-optimized.onnx")
+                onnxruntime.InferenceSession(os.path.join(tmpdirname, "model.onnx"), sess_option)
+                onnx_model = onnx.load(os.path.join(tmpdirname, "model-optimized.onnx"))
+                quantized_model = quantize(
+                    model=onnx_model,
+                    quantization_mode=QuantizationMode.IntegerOps,
+                    force_fusions=True,
+                    symmetric_weight=True,
+                )
+                onnx.save_model(quantized_model, os.path.join(tmpdirname, "model-quantized.onnx"))
+
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, "model.onnx")))
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, "model-optimized.onnx")))
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, "model-quantized.onnx")))
 
     @slow
     def test_saved_model_creation_extended(self):

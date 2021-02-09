@@ -206,6 +206,7 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFElectraModelTester(self)
@@ -248,10 +249,6 @@ class TFElectraModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in ["google/electra-small-discriminator"]:
             model = TFElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for ELECTRA
-        pass
 
 
 @require_tf

@@ -164,6 +164,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
     # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFTransfoXLModelTester(self)
@@ -210,10 +211,6 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make TransfoXL XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for TransfoXL
         pass
 
     @slow

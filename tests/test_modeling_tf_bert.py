@@ -274,6 +274,8 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = True
+    onnx_min_opset = 12
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

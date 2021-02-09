@@ -174,6 +174,7 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
     all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFCTRLModelTester(self)
@@ -227,10 +228,6 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make CTRL XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for CTRL
         pass
 
     @slow

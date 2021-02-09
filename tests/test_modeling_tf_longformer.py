@@ -298,6 +298,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFLongformerModelTester(self)
@@ -373,10 +374,6 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make Blenderbot XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for Longformer
         pass
 
 

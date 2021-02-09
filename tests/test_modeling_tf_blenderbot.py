@@ -177,6 +177,7 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBlenderbotForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFBlenderbotModelTester(self)
@@ -219,10 +220,6 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make Blenderbot XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for Blenderbot
         pass
 
     def test_resize_token_embeddings(self):

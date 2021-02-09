@@ -188,6 +188,7 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
     test_missing_keys = False
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFDPRModelTester(self)
@@ -225,10 +226,6 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFDPRReader.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for DPR
-        pass
 
 
 @require_tf

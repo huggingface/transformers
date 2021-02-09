@@ -199,6 +199,7 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFMPNetModelTester(self)
@@ -233,10 +234,6 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make MPNet XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for MPNet
         pass
 
     @slow

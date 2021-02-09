@@ -241,6 +241,7 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFAlbertModelTester(self)
@@ -296,10 +297,6 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make ALBERT float16 compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for ALBERT
         pass
 
     @slow

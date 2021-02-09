@@ -294,6 +294,7 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
         (TFXLMWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFXLMModelTester(self)
@@ -332,10 +333,6 @@ class TFXLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make XLM XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for XLM
         pass
 
     @slow

@@ -186,6 +186,7 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFRobertaModelTester(self)
@@ -219,10 +220,6 @@ class TFRobertaModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFRobertaModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for Roberta
-        pass
 
 
 @require_tf

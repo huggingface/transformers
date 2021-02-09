@@ -339,6 +339,7 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFFunnelModelTester(self)
@@ -373,10 +374,6 @@ class TFFunnelModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make Funnel float16 compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for Funnel
         pass
 
 

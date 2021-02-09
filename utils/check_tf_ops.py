@@ -41,11 +41,15 @@ INTERNAL_OPS = [
 ]
 
 
-def onnx_compliancy(saved_model_path, strict):
+def onnx_compliancy(saved_model_path, strict, opset):
     saved_model = SavedModel()
+    onnx_ops = []
 
-    with open(os.path.join(REPO_PATH, "tests", "fixtures", "tf_ops", "onnx.json")) as f:
-        onnx_ops = json.load(f)["Keras2ONNX"]["opset12"]
+    with open(os.path.join(REPO_PATH, "utils", "tf_ops", "onnx.json")) as f:
+        onnx_opsets = json.load(f)["opsets"]
+
+    for i in range(1, opset + 1):
+        onnx_ops.extend(onnx_opsets[str(i)])
 
     with open(saved_model_path, "rb") as f:
         saved_model.ParseFromString(f.read())
@@ -71,9 +75,9 @@ def onnx_compliancy(saved_model_path, strict):
             incompatible_ops.append(op)
 
     if strict and len(incompatible_ops) > 0:
-        raise Exception("Found the following incompatible ops:\n" + incompatible_ops)
+        raise Exception(f"Found the following incompatible ops for the opset {opset}:\n" + incompatible_ops)
     elif len(incompatible_ops) > 0:
-        print("Found the following incompatible ops:")
+        print(f"Found the following incompatible ops for the opset {opset}:")
         print(*incompatible_ops, sep="\n")
     else:
         print(f"The saved model {saved_model_path} can properly be converted with ONNX.")
@@ -82,6 +86,7 @@ def onnx_compliancy(saved_model_path, strict):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--saved_model_path", help="Path of the saved model to check (the .pb file).")
+    parser.add_argument("--opset", default=12, type=int, help="The ONNX opset against which the model has to be tested.")
     parser.add_argument(
         "--framework", choices=["onnx"], default="onnx", help="Frameworks against which to test the saved model."
     )
@@ -91,4 +96,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.framework == "onnx":
-        onnx_compliancy(args.saved_model_path, args.strict)
+        onnx_compliancy(args.saved_model_path, args.strict, args.opset)

@@ -203,6 +203,7 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
         (TFOpenAIGPTLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Add Double HeadsModel when generate() function is changed accordingly
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFOpenAIGPTModelTester(self)
@@ -251,10 +252,6 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make OpenAIGPT XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for OpenAIGPT
         pass
 
     @slow

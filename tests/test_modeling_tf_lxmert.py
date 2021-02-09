@@ -362,6 +362,7 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (TFLxmertModel, TFLxmertForPreTraining) if is_tf_available() else ()
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFLxmertModelTester(self)
@@ -706,10 +707,6 @@ class TFLxmertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make Lxmert float16 compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for Lxmert
         pass
 
     @slow

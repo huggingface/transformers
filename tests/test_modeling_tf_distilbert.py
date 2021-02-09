@@ -184,6 +184,7 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         else None
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFDistilBertModelTester(self)
@@ -221,10 +222,6 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in list(TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]):
             model = TFDistilBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for DistilBert
-        pass
 
 
 @require_tf

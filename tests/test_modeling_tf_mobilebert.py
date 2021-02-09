@@ -56,6 +56,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     class TFMobileBertModelTester(object):
         def __init__(
@@ -311,10 +312,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make MobileBert float16 compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for MobileBert
         pass
 
     @slow

@@ -348,6 +348,7 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFXLNetModelTester(self)
@@ -389,10 +390,6 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFXLNetModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for XLNET
-        pass
 
 
 @require_tf

@@ -239,6 +239,7 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFConvBertModelTester(self)
@@ -303,10 +304,6 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_xla_mode(self):
         # TODO JP: Make ConvBert XLA compliant
-        pass
-
-    def test_onnx_compliancy(self):
-        # Not mandatory for ConvBert
         pass
 
     @slow
