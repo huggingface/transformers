@@ -819,7 +819,7 @@ class Trainer:
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), DDP(Deepspeed(Transformers Model)), etc.
+        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
         if is_torch_tpu_available():
@@ -1043,7 +1043,7 @@ class Trainer:
             self.deepspeed = None
             self.optimizer = None
             self.lr_scheduler = None
-            self.model_wrapped = None
+            self.model_wrapped = self.model
             gc.collect()  # force memory release
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
