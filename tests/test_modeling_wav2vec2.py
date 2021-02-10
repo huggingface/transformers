@@ -128,6 +128,10 @@ class Wav2Vec2ModelTester:
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
+        # Not sure how to make this test pass at the moment. Batched input yields
+        # same results as official fairseq implementation, but gives different results
+        # depending on whether batched input is used or not
+        # check: https://github.com/pytorch/fairseq/issues/3227
         model = Wav2Vec2Model(config=config)
         model.to(torch_device)
         model.eval()
@@ -147,9 +151,6 @@ class Wav2Vec2ModelTester:
             input_values[i, input_lengths[i] :] = 0.0
             attention_mask[i, input_lengths[i] :] = 0.0
 
-        # normalize input values
-        #        input_values = (input_values - torch.mean(input_values, -1, keepdim=True)) / torch.sqrt(torch.var(input_values, -1, keepdim=True, unbiased=False) + 1e-5)
-        #
         batch_outputs = model(input_values, attention_mask=attention_mask).last_hidden_state
 
         for i in range(input_values.shape[0]):
@@ -157,7 +158,6 @@ class Wav2Vec2ModelTester:
             output = model(input_slice).last_hidden_state
 
             batch_output = batch_outputs[i : i + 1, : output.shape[1]]
-            #            import ipdb; ipdb.set_trace()
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
 
     def prepare_config_and_inputs_for_common(self):
