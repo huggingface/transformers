@@ -152,7 +152,7 @@ _onnx_available = (
 )
 try:
     _onxx_version = importlib_metadata.version("onnx")
-    logger.debug(f"Successfully imported faiss version {_onxx_version}")
+    logger.debug(f"Successfully imported onnx version {_onxx_version}")
 except importlib_metadata.PackageNotFoundError:
     _onnx_available = False
 
