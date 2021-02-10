@@ -290,6 +290,16 @@ full support for:
 
 1. Optimizer State Partitioning (ZeRO stage 1)
 2. Add Gradient Partitioning (ZeRO stage 2)
+3. Custom fp16 handling
+4. A range of fast Cuda-extension-based Optimizers
+5. ZeRO-Offload
+
+ZeRO-Offload has its own dedicated paper: `ZeRO-Offload: Democratizing Billion-Scale Model Training
+<https://arxiv.org/abs/2101.06840>`__.
+
+DeepSpeed is currently used only for training, as all the currently available features are of no use to inference.
+
+
 
 Installation
 =======================================================================================================================
@@ -328,6 +338,11 @@ Unlike, ``torch.distributed.launch`` where you have to specify how many GPUs to 
 ``deepspeed`` launcher you don't have to use the corresponding ``--num_gpus`` if you want all of your GPUs used. The
 full details on how to configure various nodes and GPUs can be found `here
 <https://www.deepspeed.ai/getting-started/#resource-configuration-multi-node>`__.
+
+In fact, you can continue using ``-m torch.distributed.launch`` with DeepSpeed as long as you don't need to use
+``deepspeed`` launcher-specific arguments. Typically if you don't need a multi-node setup you're not required to use
+the ``deepspeed`` launcher. But since in the DeepSpeed documentation it'll be used everywhere, for consistency we will
+use it here as well.
 
 Here is an example of running ``finetune_trainer.py`` under DeepSpeed deploying all available GPUs:
 
