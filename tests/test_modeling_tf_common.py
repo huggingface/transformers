@@ -246,14 +246,12 @@ class TFModelTesterMixin:
 
     @require_onnx
     @slow
-    def test_onnx_runtime_quantize_optimize(self):
+    def test_onnx_runtime_optimize(self):
         if not self.test_onnx:
             return
 
         import keras2onnx
-        import onnx
         import onnxruntime
-        from onnxruntime.quantization import QuantizationMode, quantize
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -263,23 +261,7 @@ class TFModelTesterMixin:
 
             onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
 
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                keras2onnx.save_model(onnx_model, os.path.join(tmpdirname, "model.onnx"))
-                sess_option = onnxruntime.SessionOptions()
-                sess_option.optimized_model_filepath = os.path.join(tmpdirname, "model-optimized.onnx")
-                onnxruntime.InferenceSession(os.path.join(tmpdirname, "model.onnx"), sess_option)
-                onnx_model = onnx.load(os.path.join(tmpdirname, "model-optimized.onnx"))
-                quantized_model = quantize(
-                    model=onnx_model,
-                    quantization_mode=QuantizationMode.IntegerOps,
-                    force_fusions=True,
-                    symmetric_weight=True,
-                )
-                onnx.save_model(quantized_model, os.path.join(tmpdirname, "model-quantized.onnx"))
-
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, "model.onnx")))
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, "model-optimized.onnx")))
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, "model-quantized.onnx")))
+            onnxruntime.InferenceSession(onnx_model.SerializeToString())
 
     @slow
     def test_saved_model_creation_extended(self):

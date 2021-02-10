@@ -1045,7 +1045,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             ), "Cannot handle batch sizes > 1 if no padding token is defined."
 
             if not tf.is_tensor(sequence_lengths):
-                in_logits = logits[0:logits_shape[0], sequence_lengths]
+                in_logits = logits[0 : logits_shape[0], sequence_lengths]
 
             loss = self.compute_loss(tf.reshape(inputs["labels"], [-1]), tf.reshape(in_logits, [-1, self.num_labels]))
         pooled_logits = in_logits if in_logits is not None else logits
