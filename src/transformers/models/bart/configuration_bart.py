@@ -128,7 +128,6 @@ class BartConfig(PretrainedConfig):
         classifier_dropout=0.0,
         scale_embedding=False,
         gradient_checkpointing=False,
-        force_bos_token_to_be_generated=False,
         use_cache=True,
         num_labels=3,
         pad_token_id=1,
