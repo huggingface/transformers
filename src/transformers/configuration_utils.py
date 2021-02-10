@@ -132,9 +132,8 @@ class PretrainedConfig(object):
         - **return_dict_in_generate** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should
           return a :class:`~transformers.file_utils.ModelOutput` instead of a :obj:`torch.LongTensor`
         - **forced_bos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the first generated token
-          after the :obj:`decoder_start_token_id`. Useful for multilingual models like `mBART
-          <https://huggingface.co/transformers/model_doc/mbart.html>`__ where the first generated token needs to be the
-          target language token.
+          after the :obj:`decoder_start_token_id`. Useful for multilingual models like :doc:`mBART
+          <../model_doc/mbart>` where the first generated token needs to be the target language token.
         - **forced_eos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the last generated token
           when :obj:`max_length` is reached.
 
