@@ -688,7 +688,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            # get real output lengths
+            # compute real output lengths according to convolution formula
             output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
 
             attention_mask = torch.zeros(
