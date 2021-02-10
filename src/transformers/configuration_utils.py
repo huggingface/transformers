@@ -131,6 +131,11 @@ class PretrainedConfig(object):
           logits when used for generation
         - **return_dict_in_generate** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should
           return a :class:`~transformers.file_utils.ModelOutput` instead of a :obj:`torch.LongTensor`
+        - **forced_bos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the first generated token
+          after the :obj:`decoder_start_token_id`. Useful for multilingual models like :doc:`mBART
+          <../model_doc/mbart>` where the first generated token needs to be the target language token.
+        - **forced_eos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the last generated token
+          when :obj:`max_length` is reached.
 
 
     Parameters for fine-tuning tasks
@@ -214,6 +219,8 @@ class PretrainedConfig(object):
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
         self.output_scores = kwargs.pop("output_scores", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
+        self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
+        self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
