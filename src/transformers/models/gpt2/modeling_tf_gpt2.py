@@ -1033,7 +1033,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
                 result = tf.strided_slice(
                     logits,
                     [0, sequence_lengths, 0],
-                    [shape_list(logits)[0], sequence_lengths + 1, shape_list(logits)[0]],
+                    [logits_shape[0], sequence_lengths + 1, logits_shape[0]],
                     [1, 1, 1],
                 )
                 in_logits = tf.reshape(result, [logits_shape[0], logits_shape[-1]])
