@@ -67,7 +67,7 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_gpu_failures_short.txt
-        
+
       - name: Run examples tests on GPU
         if: ${{ always() }}
         env:
@@ -157,7 +157,7 @@ jobs:
         run: |
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_tf_gpu tests
-          
+
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_gpu_failures_short.txt
@@ -183,7 +183,7 @@ jobs:
         with:
           name: run_all_tests_tf_gpu_test_reports
           path: reports
-          
+
   run_all_tests_torch_multi_gpu:
     runs-on: [self-hosted, gpu, multi-gpu]
     steps:
@@ -221,6 +221,8 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
+          pip install fairscale
+          pip install deepspeed
           pip list
 
       - name: Are GPUs recognized by our DL frameworks
@@ -342,7 +344,7 @@ jobs:
         run: |
           source .env/bin/activate
           python -m pytest -n 1 --dist=loadfile -s -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
-          
+
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_pipeline_multi_gpu_failures_short.txt
@@ -353,4 +355,3 @@ jobs:
         with:
           name: run_all_tests_tf_multi_gpu_test_reports
           path: reports
-          
