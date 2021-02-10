@@ -122,10 +122,10 @@ def nested_tensor_from_tensor_list(tensor_list: Union[List[Tensor], torch.Tensor
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        mask = torch.zeros((b, h, w), dtype=torch.bool, device=device)
         for img, pad_img, m in zip(tensor_list, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], :img.shape[2]] = False
+            m[: img.shape[1], :img.shape[2]] = True
     else:
         raise ValueError('Not supported')
     return NestedTensor(tensor, mask)
@@ -133,6 +133,7 @@ def nested_tensor_from_tensor_list(tensor_list: Union[List[Tensor], torch.Tensor
 
 # _onnx_nested_tensor_from_tensor_list() is an implementation of
 # nested_tensor_from_tensor_list() that is supported by ONNX tracing.
+# Note: inverting mask has not yet been taken into account
 @torch.jit.unused
 def _onnx_nested_tensor_from_tensor_list(tensor_list: List[Tensor]) -> NestedTensor:
     max_size = []

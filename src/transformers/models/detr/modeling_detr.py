@@ -435,9 +435,8 @@ class DetrSinePositionEmbedding(nn.Module):
         x = pixel_values
         mask = pixel_mask
         assert mask is not None
-        not_mask = ~mask
-        y_embed = not_mask.cumsum(1, dtype=torch.float32)
-        x_embed = not_mask.cumsum(2, dtype=torch.float32)
+        y_embed = mask.cumsum(1, dtype=torch.float32)
+        x_embed = mask.cumsum(2, dtype=torch.float32)
         if self.normalize:
             eps = 1e-6
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
@@ -1497,7 +1496,7 @@ class DetrModel(DetrPreTrainedModel):
         src = src.flatten(2).permute(0, 2, 1)
         position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
 
-        mask = ~mask.flatten(1)
+        mask = mask.flatten(1)
 
         # Fourth, sent src + mask + position embeddings through encoder 
         # src is a Tensor of shape (batch_size, heigth*width, hidden_size) 
