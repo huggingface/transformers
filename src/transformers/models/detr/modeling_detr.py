@@ -339,11 +339,7 @@ class Joiner(nn.Sequential):
     def __init__(self, backbone, position_embedding):
         super().__init__(backbone, position_embedding)
 
-    def forward(self, pixel_values, pixel_mask):
-        print("Hello we're here")
-        print(pixel_values.shape)
-        print(pixel_mask.shape)
-        
+    def forward(self, pixel_values, pixel_mask):     
         # first, send pixel_values and pixel_mask through backbone to obtain updated feature_map and pixel_mask
         feature_map, pixel_mask = self[0](pixel_values, pixel_mask)
 
@@ -472,8 +468,8 @@ class DetrLearnedPositionEmbedding(nn.Module):
         nn.init.uniform_(self.row_embeddings.weight)
         nn.init.uniform_(self.column_embeddings.weight)
 
-    def forward(self, tensor_list: NestedTensor):
-        x = tensor_list.tensors
+    def forward(self, pixel_values, pixel_mask=None):
+        x = pixel_values
         h, w = x.shape[-2:]
         i = torch.arange(w, device=x.device)
         j = torch.arange(h, device=x.device)
@@ -1501,8 +1497,6 @@ class DetrModel(DetrPreTrainedModel):
         src = src.flatten(2).permute(0, 2, 1)
         position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
 
-        print("Shape of position embeddings:")
-        print(position_embeddings.shape)
         mask = ~mask.flatten(1)
 
         # Fourth, sent src + mask + position embeddings through encoder 
