@@ -520,3 +520,49 @@ class HammingDiversityLogitsProcessor(LogitsProcessor):
             scores[batch_idx * group_size : (batch_idx + 1) * group_size] -= self._diversity_penalty * token_frequency
 
         return scores
+
+
+class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (:obj:`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        self.bos_token_id = bos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == 1:
+            num_tokens = scores.shape[1]
+            scores[:, [i for i in range(num_tokens) if i != self.bos_token_id]] = -float("inf")
+            scores[:, self.bos_token_id] = 0
+        return scores
+
+
+class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that enforces the specified token as the last generated token when
+    :obj:`max_length` is reached.
+
+    Args:
+        max_length (:obj:`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (:obj:`int`):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == self.max_length - 1:
+            num_tokens = scores.shape[1]
+            scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
+            scores[:, self.eos_token_id] = 0
+        return scores

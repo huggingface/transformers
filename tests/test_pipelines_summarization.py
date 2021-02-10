@@ -46,6 +46,7 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
             decoder_attention_heads=1,
             max_length=4,
             min_length=1,
+            forced_eos_token_id=None,
         )
         model = BartForConditionalGeneration(config)
         # Bias output towards L
