@@ -197,6 +197,10 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         if not is_batched:
             raw_speech = [raw_speech]
 
+        # zero-mean and unit-variance normalization
+        if normalize:
+            raw_speech = [(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-5) for x in raw_speech]
+
         # convert into correct format for padding
         encoded_inputs = BatchEncoding({"input_values": raw_speech})
 
