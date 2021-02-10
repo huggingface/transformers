@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
+import gc
 import inspect
 import math
 import os
@@ -266,8 +267,9 @@ class Trainer:
 
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway
-        if not (self.is_model_parallel or args.deepspeed):
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        #    and we only use deepspeed for training at the moment
+        if not self.is_model_parallel and not (args.deepspeed and args.do_train):
             model = model.to(args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -817,7 +819,7 @@ class Trainer:
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), DDP(Deepspeed(Transformers Model)), etc.
+        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
         if is_torch_tpu_available():
@@ -1035,6 +1037,14 @@ class Trainer:
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
+
+        if self.deepspeed:
+            # free up any memory that might be useful for eval
+            self.deepspeed = None
+            self.optimizer = None
+            self.lr_scheduler = None
+            self.model_wrapped = self.model
+            gc.collect()  # force memory release
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1593,13 +1603,9 @@ class Trainer:
         )
 
         if self.args.deepspeed and not self.args.do_train:
-            # In the future we probably can run deepspeed for inference too, but this will require
-            # some thinking about how to best run it - since while it works DeepSpeed wasn't
-            # designed for inference
-
-            # since we have to postpone model.to() till training for DeepSpeed, if there was no
-            # training, we must put the model on the right device
-            self.model = self.model.to(self.args.device)
+            # no harm, but flagging to the user that deepspeed config is ignored for eval
+            # flagging only for when --do_train wasn't passed as only then it's redundant
+            logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
         model = self.model
 
