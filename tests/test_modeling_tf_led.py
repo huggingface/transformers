@@ -78,7 +78,7 @@ class TFLEDModelTester:
         # [num_attention_heads, encoder_seq_length, encoder_key_length], but TFLongformerSelfAttention
         # returns attention of shape [num_attention_heads, encoder_seq_length, self.attention_window + 1]
         # because its local attention only attends to `self.attention_window` and one before and one after
-        self.key_length = self.attention_window + 1
+        self.key_length = self.attention_window + 2
 
         # because of padding `encoder_seq_length`, is different from `seq_length`. Relevant for
         # the `test_attention_outputs` and `test_hidden_states_output` tests
@@ -369,15 +369,8 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
     def test_saved_model_with_attentions_output(self):
-        # This test don't pass because of the error:
-        # condition [13,8,4,5], then [13,8,4,5], and else [13,8,4,6] must be broadcastable
-        # This occurs line 323 in modeling_tf_led.py because the condition line 255
-        # returns a tensor of shape
-        # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 2]
-        # if is_global_attn is True and a tensor of shape
-        # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
-        # This is due to the tf.concat call line 703 that adds one dimension
-        # Need to check with PVP how to properly fix this
+        # Temporarily disable this test in order to find
+        # how to better handle it without timing out the CI
         pass
 
     @slow
