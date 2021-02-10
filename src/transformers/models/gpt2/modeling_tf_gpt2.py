@@ -1022,7 +1022,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             sequence_lengths = -1
         else:
             if inputs["input_ids"] is not None:
-                sequence_lengths = (
+                sequence_lengths = tf.reduce_max(
                     tf.reduce_sum(
                         tf.cast(tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), tf.int32),
                         -1,
@@ -1030,14 +1030,11 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
                     )
                     - 1
                 )
-
-                def get_seq_element(sequence_position, input_batch):
-                    return tf.strided_slice(
-                        input_batch, [sequence_position, 0], [sequence_position + 1, input_batch.shape[-1]], [1, 1]
-                    )
-
-                result = tf.map_fn(
-                    fn=lambda t: get_seq_element(t[0], t[1]), elems=[sequence_lengths, logits], dtype="float"
+                result = tf.strided_slice(
+                    logits,
+                    [0, sequence_lengths, 0],
+                    [shape_list(logits)[0], sequence_lengths + 1, shape_list(logits)[0]],
+                    [1, 1, 1],
                 )
                 in_logits = tf.reshape(result, [logits_shape[0], logits_shape[-1]])
             else:
