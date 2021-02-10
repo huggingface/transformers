@@ -139,12 +139,7 @@ class Wav2Vec2ModelTester:
         input_values = input_values[:3]
         attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
 
-        input_lengths = [input_values.shape[-1] // i for i in [1, 2, 4]]
-
-        #        input_values = input_values.view(2, 48, 32)
-        #        input_values = (input_values - torch.mean(input_values, -1, keepdim=True)) / torch.sqrt(torch.var(input_values, -1, keepdim=True, unbiased=False) + 1e-5)
-
-        #        self.layer_norm = torch.nn.GroupNorm(num_groups=48, num_channels=48, affine=True)
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
 
         # pad input
         for i in range(len(input_lengths)):
@@ -190,10 +185,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_batched_inference(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_batch_inference(*config_and_inputs)
 
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
@@ -358,10 +349,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_speech, return_tensors="pt", padding=True, truncation=True)
 
         input_values = inputs.input_values.to(torch_device)
-        attention_mask = inputs.attention_mask.to(torch_device)
 
         with torch.no_grad():
-            logits = model(input_values, attention_mask=attention_mask).logits
+            logits = model(input_values).logits
 
         predicted_ids = torch.argmax(logits, dim=-1)
         predicted_trans = tokenizer.batch_decode(predicted_ids)

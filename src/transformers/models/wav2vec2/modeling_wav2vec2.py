@@ -67,6 +67,7 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
 class Wav2Vec2LayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
+        self.id = layer_id
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
@@ -573,6 +574,19 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
             module.bias.data.zero_()
 
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            return torch.floor((input_length - kernel_size) / stride + 1)
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths.to(torch.long)
+
 
 WAV_2_VEC_2_START_DOCSTRING = r"""
     Wav2Vec2 was proposed in `wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations
@@ -674,17 +688,19 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
-            batch_size, input_length = attention_mask.shape
-            output_length = hidden_states.shape[1]
+            # get real output lengths
+            output_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
 
-            superfluous_padding = input_length % output_length
+            attention_mask = torch.zeros(
+                hidden_states.shape[:2], dtype=hidden_states.dtype, device=hidden_states.device
+            )
 
-            if superfluous_padding > 0:
-                attention_mask = attention_mask[:, :-superfluous_padding]
-
-            # attention_mask from shape [batch_size, input_length] to [batch_size, output_length]
-            # and only pad hidden_states that correspond to a fully padded input
-            attention_mask = attention_mask.bool().view(batch_size, output_length, -1).any(-1)
+            # these two operations makes sure that all values
+            # before the output lengths indices are attended to
+            attention_mask[
+                (torch.arange(attention_mask.shape[0], device=hidden_states.device), output_lengths - 1)
+            ] = 1
+            attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
 
         hidden_states = self.feature_projection(hidden_states)
 
@@ -695,6 +711,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         hidden_states = encoder_outputs[0]
 
         if not return_dict:
@@ -851,6 +868,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
+
         logits = self.lm_head(hidden_states)
 
         if not return_dict:
