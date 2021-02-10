@@ -67,7 +67,6 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
 class Wav2Vec2LayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
-        self.id = layer_id
         self.in_conv_dim = config.conv_dim[layer_id] if layer_id > 0 else 1
         self.out_conv_dim = config.conv_dim[layer_id]
 
