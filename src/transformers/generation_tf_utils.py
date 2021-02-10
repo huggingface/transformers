@@ -925,10 +925,10 @@ class TFGenerationMixin:
         """
         if cur_len == 1 and forced_bos_token_id is not None:
             vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != forced_bos_token_id, 1e-8, logits)
+            return tf.where(vocab_range != forced_bos_token_id, -1e8, logits)
         elif cur_len == max_length - 1 and forced_eos_token_id is not None:
             vocab_range = tf.constant(range(self.config.vocab_size))
-            return tf.where(vocab_range != forced_eos_token_id, 1e-8, logits)
+            return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
         else:
             return logits
 
