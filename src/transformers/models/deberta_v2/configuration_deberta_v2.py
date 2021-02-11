@@ -21,10 +21,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/deberta-xlarge-v2": "https://huggingface.co/microsoft/deberta-xlarge-v2/resolve/main/config.json",
-    "microsoft/deberta-xxlarge-v2": "https://huggingface.co/microsoft/deberta-xxlarge-v2/resolve/main/config.json",
-    "microsoft/deberta-xlarge-v2-mnli": "https://huggingface.co/microsoft/deberta-xlarge-v2-mnli/resolve/main/config.json",
-    "microsoft/deberta-xxlarge-v2-mnli": "https://huggingface.co/microsoft/deberta-xxlarge-v2-mnli/resolve/main/config.json",
+    "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/config.json",
+    "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/config.json",
+    "microsoft/deberta-v2-xlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/config.json",
+    "microsoft/deberta-v2-xxlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/config.json",
 }
 
 
@@ -83,7 +83,7 @@ class DebertaV2Config(PretrainedConfig):
         layer_norm_eps (:obj:`float`, optional, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
     """
-    model_type = "deberta"
+    model_type = "deberta-v2"
 
     def __init__(
         self,

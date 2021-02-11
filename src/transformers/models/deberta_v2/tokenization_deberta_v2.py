@@ -26,25 +26,25 @@ from ...tokenization_utils import PreTrainedTokenizer
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/deberta-xlarge-v2": "https://huggingface.co/microsoft/deberta-xlarge-v2/resolve/main/spm.model",
-        "microsoft/deberta-xxlarge-v2": "https://huggingface.co/microsoft/deberta-xxlarge-v2/resolve/main/spm.model",
-        "microsoft/deberta-xlarge-v2-mnli": "https://huggingface.co/microsoft/deberta-xlarge-v2-mnli/resolve/main/spm.model",
-        "microsoft/deberta-xxlarge-v2-mnli": "https://huggingface.co/microsoft/deberta-xxlarge-v2-mnli/resolve/main/spm.model",
+        "microsoft/deberta-v2-xlarge": "https://huggingface.co/microsoft/deberta-v2-xlarge/resolve/main/spm.model",
+        "microsoft/deberta-v2-xxlarge": "https://huggingface.co/microsoft/deberta-v2-xxlarge/resolve/main/spm.model",
+        "microsoft/deberta-v2-xlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xlarge-mnli/resolve/main/spm.model",
+        "microsoft/deberta-v2-xxlarge-mnli": "https://huggingface.co/microsoft/deberta-v2-xxlarge-mnli/resolve/main/spm.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "microsoft/deberta-xlarge-v2": 512,
-    "microsoft/deberta-xxlarge-v2": 512,
-    "microsoft/deberta-xlarge-v2-mnli": 512,
-    "microsoft/deberta-xxlarge-v2-mnli": 512,
+    "microsoft/deberta-v2-xlarge": 512,
+    "microsoft/deberta-v2-xxlarge": 512,
+    "microsoft/deberta-v2-xlarge-mnli": 512,
+    "microsoft/deberta-v2-xxlarge-mnli": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "microsoft/deberta-xlarge-v2": {"do_lower_case": False},
-    "microsoft/deberta-xxlarge-v2": {"do_lower_case": False},
-    "microsoft/deberta-xlarge-v2-mnli": {"do_lower_case": False},
-    "microsoft/deberta-xxlarge-v2-mnli": {"do_lower_case": False},
+    "microsoft/deberta-v2-xlarge": {"do_lower_case": False},
+    "microsoft/deberta-v2-xxlarge": {"do_lower_case": False},
+    "microsoft/deberta-v2-xlarge-mnli": {"do_lower_case": False},
+    "microsoft/deberta-v2-xxlarge-mnli": {"do_lower_case": False},
 }
 
 VOCAB_FILES_NAMES = {"vocab_file": "spm.model"}

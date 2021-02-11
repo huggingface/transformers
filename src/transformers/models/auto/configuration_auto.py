@@ -140,7 +140,7 @@ CONFIG_MAPPING = OrderedDict(
         ("reformer", ReformerConfig),
         ("longformer", LongformerConfig),
         ("roberta", RobertaConfig),
-        ("deberta_v2", DebertaV2Config),
+        ("deberta-v2", DebertaV2Config),
         ("deberta", DebertaConfig),
         ("flaubert", FlaubertConfig),
         ("fsmt", FSMTConfig),
@@ -202,8 +202,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("encoder-decoder", "Encoder decoder"),
         ("funnel", "Funnel Transformer"),
         ("lxmert", "LXMERT"),
+        ("deberta-v2", "DeBERTa-v2"),
         ("deberta", "DeBERTa"),
-        ("deberta_v2", "DeBERTa-v2"),
         ("layoutlm", "LayoutLM"),
         ("dpr", "DPR"),
         ("rag", "RAG"),
@@ -370,7 +370,6 @@ class AutoConfig:
             {'foo': False}
         """
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
         if "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             return config_class.from_dict(config_dict, **kwargs)

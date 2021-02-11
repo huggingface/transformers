@@ -762,6 +762,10 @@ class DebertaPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["position_ids"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
 
+    def __init__(self, config):
+        super().__init__(config)
+        self._register_load_state_dict_pre_hook(self._pre_load_hook)
+
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -771,6 +775,15 @@ class DebertaPreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+    def _pre_load_hook(self, state_dict, prefix, local_metadata, strict,
+        missing_keys, unexpected_keys, error_msgs):
+        self_state = self.state_dict()
+        if ('classifier.weight' in self_state) and ('classifier.weight' in state_dict) and \
+            self_state['classifier.weight'].size() != state_dict['classifier.weight'].size():
+            logger.warning('Ignore mismatched classifer head.')
+            del state_dict['classifier.weight']
+            if 'classifier.bias' in state_dict:
+                del state_dict['classifier.bias']
 
 DEBERTA_START_DOCSTRING = r"""
     The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention

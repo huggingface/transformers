@@ -40,13 +40,13 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DebertaV2Config"
 _TOKENIZER_FOR_DOC = "DebertaV2Tokenizer"
-_CHECKPOINT_FOR_DOC = "microsoft/deberta-xlarge-v2"
+_CHECKPOINT_FOR_DOC = "microsoft/deberta-v2-xlarge"
 
 DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/deberta-xlarge-v2",
-    "microsoft/deberta-xxlarge-v2",
-    "microsoft/deberta-xlarge-v2-mnli",
-    "microsoft/deberta-xxlarge-v2-mnli",
+    "microsoft/deberta-v2-xlarge",
+    "microsoft/deberta-v2-xxlarge",
+    "microsoft/deberta-v2-xlarge-mnli",
+    "microsoft/deberta-v2-xxlarge-mnli",
 ]
 
 
@@ -897,9 +897,13 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
     """
 
     config_class = DebertaV2Config
-    base_model_prefix = "deberta"
+    base_model_prefix = "deberta-v2"
     _keys_to_ignore_on_load_missing = ["position_ids"]
     _keys_to_ignore_on_load_unexpected = ["position_embeddings"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self._register_load_state_dict_pre_hook(self._pre_load_hook)
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -910,6 +914,15 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
 
+    def _pre_load_hook(self, state_dict, prefix, local_metadata, strict,
+        missing_keys, unexpected_keys, error_msgs):
+        self_state = self.state_dict()
+        if ('classifier.weight' in self_state) and ('classifier.weight' in state_dict) and \
+            self_state['classifier.weight'].size() != state_dict['classifier.weight'].size():
+            logger.warning('Ignore mismatched classifer head.')
+            del state_dict['classifier.weight']
+            if 'classifier.bias' in state_dict:
+                del state_dict['classifier.bias']
 
 DEBERTA_START_DOCSTRING = r"""
     The DeBERTa model was proposed in `DeBERTa: Decoding-enhanced BERT with Disentangled Attention
