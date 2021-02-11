@@ -911,46 +911,24 @@ DETR_START_DOCSTRING = r"""
             weights.
 """
 
-DETR_GENERATION_EXAMPLE = r"""
-    Summarization example::
-
-        >>> from transformers import DetrTokenizer, DetrForConditionalGeneration, DetrConfig
-
-        >>> model = DetrForConditionalGeneration.from_pretrained('facebook/detr-resnet-50')
-        >>> tokenizer = DetrTokenizer.from_pretrained('facebook/detr-resnet-50')
-
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
-"""
-
 DETR_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
+        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it.
 
-            Indices can be obtained using :class:`~transformers.DetrTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
+            Pixel values can be obtained using :class:`~transformers.DetrTokenizer`. See
+            :meth:`transformers.DetrTokenizer.__call__` for details.
 
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+        pixel_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
 
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the :obj:`input_ids` to the right, following the paper.
+
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
+            Not used by default.  
 
             If you want to change padding behavior, you should read :func:`modeling_detr._prepare_decoder_inputs` and
             modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
@@ -960,12 +938,6 @@ DETR_INPUTS_DOCSTRING = r"""
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
             `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
             cross-attention of the decoder.
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
-
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -996,6 +968,11 @@ class DetrEncoder(DetrPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
     :class:`DetrEncoderLayer`.
+
+    The encoder updates the flattened feature map through multiple self-attention layers. 
+
+    Small tweaks for DETR: 
+    - position_embeddings are added to the forward pass. 
 
     Args:
         config: DetrConfig
@@ -1032,9 +1009,9 @@ class DetrEncoder(DetrPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
+        #input_ids=None,
         inputs_embeds=None,
+        attention_mask=None,
         position_embeddings=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1042,26 +1019,20 @@ class DetrEncoder(DetrPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.DetrTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+                Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
+            
             attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                Mask to avoid performing attention on padding pixel features. Mask values selected in ``[0, 1]``:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+                - 1 for pixel features that are real (i.e. **not masked**),
+                - 0 for pixel features that are padding (i.e. **masked**).
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
+           
+            position_embeddings (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+                Position embeddings that are added to the queries and keys in each self-attention layer. 
+            
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -1158,6 +1129,8 @@ class DetrDecoder(DetrPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DetrDecoderLayer`.
     
+    The decoder updates the query embeddings through multiple self-attention and cross-attention layers. 
+    
     Some small tweaks for DETR: 
     - position_embeddings and query_position_embeddings are added to the forward pass. 
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
@@ -1195,12 +1168,12 @@ class DetrDecoder(DetrPreTrainedModel):
 
     def forward(
         self,
-        input_ids=None,
+        #input_ids=None, 
+        inputs_embeds=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
-        inputs_embeds=None,
         position_embeddings=None,
         query_position_embeddings=None,
         use_cache=None,
@@ -1210,31 +1183,25 @@ class DetrDecoder(DetrPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.DetrTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
+                The query embeddings that are passed into the decoder. 
+            
             attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+                Mask to avoid performing attention on certain queries. Mask values selected in ``[0, 1]``:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+                - 1 for queries that are **not masked**,
+                - 0 for queries that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
             encoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`):
-                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+                Mask to avoid performing cross-attention on padding pixel_values of the encoder. Mask values
                 selected in ``[0, 1]``:
 
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
+                - 1 for pixels that are real (i.e. **not masked**),
+                - 0 for pixels that are padding (i.e. **masked**).
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
             past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
@@ -1245,10 +1212,6 @@ class DetrDecoder(DetrPreTrainedModel):
                 :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
                 shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
                 sequence_length)`.
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -1265,6 +1228,7 @@ class DetrDecoder(DetrPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # (Niels) following lines are not required as DETR doesn't use input_ids and inputs_embeds
         # retrieve input_ids and inputs_embeds
         # if input_ids is not None and inputs_embeds is not None:
         #     raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -1279,9 +1243,9 @@ class DetrDecoder(DetrPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        if inputs_embeds is None:
-            # to do: should be updated, because no input_ids here
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        # to do: should be updated, because no input_ids here
+        # if inputs_embeds is None:
+        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         # added this (Niels) to infer input_shape:
         if inputs_embeds is not None:
@@ -1460,7 +1424,7 @@ class DetrModel(DetrPreTrainedModel):
         self,
         #samples: NestedTensor=None,
         pixel_values,
-        pixel_mask,
+        pixel_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
@@ -1479,6 +1443,12 @@ class DetrModel(DetrPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device 
+        
+        if pixel_mask is None:
+            pixel_mask = torch.ones(((batch_size, height, width)), device=device)
+        
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features 
         # (includes features map, downsampled mask and position embeddings)
         # pixel_values should be of shape (batch_size, num_channels, height, width)
@@ -1488,23 +1458,22 @@ class DetrModel(DetrPreTrainedModel):
         assert mask is not None
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        src = self.input_projection(feature_map)
+        projected_feature_map = self.input_projection(feature_map)
         
         # Third, flatten the feature map + position embeddings of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
-        batch_size, c, h, w = src.shape
-        src = src.flatten(2).permute(0, 2, 1)
+        flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
         position_embeddings = position_embeddings.flatten(2).permute(0, 2, 1)
 
-        mask = mask.flatten(1)
+        flattened_mask = mask.flatten(1)
 
-        # Fourth, sent src + mask + position embeddings through encoder 
-        # src is a Tensor of shape (batch_size, heigth*width, hidden_size) 
-        # mask is a Tensor of shape (batch_size, heigth*width)
+        # Fourth, sent flattened_features + flattened_mask + position embeddings through encoder 
+        # flattened_features is a Tensor of shape (batch_size, heigth*width, hidden_size) 
+        # flattened_mask is a Tensor of shape (batch_size, heigth*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                inputs_embeds=src, 
-                attention_mask=mask,
+                inputs_embeds=flattened_features, 
+                attention_mask=flattened_mask,
                 position_embeddings=position_embeddings,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1520,16 +1489,16 @@ class DetrModel(DetrPreTrainedModel):
         
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        tgt = torch.zeros_like(query_position_embeddings)
+        queries = torch.zeros_like(query_position_embeddings)
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            inputs_embeds=tgt,
+            inputs_embeds=queries,
             attention_mask=None,
             position_embeddings=position_embeddings,
             query_position_embeddings=query_position_embeddings,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=mask,
+            encoder_attention_mask=flattened_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,

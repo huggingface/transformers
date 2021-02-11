@@ -14,11 +14,11 @@
 # limitations under the License.
 """Tokenization class for DETR."""
 
-import json
-import os
-from itertools import groupby
 from typing import Dict, List, Optional, Tuple, Union
-import random
+from pathlib import Path
+import json
+from collections import defaultdict
+import time
 
 import numpy as np
 import torch
@@ -390,12 +390,16 @@ class DetrTokenizer(PreTrainedTokenizer):
         )
         self._word_delimiter_token = word_delimiter_token
         self.do_lower_case = do_lower_case
+        
+        # load dataset
+        self.dataset ,self.anns, self.cats, self.imgs = dict(), dict(), dict(), dict()
+        self.imgToAnns, self.catToImgs = defaultdict(list), defaultdict(list)
 
     @add_end_docstrings(DETR_KWARGS_DOCSTRING)
     def __call__(
         self,
-        images: Union[PIL.Image.Image, np.ndarray, torch.Tensor, List[PIL.Image.Image], List[np.ndarray], List[torch.Tensor]],
-        annotations: Optional[Union[Dict, List[Dict]]] = None,
+        images: Union[PIL.Image.Image, np.ndarray, torch.Tensor, List[PIL.Image.Image], List[np.ndarray], List[torch.Tensor], str],
+        annotations: Optional[Union[Dict, List[Dict], str]] = None,
         padding: Union[bool, str] = True,
         return_mask: Union[bool, str] = True,
         resize:  Optional[bool] = True,
@@ -410,12 +414,20 @@ class DetrTokenizer(PreTrainedTokenizer):
         the largest image in a batch while creating a pixel mask for each image indicating which pixels are real and which are padding. 
 
         Args:
-            images (:obj:`PIL.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`,
-            :obj:`List[PIL.Image]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch tensor.
+            images (:obj:`PIL.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`, :obj:`str`):
+                The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch tensor. You can also provide the name of the path
+                to a directory containing the images.
             annotations (:obj:`Dict`, :obj:`List[Dict]`):
                 The annotations as either a Python dictionary (in case of a single image) or a list of Python dictionaries (in case
-                of a batch of images). Keys include "boxes", "labels", "area" and "masks". 
+                of a batch of images). Each dictionary should include the following keys: 
+
+                - boxes (:obj:`List[List[float]]`): the coordinates of the N bounding boxes in [x0, y0, x1, y1] format: the x and y coordinate of the top left and the height and width.
+                - labels (:obj:`List[int]`): the label for each bounding box. 0 represents the background (i.e. 'no object') class.
+                - (optionally) masks (:obj:`List[List[float]]`): the segmentation masks for each of the objects.
+                - (optionally) keypoints (FloatTensor[N, K, 3]): for each one of the N objects, it contains the K keypoints in [x, y, visibility] format, defining the object. visibility=0 means that the keypoint is not visible. Note that for data augmentation, the notion of flipping a keypoint is dependent on the data representation, and you should probably adapt references/detection/transforms.py for your new keypoint representation.
+
+                Instead, you can also provide a path to a json file in COCO format. 
+
             resize (:obj:`bool`, `optional`, defaults to :obj:`True`): 
                 Whether to resize images (and annotations) to a certain :obj:`size`.
             size (:obj:`int`, `optional`, defaults to :obj:`800`): 
@@ -426,6 +438,51 @@ class DetrTokenizer(PreTrainedTokenizer):
                 Whether to apply standard ImageNet mean/std normalization of images. 
         """
 
+        # images can be a path to a directory, and annotations can be a path to a json file in COCO format
+        # the following is based on the COCO class of https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocotools/coco.py
+        if isinstance(images, str) and isinstance(annotations, str):
+            with open(annotations) as f:
+                if verbose:
+                    logger.info('Loading annotations into memory...')
+                tic = time.time()
+                dataset = json.load(open(annotations, 'r'))
+                assert type(dataset)==dict, 'Annotation file format {} not supported'.format(type(dataset))
+                if verbose:
+                    logger.info('Done (t={:0.2f}s)'.format(time.time()- tic))
+
+                imgToAnns = defaultdict(list)
+                anns, imgs = {}
+                if verbose: 
+                    # create index
+                    logger.info('Creating index...')
+                
+                if 'images' in self.dataset:
+                    for img in self.dataset['images']:
+                        imgs[img['id']] = img
+                
+                if 'annotations' in self.dataset:
+                    for ann in self.dataset['annotations']:
+                        imgToAnns[ann['image_id']].append(ann)
+                        anns[ann['id']] = ann
+
+                if verbose:
+                    logger.info('Index created!')
+
+                # next, turn into list of dicts (each dict should correspond to an image in 'images')
+                # this is based on https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
+                images_path = Path(images).glob('*/*.jpg')
+                images = []
+                annotations = []
+                for image_file_name in images_path:
+                    if image_file_name.is_file():
+                        images.append(Image.open(image_file_name).convert("RGB"))
+                        annotation_dict = {}
+                        annotation_dict['boxes'] = [obj["bbox"] for obj in imgToAnns[image_file_name]]
+                        annotation_dict['area'] = [obj["area"] for obj in imgToAnns[image_file_name]]
+                        annotation_dict['classes'] = [obj["category_id"] for obj in imgToAnns[image_file_name]]
+                        annotations.append(annotation_dict)
+
+        
         is_batched = bool(
             isinstance(images, (list, tuple))
             and (isinstance(images[0], (PIL.Image.Image, np.ndarray, torch.Tensor)))
