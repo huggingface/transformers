@@ -14,13 +14,16 @@
 
 import json
 import os
+import sys
 import unittest
 
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
+    CaptureStd,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    mockenv,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
@@ -52,6 +55,20 @@ def require_deepspeed(test_case):
 @require_deepspeed
 @require_torch_gpu
 class TestDeepSpeed(TestCasePlus):
+
+    # this setup emulates a notebook where a launcher needs to be emulated by hand
+    @mockenv(MASTER_ADDR="localhost", MASTER_PORT="109999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1")
+    def test_fake_notebook_no_launcher(self):
+        sys.path.append(self.tests_dir_str)
+        from test_trainer import get_regression_trainer
+
+        del sys.path[-1]  # restore
+        ds_config_file = f"{self.test_file_dir_str}/ds_config.json"
+        with CaptureStd() as cs:
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_file)
+            trainer.train()
+        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+
     @require_torch_multi_gpu
     def test_basic_distributed(self):
         self.run_quick(distributed=True)

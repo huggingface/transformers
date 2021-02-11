@@ -561,6 +561,12 @@ class TrainingArguments:
             import deepspeed
 
             deepspeed.init_distributed()
+
+            # workaround for setups like notebooks where the launcher can't be used,
+            # but deepspeed requires a dist env.
+            # env LOCAL_RANK could be set manually by the user, or via init_distributed if mpi4py is installed
+            self.local_rank = int(os.environ.get("LOCAL_RANK", "-1"))
+
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.local_rank == -1:

@@ -429,6 +429,88 @@ Notes:
    In this example, we tell DeepSpeed to use GPU 1.
 
 
+
+Deployment in Notebooks
+=======================================================================================================================
+
+The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so under certain setups we
+have to emulate it.
+
+Here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
+
+.. code-block:: python
+
+    # DeepSpeed requires a distributed environment even when only one process is used.
+    # This emulates a launcher in the notebook
+    import os
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '9994' # modify if RuntimeError: Address already in use
+    os.environ['RANK'] = "0"
+    os.environ['LOCAL_RANK'] = "0"
+    os.environ['WORLD_SIZE'] = "1"
+
+    # Now proceed as normal, plus pass the deepspeed config file
+    training_args = TrainingArguments(..., deepspeed="ds_config.json")
+    trainer = Trainer(...)
+    trainer.train()
+
+Note: `...` stands for the normal arguments that you'd pass to the functions.
+
+If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
+cell with:
+
+.. code-block:: python
+
+    %%bash
+    cat <<'EOT' > ds_config.json
+    {
+        "fp16": {
+            "enabled": true,
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
+
+        "zero_optimization": {
+            "stage": 2,
+            "allgather_partitions": true,
+            "allgather_bucket_size": 2e8,
+            "overlap_comm": true,
+            "reduce_scatter": true,
+            "reduce_bucket_size": 2e8,
+            "contiguous_gradients": true,
+            "cpu_offload": true
+        },
+
+        "zero_allow_untested_optimizer": true,
+
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": 3e-5,
+                "betas": [0.8, 0.999],
+                "eps": 1e-8,
+                "weight_decay": 3e-7
+            }
+        },
+
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": 0,
+                "warmup_max_lr": 3e-5,
+                "warmup_num_steps": 500
+            }
+        },
+
+        "steps_per_print": 2000,
+        "wall_clock_breakdown": false
+    }
+    EOT
+
+
+
 Configuration
 =======================================================================================================================
 
