@@ -726,6 +726,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states = self.feature_projection(hidden_states)
 
+        #        if self.config.apply_spec_augment and self.training:
+        #            pass
+
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
@@ -773,7 +776,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`Float.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             TODO(PVP): Fill out when adding training
 
         Returns:
@@ -848,7 +851,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`Float.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             TODO(PVP): Fill out when adding training
 
         Returns:
@@ -893,8 +896,38 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         logits = self.lm_head(hidden_states)
 
+        loss = None
+        if labels is not None:
+
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+            )
+            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
+
+            log_probs = F.log_softmax(logits, dim=-1).transpose(0, 1)
+
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = F.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.pad_token_id,
+                    reduction="sum",
+                    zero_infinity=False,
+                )
+
         if not return_dict:
             output = (logits,) + outputs[1:]
-            return output
+            return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
+        return CausalLMOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
