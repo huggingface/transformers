@@ -71,14 +71,16 @@ class RobertaEmbeddings(nn.Module):
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
-        self.embedding_bit = 8
         self.quant_mode = config.quant_mode
-        word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.embedding_bit = 8
+        self.embedding_act_bit = 16
+
         self.word_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
-        self.word_embeddings.set_param(word_embeddings)
-        token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.word_embeddings.set_param(
+                nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id))
         self.token_type_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
-        self.token_type_embeddings.set_param(token_type_embeddings)
+        self.token_type_embeddings.set_param(
+                nn.Embedding(config.type_vocab_size, config.hidden_size))
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -91,11 +93,13 @@ class RobertaEmbeddings(nn.Module):
 
         # End copy
         self.padding_idx = config.pad_token_id
-        position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
-        )
         self.position_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
-        self.position_embeddings.set_param(position_embeddings)
+        self.position_embeddings.set_param(
+                nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx))
+
+        # Integer-only addition between embeddings
+        self.embeddings_act1 = QuantAct(self.embedding_act_bit, quant_mode=self.quant_mode)
+        self.embeddings_act2 = QuantAct(self.embedding_act_bit, quant_mode=self.quant_mode)
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -121,10 +125,18 @@ class RobertaEmbeddings(nn.Module):
             inputs_embeds, inputs_embeds_scaling_factor = self.word_embeddings(input_ids)
         token_type_embeddings, token_type_embeddings_scaling_factor = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
+        embeddings, embeddings_scaling_factor = self.embeddings_act1(
+                inputs_embeds, inputs_embeds_scaling_factor,
+                identity=token_type_embeddings,
+                identity_scaling_factor=token_type_embeddings_scaling_factor)
+
         if self.position_embedding_type == "absolute":
             position_embeddings, position_embeddings_scaling_factor = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
+            embeddings, embeddings_scaling_factor = self.embeddings_act1(
+                    embeddings, embeddings_scaling_factor,
+                    identity=position_embeddings,
+                    identity_scaling_factor=position_embeddings_scaling_factor)
+
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings

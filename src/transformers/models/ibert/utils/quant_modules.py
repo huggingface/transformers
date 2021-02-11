@@ -85,60 +85,53 @@ class QuantEmbedding(Module):
         )
         return emb_int * self.weight_scaling_factor, self.weight_scaling_factor
 
-# The input quantization needs to use symmetric quantization!
+
 class QuantAct(Module):
+    """
+    Class to quantize given activations
+
+    Parameters:
+    ----------
+    activation_bit : int
+        Bitwidth for quantized activations.
+    act_range_momentum : float, default 0.95
+        Momentum for updating the activation quantization range.
+    running_stat : bool, default True
+        Whether to use running statistics for activation quantization range.
+    per_channel : bool, default False
+        Whether to use channel-wise quantization.
+    channel_len : int, default None
+        Specify the channel length when using the per_channel mode.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
+    """
     def __init__(self,
                  activation_bit,
                  act_range_momentum=0.95,
                  running_stat=True,
-                 quant_mode="asymmetric",
-                 show_flag=False,
-                 percentile=False,
-                 signed=True,
                  per_channel=False,
-                 fix_stat=False,
-                 exponential_quant=False,
-                 channel_len=None):
+                 channel_len=None,
+                 quant_mode=False):
         super(QuantAct, self).__init__()
 
         self.activation_bit = activation_bit
         self.act_range_momentum = act_range_momentum
         self.running_stat = running_stat
         self.quant_mode = quant_mode
-        self.show_flag = show_flag
-        self.percentile = percentile
-        self.signed = signed
-        self.iter_counter = 0
-        self.percentage = 99.9
-        self.fix_stat = fix_stat
+        self.per_channel = per_channel
+        self.percentile = False
 
-        if not per_channel:
+        if not self.per_channel:
             self.register_buffer('x_min', torch.zeros(1))
             self.register_buffer('x_max', torch.zeros(1))
             self.register_buffer('act_scaling_factor', torch.zeros(1))
         else:
-            assert channel_len is not None
-            self.register_buffer('x_min', torch.zeros(channel_len))
-            self.register_buffer('x_max', torch.zeros(channel_len))
-            self.register_buffer('act_scaling_factor', torch.zeros(channel_len))
-            if exponential_quant:
-                self.register_buffer('exponents', torch.zeros(channel_len))
-                self.register_buffer('global_scaling_factor', torch.zeros(channel_len))
+            raise NotImplementedError("per-channel mode is not currently supported for activation.")
 
-
-        self.quant_mode = quant_mode
-        self.per_channel = per_channel
-        self.exponential_quant = exponential_quant
-
-        if quant_mode == "none":
+        if not self.quant_mode:
             self.act_function = None
-        elif quant_mode == "symmetric":
-            self.act_function = SymmetricQuantFunction.apply
-        elif quant_mode == "asymmetric":
-            # self.act_function = SymmetricQuantFunction.apply
-            self.act_function = AsymmetricQuantFunction.apply
         else:
-            raise ValueError("unknown quant mode: {}".format(quant_mode))
+            self.act_function = SymmetricQuantFunction.apply
 
     def __repr__(self):
         return "{0}(activation_bit={1}, " \
@@ -150,31 +143,12 @@ class QuantAct(Module):
         fix the activation range by setting running stat
         """
         self.running_stat = False
-        self.show_flag = True
         
     def unfix(self):
         """
         unfix the activation range by setting running stat
         """
         self.running_stat = True
-        self.show_flag = False
-
-    def compute_exponents(self, x_min, x_max):
-        if self.running_stat:
-            with torch.no_grad():
-                n = 2 ** (self.activation_bit - 1) - 1
-                self.exponents = torch.zeros_like(self.exponents)
-
-                x_range, _ = torch.max(torch.stack([x_min.abs(), x_max.abs()], dim=1), dim=1)
-                x_range = torch.clamp(x_range, min=1e-8)
-                x_range_min = x_range.min()
-                x_range = x_range / x_range_min
-
-                self.exponents = x_range.log2().ceil()
-                self.global_scaling_factor = x_range_min / n
-
-        return self.global_scaling_factor * (2 ** self.exponents)
-
 
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
@@ -182,30 +156,18 @@ class QuantAct(Module):
                 identity_scaling_factor=None,
                 specified_min=None,
                 specified_max=None):
+
         # collect runnng stats
-        #if self.fix_stat:
-        #    print(self.x_max, self.x_min)
         x_act = x if identity is None else identity + x
-        if not self.fix_stat and self.running_stat:
-            if not self.percentile:
-                if not self.per_channel:
-                    x_min = x_act.data.min()
-                    x_max = x_act.data.max()
-                else:
-                    x_min = x_act.data.min(axis=0).values.min(axis=0).values
-                    x_max = x_act.data.max(axis=0).values.max(axis=0).values
-            else:
-                raise NotImplementedError("percentile mode is not currently supported.")
-            '''
-            elif self.quant_mode == 'symmetric':
-                x_min, x_max = get_percentile_min_max(x_act.detach().view(-1), 
-                                0.1, self.percentage, output_tensor=True)
-            elif self.quant_mode == 'asymmetric':
-                x_min, x_max = get_percentile_min_max(x_act.detach().view(-1), 
-                                0, self.percentage, output_tensor=True)
-            '''
+        if self.running_stat:
+            assert not self.percentile, "percentile mode is not currently supported for activation."
+            assert not self.per_channel, "per-channel mode is not currently supported for activation."
+            x_min = x_act.data.min()
+            x_max = x_act.data.max()
+            
+            assert x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0
+
             # Initialization
-            #if self.x_min == self.x_max:
             if torch.eq(self.x_min, self.x_max).all():
                 self.x_min = self.x_min + x_min
                 self.x_max = self.x_max + x_max
@@ -221,32 +183,15 @@ class QuantAct(Module):
                 self.x_max = self.x_max * self.act_range_momentum +\
                         x_max * (1 - self.act_range_momentum)
 
-        if self.quant_mode == 'none':
-            if self.exponential_quant:
-                return x_act, None, None
+        if not self.quant_mode:
             return x_act, None
-        
+
         x_min = self.x_min if specified_min is None else specified_min
         x_max = self.x_max if specified_max is None else specified_max
-        # scaling factor and zero point(if necessary) of the activation outputs
-        if self.quant_mode == 'symmetric':
-            if self.exponential_quant:
-                self.act_scaling_factor = self.compute_exponents(x_min, x_max)
-            else:
-                self.act_scaling_factor = symmetric_linear_quantization_params(
-                    self.activation_bit, x_min, x_max, 
-                    per_channel=self.per_channel)
-        else:
-            '''
-            self.act_scaling_factor, self.act_zero_point = \
-                    asymmetric_linear_quantization_params(self.activation_bit, 
-                            self.x_min, self.x_max, 
-                            integral_zero_point=True, 
-                            signed=self.signed)
-            '''
-            # TODO Sehoon open up this path once 
-            # asymmetric_linear_quantization_params is implemented
-            raise NotImplementedError
+
+        self.act_scaling_factor = symmetric_linear_quantization_params(
+            self.activation_bit, x_min, x_max, 
+            per_channel=self.per_channel)
 
         if pre_act_scaling_factor is None:
             # this is for the input quantization 
@@ -260,9 +205,6 @@ class QuantAct(Module):
                     identity, identity_scaling_factor)
 
         correct_output_scale = self.act_scaling_factor.view(-1)
-
-        if self.exponential_quant:
-            return quant_act_int * correct_output_scale, self.global_scaling_factor, self.exponents
 
         return quant_act_int * correct_output_scale, self.act_scaling_factor
 
