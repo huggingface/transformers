@@ -48,9 +48,9 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
-        src_lang (:obj:`str`):
+        src_lang (:obj:`str`, `optional`):
             A string representing the source language.
-        tgt_lang (:obj:`str`):
+        tgt_lang (:obj:`str`, `optional`):
             A string representing the target language.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
@@ -93,8 +93,8 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        src_lang,
-        tgt_lang,
+        src_lang=None,
+        tgt_lang=None,
         eos_token="</s>",
         sep_token="</s>",
         cls_token="<s>",
@@ -107,6 +107,8 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
         super().__init__(
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
             eos_token=eos_token,
             unk_token=unk_token,
             sep_token=sep_token,
@@ -116,8 +118,6 @@ class MBart50Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
@@ -145,6 +145,8 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
 
+        self.src_lang = src_lang if src_lang is not None else "en_XX"
+        self.tgt_lang = tgt_lang
         self.cur_lang_code = self.lang_code_to_id[self.src_lang]
         self.set_src_lang_special_tokens(self.src_lang)
 

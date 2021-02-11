@@ -56,9 +56,9 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     Args:
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
-        src_lang (:obj:`str`):
+        src_lang (:obj:`str`, `optional`):
             A string representing the source language.
-        tgt_lang (:obj:`str`):
+        tgt_lang (:obj:`str`, `optional`):
             A string representing the target language.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
             The end of sequence token.
@@ -102,8 +102,8 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
-        src_lang,
-        tgt_lang,
+        src_lang=None,
+        tgt_lang=None,
         tokenizer_file=None,
         eos_token="</s>",
         sep_token="</s>",
@@ -118,6 +118,8 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
 
         super().__init__(
             vocab_file,
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
             tokenizer_file=tokenizer_file,
             eos_token=eos_token,
             sep_token=sep_token,
@@ -129,15 +131,16 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
-        
-        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
 
-        self.lang_code_to_id = {lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES}
+        self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+        self.lang_code_to_id = {
+            lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
+        }
+
+        self.src_lang = src_lang if src_lang is not None else "en_XX"
+        self.tgt_lang = tgt_lang
         self.cur_lang_code = self.lang_code_to_id[self.src_lang]
         self.set_src_lang_special_tokens(self.src_lang)
-
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
