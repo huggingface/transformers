@@ -22,21 +22,21 @@ logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "ibert-roberta-base": "https://huggingface.co/roberta-base/resolve/main/vocab.json",
-        "ibert-roberta-large": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
-        "ibert-roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/vocab.json",
+        "kssteven/ibert-roberta-base": "https://huggingface.co/roberta-base/resolve/main/vocab.json",
+        "kssteven/ibert-roberta-large": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
+        "kssteven/ibert-roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/vocab.json",
     },
     "merges_file": {
-        "ibert-roberta-base": "https://huggingface.co/roberta-base/resolve/main/merges.txt",
-        "ibert-roberta-large": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
-        "ibert-roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/merges.txt",
+        "kssteven/ibert-roberta-base": "https://huggingface.co/roberta-base/resolve/main/merges.txt",
+        "kssteven/ibert-roberta-large": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
+        "kssteven/ibert-roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "ibert-roberta-base": 512,
-    "ibert-roberta-large": 512,
-    "ibert-roberta-large-mnli": 512,
+    "kssteven/ibert-roberta-base": 512,
+    "kssteven/ibert-roberta-large": 512,
+    "kssteven/ibert-roberta-large-mnli": 512,
 }
 
 class IBertTokenizer(RobertaTokenizer):
@@ -48,5 +48,5 @@ class IBertTokenizer(RobertaTokenizer):
     parameters and other methods.
     """
     # merges and vocab same as Roberta
-    max_model_input_sizes = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

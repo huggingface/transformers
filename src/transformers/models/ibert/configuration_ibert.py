@@ -22,9 +22,9 @@ from ..roberta.configuration_roberta import RobertaConfig
 logger = logging.get_logger(__name__)
 
 IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ibert-roberta-base": "https://huggingface.co/roberta-base/resolve/main/config.json",
-    "ibert-roberta-large": "https://huggingface.co/roberta-large/resolve/main/config.json",
-    "ibert-roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/config.json",
+    "kssteven/ibert-roberta-base": "https://huggingface.co/roberta-base/resolve/main/config.json",
+    "kssteven/ibert-roberta-large": "https://huggingface.co/roberta-large/resolve/main/config.json",
+    "kssteven/ibert-roberta-large-mnli": "https://huggingface.co/roberta-large-mnli/resolve/main/config.json",
 }
 
 

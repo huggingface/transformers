@@ -348,6 +348,7 @@ MODEL_MAPPING = OrderedDict(
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
         (MarianConfig, MarianModel),
+        (IBertConfig, IBertModel),
     ]
 )
 
@@ -380,6 +381,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForPreTraining),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (IBertConfig, IBertForMaskedLM),
     ]
 )
 
@@ -418,6 +420,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
+        (IBertConfig, IBertForMaskedLM),
     ]
 )
 
@@ -447,6 +450,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianForCausalLM),
         (BlenderbotConfig, BlenderbotForCausalLM),
         (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
+        (IBertConfig, IBertForCausalLM),
     ]
 )
 
@@ -475,6 +479,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
+        (IBertConfig, IBertForMaskedLM),
     ]
 )
 
@@ -527,6 +532,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
+        (IBertConfig, IBertForSequenceClassification),
     ]
 )
 
@@ -555,6 +561,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (LxmertConfig, LxmertForQuestionAnswering),
         (MPNetConfig, MPNetForQuestionAnswering),
         (DebertaConfig, DebertaForQuestionAnswering),
+        (IBertConfig, IBertForQuestionAnswering),
     ]
 )
 
@@ -587,6 +594,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForTokenClassification),
         (MPNetConfig, MPNetForTokenClassification),
         (DebertaConfig, DebertaForTokenClassification),
+        (IBertConfig, IBertForTokenClassification),
     ]
 )
 
@@ -609,6 +617,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
         (MPNetConfig, MPNetForMultipleChoice),
+        (IBertConfig, IBertForMultipleChoice),
     ]
 )
 

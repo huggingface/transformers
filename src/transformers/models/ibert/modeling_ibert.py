@@ -55,9 +55,9 @@ _CONFIG_FOR_DOC = "IBertConfig"
 _TOKENIZER_FOR_DOC = "IBertTokenizer"
 
 ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ibert-roberta-base",
-    "ibert-roberta-large",
-    "ibert-roberta-large-mnli",
+    "kssteven/ibert-roberta-base",
+    "kssteven/ibert-roberta-large",
+    "kssteven/ibert-roberta-large-mnli",
 ]
 
 
@@ -1106,7 +1106,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
+        self.roberta = IBertModel(config, add_pooling_layer=False)
         self.classifier = RobertaClassificationHead(config)
 
         self.init_weights()
