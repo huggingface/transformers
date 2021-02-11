@@ -55,9 +55,6 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            normalize (:obj:`bool`, defaults to :obj:`True`):
-                Performs zero-mean and unit-variance on the input values
-
             return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -91,26 +88,24 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`"|"`):
             The token used for defining the end of a word.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to lowercase the input when tokenizing.
+            Whether or not to lowercase the output when decoding.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
             improve the performance for some models, *e.g.*, `wav2vec2-lv60
             <https://huggingface.co/models?search=lv60>`__.
         return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether :meth:`~transformers.Wav2Vec2Tokenizer.__call__` should return :obj:`attention_mask` for batched
-            inference.
+            Whether or not :meth:`~transformers.Wav2Vec2Tokenizer.__call__` should return :obj:`attention_mask`.
 
             .. note::
 
                 Wav2Vec2 models that have set ``config.feat_extract_norm == "group"``, such as `wav2vec2-base
                 <https://huggingface.co/facebook/wav2vec2-base-960h>`__, have **not** been trained using
-                :obj:`attention_mask` and therefore should **not** make use of :obj:`attention_mask` for batched
-                inference. For such, models :obj:`input_values` should simply be padded with 0 and no
-                :obj:`attention_mask` should be provided.
+                :obj:`attention_mask`. For such models, :obj:`input_values` should simply be padded with 0 and no
+                :obj:`attention_mask` should be passed.
 
-                Wav2Vec2 models that have set ``config.feat_extract_norm == "layer"``, such as `wav2vec2-lv60
-                <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__ should make use of
-                :obj:`attention_mask` for batched inference.
+                For Wav2Vec2 models that have set ``config.feat_extract_norm == "layer"``, such as `wav2vec2-lv60
+                <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__, :obj:`attention_mask` should be
+                passed for batched inference.
 
         **kwargs
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`

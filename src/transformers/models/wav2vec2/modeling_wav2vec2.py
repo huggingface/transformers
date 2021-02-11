@@ -36,7 +36,10 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "Wav2Vec2Config"
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-base-960h"
+    "facebook/wav2vec2-base-960h",
+    "facebook/wav2vec2-large-960h",
+    "facebook/wav2vec2-large-960h-lv60",
+    "facebook/wav2vec2-large-960h-lv60-self",
     # See all Wav2Vec2 models at https://huggingface.co/models?filter=wav2vec2
 ]
 
@@ -579,6 +582,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
         """
 
         def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
             return torch.floor((input_length - kernel_size) / stride + 1)
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
@@ -624,13 +629,13 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             `What are attention masks? <../glossary.html#attention-mask>`__
 
             .. warning::
-                :obj:`attention_mask` should only be provided to the model if the corresponding tokenizer has set
-                ``config.return_attention_mask == True``. All models whose tokenizer have set
+                :obj:`attention_mask` should only be passed if the corresponding tokenizer has set
+                ``config.return_attention_mask == True``. For all models whose tokenizer have set
                 ``config.return_attention_mask == False``, such as `wav2vec2-base
-                <https://huggingface.co/facebook/wav2vec2-base-960h>`__, should **not** pass :obj:`attention_mask` to
-                avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
+                <https://huggingface.co/facebook/wav2vec2-base-960h>`__, :obj:`attention_mask` should **not** be passed
+                to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
                 simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield
-                slightly different results depending on whether the speech input is padded or not.
+                slightly different results depending on whether :obj:`input_values` is padded or not.
 
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
