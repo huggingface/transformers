@@ -590,7 +590,7 @@ def main():
         logger.info("*** Evaluate ***")
 
         results = trainer.evaluate(max_length=data_args.val_max_target_length, num_beams=data_args.num_beams)
-        result = {k: round(v, 4) for k, v in result.items()}
+        results = {k: round(v, 4) for k, v in results.items()}
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_seq2seq.txt")
         if trainer.is_world_process_zero():
