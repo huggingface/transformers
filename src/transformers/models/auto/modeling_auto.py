@@ -122,6 +122,15 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
+from ..ibert.modeling_ibert import (
+    IBertForCausalLM,
+    IBertForMaskedLM,
+    IBertForMultipleChoice,
+    IBertForQuestionAnswering,
+    IBertForSequenceClassification,
+    IBertForTokenClassification,
+    IBertModel,
+)
 from ..layoutlm.modeling_layoutlm import (
     LayoutLMForMaskedLM,
     LayoutLMForSequenceClassification,
@@ -262,6 +271,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    IBertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,

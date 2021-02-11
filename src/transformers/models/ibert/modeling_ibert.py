@@ -46,22 +46,18 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_roberta import RobertaConfig
+from .configuration_ibert import IBertConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "RobertaConfig"
-_TOKENIZER_FOR_DOC = "RobertaTokenizer"
+_CONFIG_FOR_DOC = "IBertConfig"
+_TOKENIZER_FOR_DOC = "IBertTokenizer"
 
 ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "roberta-base",
-    "roberta-large",
-    "roberta-large-mnli",
-    "distilroberta-base",
-    "roberta-base-openai-detector",
-    "roberta-large-openai-detector",
-    # See all RoBERTa models at https://huggingface.co/models?filter=roberta
+    "ibert-roberta-base",
+    "ibert-roberta-large",
+    "ibert-roberta-large-mnli",
 ]
 
 
@@ -562,14 +558,14 @@ class RobertaPooler(nn.Module):
         return pooled_output
 
 
-class RobertaPreTrainedModel(PreTrainedModel):
+class IBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = RobertaConfig
-    base_model_prefix = "roberta"
+    config_class = IBertConfig
+    base_model_prefix = "ibert"
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -657,7 +653,7 @@ ROBERTA_INPUTS_DOCSTRING = r"""
     "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_START_DOCSTRING,
 )
-class RobertaModel(RobertaPreTrainedModel):
+class IBertModel(IBertPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -835,7 +831,7 @@ class RobertaModel(RobertaPreTrainedModel):
 @add_start_docstrings(
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning. """, ROBERTA_START_DOCSTRING
 )
-class RobertaForCausalLM(RobertaPreTrainedModel):
+class IBertForCausalLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -981,7 +977,7 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
 
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
-class RobertaForMaskedLM(RobertaPreTrainedModel):
+class IBertForMaskedLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
@@ -1103,7 +1099,7 @@ class RobertaLMHead(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
-class RobertaForSequenceClassification(RobertaPreTrainedModel):
+class IBertForSequenceClassification(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1186,7 +1182,7 @@ class RobertaForSequenceClassification(RobertaPreTrainedModel):
     """,
     ROBERTA_START_DOCSTRING,
 )
-class RobertaForMultipleChoice(RobertaPreTrainedModel):
+class IBertForMultipleChoice(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1278,7 +1274,7 @@ class RobertaForMultipleChoice(RobertaPreTrainedModel):
     """,
     ROBERTA_START_DOCSTRING,
 )
-class RobertaForTokenClassification(RobertaPreTrainedModel):
+class IBertForTokenClassification(IBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1388,7 +1384,7 @@ class RobertaClassificationHead(nn.Module):
     """,
     ROBERTA_START_DOCSTRING,
 )
-class RobertaForQuestionAnswering(RobertaPreTrainedModel):
+class IBertForQuestionAnswering(IBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
