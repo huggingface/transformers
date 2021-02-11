@@ -48,6 +48,8 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_ibert import IBertConfig
 
+from .utils.quant_modules import *
+
 
 logger = logging.get_logger(__name__)
 
@@ -67,11 +69,16 @@ class RobertaEmbeddings(nn.Module):
     """
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
-    def __init__(self, config):
+    def __init__(self, config, quant_mode=True):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.embedding_bit = 8
+        self.quant_mode = quant_mode
+        word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
+        self.word_embeddings.set_param(word_embeddings)
+        token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.token_type_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
+        self.token_type_embeddings.set_param(token_type_embeddings)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -84,9 +91,11 @@ class RobertaEmbeddings(nn.Module):
 
         # End copy
         self.padding_idx = config.pad_token_id
-        self.position_embeddings = nn.Embedding(
+        position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
+        self.position_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
+        self.position_embeddings.set_param(position_embeddings)
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -109,12 +118,12 @@ class RobertaEmbeddings(nn.Module):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+            inputs_embeds, inputs_embeds_scaling_factor = self.word_embeddings(input_ids)
+        token_type_embeddings, token_type_embeddings_scaling_factor = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
+            position_embeddings, position_embeddings_scaling_factor = self.position_embeddings(position_ids)
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
