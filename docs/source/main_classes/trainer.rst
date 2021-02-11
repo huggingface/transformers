@@ -436,34 +436,25 @@ Deployment in Notebooks
 The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so under certain setups we
 have to emulate it.
 
-Here is how you'd have to adjust your training code in the notebook to use DeepSpeed. This example uses
-``Seq2SeqTrainer``, but the same applies to ``Trainer`` or any subclass of it:
+Here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
 
 .. code-block:: python
 
-    import os
-
     # DeepSpeed requires a distributed environment even when only one process is used.
-    # The following seems to be required on colab.research.google.com, but works fine
-    # without it in a normal jupyter notebook.
+    # This emulates a launcher in the notebook
+    import os
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '9994' # modify if RuntimeError: Address already in use
     os.environ['RANK'] = "0"
+    os.environ['LOCAL_RANK'] = "0"
+    os.environ['WORLD_SIZE'] = "1"
 
-    # You can also tweak the following if need be
-    # os.environ['CUDA_VISIBLE_DEVICES'] = "0"
-    # os.environ['MASTER_ADDR'] = 'localhost'
-    # os.environ['MASTER_PORT'] = '9998'
-    # os.environ['LOCAL_RANK'] = "0"
-    # os.environ['WORLD_SIZE'] = "1"
-
-    training_args = Seq2SeqTrainingArguments(
-        [... normal args ...]
-        # deepspeed-in-notebook-special-args
-        local_rank=0,
-        deepspeed="ds_config.json"
-    )
-
-    trainer = Seq2SeqTrainer(...)
+    # Now proceed as normal, plus pass the deepspeed config file
+    training_args = TrainingArguments(..., deepspeed="ds_config.json")
+    trainer = Trainer(...)
     trainer.train()
+
+Note: `...` stands for the normal arguments that you'd pass to the functions.
 
 If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
 cell with:

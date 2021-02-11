@@ -556,6 +556,11 @@ class TrainingArguments:
             # python -m torch.distributed.launch --nproc_per_node=2 ./program.py
             from .integrations import is_deepspeed_available
 
+            # workaround for setups like notebooks where the launcher can't be used,
+            # but deepspeed requires a dist env.
+            if self.local_rank == -1:
+                self.local_rank = 0
+
             if not is_deepspeed_available():
                 raise ImportError("--deepspeed requires deepspeed: `pip install deepspeed`.")
             import deepspeed
