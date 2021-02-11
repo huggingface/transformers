@@ -429,6 +429,98 @@ Notes:
    In this example, we tell DeepSpeed to use GPU 1.
 
 
+
+Deployment in Notebooks
+=======================================================================================================================
+
+The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so we have to emulate it.
+
+Here is how you'd have to adjust your training code to have DeepSpeed working:
+
+.. code-block:: python
+
+    import os
+
+    # deepspeed requires a distributed environment even if one process is used
+    # emulating distributed env with a single gpu 0 (for multiple-gpus need a process per gpu)
+    os.environ['RANK'] = "0"
+    local_rank = 0
+
+    # You can also tweak the following if need be
+    # os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+    # os.environ['MASTER_ADDR'] = 'localhost'
+    # os.environ['MASTER_PORT'] = '9998'
+    # os.environ['LOCAL_RANK'] = "0"
+    # os.environ['WORLD_SIZE'] = "1"
+
+    training_args = Seq2SeqTrainingArguments(
+        [... normal args ...]
+        # deepspeed-in-jupyter-notebook-special-args
+        local_rank=0,
+        deepspeed="ds_config.json"
+    )
+
+    trainer = Seq2SeqTrainer(...)
+    trainer.train()
+
+
+You may need to adjust ``localhost`` and the port number if the suggested ones don't work on your setup.
+
+If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
+cell with:
+
+.. code-block:: python
+
+    %%bash
+    cat <<'EOT' > ds_config.json
+    {
+        "fp16": {
+            "enabled": true,
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
+
+        "zero_optimization": {
+            "stage": 2,
+            "allgather_partitions": true,
+            "allgather_bucket_size": 2e8,
+            "overlap_comm": true,
+            "reduce_scatter": true,
+            "reduce_bucket_size": 2e8,
+            "contiguous_gradients": true,
+            "cpu_offload": true
+        },
+
+        "zero_allow_untested_optimizer": true,
+
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": 3e-5,
+                "betas": [0.8, 0.999],
+                "eps": 1e-8,
+                "weight_decay": 3e-7
+            }
+        },
+
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": 0,
+                "warmup_max_lr": 3e-5,
+                "warmup_num_steps": 500
+            }
+        },
+
+        "steps_per_print": 2000,
+        "wall_clock_breakdown": false
+    }
+    EOT
+
+
+
 Configuration
 =======================================================================================================================
 
