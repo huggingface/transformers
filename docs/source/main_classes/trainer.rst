@@ -437,7 +437,7 @@ The problem with notebooks is that there is no normal ``deepspeed`` launcher to 
 have to emulate it.
 
 Here is how you'd have to adjust your training code in the notebook to use DeepSpeed. This example uses
-`Seq2SeqTrainer`, but the same applies to `Trainer` or any subclass of it:
+``Seq2SeqTrainer``, but the same applies to ``Trainer`` or any subclass of it:
 
 .. code-block:: python
 
