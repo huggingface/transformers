@@ -637,6 +637,13 @@ class TrainingArguments:
         else:
             return ParallelMode.NOT_PARALLEL
 
+    @property
+    def place_model_on_device(self):
+        """
+        Can be subclassed and overridden for some specific integrations.
+        """
+        return True
+
     def to_dict(self):
         """
         Serializes this instance while replace `Enum` by their values (for JSON serialization support).
