@@ -35,3 +35,7 @@ class IBertConfig(RobertaConfig):
     """
 
     model_type = "ibert"
+
+    def __init__(self, quant_mode=False, **kwargs):
+        super().__init__(**kwargs)
+        self.quant_mode = quant_mode

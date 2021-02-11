@@ -69,10 +69,10 @@ class RobertaEmbeddings(nn.Module):
     """
 
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
-    def __init__(self, config, quant_mode=True):
+    def __init__(self, config):
         super().__init__()
         self.embedding_bit = 8
-        self.quant_mode = quant_mode
+        self.quant_mode = config.quant_mode
         word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.word_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
         self.word_embeddings.set_param(word_embeddings)
@@ -151,6 +151,7 @@ class RobertaEmbeddings(nn.Module):
 class RobertaSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.quant_mode = config.quant_mode
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
@@ -277,6 +278,7 @@ class RobertaSelfAttention(nn.Module):
 class RobertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.quant_mode = config.quant_mode
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -292,6 +294,7 @@ class RobertaSelfOutput(nn.Module):
 class RobertaAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.quant_mode = config.quant_mode
         self.self = RobertaSelfAttention(config)
         self.output = RobertaSelfOutput(config)
         self.pruned_heads = set()
@@ -342,6 +345,7 @@ class RobertaAttention(nn.Module):
 class RobertaIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.quant_mode = config.quant_mode
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
@@ -358,6 +362,7 @@ class RobertaIntermediate(nn.Module):
 class RobertaOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.quant_mode = config.quant_mode
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -373,6 +378,7 @@ class RobertaOutput(nn.Module):
 class RobertaLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.quant_mode = config.quant_mode
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = RobertaAttention(config)
@@ -458,6 +464,7 @@ class RobertaEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.quant_mode = config.quant_mode
         self.layer = nn.ModuleList([RobertaLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
@@ -555,6 +562,7 @@ class RobertaEncoder(nn.Module):
 class RobertaPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
+        selg.quant_mode = config.quant_mode
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
@@ -685,6 +693,7 @@ class IBertModel(IBertPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
+        self.quant_mode = config.quant_mode
 
         self.embeddings = RobertaEmbeddings(config)
         self.encoder = RobertaEncoder(config)
