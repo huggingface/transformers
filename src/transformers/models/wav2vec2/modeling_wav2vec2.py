@@ -614,6 +614,24 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Tokenizer` should
             be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
             :meth:`transformers.Wav2Vec2Tokenizer.__call__` for details.
+        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
+            1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            `What are attention masks? <../glossary.html#attention-mask>`__
+
+            .. warning::
+                :obj:`attention_mask` should only be provided to the model if the corresponding tokenizer has set
+                ``config.return_attention_mask == True``. All models whose tokenizer have set
+                ``config.return_attention_mask == False``, such as `wav2vec2-base
+                <https://huggingface.co/facebook/wav2vec2-base-960h>`__, should **not** pass :obj:`attention_mask` to
+                avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
+                simply be padded with 0 and passed without :obj:`attention_mask`. Be aware that these models also yield
+                slightly different results depending on whether the speech input is padded or not.
+
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
