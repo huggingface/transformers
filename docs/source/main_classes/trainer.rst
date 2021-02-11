@@ -456,7 +456,7 @@ Here is how you'd have to adjust your training code in the notebook to use DeepS
 
     training_args = Seq2SeqTrainingArguments(
         [... normal args ...]
-        # deepspeed-in-jupyter-notebook-special-args
+        # deepspeed-in-notebook-special-args
         local_rank=0,
         deepspeed="ds_config.json"
     )
