@@ -471,6 +471,8 @@ RAG_FORWARD_INPUTS_DOCSTRING = r"""
         output_retrieved(:obj:`bool`, `optional`):
             Whether or not to return the :obj:`retrieved_doc_embeds`, :obj:`retrieved_doc_ids`,
             :obj:`context_input_ids` and :obj:`context_attention_mask`. See returned tensors for more detail.
+        return_dict (:obj:`bool`, `optional`):
+            Whether or not to return a :class:`~TFRetrievAugLMOutput` instead of a plain tuple.
         n_docs (:obj:`int`, `optional`, defaults to :obj:`config.n_docs`)
             Number of documents to retrieve and/or number of documents for which to generate an answer.
 """
@@ -921,6 +923,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         do_marginalize (:obj:`bool`, `optional`):
             If :obj:`True`, the logits are marginalized over all documents by making use of
             ``torch.nn.functional.log_softmax``.
+        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the cross entropy classification loss according to Rag-Token model formulation
+            See https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Token formulation.
+            Indices should be in ``[0, ..., config.vocab_size - 1]``.
         reduce_loss (:obj:`bool`, `optional`):
             Only relevant if ``labels`` is passed. If :obj:`True`, the NLL loss is reduced using the ``tf.Tensor.sum``
             operation.
@@ -1830,7 +1836,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     def get_nll(self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, n_docs=None):
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         # shift tokens left (from original Pytorch's version)
-        # CONCERNS : T5 shift-right, RAG shift-left -> inconsistent label format ?
+
         target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
         loss = self.compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
@@ -1950,6 +1956,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         exclude_bos_score (:obj:`bool`, `optional`):
             Only relevant if ``labels`` is passed. If :obj:`True`, the score of the BOS token is disregarded when
             computing the loss.
+        labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the cross entropy classification loss according to Rag-Sequence model formulation
+            See https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Sequence formulation.
+            Indices should be in ``[0, ..., config.vocab_size - 1]``.
         reduce_loss (:obj:`bool`, `optional`):
             Only relevant if ``labels`` is passed. If :obj:`True`, the NLL loss is reduced using the ``tf.Tensor.sum``
             operation.
