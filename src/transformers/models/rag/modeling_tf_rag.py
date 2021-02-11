@@ -385,7 +385,7 @@ RAG_START_DOCSTRING = r"""
     combination with the outputs of a retriever in multiple steps---see examples for more details. The model is
     compatible any `autoencoding` model as the ``question_encoder`` and any `seq2seq` model with language model head as
     the ``generator``. It has been tested with :class:`~transformers.TFDPRQuestionEncoder` as the ``question_encoder``
-    and :class:`~transformers.TFBartForConditionalGeneration` or :class:`~transformers.TFT5ForConditionalGeneration` as
+    and :class:`~transformers.TFBartForConditionalGeneration` as the ``generator``.
     the ``generator``.
 
     This model inherits from :class:`~transformers.TFPreTrainedModel`. Check the superclass documentation for the
