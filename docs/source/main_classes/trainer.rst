@@ -433,18 +433,19 @@ Notes:
 Deployment in Notebooks
 =======================================================================================================================
 
-The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so we have to emulate it.
+The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so under certain setups we
+have to emulate it.
 
-Here is how you'd have to adjust your training code to have DeepSpeed working:
+Here is how you'd have to adjust your training code in the notebook to use DeepSpeed. This example uses
+`Seq2SeqTrainer`, but the same applies to `Trainer` or any subclass of it:
 
 .. code-block:: python
 
     import os
 
     # deepspeed requires a distributed environment even if one process is used
-    # emulating distributed env with a single gpu 0 (for multiple-gpus need a process per gpu)
+    # this seems to be required on colab.google.com, but works fine without it in normal jupyter notebook
     os.environ['RANK'] = "0"
-    local_rank = 0
 
     # You can also tweak the following if need be
     # os.environ['CUDA_VISIBLE_DEVICES'] = "0"
@@ -462,9 +463,6 @@ Here is how you'd have to adjust your training code to have DeepSpeed working:
 
     trainer = Seq2SeqTrainer(...)
     trainer.train()
-
-
-You may need to adjust ``localhost`` and the port number if the suggested ones don't work on your setup.
 
 If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
 cell with:
