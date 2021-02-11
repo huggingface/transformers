@@ -519,7 +519,7 @@ def main():
         # rougeLSum expects newline after each sentence
         if metric_name == "rouge":
             preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in preds]
-            labels = ["\n".join(nltk.sent_tokenize(label)) for label in decoded_labels]
+            labels = ["\n".join(nltk.sent_tokenize(label)) for label in labels]
         else:  # sacrebleu
             labels = [[label] for label in labels]
 
