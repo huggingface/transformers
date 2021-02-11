@@ -629,8 +629,8 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             `What are attention masks? <../glossary.html#attention-mask>`__
 
             .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding tokenizer has set
-                ``config.return_attention_mask == True``. For all models whose tokenizer have set
+                :obj:`attention_mask` should only be passed if the corresponding tokenizer has
+                ``config.return_attention_mask == True``. For all models whose tokenizer has
                 ``config.return_attention_mask == False``, such as `wav2vec2-base
                 <https://huggingface.co/facebook/wav2vec2-base-960h>`__, :obj:`attention_mask` should **not** be passed
                 to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
