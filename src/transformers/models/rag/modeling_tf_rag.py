@@ -818,7 +818,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             "doc_scores": doc_scores,
             "context_attention_mask": attention_mask,
             "decoder_input_ids": decoder_input_ids,
-            "past_key_values": decoder_cached_states,  # This is due to TFBart and is the main difference to Pytorch's RAG
+            "past_key_values": decoder_cached_states,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
             "do_marginalize": True,
             "n_docs": n_docs,
