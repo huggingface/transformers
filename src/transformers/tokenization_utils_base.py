@@ -2573,6 +2573,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        pad_token_id: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
@@ -2690,6 +2691,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
+                pad_token_id=pad_token_id,
                 return_attention_mask=return_attention_mask,
             )
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
@@ -2711,6 +2713,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
+                pad_token_id=pad_token_id,
                 return_attention_mask=return_attention_mask,
             )
 
@@ -2984,6 +2987,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
+        pad_token_id: Optional[int] = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -3006,6 +3010,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 >= 7.5 (Volta).
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
+        pad_token_id = pad_token_id if pad_token_id is not None else self.pad_token_id
+
         # Load from model defaults
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
@@ -3031,7 +3037,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                encoded_inputs[self.model_input_names[0]] = required_input + [pad_token_id] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + [1] * len(required_input)
@@ -3041,7 +3047,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     ]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                encoded_inputs[self.model_input_names[0]] = [pad_token_id] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in encoded_inputs:

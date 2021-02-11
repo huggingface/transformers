@@ -23,7 +23,7 @@ import numpy as np
 
 from ...file_utils import add_end_docstrings
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TensorType
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TensorType, TextInput
 from ...utils import logging
 
 
@@ -271,6 +271,48 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         if self.do_lower_case:
             string = string.lower()
         return string
+
+    def encode_labels(
+        self,
+        text: Union[TextInput, List[TextInput]],
+        padding: Union[bool, str, PaddingStrategy] = False,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        verbose: bool = True,
+    ) -> BatchEncoding:
+
+        if isinstance(text, str):
+            text = [text]
+
+        assert isinstance(text, list), f"`text` input has to be type `str` or `List[str]`, but is {type(text)}"
+
+        batch_tokens = []
+        for text_str in text:
+            batch_tokens.append(list(text_str.strip().replace(" ", self.word_delimiter_token) + "|"))
+
+        batch_ids = []
+        for tokens in batch_tokens:
+            batch_ids.append(self.convert_tokens_to_ids(tokens))
+
+        encoded_labels = BatchEncoding({"input_values": batch_ids})
+
+        padded_labels = self.pad(
+            encoded_labels,
+            padding=padding,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            pad_token_id=self.bos_token_id,
+            return_attention_mask=True,
+            return_tensors=return_tensors,
+            verbose=verbose,
+        )
+
+        # hack
+        padded_labels["labels"] = padded_labels["input_values"]
+        del padded_labels["input_values"]
+
+        return padded_labels
 
     def _decode(
         self,
