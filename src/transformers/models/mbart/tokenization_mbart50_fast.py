@@ -50,29 +50,44 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" MBART tokenizer for mBART-50 (backed by HuggingFace's `tokenizers` library). Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    :class:`~transformers.MBart50TokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and
-    adds a new :meth:`~transformers.MBart50TokenizerFast.prepare_seq2seq_batch`.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning
-    the initialization parameters and other methods.
-
-    .. warning::
-        ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
-        properly.
-
-    The tokenization method is ``<language code> <tokens> <eos>`` for both source and target language documents. Note
-    that this is different from :class:`~transformers.MBartTokenizer` where the ``<language code>`` is used as a suffix
-    for source language documents.
+    Args:
+        vocab_file (:obj:`str`):
+            Path to the vocabulary file.
+        src_lang (:obj:`str`):
+            A string representing the source language.
+        tgt_lang (:obj:`str`):
+            A string representing the target language.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sequence token.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"<mask>"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
 
     Examples::
 
         >>> from transformers import MBart50TokenizerFast
-        >>> tokenizer = MBart50TokenizerFast.from_pretrained('facebook/mbart-50-large-one-to-many')
-        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> batch: dict = tokenizer.prepare_seq2seq_batch(
-        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
-        ... )
+        >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-50-large-one-to-many", src_lang="en_XX", tgt_lang="ro_RO")
+        >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
+        >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
+        >>> model_inputs = tokenizer(src_text, return_tensors="pt")
+        >>> with tokenizer.as_target_tokenizer():
+        ...    labels = tokenizer(tgt_text, return_tensors="pt").input_ids
+        >>> # model(**model_inputs, labels=labels) should work
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -87,10 +102,9 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
-        src_lang=None,
-        tgt_lang=None,
+        src_lang,
+        tgt_lang,
         tokenizer_file=None,
-        bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
         cls_token="<s>",
@@ -104,10 +118,7 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
 
         super().__init__(
             vocab_file,
-            src_lang=None,
-            tgt_lang=None,
             tokenizer_file=tokenizer_file,
-            bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
             cls_token=cls_token,
@@ -118,11 +129,15 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         )
 
         self.vocab_file = vocab_file
-
-        self.cur_lang_code = self.convert_tokens_to_ids("en_XX")
-        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
-
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        
         self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+
+        self.lang_code_to_id = {lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES}
+        self.cur_lang_code = self.lang_code_to_id[self.src_lang]
+        self.set_src_lang_special_tokens(self.src_lang)
+
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
