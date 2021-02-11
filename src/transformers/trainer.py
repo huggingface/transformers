@@ -239,6 +239,9 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
 
+        # force device and distributed setup init explicitly
+        args._setup_devices
+
         if model is None:
             if model_init is not None:
                 self.model_init = model_init
