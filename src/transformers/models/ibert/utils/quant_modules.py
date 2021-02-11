@@ -211,38 +211,37 @@ class QuantAct(Module):
 
 class QuantLinear(Module):
     """
-    Class to quantize given linear layer weights
+    Class to quantize weights of given Linear layer
+    
+    Parameters:
+    ----------
+    weight_bit : int
+        Bitwidth for quantized weights.
+    bias_bit : int, default None
+        Bitwidth for quantized bias.
+    per_channel : bool, default False
+        Whether to use channel-wise quantization.
+    quant_mode : 'none' or 'symmetric', default 'none'
+        The mode for quantization. 'none' for no quantization.
     """
     def __init__(self,
                  weight_bit,
                  bias_bit=None,
-                 quant_mode='none',
                  per_channel=False,
-                 show_flag=False,
-                 weight_percentile=False,
-                 save_path=None,
-                 threshold=None):
-        """
-        weight: bit-setting for weight
-        running_stat: determines whether the activation range is updated or froze
-        """
+                 quant_mode=False):
         super(QuantLinear, self).__init__()
         self.weight_bit = weight_bit
         self.quant_mode = quant_mode
         self.per_channel = per_channel
-        self.show_flag = show_flag
-        self.weight_percentile = weight_percentile
         self.bias_bit = bias_bit
         self.quantize_bias = (False if bias_bit is None else True)
         self.quant_mode = quant_mode
-        self.save_path = save_path
-        self.counter = 0
-        self.checkpoint_iter_threshold = threshold
+        self.percentile_mode = False
 
-        if quant_mode == "symmetric":
+        if not self.quant_mode:
+            self.weight_function = None
+        else:
             self.weight_function = SymmetricQuantFunction.apply
-        elif quant_mode == "asymmetric":
-            self.weight_function = AsymmetricQuantFunction.apply
 
     def __repr__(self):
         s = super(QuantLinear, self).__repr__()
@@ -255,35 +254,30 @@ class QuantLinear(Module):
         self.out_features = linear.out_features
         self.weight = Parameter(linear.weight.data.clone())
         self.register_buffer('fc_scaling_factor', torch.zeros(self.out_features))
-        self.register_buffer('fc_zero_point', torch.zeros(self.out_features))
         self.register_buffer('weight_integer', torch.zeros_like(self.weight))
         try:
             self.bias = Parameter(linear.bias.data.clone())
+            self.register_buffer('bias_integer', torch.zeros_like(self.bias))
         except AttributeError:
             self.bias = None
-        self.register_buffer('bias_integer', torch.zeros_like(self.bias))
 
     def fix(self):
-        self.show_flag = True
+        pass
 
     def unfix(self):
-        self.show_flag = False
+        pass
 
-    # prev_act_scaling_factor: used to scaling the bias term
-    # also, x / prev_act_scaling_factor = int
-    def forward(self, x, prev_act_scaling_factor=None, prev_act_zero_point=None):
+    def forward(self, x, prev_act_scaling_factor=None):
         """
         using quantized weights to forward activation x
         """
-        if self.quant_mode == 'none':
+        if not self.quant_mode:
             return F.linear(x, weight=self.weight, bias=self.bias), None
 
         # assert that prev_act_scaling_factor is a scalar tensor
-        # e.g. all input tensors have the same scalar factor
+        # i.e., it is not channel-wise quantized
         assert prev_act_scaling_factor is not None and \
               prev_act_scaling_factor.shape == (1,) 
-
-        #print('x shape @ QuantLinear', x.shape)
 
         w = self.weight
         w_transform = w.data.detach()
@@ -294,40 +288,23 @@ class QuantLinear(Module):
             w_min = w_transform.min().expand(1)
             w_max = w_transform.max().expand(1)
 
-        # we need to add asymmetric here later, for now just ignore it
-        if self.quant_mode == 'symmetric':
-            # TODO: for now, we alway enable fraction number as well as make denom=10250, we can make it more auto later.
-            self.fc_scaling_factor = symmetric_linear_quantization_params(
-                    self.weight_bit, w_min, w_max, self.per_channel)
-            self.weight_integer = self.weight_function(
-                    self.weight, self.weight_bit, self.weight_percentile, 
-                    self.fc_scaling_factor)
+        self.fc_scaling_factor = symmetric_linear_quantization_params(
+                self.weight_bit, w_min, w_max, self.per_channel)
+        self.weight_integer = self.weight_function(
+                self.weight, self.weight_bit, self.percentile_mode, 
+                self.fc_scaling_factor)
 
-            # fc_scaling_factor is per_channel  2 x n 
-            # prev_act_scaling_factor: 2
-            #print('fc shape @ QuantLinear', self.fc_scaling_factor.shape)
-            #print('prev act shape @ QuantLinear', prev_act_scaling_factor.shape)
-            bias_scaling_factor = self.fc_scaling_factor * prev_act_scaling_factor
+        bias_scaling_factor = self.fc_scaling_factor * prev_act_scaling_factor
 
-            self.bias_integer = self.weight_function(self.bias, 
-                    self.bias_bit, False, bias_scaling_factor)
-            #print('bias integer', self.bias_integer.shape)
-            #print('bias scaling factor', bias_scaling_factor.shape)
-        else:
-            raise Exception('For weight, we only support symmetric quantization.')
+        self.bias_integer = self.weight_function(self.bias, 
+                self.bias_bit, False, bias_scaling_factor)
 
         prev_act_scaling_factor = prev_act_scaling_factor.view(1, -1)
         x_int = x / prev_act_scaling_factor
 
-        #print('x_int shape @ QuantLinear', x_int.shape)
-        #print('weight shape @ QuantLinear', self.weight_integer.shape)
-        #print('bias scaling factor shape @ QuantLinear', bias_scaling_factor[0].shape)
-        #print('bias scaling factor shape 2 @ QuantLinear', bias_scaling_factor.shape)
-
-        self.counter += 1
-
         return F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) \
                 * bias_scaling_factor, bias_scaling_factor
+
 
 class QuantLayerNorm(Module):
     def __init__(self,
