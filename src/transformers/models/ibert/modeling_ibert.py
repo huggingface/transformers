@@ -63,7 +63,7 @@ ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class RobertaEmbeddings(nn.Module):
+class IBertEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -160,31 +160,39 @@ class RobertaEmbeddings(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Roberta
-class RobertaSelfAttention(nn.Module):
+class IBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.quant_mode = config.quant_mode
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 "The hidden size (%d) is not a multiple of the number of attention "
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
+        self.quant_mode = config.quant_mode
+        self.weight_bit = 8
+        self.bias_bit = 32
+        self.act_bit = 8
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        # Q, K, V Linear layers
+        self.query = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
+                quant_mode=self.quant_mode, per_channel=True)
+        self.key = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
+                quant_mode=self.quant_mode, per_channel=True)
+        self.value = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
+                quant_mode=self.quant_mode, per_channel=True)
+        self.query.set_param(nn.Linear(config.hidden_size, self.all_head_size))
+        self.key.set_param(nn.Linear(config.hidden_size, self.all_head_size))
+        self.value.set_param(nn.Linear(config.hidden_size, self.all_head_size))
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
+        assert self.position_embedding_type == "absolute"
         self.is_decoder = config.is_decoder
+        assert not self.is_decoder
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -194,6 +202,7 @@ class RobertaSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
+        hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -201,42 +210,22 @@ class RobertaSelfAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        mixed_query_layer = self.query(hidden_states)
+        mixed_query_layer, mixed_query_layer_scaling_factor = \
+                self.query(hidden_states, hidden_states_scaling_factor)
+        mixed_key_layer, mixed_key_layer_scaling_factor = \
+                self.key(hidden_states, hidden_states_scaling_factor)
+        mixed_value_layer, mixed_value_layer_scaling_factor = \
+                self.value(hidden_states, hidden_states_scaling_factor)
 
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
         # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
-        else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+        assert encoder_hidden_states is None
+        assert past_key_value is None
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
+        key_layer = self.transpose_for_scores(mixed_key_layer)
+        value_layer = self.transpose_for_scores(mixed_value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -281,8 +270,6 @@ class RobertaSelfAttention(nn.Module):
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
         return outputs
 
 
@@ -303,11 +290,11 @@ class RobertaSelfOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
-class RobertaAttention(nn.Module):
+class IBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
-        self.self = RobertaSelfAttention(config)
+        self.self = IBertSelfAttention(config)
         self.output = RobertaSelfOutput(config)
         self.pruned_heads = set()
 
@@ -332,6 +319,7 @@ class RobertaAttention(nn.Module):
     def forward(
         self,
         hidden_states,
+        hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -341,6 +329,7 @@ class RobertaAttention(nn.Module):
     ):
         self_outputs = self.self(
             hidden_states,
+            hidden_states_scaling_factor,
             attention_mask,
             head_mask,
             encoder_hidden_states,
@@ -387,20 +376,22 @@ class RobertaOutput(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
-class RobertaLayer(nn.Module):
+class IBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
+        assert self.chunk_size_feed_forward == 0
         self.seq_len_dim = 1
-        self.attention = RobertaAttention(config)
+        self.attention = IBertAttention(config)
         self.is_decoder = config.is_decoder
+        assert not self.is_decoder
         self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = RobertaAttention(config)
+        assert not self.add_cross_attention
         self.intermediate = RobertaIntermediate(config)
         self.output = RobertaOutput(config)
+
+        self.input_act = QuantAct(8, quant_mode=self.quant_mode)
 
     def forward(
         self,
@@ -412,72 +403,41 @@ class RobertaLayer(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        #TODO remove this
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        hidden_states, hidden_states_scaling_factor = self.input_act(hidden_states)
         self_attention_outputs = self.attention(
             hidden_states,
+            hidden_states_scaling_factor,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
+        attention_output_scaling_factor = None
 
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
-        cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
-
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
-
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
+        layer_output, layer_output_scaling_factor = \
+                self.feed_forward_chunk(attention_output, attention_output_scaling_factor)
         outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
 
         return outputs
 
-    def feed_forward_chunk(self, attention_output):
+    def feed_forward_chunk(self, attention_output, attention_output_scaling_factor):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
+        return layer_output, None
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Roberta
-class RobertaEncoder(nn.Module):
+class IBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.quant_mode = config.quant_mode
-        self.layer = nn.ModuleList([RobertaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([IBertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -505,28 +465,8 @@ class RobertaEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
+                raise NotImplementedError("gradient checkpointing is not currently supported")
 
-                if use_cache:
-                    logger.warn(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
@@ -707,8 +647,8 @@ class IBertModel(IBertPreTrainedModel):
         self.config = config
         self.quant_mode = config.quant_mode
 
-        self.embeddings = RobertaEmbeddings(config)
-        self.encoder = RobertaEncoder(config)
+        self.embeddings = IBertEmbeddings(config)
+        self.encoder = IBertEncoder(config)
 
         self.pooler = RobertaPooler(config) if add_pooling_layer else None
 
