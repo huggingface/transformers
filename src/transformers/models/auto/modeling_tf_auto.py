@@ -539,7 +539,7 @@ class TFAutoModel(object):
     r"""
     This is a generic model class that will be instantiated as one of the base model classes of the library when
     created with the when created with the :meth:`~transformers.TFAutoModel.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModel.from_config` class methods.
+    :meth:`~transformers.TFAutoModel.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -629,7 +629,7 @@ class TFAutoModel(object):
 class TFAutoModelForPreTraining(object):
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with the
-    architecture used for pretraining this model---when created with the when created with the
+    architecture used for pretraining this model---when created with the
     :meth:`~transformers.TFAutoModelForPreTraining.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForPreTraining.from_config` class method.
 
@@ -723,9 +723,8 @@ class TFAutoModelForPreTraining(object):
 class TFAutoModelWithLMHead(object):
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    language modeling head---when created with the when created with the
-    :meth:`~transformers.TFAutoModelWithLMHead.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelWithLMHead.from_config` class method.
+    language modeling head---when created with the :meth:`~transformers.TFAutoModelWithLMHead.from_pretrained` class
+    method or the :meth:`~transformers.TFAutoModelWithLMHead.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
 
@@ -836,9 +835,8 @@ class TFAutoModelWithLMHead(object):
 class TFAutoModelForCausalLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a causal
-    language modeling head---when created with the when created with the
-    :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForCausalLM.from_config` class method.
+    language modeling head---when created with the :meth:`~transformers.TFAutoModelForCausalLM.from_pretrained` class
+    method or the :meth:`~transformers.TFAutoModelForCausalLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -930,9 +928,8 @@ class TFAutoModelForCausalLM:
 class TFAutoModelForMaskedLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a masked
-    language modeling head---when created with the when created with the
-    :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForMaskedLM.from_config` class method.
+    language modeling head---when created with the :meth:`~transformers.TFAutoModelForMaskedLM.from_pretrained` class
+    method or the :meth:`~transformers.TFAutoModelForMaskedLM.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1024,7 +1021,7 @@ class TFAutoModelForMaskedLM:
 class TFAutoModelForSeq2SeqLM:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence-to-sequence language modeling head---when created with the when created with the
+    sequence-to-sequence language modeling head---when created with the
     :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForSeq2SeqLM.from_config` class method.
 
@@ -1122,7 +1119,7 @@ class TFAutoModelForSeq2SeqLM:
 class TFAutoModelForSequenceClassification(object):
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    sequence classification head---when created with the when created with the
+    sequence classification head---when created with the
     :meth:`~transformers.TFAutoModelForSequenceClassification.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForSequenceClassification.from_config` class method.
 
@@ -1220,7 +1217,7 @@ class TFAutoModelForSequenceClassification(object):
 class TFAutoModelForQuestionAnswering(object):
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    question answering head---when created with the when created with the
+    question answering head---when created with the
     :meth:`~transformers.TFAutoModeForQuestionAnswering.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForQuestionAnswering.from_config` class method.
 
@@ -1317,9 +1314,8 @@ class TFAutoModelForQuestionAnswering(object):
 class TFAutoModelForTokenClassification:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a token
-    classification head---when created with the when created with the
-    :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained` class method or the
-    :meth:`~transformers.TFAutoModelForTokenClassification.from_config` class method.
+    classification head---when created with the :meth:`~transformers.TFAutoModelForTokenClassification.from_pretrained`
+    class method or the :meth:`~transformers.TFAutoModelForTokenClassification.from_config` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -1414,7 +1410,7 @@ class TFAutoModelForTokenClassification:
 class TFAutoModelForMultipleChoice:
     r"""
     This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the when created with the
+    multiple choice classification head---when created with the
     :meth:`~transformers.TFAutoModelForMultipleChoice.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForMultipleChoice.from_config` class method.
 
@@ -1511,8 +1507,8 @@ class TFAutoModelForMultipleChoice:
 
 class TFAutoModelForNextSentencePrediction:
     r"""
-    This is a generic model class that will be instantiated as one of the model classes of the library---with a
-    multiple choice classification head---when created with the when created with the
+    This is a generic model class that will be instantiated as one of the model classes of the library---with a next
+    sentence prediction head---when created with the
     :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_pretrained` class method or the
     :meth:`~transformers.TFAutoModelForNextSentencePrediction.from_config` class method.
 

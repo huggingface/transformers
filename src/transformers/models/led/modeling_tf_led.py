@@ -87,17 +87,17 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=tf.float32), mask], axis=-1)
-    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+
+    return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
 def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = shape_list(mask)
+    src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
+    expanded_mask = tf.cast(tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)), tf.float32)
 
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
@@ -200,6 +200,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         (
             hidden_states,
             attention_mask,
+            layer_head_mask,
             is_index_masked,
             is_index_global_attn,
             is_global_attn,
@@ -265,15 +266,36 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             ),
             lambda: attn_scores,
         )
-
         attn_probs = tf.nn.softmax(attn_scores, axis=-1)
 
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
+        # Make sure to create a mask with the proper shape:
+        # if is_global_attn==True => [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1]
+        # if is_global_attn==False => [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
+        masked_index = tf.cond(
+            is_global_attn,
+            lambda: tf.tile(
+                is_index_masked[:, :, None, None],
+                (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1),
+            ),
+            lambda: tf.tile(
+                is_index_masked[:, :, None, None],
+                (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + 1),
+            ),
+        )
         attn_probs = tf.where(
-            tf.broadcast_to(is_index_masked[:, :, None, None], shape_list(attn_probs)),
-            0.0,
+            masked_index,
+            tf.zeros(shape_list(masked_index), dtype=tf.dtypes.float32),
             attn_probs,
         )
+
+        if layer_head_mask is not None:
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+            )
+            attn_probs = tf.reshape(layer_head_mask, (1, 1, -1, 1)) * attn_probs
 
         # apply dropout
         attn_probs = self.dropout(attn_probs, training=training)
@@ -310,6 +332,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                 attn_output=attn_output,
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
+                layer_head_mask=layer_head_mask,
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
                 is_index_global_attn_nonzero=is_index_global_attn_nonzero,
                 is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
@@ -320,11 +343,23 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
 
         # make sure that local attention probabilities are set to 0 for indices of global attn
-        # When is_global_attn is True, the last dimension is always self.one_sided_attn_window_size * 2 + 1 + 1
-        # because of the concat Line 713.
+        # Make sure to create a mask with the proper shape:
+        # if is_global_attn==True => [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1]
+        # if is_global_attn==False => [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
+        masked_global_attn_index = tf.cond(
+            is_global_attn,
+            lambda: tf.tile(
+                is_index_global_attn[:, :, None, None],
+                (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + max_num_global_attn_indices + 1),
+            ),
+            lambda: tf.tile(
+                is_index_global_attn[:, :, None, None],
+                (1, 1, self.num_heads, self.one_sided_attn_window_size * 2 + 1),
+            ),
+        )
         attn_probs = tf.where(
-            tf.broadcast_to(is_index_global_attn[:, :, None, None], shape_list(attn_probs)),
-            tf.zeros(shape_list(attn_probs), dtype=tf.dtypes.float32),
+            masked_global_attn_index,
+            tf.zeros(shape_list(masked_global_attn_index), dtype=tf.dtypes.float32),
             attn_probs,
         )
 
@@ -408,14 +443,9 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             axis=1,
         )
         first_chunk_mask = (
-            tf.broadcast_to(
+            tf.tile(
                 tf.range(chunks_count + 1)[None, :, None, None],
-                shape=(
-                    batch_size * num_heads,
-                    chunks_count + 1,
-                    window_overlap,
-                    window_overlap,
-                ),
+                (batch_size * num_heads, 1, window_overlap, window_overlap),
             )
             < 1
         )
@@ -463,7 +493,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         mask_2d = mask_2d + tf.reverse(mask_2d, axis=[0, 1])
 
         # broadcast to full matrix
-        mask_4d = tf.broadcast_to(mask_2d[None, :, None, :], shape_list(input_tensor))
+        mask_4d = tf.tile(mask_2d[None, :, None, :], (shape_list(input_tensor)[0], 1, 1, 1))
 
         # inf tensor used for masking
         inf_tensor = -float("inf") * tf.ones_like(input_tensor, dtype=tf.dtypes.float32)
@@ -752,6 +782,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         attn_output,
         hidden_states,
         max_num_global_attn_indices,
+        layer_head_mask,
         is_local_index_global_attn_nonzero,
         is_index_global_attn_nonzero,
         is_local_index_no_global_attn_nonzero,
@@ -807,7 +838,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         global_attn_scores = tf.transpose(global_attn_scores_trans, (0, 2, 1, 3))
 
         # mask global attn scores
-        attn_mask = tf.broadcast_to(is_index_masked[:, None, None, :], shape_list(global_attn_scores))
+        attn_mask = tf.tile(is_index_masked[:, None, None, :], (1, shape_list(global_attn_scores)[1], 1, 1))
         global_attn_scores = tf.where(attn_mask, -10000.0, global_attn_scores)
         global_attn_scores = tf.reshape(
             global_attn_scores,
@@ -816,6 +847,20 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
 
         # compute global attn probs
         global_attn_probs_float = tf.nn.softmax(global_attn_scores, axis=-1)
+
+        # apply layer head maskin
+        if layer_head_mask is not None:
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+            )
+            global_attn_probs_float = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
+                global_attn_probs_float, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
+            )
+            global_attn_probs_float = tf.reshape(
+                global_attn_probs_float, (batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
+            )
 
         # dropout
         global_attn_probs = self.global_dropout(global_attn_probs_float, training=training)
@@ -875,13 +920,14 @@ class TFLEDEncoderAttention(tf.keras.layers.Layer):
         (
             hidden_states,
             attention_mask,
+            layer_head_mask,
             is_index_masked,
             is_index_global_attn,
             is_global_attn,
         ) = inputs
 
         self_outputs = self.longformer_self_attn(
-            [hidden_states, attention_mask, is_index_masked, is_index_global_attn, is_global_attn],
+            [hidden_states, attention_mask, layer_head_mask, is_index_masked, is_index_global_attn, is_global_attn],
             training=training,
         )
 
@@ -927,6 +973,7 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
         key_value_states: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         attention_mask: Optional[tf.Tensor] = None,
+        layer_head_mask: Optional[tf.Tensor] = None,
         training=False,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
         """Input shape: Batch x Time x Channel"""
@@ -993,6 +1040,17 @@ class TFLEDDecoderAttention(tf.keras.layers.Layer):
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
+        if layer_head_mask is not None:
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+            )
+            attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
+                attn_weights, (bsz, self.num_heads, tgt_len, src_len)
+            )
+            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+
         attn_probs = self.dropout(attn_weights, training=training)
 
         attn_output = tf.matmul(attn_probs, value_states)
@@ -1031,6 +1089,7 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         attention_mask: tf.Tensor,
+        layer_head_mask: tf.Tensor,
         is_index_masked: tf.Tensor,
         is_index_global_attn: tf.Tensor,
         is_global_attn: bool,
@@ -1041,10 +1100,12 @@ class TFLEDEncoderLayer(tf.keras.layers.Layer):
             hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`tf.Tensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
         """
         residual = hidden_states
         layer_outputs = self.self_attn(
-            [hidden_states, attention_mask, is_index_masked, is_index_global_attn, is_global_attn],
+            [hidden_states, attention_mask, layer_head_mask, is_index_masked, is_index_global_attn, is_global_attn],
             training=training,
         )
 
@@ -1104,6 +1165,8 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
         attention_mask: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
+        layer_head_mask: Optional[tf.Tensor] = None,
+        encoder_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
@@ -1115,6 +1178,10 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
             encoder_hidden_states (:obj:`tf.Tensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`tf.Tensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
+            encoder_layer_head_mask (:obj:`tf.Tensor`): mask for encoder attention heads in a given layer of
+                size `(config.encoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
@@ -1127,6 +1194,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
         )
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
@@ -1143,6 +1211,7 @@ class TFLEDDecoderLayer(tf.keras.layers.Layer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
+                layer_head_mask=encoder_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
             )
             hidden_states = self.dropout(hidden_states, training=training)
@@ -1438,6 +1507,18 @@ LED_INPUTS_DOCSTRING = r"""
             shifting the input_ids right, following the paper.
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
+        head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
         encoder_outputs (:obj:`tf.FloatTensor`, `optional`):
             hidden states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
             of shape :obj:`(batch_size, sequence_length, hidden_size)` is a sequence of
@@ -1517,6 +1598,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         inputs_embeds=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1541,6 +1623,12 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
+            head_mask (:obj:`tf.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
             inputs_embeds (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
                 representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
@@ -1559,6 +1647,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
+            head_mask=head_mask,
             global_attention_mask=global_attention_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1617,8 +1706,15 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         encoder_states = () if inputs["output_hidden_states"] else None
         all_attentions = all_global_attentions = () if inputs["output_attentions"] else None
 
+        # check if head_mask has a correct number of layers specified if desired
+        if inputs["head_mask"] is not None:
+            tf.debugging.assert_equal(
+                shape_list(inputs["head_mask"])[0],
+                len(self.layers),
+                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
+            )
         # encoder layers
-        for encoder_layer in self.layers:
+        for idx, encoder_layer in enumerate(self.layers):
 
             if inputs["output_hidden_states"]:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
@@ -1631,6 +1727,7 @@ class TFLEDEncoder(tf.keras.layers.Layer):
             layer_outputs = encoder_layer(
                 hidden_states=hidden_states,
                 attention_mask=inputs["attention_mask"],
+                layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
                 is_index_masked=is_index_masked,
                 is_index_global_attn=is_index_global_attn,
                 is_global_attn=is_global_attn,
@@ -1665,7 +1762,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
     def compute_hidden_states(self, hidden_states, padding_len):
         return hidden_states[:, :-padding_len] if padding_len > 0 else hidden_states
 
-    @tf.function
     def _pad_to_window_size(
         self,
         input_ids,
@@ -1692,19 +1788,21 @@ class TFLEDEncoder(tf.keras.layers.Layer):
                 )
             )
 
-            paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
+        paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
 
-            if input_ids is not None:
-                input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
+        if input_ids is not None:
+            input_ids = tf.pad(input_ids, paddings, constant_values=pad_token_id)
 
-            if inputs_embeds is not None:
+        if inputs_embeds is not None:
+
+            def pad_embeddings():
                 input_ids_padding = tf.fill((batch_size, padding_len), pad_token_id)
                 inputs_embeds_padding = self.embed_tokens(input_ids_padding)
-                inputs_embeds = tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
+                return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
 
-            attention_mask = tf.pad(
-                attention_mask, paddings, constant_values=False
-            )  # no attention on the padding tokens
+            inputs_embeds = tf.cond(tf.math.greater(padding_len, 0), pad_embeddings, lambda: inputs_embeds)
+
+        attention_mask = tf.pad(attention_mask, paddings, constant_values=False)  # no attention on the padding tokens
 
         return (
             padding_len,
@@ -1752,6 +1850,8 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        head_mask=None,
+        encoder_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -1783,6 +1883,19 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
                 `What are attention masks? <../glossary.html#attention-mask>`__
+            head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
+            encoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
+                on hidden heads. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
             past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding. If :obj:`past_key_values` are used, the user can optionally input only the last
@@ -1809,6 +1922,8 @@ class TFLEDDecoder(tf.keras.layers.Layer):
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            encoder_head_mask=encoder_head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -1864,6 +1979,14 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         all_hidden_states = ()
         all_self_attns = ()
         present_key_values = ()
+
+        # check if head_mask has a correct number of layers specified if desired
+        if inputs["head_mask"] is not None:
+            tf.debugging.assert_equal(
+                shape_list(inputs["head_mask"])[0],
+                len(self.layers),
+                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
+            )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
@@ -1880,6 +2003,10 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 attention_mask=combined_attention_mask,
                 encoder_hidden_states=inputs["encoder_hidden_states"],
                 encoder_attention_mask=inputs["encoder_attention_mask"],
+                layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
+                encoder_layer_head_mask=inputs["encoder_head_mask"][idx]
+                if inputs["encoder_head_mask"] is not None
+                else None,
                 past_key_value=past_key_value,
             )
 
@@ -1949,6 +2076,8 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs: Optional[Union[Tuple, TFLEDEncoderBaseModelOutput]] = None,
         global_attention_mask=None,
         past_key_values=None,
@@ -1968,6 +2097,8 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             encoder_outputs=encoder_outputs,
             global_attention_mask=global_attention_mask,
             past_key_values=past_key_values,
@@ -1989,6 +2120,7 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
                 input_ids=inputs["input_ids"],
                 attention_mask=inputs["attention_mask"],
                 global_attention_mask=inputs["global_attention_mask"],
+                head_mask=inputs["head_mask"],
                 inputs_embeds=inputs["inputs_embeds"],
                 output_attentions=inputs["output_attentions"],
                 output_hidden_states=inputs["output_hidden_states"],
@@ -2011,6 +2143,8 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
             attention_mask=inputs["decoder_attention_mask"],
             encoder_hidden_states=inputs["encoder_outputs"][0],
             encoder_attention_mask=inputs["attention_mask"],
+            head_mask=inputs["decoder_head_mask"],
+            encoder_head_mask=inputs["head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["decoder_inputs_embeds"],
             use_cache=inputs["use_cache"],
@@ -2064,6 +2198,8 @@ class TFLEDModel(TFLEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs: Optional[Union[Tuple, TFLEDEncoderBaseModelOutput]] = None,
         global_attention_mask=None,
         past_key_values=None,
@@ -2083,6 +2219,8 @@ class TFLEDModel(TFLEDPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             encoder_outputs=encoder_outputs,
             global_attention_mask=global_attention_mask,
             past_key_values=past_key_values,
@@ -2102,6 +2240,8 @@ class TFLEDModel(TFLEDPreTrainedModel):
             decoder_attention_mask=inputs["decoder_attention_mask"],
             encoder_outputs=inputs["encoder_outputs"],
             global_attention_mask=inputs["global_attention_mask"],
+            head_mask=inputs["head_mask"],
+            decoder_head_mask=inputs["decoder_head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
@@ -2179,6 +2319,8 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs: Optional[TFLEDEncoderBaseModelOutput] = None,
         global_attention_mask=None,
         past_key_values=None,
@@ -2216,6 +2358,8 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             encoder_outputs=encoder_outputs,
             global_attention_mask=global_attention_mask,
             past_key_values=past_key_values,
@@ -2244,6 +2388,8 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
             decoder_attention_mask=inputs["decoder_attention_mask"],
             encoder_outputs=inputs["encoder_outputs"],
             global_attention_mask=inputs["global_attention_mask"],
+            head_mask=inputs["head_mask"],
+            decoder_head_mask=inputs["decoder_head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],

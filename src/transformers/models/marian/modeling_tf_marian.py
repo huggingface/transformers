@@ -39,6 +39,7 @@ from ...modeling_tf_outputs import (
 # Public API
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
+    TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
@@ -94,7 +95,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
     if past_key_values_length > 0:
         mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=tf.float32), mask], axis=-1)
-    return tf.broadcast_to(mask[None, None, :, :], (bsz, 1, tgt_len, tgt_len + past_key_values_length))
+
+    return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
@@ -102,10 +104,9 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    bsz, src_len = shape_list(mask)
+    src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
-
-    expanded_mask = tf.cast(tf.broadcast_to(mask[:, None, None, :], (bsz, 1, tgt_len, src_len)), tf.float32)
+    expanded_mask = tf.cast(tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)), tf.float32)
 
     return (1.0 - expanded_mask) * LARGE_NEGATIVE
 
@@ -272,7 +273,7 @@ class TFMarianAttention(tf.keras.layers.Layer):
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
             )
-            attn_weights = attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_probs = self.dropout(attn_weights, training=training)
 
@@ -942,7 +943,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
                 tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
             )
 
-        if inputs["attention_mask"] is not None and input_shape[-1] > 1:
+        if inputs["attention_mask"] is not None:
             combined_attention_mask = combined_attention_mask + _expand_mask(
                 inputs["attention_mask"], tgt_len=input_shape[-1]
             )
@@ -1256,7 +1257,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
     "The MARIAN Model with a language modeling head. Can be used for summarization.",
     MARIAN_START_DOCSTRING,
 )
-class TFMarianMTModel(TFMarianPreTrainedModel):
+class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
@@ -1313,7 +1314,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
         **kwargs,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+        labels (:obj:`tf.tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
             config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
@@ -1344,6 +1345,11 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
         )
 
         if inputs["labels"] is not None:
+            inputs["labels"] = tf.where(
+                inputs["labels"] == self.config.pad_token_id,
+                tf.fill(shape_list(inputs["labels"]), -100),
+                inputs["labels"],
+            )
             inputs["use_cache"] = False
             if inputs["decoder_input_ids"] is None:
                 inputs["decoder_input_ids"] = shift_tokens_right(
@@ -1464,23 +1470,17 @@ class TFMarianMTModel(TFMarianPreTrainedModel):
             )
         return (past[0], reordered_past)
 
-    def adjust_logits_during_generation(self, logits, cur_len, max_length):
+    def adjust_logits_during_generation(
+        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
+    ):
         """Never predict pad_token_id. Predict </s> when max_length is reached."""
         vocab_range = tf.constant(range(self.config.vocab_size))
         logits = tf.where(vocab_range == self.config.pad_token_id, LARGE_NEGATIVE, logits)
-        if cur_len == max_length - 1:
-            logits = tf.where(vocab_range != self.config.eos_token_id, LARGE_NEGATIVE, logits)
-        return logits
-
-    # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.compute_loss
-    def compute_loss(self, labels, logits):
-        """CrossEntropyLoss that ignores pad tokens"""
-        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True,
-            reduction=tf.keras.losses.Reduction.NONE,
-        )
-        melted_labels = tf.reshape(labels, (-1,))
-        active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(melted_labels, active_loss)
-        return loss_fn(labels, reduced_logits)
+        if cur_len == 1 and forced_bos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_bos_token_id, LARGE_NEGATIVE, logits)
+        elif cur_len == max_length - 1 and forced_eos_token_id is not None:
+            vocab_range = tf.constant(range(self.config.vocab_size))
+            return tf.where(vocab_range != forced_eos_token_id, LARGE_NEGATIVE, logits)
+        else:
+            return logits

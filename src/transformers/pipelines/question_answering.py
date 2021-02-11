@@ -196,8 +196,9 @@ class QuestionAnsweringPipeline(Pipeline):
             A :obj:`dict` or a list of :obj:`dict`: Each result comes as a dictionary with the following keys:
 
             - **score** (:obj:`float`) -- The probability associated to the answer.
-            - **start** (:obj:`int`) -- The start index of the answer (in the tokenized version of the input).
-            - **end** (:obj:`int`) -- The end index of the answer (in the tokenized version of the input).
+            - **start** (:obj:`int`) -- The character start index of the answer (in the tokenized version of the
+              input).
+            - **end** (:obj:`int`) -- The character end index of the answer (in the tokenized version of the input).
             - **answer** (:obj:`str`) -- The answer to the question.
         """
         # Set defaults values
@@ -300,7 +301,7 @@ class QuestionAnsweringPipeline(Pipeline):
 
         all_answers = []
         for features, example in zip(features_list, examples):
-            model_input_names = self.tokenizer.model_input_names + ["input_ids"]
+            model_input_names = self.tokenizer.model_input_names
             fw_args = {k: [feature.__dict__[k] for feature in features] for k in model_input_names}
 
             # Manage tensor allocation on correct device

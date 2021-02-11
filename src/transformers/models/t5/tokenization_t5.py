@@ -92,12 +92,16 @@ class T5Tokenizer(PreTrainedTokenizer):
             <https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117>`__).
         additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
+
+    Attributes:
+        sp_model (:obj:`SentencePieceProcessor`):
+            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,

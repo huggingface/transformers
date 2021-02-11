@@ -337,6 +337,10 @@ def main():
         tokenized_datasets["validation"] = add_chinese_references(
             tokenized_datasets["validation"], data_args.validation_ref_file
         )
+    # If we have ref files, need to avoid it removed by trainer
+    has_ref = data_args.train_ref_file or data_args.validation_ref_file
+    if has_ref:
+        training_args.remove_unused_columns = False
 
     # Data collator
     # This one will take care of randomly masking the tokens.

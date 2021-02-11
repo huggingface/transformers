@@ -59,7 +59,7 @@ else:
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
-ENV_VARS_TRUE_VALUES = {"1", "ON", "YES"}
+ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
 ENV_VARS_TRUE_AND_AUTO_VALUES = ENV_VARS_TRUE_VALUES.union({"AUTO"})
 
 USE_TF = os.environ.get("USE_TF", "AUTO").upper()
@@ -144,7 +144,11 @@ try:
     _faiss_version = importlib_metadata.version("faiss")
     logger.debug(f"Successfully imported faiss version {_faiss_version}")
 except importlib_metadata.PackageNotFoundError:
-    _faiss_available = False
+    try:
+        _faiss_version = importlib_metadata.version("faiss-cpu")
+        logger.debug(f"Successfully imported faiss version {_faiss_version}")
+    except importlib_metadata.PackageNotFoundError:
+        _faiss_available = False
 
 
 _scatter_available = importlib.util.find_spec("torch_scatter") is not None
@@ -153,6 +157,14 @@ try:
     logger.debug(f"Successfully imported torch-scatter version {_scatter_version}")
 except importlib_metadata.PackageNotFoundError:
     _scatter_available = False
+
+
+_soundfile_available = importlib.util.find_spec("soundfile") is not None
+try:
+    _soundfile_version = importlib_metadata.version("soundfile")
+    logger.debug(f"Successfully imported soundfile version {_soundfile_version}")
+except importlib_metadata.PackageNotFoundError:
+    _soundfile_available = False
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
@@ -309,6 +321,10 @@ def is_sagemaker_distributed_available():
         return False
     # Lastly, check if the `smdistributed` module is present.
     return importlib.util.find_spec("smdistributed") is not None
+
+
+def is_soundfile_availble():
+    return _soundfile_available
 
 
 def torch_only_method(fn):
