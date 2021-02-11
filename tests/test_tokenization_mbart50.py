@@ -45,11 +45,11 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         super().setUp()
 
         # We have a SentencePiece fixture for testing
-        tokenizer = MBart50Tokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = MBart50Tokenizer(SAMPLE_VOCAB, src_lang="en_XX", tgt_lang="ro_RO", keep_accents=True)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_full_tokenizer(self):
-        tokenizer = MBart50Tokenizer(SAMPLE_VOCAB, keep_accents=True)
+        tokenizer = MBart50Tokenizer(SAMPLE_VOCAB, src_lang="en_XX", tgt_lang="ro_RO", keep_accents=True)
 
         tokens = tokenizer.tokenize("This is a test")
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
@@ -142,7 +142,9 @@ class MBartOneToManyIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: MBart50Tokenizer = MBart50Tokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer: MBart50Tokenizer = MBart50Tokenizer.from_pretrained(
+            cls.checkpoint_name, src_lang="en_XX", tgt_lang="ro_RO"
+        )
         cls.pad_token_id = 1
         return cls
 
