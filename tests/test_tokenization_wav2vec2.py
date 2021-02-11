@@ -23,7 +23,8 @@ import unittest
 
 import numpy as np
 
-from transformers.models.wav2vec2 import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2Tokenizer
+from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST
+from transformers.models.wav2vec2 import Wav2Vec2Config, Wav2Vec2Tokenizer
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import slow
 
