@@ -443,8 +443,9 @@ Here is how you'd have to adjust your training code in the notebook to use DeepS
 
     import os
 
-    # deepspeed requires a distributed environment even if one process is used
-    # this seems to be required on colab.google.com, but works fine without it in normal jupyter notebook
+    # DeepSpeed requires a distributed environment even when only one process is used.
+    # The following seems to be required on colab.research.google.com, but works fine
+    # without it in a normal jupyter notebook.
     os.environ['RANK'] = "0"
 
     # You can also tweak the following if need be
