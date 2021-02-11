@@ -548,7 +548,7 @@ def main():
 
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
-
+        result = {k: round(v, 4) for k, v in result.items()}
         return result
 
     # Initialize our Trainer
@@ -590,6 +590,7 @@ def main():
         logger.info("*** Evaluate ***")
 
         results = trainer.evaluate(max_length=data_args.val_max_target_length, num_beams=data_args.num_beams)
+        result = {k: round(v, 4) for k, v in result.items()}
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_seq2seq.txt")
         if trainer.is_world_process_zero():
@@ -609,6 +610,7 @@ def main():
             num_beams=data_args.num_beams,
         )
         test_metrics = test_results.metrics
+        test_metrics["test_loss"] = round(test_metrics["test_loss"], 4)
 
         output_test_result_file = os.path.join(training_args.output_dir, "test_results_seq2seq.txt")
         if trainer.is_world_process_zero():
