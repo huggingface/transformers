@@ -260,6 +260,7 @@ class QuantLinear(Module):
             self.register_buffer('bias_integer', torch.zeros_like(self.bias))
         except AttributeError:
             self.bias = None
+            self.bias_integer = None
 
     def fix(self):
         pass
@@ -296,8 +297,9 @@ class QuantLinear(Module):
 
         bias_scaling_factor = self.fc_scaling_factor * prev_act_scaling_factor
 
-        self.bias_integer = self.weight_function(self.bias, 
-                self.bias_bit, False, bias_scaling_factor)
+        if self.bias is not None:
+            self.bias_integer = self.weight_function(self.bias, 
+                    self.bias_bit, False, bias_scaling_factor)
 
         prev_act_scaling_factor = prev_act_scaling_factor.view(1, -1)
         x_int = x / prev_act_scaling_factor
