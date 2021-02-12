@@ -39,25 +39,6 @@ class RepoObj:
         self.size = size
 
 
-class S3Obj:
-    """
-    HuggingFace S3-based system, data structure that represents a file belonging to the current user.
-    """
-
-    def __init__(self, filename: str, LastModified: str, ETag: str, Size: int, **kwargs):
-        self.filename = filename
-        self.LastModified = LastModified
-        self.ETag = ETag
-        self.Size = Size
-
-
-class PresignedUrl:
-    def __init__(self, write: str, access: str, type: str, **kwargs):
-        self.write = write
-        self.access = access
-        self.type = type  # mime-type to send to S3.
-
-
 class ModelSibling:
     """
     Data structure that represents a public file inside a model, accessible from huggingface.co
@@ -77,16 +58,12 @@ class ModelInfo:
     def __init__(
         self,
         modelId: Optional[str] = None,  # id of model
-        author: Optional[str] = None,
-        downloads: Optional[int] = None,
         tags: List[str] = [],
         pipeline_tag: Optional[str] = None,
         siblings: Optional[List[Dict]] = None,  # list of files that constitute the model
         **kwargs
     ):
         self.modelId = modelId
-        self.author = author
-        self.downloads = downloads
         self.tags = tags
         self.pipeline_tag = pipeline_tag
         self.siblings = [ModelSibling(**x) for x in siblings] if siblings is not None else None
@@ -95,8 +72,6 @@ class ModelInfo:
 
 
 class HfApi:
-    ALLOWED_S3_FILE_TYPES = ["datasets", "metrics"]
-
     def __init__(self, endpoint=None):
         self.endpoint = endpoint if endpoint is not None else ENDPOINT
 
@@ -130,78 +105,6 @@ class HfApi:
         """
         path = "{}/api/logout".format(self.endpoint)
         r = requests.post(path, headers={"authorization": "Bearer {}".format(token)})
-        r.raise_for_status()
-
-    def presign(self, token: str, filetype: str, filename: str, organization: Optional[str] = None) -> PresignedUrl:
-        """
-        HuggingFace S3-based system, used for datasets and metrics.
-
-        Call HF API to get a presigned url to upload `filename` to S3.
-        """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
-        path = f"{self.endpoint}/api/{filetype}/presign"
-        r = requests.post(
-            path,
-            headers={"authorization": "Bearer {}".format(token)},
-            json={"filename": filename, "organization": organization},
-        )
-        r.raise_for_status()
-        d = r.json()
-        return PresignedUrl(**d)
-
-    def presign_and_upload(
-        self, token: str, filetype: str, filename: str, filepath: str, organization: Optional[str] = None
-    ) -> str:
-        """
-        HuggingFace S3-based system, used for datasets and metrics.
-
-        Get a presigned url, then upload file to S3.
-
-        Outputs: url: Read-only url for the stored file on S3.
-        """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
-        urls = self.presign(token, filetype=filetype, filename=filename, organization=organization)
-        # streaming upload:
-        # https://2.python-requests.org/en/master/user/advanced/#streaming-uploads
-        #
-        # Even though we presign with the correct content-type,
-        # the client still has to specify it when uploading the file.
-        with open(filepath, "rb") as f:
-            pf = TqdmProgressFileReader(f)
-            data = f if pf.total_size > 0 else ""
-
-            r = requests.put(urls.write, data=data, headers={"content-type": urls.type})
-            r.raise_for_status()
-            pf.close()
-        return urls.access
-
-    def list_objs(self, token: str, filetype: str, organization: Optional[str] = None) -> List[S3Obj]:
-        """
-        HuggingFace S3-based system, used for datasets and metrics.
-
-        Call HF API to list all stored files for user (or one of their organizations).
-        """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
-        path = "{}/api/{}/listObjs".format(self.endpoint, filetype)
-        params = {"organization": organization} if organization is not None else None
-        r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
-        r.raise_for_status()
-        d = r.json()
-        return [S3Obj(**x) for x in d]
-
-    def delete_obj(self, token: str, filetype: str, filename: str, organization: Optional[str] = None):
-        """
-        HuggingFace S3-based system, used for datasets and metrics.
-
-        Call HF API to delete a file stored by user
-        """
-        assert filetype in self.ALLOWED_S3_FILE_TYPES, f"Please specify filetype from {self.ALLOWED_S3_FILE_TYPES}"
-        path = "{}/api/{}/deleteObj".format(self.endpoint, filetype)
-        r = requests.delete(
-            path,
-            headers={"authorization": "Bearer {}".format(token)},
-            json={"filename": filename, "organization": organization},
-        )
         r.raise_for_status()
 
     def model_list(self) -> List[ModelInfo]:
