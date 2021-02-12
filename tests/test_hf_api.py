@@ -20,7 +20,6 @@ import subprocess
 import time
 import unittest
 
-import requests
 from requests.exceptions import HTTPError
 from transformers.hf_api import HfApi, HfFolder, ModelInfo, RepoObj
 from transformers.testing_utils import require_git_lfs
