@@ -286,19 +286,35 @@ class IBertSelfAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
-class RobertaSelfOutput(nn.Module):
+class IBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.weight_bit = 8
+        self.bias_bit = 32
+        self.ln_input_bit = 22
+        self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
+                quant_mode=self.quant_mode, per_channel=True)
+        self.dense.set_param(nn.Linear(config.hidden_size, config.hidden_size))
+        self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
+        self.ln_act = QuantAct(32, quant_mode=self.quant_mode) # TODO remove thi
+
+    def forward(self, hidden_states, hidden_states_scaling_factor, 
+                input_tensor, input_tensor_scaling_factor):
+        hidden_states, hidden_states_scaling_factor = \
+                self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+        hidden_states, hidden_states_scaling_factor = self.ln_input_act(
+                hidden_states, hidden_states_scaling_factor,
+                identity=input_tensor,
+                identity_scaling_factor=input_tensor_scaling_factor)
+        hidden_states = self.LayerNorm(hidden_states)
+
+        hidden_states, hidden_states_scaling_factor = self.ln_act(hidden_states) #TODO remove this
+        return hidden_states, hidden_states_scaling_factor
 
 
 # Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
@@ -307,7 +323,7 @@ class IBertAttention(nn.Module):
         super().__init__()
         self.quant_mode = config.quant_mode
         self.self = IBertSelfAttention(config)
-        self.output = RobertaSelfOutput(config)
+        self.output = IBertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -350,13 +366,17 @@ class IBertAttention(nn.Module):
                 past_key_value,
                 output_attentions,
             )
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output, attention_output_scaling_factor = self.output(
+                self_outputs[0], self_outputs_scaling_factor[0],
+                hidden_states, hidden_states_scaling_factor)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
+        outputs_scaling_factor = (attention_output_scaling_factor,) + \
+                self_outputs_scaling_factor[1:]
+        return outputs, outputs_scaling_factor
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class RobertaIntermediate(nn.Module):
+class IBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -366,14 +386,14 @@ class RobertaIntermediate(nn.Module):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states, hidden_states_scaling_factor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
+        return hidden_states, None
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
-class RobertaOutput(nn.Module):
+class IBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -381,11 +401,12 @@ class RobertaOutput(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def forward(self, hidden_states, hidden_states_scaling_factor, 
+               input_tensor, input_tensor_scaling_factor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
+        return hidden_states, None
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
@@ -393,16 +414,22 @@ class IBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        assert self.chunk_size_feed_forward == 0
+        self.act_bit = 8
+
         self.seq_len_dim = 1
-        self.attention = IBertAttention(config)
+        self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.is_decoder = config.is_decoder
-        assert not self.is_decoder
         self.add_cross_attention = config.add_cross_attention
+        assert self.chunk_size_feed_forward == 0
+        assert not self.is_decoder
         assert not self.add_cross_attention
-        self.intermediate = RobertaIntermediate(config)
-        self.output = RobertaOutput(config)
+
+        self.attention = IBertAttention(config)
+        self.intermediate = IBertIntermediate(config)
+        self.output = IBertOutput(config)
+
+        self.pre_intermediate_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.pre_output_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.input_act = QuantAct(8, quant_mode=self.quant_mode) #TODO remove this
 
@@ -419,18 +446,20 @@ class IBertLayer(nn.Module):
         assert past_key_value is None
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         hidden_states, hidden_states_scaling_factor = self.input_act(hidden_states) #TODO remove this
-        self_attention_outputs = self.attention(
-            hidden_states,
-            hidden_states_scaling_factor,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
-        )
+        self_attention_outputs, self_attention_outputs_scaling_factor = \
+            self.attention(
+                hidden_states,
+                hidden_states_scaling_factor,
+                attention_mask,
+                head_mask,
+                output_attentions=output_attentions,
+                past_key_value=self_attn_past_key_value,
+            )
         attention_output = self_attention_outputs[0]
-        attention_output_scaling_factor = None
+        attention_output_scaling_factor = self_attention_outputs_scaling_factor[0]
 
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        outputs_scaling_factor = self_attention_outputs_scaling_factor[1:]  
 
         layer_output, layer_output_scaling_factor = \
                 self.feed_forward_chunk(attention_output, attention_output_scaling_factor)
@@ -439,9 +468,17 @@ class IBertLayer(nn.Module):
         return outputs
 
     def feed_forward_chunk(self, attention_output, attention_output_scaling_factor):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output, None
+        attention_output, attention_output_scaling_factor = \
+                self.pre_intermediate_act(attention_output, attention_output_scaling_factor)
+        intermediate_output, intermediate_output_scaling_factor = \
+                self.intermediate(attention_output, attention_output_scaling_factor)
+
+        intermediate_output, intermediate_output_scaling_factor = \
+                self.pre_output_act(intermediate_output, intermediate_output_scaling_factor)
+        layer_output, layer_output_scaling_factor = self.output(
+                intermediate_output, intermediate_output_scaling_factor,
+                attention_output, attention_output_scaling_factor)
+        return layer_output, layer_output_scaling_factor
 
 
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Roberta
