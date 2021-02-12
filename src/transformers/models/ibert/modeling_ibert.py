@@ -200,7 +200,7 @@ class IBertSelfAttention(nn.Module):
         self.is_decoder = config.is_decoder
         assert not self.is_decoder
 
-        self.softmax_activation = QuantAct(8, quant_mode=self.quant_mode) # TODO remove this
+        self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -257,8 +257,8 @@ class IBertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
-        attention_probs, attention_probs_scaling_factor = self.softmax_activation(attention_probs) #TODO: remove
+        attention_probs, attention_probs_scaling_factor = \
+                self.softmax(attention_scores, attention_scores_scaling_factor)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -385,6 +385,7 @@ class IBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
+        self.act_bit = 8
         self.weight_bit = 8
         self.bias_bit = 32
         self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
@@ -393,12 +394,17 @@ class IBertIntermediate(nn.Module):
 
         assert config.hidden_act == 'gelu'
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
+        self.output_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
     def forward(self, hidden_states, hidden_states_scaling_factor):
         hidden_states, hidden_states_scaling_factor = \
                 self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states, hidden_states_scaling_factor = \
                 self.intermediate_act_fn(hidden_states, hidden_states_scaling_factor)
+
+        # Requantization: 32bit -> 8-bit
+        hidden_states, hidden_states_scaling_factor = \
+                self.output_act(hidden_states, hidden_states_scaling_factor)
         return hidden_states, hidden_states_scaling_factor
 
 
