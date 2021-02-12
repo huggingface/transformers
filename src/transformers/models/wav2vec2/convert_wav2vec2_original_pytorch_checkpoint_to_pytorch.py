@@ -20,25 +20,25 @@ import argparse
 import fairseq
 import torch
 
-from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, logging
+from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, Wav2Vec2Model, logging
 
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 MAPPING = {
-    "post_extract_proj": "wav2vec2.feature_projection.projection",
-    "encoder.pos_conv.0": "wav2vec2.encoder.pos_conv_embed.conv",
-    "self_attn.k_proj": "wav2vec2.encoder.layers.*.attention.k_proj",
-    "self_attn.v_proj": "wav2vec2.encoder.layers.*.attention.v_proj",
-    "self_attn.q_proj": "wav2vec2.encoder.layers.*.attention.q_proj",
-    "self_attn.out_proj": "wav2vec2.encoder.layers.*.attention.out_proj",
-    "self_attn_layer_norm": "wav2vec2.encoder.layers.*.layer_norm",
-    "fc1": "wav2vec2.encoder.layers.*.feed_forward.intermediate_dense",
-    "fc2": "wav2vec2.encoder.layers.*.feed_forward.output_dense",
-    "final_layer_norm": "wav2vec2.encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "wav2vec2.encoder.layer_norm",
-    "w2v_model.layer_norm": "wav2vec2.feature_projection.layer_norm",
+    "post_extract_proj": "feature_projection.projection",
+    "encoder.pos_conv.0": "encoder.pos_conv_embed.conv",
+    "self_attn.k_proj": "encoder.layers.*.attention.k_proj",
+    "self_attn.v_proj": "encoder.layers.*.attention.v_proj",
+    "self_attn.q_proj": "encoder.layers.*.attention.q_proj",
+    "self_attn.out_proj": "encoder.layers.*.attention.out_proj",
+    "self_attn_layer_norm": "encoder.layers.*.layer_norm",
+    "fc1": "encoder.layers.*.feed_forward.intermediate_dense",
+    "fc2": "encoder.layers.*.feed_forward.output_dense",
+    "final_layer_norm": "encoder.layers.*.final_layer_norm",
+    "encoder.layer_norm": "encoder.layer_norm",
+    "w2v_model.layer_norm": "feature_projection.layer_norm",
     "w2v_encoder.proj": "lm_head",
 }
 
@@ -62,9 +62,11 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     logger.info(f"{key + '.' + weight_type} was initialized from {full_name}.")
 
 
-def recursively_load_weights(fairseq_model, hf_model):
+def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
     unused_weights = []
     fairseq_dict = fairseq_model.state_dict()
+
+    feature_extractor = hf_model.wav2vec2.feature_extractor if is_finetuned else hf_model.feature_extractor
 
     for name, value in fairseq_dict.items():
         is_used = False
@@ -72,13 +74,14 @@ def recursively_load_weights(fairseq_model, hf_model):
             load_conv_layer(
                 name,
                 value,
-                hf_model.wav2vec2.feature_extractor,
+                feature_extractor,
                 unused_weights,
                 hf_model.config.feat_extract_norm == "group",
             )
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
+                mapped_key = "wav2vec2." + mapped_key if is_finetuned else mapped_key
                 if key in name:
                     is_used = True
                     if "*" in mapped_key:
@@ -137,18 +140,21 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
 
 
 @torch.no_grad()
-def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, dict_path=None):
+def convert_wav2vec2_checkpoint(checkpoint_path, pytorch_dump_folder_path, dict_path=None, is_finetuned=True):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    hf_wav2vec = Wav2Vec2ForCTC(Wav2Vec2Config())
+    if is_finetuned:
+        hf_wav2vec = Wav2Vec2ForCTC(Wav2Vec2Config())
+    else:
+        hf_wav2vec = Wav2Vec2Model(Wav2Vec2Config())
 
     model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
         [checkpoint_path], arg_overrides={"data": dict_path}
     )
     model = model[0].eval()
 
-    recursively_load_weights(model, hf_wav2vec)
+    recursively_load_weights(model, hf_wav2vec, is_finetuned)
 
     hf_wav2vec.save_pretrained(pytorch_dump_folder_path)
 
@@ -158,5 +164,10 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     parser.add_argument("--checkpoint_path", default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")
+    parser.add_argument(
+        "--not_finetuned", action="store_true", help="Whether the model to convert is a fine-tuned model or not"
+    )
     args = parser.parse_args()
-    convert_wav2vec2_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.dict_path)
+    convert_wav2vec2_checkpoint(
+        args.checkpoint_path, args.pytorch_dump_folder_path, args.dict_path, not args.not_finetuned
+    )

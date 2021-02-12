@@ -117,6 +117,7 @@ class Wav2Vec2Config(PretrainedConfig):
         intermediate_size=3072,
         hidden_act="gelu",
         hidden_dropout=0.1,
+        activation_dropout=0.1,
         attention_dropout=0.1,
         feat_proj_dropout=0.1,
         final_dropout=0.1,
@@ -132,6 +133,7 @@ class Wav2Vec2Config(PretrainedConfig):
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         do_stable_layer_norm=False,
+        freeze_feat_extract_train=True,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -167,6 +169,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
         self.feat_proj_dropout = feat_proj_dropout
         self.final_dropout = final_dropout
         self.layerdrop = layerdrop
@@ -174,6 +177,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
+        self.freeze_feat_extract_train = freeze_feat_extract_train
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
