@@ -315,8 +315,8 @@ class TFTransformerBlock(tf.keras.layers.Layer):
             kwarg_copy.pop('attention_dropout', 'attention_dropout'),
             0.0
         )
-        attn_config.d_model = getattr(config, kwarg_copy.pop('d_model', 'd_model'))
-        attn_config.num_heads = getattr(config, kwarg_copy.pop('num_heads', 'num_heads'))
+        attn_config.d_model = getattr(config, kwarg_copy.pop('dim', 'dim'))  # Remove for kwars.get?
+        attn_config.num_heads = getattr(config, kwarg_copy.pop('n_heads', 'n_heads'))
         attn_config.__dict__.update(kwarg_copy)    # Apply any remaining kwargs directly
 
         #if _layer_is_tf(softmax_attention_class):
