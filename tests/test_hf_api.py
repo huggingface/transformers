@@ -27,16 +27,7 @@ from transformers.testing_utils import require_git_lfs
 
 USER = "__DUMMY_TRANSFORMERS_USER__"
 PASS = "__DUMMY_TRANSFORMERS_PASS__"
-FILES = [
-    (
-        "nested/Test-{}.txt".format(int(time.time())),
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/input.txt"),
-    ),
-    (
-        "nested/yoyo {}.txt".format(int(time.time())),  # space is intentional
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/empty.txt"),
-    ),
-]
+
 ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-staging.huggingface.co"
 
@@ -68,11 +59,6 @@ class HfApiEndpointsTest(HfApiCommonTest):
         Share this valid token in all tests below.
         """
         cls._token = cls._api.login(username=USER, password=PASS)
-
-    @classmethod
-    def tearDownClass(cls):
-        for FILE_KEY, FILE_PATH in FILES:
-            cls._api.delete_obj(token=cls._token, filetype="datasets", filename=FILE_KEY)
 
     def test_whoami(self):
         user, orgs = self._api.whoami(token=self._token)
