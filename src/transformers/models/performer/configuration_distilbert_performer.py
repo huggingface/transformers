@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DistilBERT model configuration """
+""" DistilBERTPerformer model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from .configuration_performer_attention import PerformerAttentionConfig
@@ -31,10 +31,10 @@ DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "distilbert-base-uncased-finetuned-sst-2-english": "https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json",
 }
 
-class DistilBertConfig(PretrainedConfig):
+class DistilBertPerformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.DistilBertModel` or a
-    :class:`~transformers.TFDistilBertModel`. It is used to instantiate a DistilBERT model according to the specified
+    This is the configuration class to store the configuration of a :class:`~transformers.DistilBertPerformerModel` or a
+    :class:`~transformers.TFDistilBertPerformerModel`. It is used to instantiate a DistilBERTPerformer model according to the specified
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the DistilBERT `distilbert-base-uncased
     <https://huggingface.co/distilbert-base-uncased>`__ architecture.
@@ -44,9 +44,9 @@ class DistilBertConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the DistilBERT model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.DistilBertModel` or
-            :class:`~transformers.TFDistilBertModel`.
+            Vocabulary size of the DistilBERTPerformer model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.DistilBertPerformerModel` or
+            :class:`~transformers.TFDistilBertPerformerModel`.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -73,25 +73,25 @@ class DistilBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         qa_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilities used in the question answering model
-            :class:`~transformers.DistilBertForQuestionAnswering`.
+            :class:`~transformers.DistilBertPerformerForQuestionAnswering`.
         seq_classif_dropout (:obj:`float`, `optional`, defaults to 0.2):
             The dropout probabilities used in the sequence classification and the multiple choice model
-            :class:`~transformers.DistilBertForSequenceClassification`.
+            :class:`~transformers.DistilBertPerformerForSequenceClassification`.
 
     Examples::
 
-        >>> from transformers import DistilBertModel, DistilBertConfig
+        >>> from transformers import DistilBertPerformerModel, DistilBertPerformerConfig
 
-        >>> # Initializing a DistilBERT configuration
-        >>> configuration = DistilBertConfig()
+        >>> # Initializing a DistilBERTPerformer configuration
+        >>> configuration = DistilBertPerformerConfig()
 
         >>> # Initializing a model from the configuration
-        >>> model = DistilBertModel(configuration)
+        >>> model = DistilBertPerformerModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "distilbert"
+    model_type = "distilbertperformer"
 
     def __init__(
         self,

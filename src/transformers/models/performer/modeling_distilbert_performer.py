@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- PyTorch DistilBERT model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
+ PyTorch DistilBERTPerformer model adapted in part from Facebook, Inc XLM model (https://github.com/facebookresearch/XLM) and in
  part from HuggingFace PyTorch version of Google AI Bert model (https://github.com/google-research/bert)
 """
 
@@ -49,13 +49,13 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_distilbert_performer import DistilBertConfig
+from .configuration_distilbert_performer import DistilBertPerformerConfig
 from .modeling_performer_attention import PerformerAttention
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "DistilBertConfig"
+_CONFIG_FOR_DOC = "DistilBertPerformerConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -330,13 +330,13 @@ class Transformer(nn.Module):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
-class DistilBertPreTrainedModel(PreTrainedModel):
+class DistilBertPerformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = DistilBertConfig
+    config_class = DistilBertPerformerConfig
     load_tf_weights = None
     base_model_prefix = "distilbert"
 
@@ -413,7 +413,7 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
     DISTILBERT_START_DOCSTRING,
 )
-class DistilBertModel(DistilBertPreTrainedModel):
+class DistilBertPerformerModel(DistilBertPerformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -493,11 +493,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
     """DistilBert Model with a `masked language modeling` head on top. """,
     DISTILBERT_START_DOCSTRING,
 )
-class DistilBertForMaskedLM(DistilBertPreTrainedModel):
+class DistilBertPerformerForMaskedLM(DistilBertPerformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.distilbert = DistilBertModel(config)
+        self.distilbert = DistilBertPerformerModel(config)
         self.vocab_transform = nn.Linear(config.dim, config.dim)
         self.vocab_layer_norm = nn.LayerNorm(config.dim, eps=1e-12)
         self.vocab_projector = nn.Linear(config.dim, config.vocab_size)
@@ -576,7 +576,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
+class DistilBertPerformerForSequenceClassification(DistilBertPerformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -658,11 +658,11 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
+class DistilBertPerformerForQuestionAnswering(DistilBertPerformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.distilbert = DistilBertModel(config)
+        self.distilbert = DistilBertPerformerModel(config)
         self.qa_outputs = nn.Linear(config.dim, config.num_labels)
         assert config.num_labels == 2
         self.dropout = nn.Dropout(config.qa_dropout)
@@ -754,12 +754,12 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class DistilBertForTokenClassification(DistilBertPreTrainedModel):
+class DistilBertPerformerForTokenClassification(DistilBertPerformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.distilbert = DistilBertModel(config)
+        self.distilbert = DistilBertPerformerModel(config)
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -833,16 +833,16 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    DistilBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    DistilBertPerformer Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
     a softmax) e.g. for RocStories/SWAG tasks.
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
+class DistilBertPerformerForMultipleChoice(DistilBertPerformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.distilbert = DistilBertModel(config)
+        self.distilbert = DistilBertPerformerModel(config)
         self.pre_classifier = nn.Linear(config.dim, config.dim)
         self.classifier = nn.Linear(config.dim, 1)
         self.dropout = nn.Dropout(config.seq_classif_dropout)
@@ -874,11 +874,11 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import DistilBertTokenizer, DistilBertForMultipleChoice
+            >>> from transformers import DistilBertPerformerTokenizer, DistilBertPerformerForMultipleChoice
             >>> import torch
 
-            >>> tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-cased')
-            >>> model = DistilBertForMultipleChoice.from_pretrained('distilbert-base-cased')
+            >>> tokenizer = DistilBertPerformerTokenizer.from_pretrained('distilbert-base-cased')
+            >>> model = DistilBertPerformerForMultipleChoice.from_pretrained('distilbert-base-cased')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> choice0 = "It is eaten with a fork and a knife."

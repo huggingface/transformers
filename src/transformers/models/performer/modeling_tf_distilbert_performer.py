@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- TF 2.0 DistilBERT model
+ TF 2.0 DistilBERTPerformer model
 """
 
 import tensorflow as tf
@@ -49,7 +49,7 @@ from ...modeling_tf_utils import (
 from .modeling_tf_performer_attention import TFPerformerAttention
 from copy import copy, deepcopy
 from ...utils import logging
-from .configuration_distilbert_performer import DistilBertConfig
+from .configuration_distilbert_performer import DistilBertPerformerConfig
 
 
 logger = logging.get_logger(__name__)
@@ -385,8 +385,8 @@ class TFTransformer(tf.keras.layers.Layer):
 
 
 @keras_serializable
-class TFDistilBertMainLayer(tf.keras.layers.Layer):
-    config_class = DistilBertConfig
+class TFDistilBertPerformerMainLayer(tf.keras.layers.Layer):
+    config_class = DistilBertPerformerConfig
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
@@ -477,13 +477,13 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
-class TFDistilBertPreTrainedModel(TFPreTrainedModel):
+class TFDistilBertPerformerPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = DistilBertConfig
+    config_class = DistilBertPerformerConfig
     base_model_prefix = "distilbert"
 
 
@@ -568,10 +568,10 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
     "The bare DistilBERT encoder/transformer outputting raw hidden-states without any specific head on top.",
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertModel(TFDistilBertPreTrainedModel):
+class TFDistilBertPerformerModel(TFDistilBertPerformerPreTrainedModel):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")  # Embeddings
+        self.distilbert = TFDistilBertPerformerMainLayer(config, name="distilbert")  # Embeddings
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -618,7 +618,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         return outputs
 
 
-class TFDistilBertLMHead(tf.keras.layers.Layer):
+class TFDistilBertPerformerLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
@@ -641,12 +641,12 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
     """DistilBert Model with a `masked language modeling` head on top. """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
+class TFDistilBertPerformerForMaskedLM(TFDistilBertPerformerPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.vocab_size = config.vocab_size
 
-        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.distilbert = TFDistilBertPerformerMainLayer(config, name="distilbert")
         self.vocab_transform = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="vocab_transform"
         )
@@ -740,12 +740,12 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSequenceClassificationLoss):
+class TFDistilBertPerformerForSequenceClassification(TFDistilBertPerformerPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.distilbert = TFDistilBertPerformerMainLayer(config, name="distilbert")
         self.pre_classifier = tf.keras.layers.Dense(
             config.dim,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -834,12 +834,12 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenClassificationLoss):
+class TFDistilBertPerformerForTokenClassification(TFDistilBertPerformerPreTrainedModel, TFTokenClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.distilbert = TFDistilBertPerformerMainLayer(config, name="distilbert")
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -918,11 +918,11 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoiceLoss):
+class TFDistilBertPerformerForMultipleChoice(TFDistilBertPerformerPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.distilbert = TFDistilBertPerformerMainLayer(config, name="distilbert")
         self.dropout = tf.keras.layers.Dropout(config.seq_classif_dropout)
         self.pre_classifier = tf.keras.layers.Dense(
             config.dim,
@@ -1041,11 +1041,11 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
     """,
     DISTILBERT_START_DOCSTRING,
 )
-class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAnsweringLoss):
+class TFDistilBertPerformerForQuestionAnswering(TFDistilBertPerformerPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.distilbert = TFDistilBertMainLayer(config, name="distilbert")
+        self.distilbert = TFDistilBertPerformerMainLayer(config, name="distilbert")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )

@@ -1286,6 +1286,7 @@ if TYPE_CHECKING:
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
+    from .models.performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPRConfig,
@@ -1611,6 +1612,16 @@ if TYPE_CHECKING:
             DistilBertForTokenClassification,
             DistilBertModel,
             DistilBertPreTrainedModel,
+        )
+        from .models.performer import (
+            DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DistilBertPerformerForMaskedLM,
+            DistilBertPerformerForMultipleChoice,
+            DistilBertPerformerForQuestionAnswering,
+            DistilBertPerformerForSequenceClassification,
+            DistilBertPerformerForTokenClassification,
+            DistilBertPerformerModel,
+            DistilBertPerformerPreTrainedModel,
         )
         from .models.dpr import (
             DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -1981,6 +1992,18 @@ if TYPE_CHECKING:
             TFDistilBertModel,
             TFDistilBertPreTrainedModel,
         )
+        from .models.performer import (
+            TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDistilBertPerformerForMaskedLM,
+            TFDistilBertPerformerForMultipleChoice,
+            TFDistilBertPerformerForQuestionAnswering,
+            TFDistilBertPerformerForSequenceClassification,
+            TFDistilBertPerformerForTokenClassification,
+            TFDistilBertPerformerMainLayer,
+            TFDistilBertPerformerModel,
+            TFDistilBertPerformerPreTrainedModel,
+        )
+
         from .models.dpr import (
             TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
