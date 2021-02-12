@@ -213,6 +213,7 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
+        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
@@ -883,8 +884,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     no_overlap=self.config.no_mask_time_overlap,
                     min_space=self.config.mask_time_min_space,
                 )
-                #                hidden_states[torch.from_numpy(mask_time_indices)] = self.mask_time_emb_vector
-                hidden_states[torch.from_numpy(mask_time_indices).to(hidden_states.device)] = 1
+                hidden_states[torch.from_numpy(mask_time_indices)] = self.mask_time_emb_vector
 
             if self.config.mask_channel_prob > 0:
                 mask_channel_indices = compute_mask_indices(
