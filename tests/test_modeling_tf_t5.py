@@ -237,7 +237,6 @@ class TFT5ModelTester:
             "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 

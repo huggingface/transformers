@@ -201,7 +201,7 @@ class TFModelTesterMixin:
             model.save_pretrained(tmpdirname, saved_model=True)
             saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
-    
+
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -210,7 +210,7 @@ class TFModelTesterMixin:
 
         if hasattr(config, "use_cache"):
             config.use_cache = True
-        
+
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
@@ -231,7 +231,7 @@ class TFModelTesterMixin:
                 else:
                     output_hidden_states = outputs["hidden_states"]
                     output_attentions = outputs["attentions"]
-                
+
                 self.assertEqual(len(outputs), num_out)
 
                 expected_num_layers = getattr(
@@ -604,7 +604,6 @@ class TFModelTesterMixin:
                 shared = TFSharedEmbeddings(self.model_tester.vocab_size, self.model_tester.hidden_size, name="shared")
                 config.use_cache = False
                 main_layer = main_layer_class(config, embed_tokens=shared)
-                del inputs_dict["use_cache"]
             else:
                 main_layer = main_layer_class(config)
 
