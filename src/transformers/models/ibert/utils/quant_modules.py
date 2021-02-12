@@ -10,6 +10,9 @@ from torch.nn import Embedding as _Embedding
 from torch.nn import Module, Parameter
 from .quant_utils import *
 
+from ....utils import logging
+logger = logging.get_logger(__name__)
+
 class QuantEmbedding(Module):
     """
     Class to quantize given Embedding layer
@@ -440,7 +443,7 @@ class IntSoftmax(Module):
 
     def forward(self, x, scaling_factor):
         if not self.quant_mode:
-            return utils.softmax(x, dim=-1, onnx_trace=False), None
+            return nn.Softmax(dim=-1)(x), None
 
         x_int = x / scaling_factor
 
@@ -457,3 +460,122 @@ class IntSoftmax(Module):
         exp_int = floor_ste.apply(exp_int * factor / 2 ** (self.max_bit - self.output_bit))
         scaling_factor = 1 / 2 ** self.output_bit
         return exp_int * scaling_factor, scaling_factor
+
+
+class IntLayerNorm(Module):
+    """
+    Class to quantize given LayerNorm layer
+
+    Parameters:
+    ----------
+    output_bit : int
+        Bitwidth for the LayerNorm output.
+    overflow_handling : bool, default True
+        Whether to do overflow handling if the intermediate values are larger than 32-bit.
+    quant_mode : bool, default False
+        The mode for quantization. True for quantization.
+    force_dequant : str, default 'none'
+        Force dequantize LayerNorm if either 'layernorm' or 'nonlinear' is given.
+    """
+    def __init__(self,
+                 output_bit,
+                 overflow_handling=True,
+                 quant_mode=False,
+                 force_dequant='none'):
+        super(IntLayerNorm, self).__init__()
+        self.quant_mode = quant_mode
+        if force_dequant in ['nonlinear', 'layernorm']:
+            logger.info("Force dequantize layernorm")
+            self.quant_mode = False
+
+        self.overflow_handling = overflow_handling
+        self.register_buffer('shift', torch.zeros(1))
+        self.output_bit = output_bit
+        self.max_bit = 32
+        self.dim_sqrt = None
+
+        self.activation = QuantAct(self.output_bit, quant_mode=self.quant_mode)
+        if not self.quant_mode:
+            pass
+        else:
+            self.weight_function = SymmetricQuantFunction.apply
+
+    def fix(self):
+        self.overflow_handling = False
+
+    def unfix(self):
+        self.overflow_handling = True
+
+    def set_param(self, ln):
+        self.normalized_shape = ln.normalized_shape
+        self.eps = ln.eps
+        self.weight = Parameter(ln.weight.data.clone())
+        self.bias = Parameter(ln.bias.data.clone())
+
+    def set_shift(self, y_int):
+        with torch.no_grad():
+            y_sq_int = y_int ** 2
+            var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+            shift = (torch.log2(torch.sqrt(var_int / 2 ** self.max_bit)).ceil()).max()
+            shift_old = self.shift
+            self.shift = torch.max(self.shift, shift)
+            logger.info("Dynamic shift adjustment: {} -> {}".format(
+                int(shift_old), int(self.shift))
+            )
+
+    def overflow_fallback(self, y_int):
+        """
+        This fallback function is called when overflow is detected during training time,
+        and adjusts the `self.shift` to avoid overflow in the subsequent runs.
+        """
+        self.set_shift(y_int) # adjusts `self.shift`
+        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
+        y_sq_int = y_int_shifted ** 2
+        var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+        return var_int
+
+    def forward(self, x, scaling_factor=None):
+        if not self.quant_mode:
+            mean = x.mean(axis=2, keepdim=True)
+            y = x - mean
+            var = torch.mean(y ** 2, axis=2, keepdim=True)
+            x = y / torch.sqrt(self.eps + var)
+            x = x * self.weight + self.bias
+            return x, None
+
+        # compute sqrt of the feature dimension if it is the first run
+        if self.dim_sqrt is None:
+            n = torch.tensor(x.shape[2], dtype=torch.float) 
+            self.dim_sqrt = torch.sqrt(n).cuda()
+
+        # Normalization: computes mean and variance(std)
+        x_int = x / scaling_factor
+        mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
+        y_int = x_int - mean_int
+        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift) 
+        y_sq_int = y_int_shifted ** 2
+        var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
+        
+        # overflow handling in training time
+        if self.overflow_handling:
+            # if overflow is detected
+            if var_int.max() >= 2 ** self.max_bit:
+                var_int = self.overflow_fallback(y_int)
+                assert var_int.max() < 2 ** self.max_bit + 0.1
+        
+        # To be replaced with integer-sqrt kernel that produces the same output
+        std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift 
+        factor = floor_ste.apply(2 ** 31 / std_int)
+        y_int = floor_ste.apply(y_int * factor / 2)
+        scaling_factor = self.dim_sqrt / 2**30
+
+        # scaling and shifting
+        bias = self.bias.data.detach() / (self.weight.data.detach())
+        bias_int = floor_ste.apply(bias / scaling_factor)
+
+        y_int = y_int + bias_int
+        scaling_factor = scaling_factor * self.weight
+        x = y_int * scaling_factor
+
+        return x, scaling_factor
+

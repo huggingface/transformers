@@ -295,17 +295,21 @@ class IBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
+        self.act_bit = 8
         self.weight_bit = 8
         self.bias_bit = 32
         self.ln_input_bit = 22
+        self.ln_output_bit = 32
+
         self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
                 quant_mode=self.quant_mode, per_channel=True)
         self.dense.set_param(nn.Linear(config.hidden_size, config.hidden_size))
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
+        self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
+        self.out_act = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-        self.ln_act = QuantAct(32, quant_mode=self.quant_mode) # TODO remove thi
 
     def forward(self, hidden_states, hidden_states_scaling_factor, 
                 input_tensor, input_tensor_scaling_factor):
@@ -316,9 +320,11 @@ class IBertSelfOutput(nn.Module):
                 hidden_states, hidden_states_scaling_factor,
                 identity=input_tensor,
                 identity_scaling_factor=input_tensor_scaling_factor)
-        hidden_states = self.LayerNorm(hidden_states)
+        hidden_states, hidden_states_scaling_factor = \
+                self.LayerNorm(hidden_states, hidden_states_scaling_factor)
 
-        hidden_states, hidden_states_scaling_factor = self.ln_act(hidden_states) #TODO remove this
+        hidden_states, hidden_states_scaling_factor = \
+                self.out_act(hidden_states, hidden_states_scaling_factor) 
         return hidden_states, hidden_states_scaling_factor
 
 
@@ -413,14 +419,19 @@ class IBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
+        self.act_bit = 8
         self.weight_bit = 8
         self.bias_bit = 32
         self.ln_input_bit = 22
+        self.ln_output_bit = 32
+
         self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
                 quant_mode=self.quant_mode, per_channel=True)
         self.dense.set_param(nn.Linear(config.intermediate_size, config.hidden_size))
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
+        self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
+        self.out_act = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, hidden_states_scaling_factor, 
@@ -432,8 +443,12 @@ class IBertOutput(nn.Module):
                 hidden_states, hidden_states_scaling_factor,
                 identity=input_tensor,
                 identity_scaling_factor=input_tensor_scaling_factor)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states, None
+        hidden_states, hidden_states_scaling_factor = \
+                self.LayerNorm(hidden_states, hidden_states_scaling_factor)
+
+        hidden_states, hidden_states_scaling_factor = \
+                self.out_act(hidden_states, hidden_states_scaling_factor) 
+        return hidden_states, hidden_states_scaling_factor
 
 
 # Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
