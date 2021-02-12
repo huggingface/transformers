@@ -18,6 +18,7 @@
 import warnings
 from typing import Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -44,6 +45,128 @@ WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+def compute_mask_indices(
+    shape: Tuple[int, int],
+    padding_mask: Optional[torch.Tensor],
+    mask_prob: float,
+    mask_length: int,
+    mask_type: str = "static",
+    mask_other: float = 0.0,
+    min_masks: int = 0,
+    no_overlap: bool = False,
+    min_space: int = 0,
+) -> np.ndarray:
+    """
+    Computes random mask spans for a given shape
+
+    Args:
+        shape: the the shape for which to compute masks.
+            should be of size 2 where first element is batch size and 2nd is timesteps
+        padding_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
+        mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
+            number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
+            however due to overlaps, the actual number will be smaller (unless no_overlap is True)
+        mask_type: how to compute mask lengths
+            static = fixed size uniform = sample from uniform distribution [mask_other, mask_length*2] normal = sample
+            from normal distribution with mean mask_length and stdev mask_other. mask is min 1 element poisson = sample
+            from possion distribution with lambda = mask length
+        min_masks: minimum number of masked spans
+        no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
+        min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
+    """
+
+    np.random.seed(0)
+    bsz, all_sz = shape
+    mask = np.full((bsz, all_sz), False)
+
+    all_num_mask = int(
+        # add a random number for probabilistic rounding
+        mask_prob * all_sz / float(mask_length)
+        + np.random.rand()
+    )
+
+    all_num_mask = max(min_masks, all_num_mask)
+
+    mask_idcs = []
+    padding_mask = padding_mask.ne(1) if padding_mask is not None else None
+    for i in range(bsz):
+        if padding_mask is not None:
+            sz = all_sz - padding_mask[i].long().sum().item()
+            num_mask = int(
+                # add a random number for probabilistic rounding
+                mask_prob * sz / float(mask_length)
+                + np.random.rand()
+            )
+            num_mask = max(min_masks, num_mask)
+        else:
+            sz = all_sz
+            num_mask = all_num_mask
+
+        if mask_type == "static":
+            lengths = np.full(num_mask, mask_length)
+        elif mask_type == "uniform":
+            lengths = np.random.randint(mask_other, mask_length * 2 + 1, size=num_mask)
+        elif mask_type == "normal":
+            lengths = np.random.normal(mask_length, mask_other, size=num_mask)
+            lengths = [max(1, int(round(x))) for x in lengths]
+        elif mask_type == "poisson":
+            lengths = np.random.poisson(mask_length, size=num_mask)
+            lengths = [int(round(x)) for x in lengths]
+        else:
+            raise Exception("unknown mask selection " + mask_type)
+
+        if sum(lengths) == 0:
+            lengths[0] = min(mask_length, sz - 1)
+
+        if no_overlap:
+            mask_idc = []
+
+            def arrange(s, e, length, keep_length):
+                span_start = np.random.randint(s, e - length)
+                mask_idc.extend(span_start + i for i in range(length))
+
+                new_parts = []
+                if span_start - s - min_space >= keep_length:
+                    new_parts.append((s, span_start - min_space + 1))
+                if e - span_start - keep_length - min_space > keep_length:
+                    new_parts.append((span_start + length + min_space, e))
+                return new_parts
+
+            parts = [(0, sz)]
+            min_length = min(lengths)
+            for length in sorted(lengths, reverse=True):
+                lens = np.fromiter(
+                    (e - s if e - s >= length + min_space else 0 for s, e in parts),
+                    np.int,
+                )
+                l_sum = np.sum(lens)
+                if l_sum == 0:
+                    break
+                probs = lens / np.sum(lens)
+                c = np.random.choice(len(parts), p=probs)
+                s, e = parts.pop(c)
+                parts.extend(arrange(s, e, length, min_length))
+            mask_idc = np.asarray(mask_idc)
+        else:
+            min_len = min(lengths)
+            if sz - min_len <= num_mask:
+                min_len = sz - num_mask - 1
+
+            mask_idc = np.random.choice(sz - min_len, num_mask, replace=False)
+
+            mask_idc = np.asarray([mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])])
+
+        mask_idcs.append(np.unique(mask_idc[mask_idc < sz]))
+
+    min_len = min([len(m) for m in mask_idcs])
+    for i, mask_idc in enumerate(mask_idcs):
+        if len(mask_idc) > min_len:
+            mask_idc = np.random.choice(mask_idc, min_len, replace=False)
+        mask[i, mask_idc] = True
+
+    return mask
+
+
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -57,12 +180,10 @@ class Wav2Vec2NoLayerNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
-        self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
-        hidden_states = self.dropout(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
 
@@ -80,13 +201,10 @@ class Wav2Vec2LayerNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
-        self.dropout = nn.Dropout(config.feat_extract_dropout)
-        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
-        hidden_states = self.dropout(hidden_states)
 
         hidden_states = hidden_states.transpose(-2, -1)
         hidden_states = self.layer_norm(hidden_states)
@@ -109,14 +227,12 @@ class Wav2Vec2GroupNormConvLayer(nn.Module):
             stride=config.conv_stride[layer_id],
             bias=config.conv_bias,
         )
-        self.dropout = nn.Dropout(config.feat_extract_dropout)
         self.activation = ACT2FN[config.feat_extract_activation]
 
         self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
 
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
-        hidden_states = self.dropout(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
         return hidden_states
@@ -191,7 +307,7 @@ class Wav2Vec2FeatureProjection(nn.Module):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
-        self.dropout = nn.Dropout(config.feat_extract_dropout)
+        self.dropout = nn.Dropout(config.feat_proj_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.layer_norm(hidden_states)
@@ -346,7 +462,7 @@ class Wav2Vec2Attention(nn.Module):
 class Wav2Vec2FeedForward(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
         self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -355,7 +471,7 @@ class Wav2Vec2FeedForward(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
         self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.output_dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.output_dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(self, hidden_states):
         hidden_states = self.intermediate_dense(hidden_states)
@@ -381,10 +497,10 @@ class Wav2Vec2EncoderLayer(nn.Module):
         self.attention = Wav2Vec2Attention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
-            dropout=config.hidden_dropout_prob,
+            dropout=config.attention_dropout,
             is_decoder=False,
         )
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -410,10 +526,10 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.attention = Wav2Vec2Attention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
-            dropout=config.hidden_dropout_prob,
+            dropout=config.attention_dropout,
             is_decoder=False,
         )
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -437,8 +553,7 @@ class Wav2Vec2Encoder(nn.Module):
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        # IMPORTANT: the param for dropout is probs wrong
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([Wav2Vec2EncoderLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
@@ -471,9 +586,13 @@ class Wav2Vec2Encoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            hidden_states, attn_weights = layer(
-                hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-            )
+            dropout_probability = np.random.uniform(0, 1)
+            if self.training and (dropout_probability < self.config.layerdrop):
+                hidden_states, attn_weights = None, None
+            else:
+                hidden_states, attn_weights = layer(
+                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                )
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (attn_weights,)
@@ -496,8 +615,7 @@ class Wav2Vec2EncoderStableLayerNorm(nn.Module):
         self.config = config
         self.pos_conv_embed = Wav2Vec2PositionalConvEmbedding(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        # IMPORTANT: the param for dropout is probs wrong
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList(
             [Wav2Vec2EncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
         )
@@ -659,6 +777,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
+        # question is this trained
+        self.mask_time_emb_vector = nn.Parameter(torch.FloatTensor(config.conv_dim[-1]).uniform_())
+
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
         else:
@@ -726,8 +847,35 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         hidden_states = self.feature_projection(hidden_states)
 
-        #        if self.config.apply_spec_augment and self.training:
-        #            pass
+        if self.config.apply_spec_augment and self.training:
+            batch_size, sequence_length, hidden_size = hidden_states.size()
+
+            if self.config.mask_time_prob > 0:
+                mask_time_indices = compute_mask_indices(
+                    (batch_size, sequence_length),
+                    attention_mask,
+                    self.config.mask_time_prob,
+                    self.config.mask_time_length,
+                    self.config.mask_time_selection,
+                    min_masks=2,
+                    no_overlap=self.config.no_mask_time_overlap,
+                    min_space=self.config.mask_time_min_space,
+                )
+                #                hidden_states[torch.from_numpy(mask_time_indices)] = self.mask_time_emb_vector
+                hidden_states[torch.from_numpy(mask_time_indices).to(hidden_states.device)] = 1
+
+            if self.config.mask_channel_prob > 0:
+                mask_channel_indices = compute_mask_indices(
+                    (batch_size, hidden_size),
+                    None,
+                    self.config.mask_channel_prob,
+                    self.config.mask_channel_length,
+                    self.config.mask_channel_selection,
+                    no_overlap=self.config.no_mask_channel_overlap,
+                    min_space=self.config.mask_channel_min_space,
+                )
+                mask_channel_indices = torch.from_numpy(mask_channel_indices).to(hidden_states.device)
+                hidden_states[mask_channel_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -759,7 +907,7 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
         )
 
         self.wav2vec2 = Wav2Vec2Model(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
@@ -834,7 +982,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()

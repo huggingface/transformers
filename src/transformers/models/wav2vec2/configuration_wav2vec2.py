@@ -116,12 +116,14 @@ class Wav2Vec2Config(PretrainedConfig):
         num_attention_heads=12,
         intermediate_size=3072,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,  # TODO(PVP) this is most likely not correctly set yet - correct when adding train
-        attention_probs_dropout_prob=0.1,  # TODO(PVP) this is most likely not correctly set yet - correct when adding train
+        hidden_dropout=0.1,
+        attention_dropout=0.1,
+        feat_proj_dropout=0.1,
+        final_dropout=0.1,
+        layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         feat_extract_norm="group",
-        feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
         conv_dim=(512, 512, 512, 512, 512, 512, 512),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
@@ -130,6 +132,19 @@ class Wav2Vec2Config(PretrainedConfig):
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         do_stable_layer_norm=False,
+        apply_spec_augment=True,
+        mask_time_prob=0.05,
+        mask_time_length=10,
+        mask_time_selection="static",
+        mask_time_other=0.0,
+        no_mask_time_overlap=False,
+        mask_time_min_space=1,
+        mask_channel_prob=0.008,
+        mask_channel_length=10,
+        mask_channel_selection="static",
+        mask_channel_other=0.0,
+        no_mask_channel_overlap=False,
+        mask_channel_min_space=1,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -138,7 +153,6 @@ class Wav2Vec2Config(PretrainedConfig):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
         self.feat_extract_norm = feat_extract_norm
-        self.feat_extract_dropout = feat_extract_dropout
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = list(conv_dim)
         self.conv_stride = list(conv_stride)
@@ -151,8 +165,11 @@ class Wav2Vec2Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.hidden_dropout = hidden_dropout
+        self.attention_dropout = attention_dropout
+        self.feat_proj_dropout = feat_proj_dropout
+        self.final_dropout = final_dropout
+        self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
@@ -169,3 +186,18 @@ class Wav2Vec2Config(PretrainedConfig):
                 f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
+
+        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_selection = mask_time_selection
+        self.mask_time_other = mask_time_other
+        self.no_mask_time_overlap = no_mask_time_overlap
+        self.mask_time_min_space = mask_time_min_space
+        self.mask_channel_prob = mask_channel_prob
+        self.mask_channel_length = mask_channel_length
+        self.mask_channel_selection = mask_channel_selection
+        self.mask_channel_other = mask_channel_other
+        self.no_mask_channel_overlap = no_mask_channel_overlap
+        self.mask_channel_min_space = mask_channel_min_space
