@@ -15,19 +15,49 @@
 import argparse
 
 import torch
+from torch import nn
 
-from transformers import BartForConditionalGeneration, MBartConfig
-from transformers.models.bart.convert_bart_original_pytorch_checkpoint_to_pytorch import remove_ignore_keys_
+from transformers import MBartConfig, MBartForConditionalGeneration
 
 
-def convert_fairseq_mbart_checkpoint_from_disk(checkpoint_path, hf_config_path="facebook/mbart-large-en-ro"):
+def remove_ignore_keys_(state_dict):
+    ignore_keys = [
+        "encoder.version",
+        "decoder.version",
+        "model.encoder.version",
+        "model.decoder.version",
+        "_float_tensor",
+        "decoder.output_projection.weight",
+    ]
+    for k in ignore_keys:
+        state_dict.pop(k, None)
+
+
+def make_linear_from_emb(emb):
+    vocab_size, emb_size = emb.weight.shape
+    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
+    lin_layer.weight.data = emb.weight.data
+    return lin_layer
+
+
+def convert_fairseq_mbart_checkpoint_from_disk(
+    checkpoint_path, hf_config_path="facebook/mbart-large-en-ro", finetuned=False, mbart_50=False
+):
     state_dict = torch.load(checkpoint_path, map_location="cpu")["model"]
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
+
     mbart_config = MBartConfig.from_pretrained(hf_config_path, vocab_size=vocab_size)
+    if mbart_50 and finetuned:
+        mbart_config.activation_function = "relu"
+
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    model = BartForConditionalGeneration(mbart_config)
+    model = MBartForConditionalGeneration(mbart_config)
     model.model.load_state_dict(state_dict)
+
+    if finetuned:
+        model.lm_head = make_linear_from_emb(model.model.shared)
+
     return model
 
 
@@ -42,8 +72,12 @@ if __name__ == "__main__":
         "--hf_config",
         default="facebook/mbart-large-cc25",
         type=str,
-        help="Which huggingface architecture to use: bart-large-xsum",
+        help="Which huggingface architecture to use: mbart-large",
     )
+    parser.add_argument("--mbart_50", action="store_true", help="whether the model is mMART-50 checkpoint")
+    parser.add_argument("--finetuned", action="store_true", help="whether the model is a fine-tuned checkpoint")
     args = parser.parse_args()
-    model = convert_fairseq_mbart_checkpoint_from_disk(args.fairseq_path, hf_config_path=args.hf_config)
+    model = convert_fairseq_mbart_checkpoint_from_disk(
+        args.fairseq_path, hf_config_path=args.hf_config, finetuned=args.finetuned, mbart_50=args.mbart_50
+    )
     model.save_pretrained(args.pytorch_dump_folder_path)
