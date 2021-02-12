@@ -145,14 +145,22 @@ class MBart50Tokenizer(PreTrainedTokenizer):
         self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
         self._additional_special_tokens = list(self.lang_code_to_id.keys())
 
-        self.src_lang = src_lang if src_lang is not None else "en_XX"
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.tgt_lang = tgt_lang
-        self.cur_lang_code = self.lang_code_to_id[self.src_lang]
-        self.set_src_lang_special_tokens(self.src_lang)
+        self.set_src_lang_special_tokens(self._src_lang)
 
     @property
     def vocab_size(self) -> int:
         return len(self.sp_model) + len(self.lang_code_to_id) + self.fairseq_offset + 1  # Plus 1 for the mask token
+    
+    @property
+    def src_lang(self) -> str:
+        return self._src_lang
+
+    @src_lang.setter
+    def src_lang(self, new_src_lang: str) -> None:
+        self._src_lang = new_src_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
