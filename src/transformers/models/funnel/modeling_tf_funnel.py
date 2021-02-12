@@ -16,7 +16,7 @@
 
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
@@ -75,88 +75,45 @@ INF = 1e6
 
 
 class TFFunnelEmbeddings(tf.keras.layers.Layer):
-    """Construct the embeddings from word embeddings."""
+    """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
         self.initializer_range = config.initializer_range
 
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout)
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
 
     def build(self, input_shape):
-        """Build shared word embedding layer """
         with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight",
+            self.weight = self.add_weight(
+                name="weight",
                 shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
+                initializer=get_initializer(initializer_range=self.initializer_range),
             )
+
         super().build(input_shape)
 
-    def call(
-        self,
-        input_ids=None,
-        inputs_embeds=None,
-        mode="embedding",
-        training=False,
-    ):
+    def call(self, input_ids=None, inputs_embeds=None, training=False):
         """
-        Get token embeddings of inputs
-
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear"
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: (1) If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; (2) mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size]
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        if mode == "embedding":
-            return self._embedding(input_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, inputs_embeds, training=False):
-        """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
+        assert not (input_ids is not None and inputs_embeds is not None)
 
-        embeddings = self.layer_norm(inputs_embeds)
-        embeddings = self.dropout(embeddings, training=training)
+        if input_ids is not None:
+            inputs_embeds = tf.gather(self.weight, input_ids)
 
-        return embeddings
+        final_embeddings = self.LayerNorm(inputs=inputs_embeds)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
 class TFFunnelAttentionStructure:
@@ -524,13 +481,15 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
         # Shape batch_size x n_head x seq_len x 2
         token_type_bias = tf.einsum("bind,snd->bnis", q_head + r_s_bias, self.seg_embed)
         # Shape batch_size x n_head x seq_len x context_len
-        new_shape = [batch_size, shape_list(q_head)[2], seq_len, context_len]
-        token_type_mat = tf.broadcast_to(token_type_mat[:, None], new_shape)
+        token_type_mat = tf.tile(token_type_mat[:, None], [1, shape_list(q_head)[2], 1, 1])
+        # token_type_mat = tf.broadcast_to(token_type_mat[:, None], new_shape)
         # Shapes batch_size x n_head x seq_len
         diff_token_type, same_token_type = tf.split(token_type_bias, 2, axis=-1)
         # Shape batch_size x n_head x seq_len x context_len
         token_type_attn = tf.where(
-            token_type_mat, tf.broadcast_to(same_token_type, new_shape), tf.broadcast_to(diff_token_type, new_shape)
+            token_type_mat,
+            tf.tile(same_token_type, [1, 1, 1, context_len]),
+            tf.tile(diff_token_type, [1, 1, 1, context_len]),
         )
 
         if cls_mask is not None:
@@ -787,7 +746,7 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        self.embeddings.weight = value
         self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
@@ -873,7 +832,7 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        self.embeddings.weight = value
         self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
@@ -987,17 +946,19 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
         self.input_embeddings = input_embeddings
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
     def get_output_embeddings(self):
         return self.input_embeddings
 
     def set_output_embeddings(self, value):
-        self.input_embeddings.word_embeddings = value
+        self.input_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self):
@@ -1008,8 +969,12 @@ class TFFunnelMaskedLMHead(tf.keras.layers.Layer):
         self.vocab_size = shape_list(value["bias"])[0]
 
     def call(self, hidden_states, training=False):
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
         return hidden_states
 
 
@@ -1136,12 +1101,15 @@ FUNNEL_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -1438,7 +1406,7 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1528,7 +1496,7 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1658,13 +1626,13 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
             }
         ]
     )
-    def serving(self, inputs):
-        output = self.call(inputs)
+    def serving(self, inputs: Dict[str, tf.Tensor]):
+        output = self.call(input_ids=inputs)
 
-        return self.serving_output(output)
+        return self.serving_output(output=output)
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1757,7 +1725,7 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
@@ -1862,7 +1830,7 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
-    def serving_output(self, output):
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 

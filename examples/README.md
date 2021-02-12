@@ -1,6 +1,5 @@
 <!---
 Copyright 2020 The HuggingFace Team. All rights reserved.
-
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -55,11 +54,11 @@ Coming soon!
 |---|---|:---:|:---:|:---:|:---:|
 | [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/language-modeling)       | Raw text        | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb)
 | [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG, RACE, ARC | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
-| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
+| [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
 | [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     | CNN/Daily Mail  | ✅  | - | - | -
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
-| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://github.com/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
+| [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
 
 
@@ -147,7 +146,7 @@ python xla_spawn.py --num_cores 8 \
 You can easily log and monitor your runs code. The following are currently supported:
 
 * [TensorBoard](https://www.tensorflow.org/tensorboard)
-* [Weights & Biases](https://docs.wandb.com/library/integrations/huggingface)
+* [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
 
 ### Weights & Biases
@@ -171,9 +170,46 @@ import wandb
 wandb.login()
 ```
 
+To enable logging to W&B, include `"wandb"` in the `report_to` of your `TrainingArguments` or script. Or just pass along `--report_to all` if you have `wandb` installed.
+
 Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metrics, model topology and gradients (for `Trainer` only) will automatically be logged.
 
-When using 🤗 Transformers with PyTorch Lightning, runs can be tracked through `WandbLogger`. Refer to related [documentation & examples](https://docs.wandb.com/library/integrations/lightning).
+Advanced configuration is possible by setting environment variables:
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">Environment Variables</th>
+      <th style="text-align:left">Options</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:left">WANDB_LOG_MODEL</td>
+      <td style="text-align:left">Log the model as artifact at the end of training (<b>false</b> by default)</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">WANDB_WATCH</td>
+      <td style="text-align:left">
+        <ul>
+          <li><b>gradients</b> (default): Log histograms of the gradients</li>
+          <li><b>all</b>: Log histograms of gradients and parameters</li>
+          <li><b>false</b>: No gradient or parameter logging</li>
+        </ul>
+      </td>
+    </tr>
+    <tr>
+      <td style="text-align:left">WANDB_PROJECT</td>
+      <td style="text-align:left">Organize runs by project</td>
+    </tr>
+  </tbody>
+</table>
+
+Set run names with `run_name` argument present in scripts or as part of `TrainingArguments`.
+
+Additional configuration options are available through generic [wandb environment variables](https://docs.wandb.com/library/environment-variables).
+
+Refer to related [documentation & examples](https://docs.wandb.ai/integrations/huggingface).
 
 ### Comet.ml
 

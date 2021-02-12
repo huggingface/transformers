@@ -33,8 +33,9 @@ from torch import nn
 from torch.utils.data import Dataset, Sampler
 
 from sentence_splitter import add_newline_to_end_of_each_sentence
-from transformers import BartTokenizer, EvalPrediction, PreTrainedTokenizer
+from transformers import BartTokenizer, EvalPrediction, PreTrainedTokenizer, T5Tokenizer
 from transformers.file_utils import cached_property
+from transformers.models.bart.modeling_bart import shift_tokens_right
 
 
 try:
@@ -81,8 +82,11 @@ def build_compute_metrics_fn(task_name: str, tokenizer: PreTrainedTokenizer) -> 
         return np.count_nonzero(tokens != tokenizer.pad_token_id)
 
     def decode_pred(pred: EvalPrediction) -> Tuple[List[str], List[str]]:
-        pred_str = tokenizer.batch_decode(pred.predictions, skip_special_tokens=True)
-        label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
+        pred_ids = pred.predictions
+        label_ids = pred.label_ids
+        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        label_ids[label_ids == -100] = tokenizer.pad_token_id
+        label_str = tokenizer.batch_decode(label_ids, skip_special_tokens=True)
         pred_str = lmap(str.strip, pred_str)
         label_str = lmap(str.strip, label_str)
         return pred_str, label_str
@@ -274,9 +278,10 @@ class Seq2SeqDataset(AbstractSeq2SeqDataset):
 
 
 class Seq2SeqDataCollator:
-    def __init__(self, tokenizer, data_args, tpu_num_cores=None):
+    def __init__(self, tokenizer, data_args, decoder_start_token_id, tpu_num_cores=None):
         self.tokenizer = tokenizer
         self.pad_token_id = tokenizer.pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         assert (
             self.pad_token_id is not None
         ), f"pad_token_id is not defined for ({self.tokenizer.__class__.__name__}), it must be defined."
@@ -304,9 +309,15 @@ class Seq2SeqDataCollator:
             labels = trim_batch(labels, self.pad_token_id)
             input_ids, attention_mask = trim_batch(input_ids, self.pad_token_id, attention_mask=attention_mask)
 
+        if isinstance(self.tokenizer, T5Tokenizer):
+            decoder_input_ids = self._shift_right_t5(labels)
+        else:
+            decoder_input_ids = shift_tokens_right(labels, self.pad_token_id, self.decoder_start_token_id)
+
         batch = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
             "labels": labels,
         }
         return batch
@@ -555,7 +566,7 @@ def freeze_embeds(model):
     """Freeze token embeddings and positional embeddings for bart, just token embeddings for t5."""
     model_type = model.config.model_type
 
-    if model_type == "t5":
+    if model_type in ["t5", "mt5"]:
         freeze_params(model.shared)
         for d in [model.encoder, model.decoder]:
             freeze_params(d.embed_tokens)

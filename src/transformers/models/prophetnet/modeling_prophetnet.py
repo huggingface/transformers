@@ -1330,7 +1330,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = ProphetNetTokenizer.from_pretrained('microsoft/prophetnet-large-uncased')
-            >>> model = ProphetNetDecoder.from_pretrained('patrickvonplaten/prophetnet-large-uncased-standalone', add_cross_attention=False)
+            >>> model = ProphetNetDecoder.from_pretrained('microsoft/prophetnet-large-uncased', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1852,6 +1852,9 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             "use_cache": use_cache,
         }
 
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return self._shift_right(labels)
+
     @staticmethod
     def _reorder_cache(past, beam_idx):
         # this function reorders the cache for beam search
@@ -1883,11 +1886,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
 )
 class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
     def __init__(self, config):
-        super().__init__(config)
         # set config for CLM
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
+        super().__init__(config)
         self.prophetnet = ProphetNetDecoderWrapper(config)
 
         self.padding_idx = config.pad_token_id

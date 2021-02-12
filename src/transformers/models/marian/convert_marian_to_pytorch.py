@@ -26,8 +26,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from ...hf_api import HfApi
-from . import MarianConfig, MarianMTModel, MarianTokenizer
+from transformers import MarianConfig, MarianMTModel, MarianTokenizer
+from transformers.hf_api import HfApi
 
 
 def remove_suffix(text: str, suffix: str):

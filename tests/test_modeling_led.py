@@ -49,16 +49,24 @@ def prepare_led_inputs_dict(
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
+    if head_mask is None:
+        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+    if decoder_head_mask is None:
+        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": decoder_attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": decoder_head_mask,
     }
 
 
@@ -160,9 +168,10 @@ class LEDModelTester:
         model = LEDModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
         attention_mask = inputs_dict["attention_mask"]
+        head_mask = inputs_dict["head_mask"]
 
         # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
 
         output, past_key_values = outputs.to_tuple()
 
@@ -258,7 +267,6 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (LEDForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
 
     def setUp(self):
@@ -521,8 +529,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
 
         dct = tok.batch_encode_plus(
             [ARTICLE_LEP, ARTICLE_MAGNET],
-            max_length=12288,
+            max_length=6144,
             padding="max_length",
+            truncation=True,
             return_tensors="pt",
         )
 
@@ -535,9 +544,9 @@ class LEDModelIntegrationTests(unittest.TestCase):
             no_repeat_ngram_size=3,
         )
 
-        EXPECTED_LEP = " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the gigaz option of the international linear collider ( ilc ) is realized in its first phase. \n the expected sensitivity to the branching ratio of rare decays, especially the flavor changing processes, can be greatly enhanced to @xcite. in light of this, \n its exotic or rare processes should be investigated comprehensively to evaluate their potential in probing new physics. in this paper \n, we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric standard model ( mssm ), where a light cp - odd higgs - boson with a singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry like the peccei - quuin symmetry ( pec24 ).    * \n pacs numbers : * 12.38.lg, 13.85.hb, 14.40.gp   + * keywords : * exotic decays ; flavor changing ; rare decay ; higgs + * pacs : * 11.15.ha, 12.39.hg, 11.30"
+        EXPECTED_LEP = " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the gigaz option of the international linear collider ( ilc ) can be realized in its first phase. \n the expected sensitivity to the branching ratio of the rare decays, especially its exotic or rare processes, should be investigated comprehensively to evaluate their potential in probing new physics. in this work \n, we extend the previous studies of these decays to some new models and investigate the decays altogether. we are motivated by some recent studies on the singlet extension of the mssm, such as the next - to - minimal supersymmetric standard model ( nmssm ) @xcite and the nearly - minimal - supersymmetry - standard - model(nmssm)@xcite, where a light cp - odd higgs boson with singlet - dominant component may naturally arise from the spontaneous breaking of some approximate global symmetry.    # 1#2#3#4#5#6#7#8#9#10#11#12 "
 
-        EXPECTED_MAGNET = " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however, reported that a large positive magnetoresistance becomes very linear above a characteristic magnetic field. \n it is striking that this observation is in conflict with abrikosov s model and also with the classical parish - littlewood model. so far a reliable theoretical scheme capable of explaining this novel experiment has still been lacking. "
+        EXPECTED_MAGNET = " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however, reported that a large positive magnetoresistance becomes very linear in perpendicular magnetic field even in an opposite situation where the carrier sheet density is high that all electrons occupy more than one landau levels. \n it is striking that this observation is in conflict with abrikosov s model and also with the classical parish - littlewood model. "
 
         generated = tok.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True

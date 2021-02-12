@@ -486,15 +486,17 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
             (a) For sequence pairs (for a pair title+text for example):
 
-                ``tokens: [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
+            ::
 
-                ``token_type_ids: 0 0 0 0 0 0 0 0 1 1 1 1 1 1``
+                tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+                token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
 
             (b) For single sequences (for a question for example):
 
-                ``tokens: [CLS] the dog is hairy . [SEP]``
+            ::
 
-                ``token_type_ids: 0 0 0 0 0 0 0``
+                tokens:         [CLS] the dog is hairy . [SEP]
+                token_type_ids:   0   0   0   0  0     0   0
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
@@ -502,6 +504,8 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`~transformers.DPRTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
@@ -523,12 +527,18 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 TF_DPR_READER_INPUTS_DOCSTRING = r"""
@@ -556,14 +566,16 @@ TF_DPR_READER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        output_attentions (:obj:`bool`, `optional`):
-            Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
         output_hidden_states (:obj:`bool`, `optional`):
-            Whether or not to rturn the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
+        training (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
 """
 
 

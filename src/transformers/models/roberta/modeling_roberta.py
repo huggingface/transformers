@@ -19,6 +19,7 @@ import math
 
 import torch
 import torch.nn as nn
+import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
@@ -478,7 +479,15 @@ class RobertaEncoder(nn.Module):
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
-            if getattr(self.config, "gradient_checkpointing", False):
+
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                if use_cache:
+                    logger.warn(
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
+                    )
+                    use_cache = False
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):

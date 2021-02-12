@@ -156,12 +156,15 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -178,12 +181,12 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
     else:
         # assert lengths.max().item() <= slen
         alen = tf.range(slen)
-        mask = tf.math.less(alen, lengths[:, tf.newaxis])
+        mask = tf.math.less(alen, tf.expand_dims(lengths, axis=1))
 
     # attention mask is the same as mask, or triangular inferior attention (causal)
     if causal:
         attn_mask = tf.less_equal(
-            tf.tile(alen[tf.newaxis, tf.newaxis, :], (bs, slen, 1)), alen[tf.newaxis, :, tf.newaxis]
+            tf.tile(tf.reshape(alen, (1, 1, slen)), (bs, slen, 1)), tf.reshape(alen, (1, slen, 1))
         )
     else:
         attn_mask = mask
@@ -214,10 +217,13 @@ class TFFlaubertPreTrainedModel(TFPreTrainedModel):
         inputs_list = tf.constant([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
         attns_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
         if self.config.use_lang_emb and self.config.n_langs > 1:
-            langs_list = tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
+            return {
+                "input_ids": inputs_list,
+                "attention_mask": attns_list,
+                "langs": tf.constant([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]]),
+            }
         else:
-            langs_list = None
-        return {"input_ids": inputs_list, "attention_mask": attns_list, "langs": langs_list}
+            return {"input_ids": inputs_list, "attention_mask": attns_list}
 
 
 @add_start_docstrings(
@@ -606,7 +612,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         tensor = self.layer_norm_emb(tensor)
         tensor = self.dropout(tensor, training=inputs["training"])
-        tensor = tensor * mask[..., tf.newaxis]
+        tensor = tensor * tf.expand_dims(mask, axis=-1)
 
         # hidden_states and attentions cannot be None in graph mode.
         hidden_states = () if inputs["output_hidden_states"] else None
@@ -676,7 +682,7 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
                 tensor_normalized = self.layer_norm2[i](tensor)
                 tensor = tensor + self.ffns[i](tensor_normalized)
 
-            tensor = tensor * mask[..., tf.newaxis]
+            tensor = tensor * tf.expand_dims(mask, axis=-1)
 
         # Add last hidden state
         if inputs["output_hidden_states"]:

@@ -92,7 +92,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         },
     }
     max_model_input_sizes = {"facebook/blenderbot_small-90M": 512}
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,

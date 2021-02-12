@@ -128,3 +128,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
+
+    # tokenizer has no padding token
+    def test_padding_different_model_input_name(self):
+        pass

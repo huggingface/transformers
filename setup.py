@@ -102,10 +102,10 @@ _deps = [
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.0",
-    "jaxlib==0.1.55",
+    "jax>=0.2.8",
+    "jaxlib>=0.1.59",
     "keras2onnx",
-    "numpy",
+    "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
@@ -123,6 +123,7 @@ _deps = [
     "sacremoses",
     "scikit-learn",
     "sentencepiece==0.1.91",
+    "soundfile",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -131,7 +132,7 @@ _deps = [
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
-    "tokenizers==0.9.4",
+    "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
@@ -226,13 +227,14 @@ extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
+extras["speech"] = deps_list("soundfile")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
-extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["speech"]
 )
 extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
 extras["quality"] = deps_list("black", "isort", "flake8")
@@ -249,8 +251,20 @@ extras["dev"] = (
     + extras["modelcreation"]
 )
 
-extras["torchhub"] = deps_list("filelock", "importlib_metadata", "numpy", "packaging", "protobuf", "regex",
-                               "requests", "sacremoses", "sentencepiece", "torch", "tokenizers", "tqdm")
+extras["torchhub"] = deps_list(
+    "filelock",
+    "importlib_metadata",
+    "numpy",
+    "packaging",
+    "protobuf",
+    "regex",
+    "requests",
+    "sacremoses",
+    "sentencepiece",
+    "torch",
+    "tokenizers",
+    "tqdm",
+)
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
@@ -268,7 +282,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.3.0.dev0", # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.4.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",
