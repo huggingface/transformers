@@ -81,7 +81,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
             is_used = True
         else:
             for key, mapped_key in MAPPING.items():
-                mapped_key = "wav2vec2." + mapped_key if is_finetuned else mapped_key
+                mapped_key = "wav2vec2." + mapped_key if (is_finetuned and mapped_key != "lm_head") else mapped_key
                 if key in name:
                     is_used = True
                     if "*" in mapped_key:
