@@ -33,7 +33,6 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from .performer_attention_utils import init_performer_attention
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
