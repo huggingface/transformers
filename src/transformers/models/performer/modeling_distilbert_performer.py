@@ -49,7 +49,8 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_distilbert import DistilBertConfig
+from .configuration_distilbert_performer import DistilBertConfig
+from .modeling_performer_attention import PerformerAttention
 
 
 logger = logging.get_logger(__name__)
@@ -226,13 +227,11 @@ class FFN(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    @init_performer_attention(softmax_attention_class=MultiHeadSelfAttention,
-                              linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'),
-                              d_model='dim', num_heads='n_heads')
     def __init__(self, config):
         super().__init__()
 
         assert config.dim % config.n_heads == 0
+        self.attention = PerformerAttention(config.performer_attention_config, name="attention")
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)

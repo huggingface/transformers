@@ -15,7 +15,7 @@
 """ DistilBERT model configuration """
 
 from ...configuration_utils import PretrainedConfig
-from .performer_attention_utils import supports_performer_attention
+from .configuration_performer_attention import PerformerAttentionConfig
 from ...utils import logging
 
 
@@ -31,8 +31,6 @@ DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "distilbert-base-uncased-finetuned-sst-2-english": "https://huggingface.co/distilbert-base-uncased-finetuned-sst-2-english/resolve/main/config.json",
 }
 
-
-@supports_performer_attention
 class DistilBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.DistilBertModel` or a
@@ -66,12 +64,8 @@ class DistilBertConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        attention_type (:obj:`str`, `optional`, defaults to :obj:`'softmax'`):
-            The type of attention mechanism to use. Possibilities are :obj:`'softmax'` and :obj:`'performer'`, with the
-            latter referring to the FAVOR+ algorithm put forward in the paper "Rethinking Attention with Performers".
-        performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`None`):
-            An instance of PerformerAttentionConfig carrying options for the PerformerAttention module. Only used when
-            :obj:`attention_type` = :obj:`'performer'`.
+        performer_attention_config (:obj:`str`, `optional`, defaults to :obj:`PerformerAttentionConfig()`):
+            An instance of PerformerAttentionConfig carrying options for the PerformerAttention module.
         activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
@@ -115,6 +109,7 @@ class DistilBertConfig(PretrainedConfig):
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
+        performer_attention_config=PerformerAttentionConfig(),
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id)
@@ -131,6 +126,18 @@ class DistilBertConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
+
+        # Prepare Performer Attention Config
+        self.performer_attention_config = performer_attention_config
+
+        self.performer_attention_config.attention_dropout = attention_dropout
+        self.performer_attention_config.d_model = dim
+        self.performer_attention_config.num_heads = n_heads
+        self.performer_attention_config.__dict__.update(kwargs)    # Apply any remaining kwargs directly
+
+        # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
+        self.performer_attention_config = self.performer_attention_config.to_dict()
+
 
     @property
     def hidden_size(self):
