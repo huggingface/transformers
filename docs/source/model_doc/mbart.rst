@@ -79,11 +79,11 @@ the sequences for sequence-to-sequence fine-tuning.
 MBart-50
 -----------------------------------------------------------------------------------------------------------------------
 
-MBart-50 was introduced in the `Multilingual Translation with Extensible
-Multilingual Pretraining and Finetuning <https://arxiv.org/abs/2008.00401>` paper by Yuqing Tang, Chau Tran, Xian Li,
-Peng-Jen Chen, Naman Goyal, Vishrav Chaudhary, Jiatao Gu, Angela Fan. mBART-50 is pre-traied on 50 languages using
-the original `mbart-large-cc25` checkpoint and extendeding it's embeddings to support a set of 25 languages
-in addition to the 25 languages mBART model.
+MBart-50 was introduced in the `Multilingual Translation with Extensible Multilingual Pretraining and Finetuning
+<https://arxiv.org/abs/2008.00401>` paper by Yuqing Tang, Chau Tran, Xian Li, Peng-Jen Chen, Naman Goyal, Vishrav
+Chaudhary, Jiatao Gu, Angela Fan. mBART-50 is pre-traied on 50 languages using the original `mbart-large-cc25`
+checkpoint and extendeding it's embeddings to support a set of 25 languages in addition to the 25 languages mBART
+model.
 
 According to the abstract
 
@@ -98,9 +98,9 @@ Training
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The text format for mBART-50 is slightly different from mBART. For mBART-50 the language id token is used as a prefix
-for both source and target text i.e the text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is
-source language id for source text and target language id for target text, with :obj:`X` being the source or 
-target text respectivelyt. 
+for both source and target text i.e the text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is source
+language id for source text and target language id for target text, with :obj:`X` being the source or target text
+respectivelyt.
 
 
 mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer`.
@@ -124,14 +124,15 @@ mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer`.
     tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 
     # translate Hindi to French
-    encoded_hi = tokenizer.prepare_seq2seq_batch(src_texts=article_hi, src_lang="hi_IN", return_tensors="pt")
+    tokenizer.src_lang = "hi_IN"
+    encoded_hi = tokenizer(article_hi, return_tensors="pt")
     generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"])
-
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     # => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire dans la Syrie."
-    # translate Arabic to English
-    encoded_ar = tokenizer.prepare_seq2seq_batch(src_texts=article_ar, src_lang="ar_AR", return_tensors="pt")
 
+    # translate Arabic to English
+    tokenizer.src_lang = "ar_AR"
+    encoded_ar = tokenizer(article_ar, return_tensors="pt")
     generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     # => "The Secretary-General of the United Nations says there is no military solution in Syria."
