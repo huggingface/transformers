@@ -74,6 +74,9 @@ class IBertEmbeddings(nn.Module):
         self.quant_mode = config.quant_mode
         self.embedding_bit = 8
         self.embedding_act_bit = 16
+        self.act_bit = 8
+        self.ln_input_bit = 22
+        self.ln_output_bit = 32
 
         self.word_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
         self.word_embeddings.set_param(
@@ -81,11 +84,6 @@ class IBertEmbeddings(nn.Module):
         self.token_type_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
         self.token_type_embeddings.set_param(
                 nn.Embedding(config.type_vocab_size, config.hidden_size))
-
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
@@ -100,6 +98,13 @@ class IBertEmbeddings(nn.Module):
         # Integer-only addition between embeddings
         self.embeddings_act1 = QuantAct(self.embedding_act_bit, quant_mode=self.quant_mode)
         self.embeddings_act2 = QuantAct(self.embedding_act_bit, quant_mode=self.quant_mode)
+
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
+        self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
+        self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -137,9 +142,10 @@ class IBertEmbeddings(nn.Module):
                     identity=position_embeddings,
                     identity_scaling_factor=position_embeddings_scaling_factor)
 
-        embeddings = self.LayerNorm(embeddings)
+        embeddings, embeddings_scaling_factor = self.LayerNorm(embeddings, embeddings_scaling_factor)
         embeddings = self.dropout(embeddings)
-        return embeddings
+        embeddings, embeddings_scaling_factor = self.output_activation(embeddings, embeddings_scaling_factor)
+        return embeddings, embeddings_scaling_factor
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
@@ -307,7 +313,7 @@ class IBertSelfOutput(nn.Module):
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
         self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
-        self.out_act = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
+        self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
 
@@ -324,7 +330,7 @@ class IBertSelfOutput(nn.Module):
                 self.LayerNorm(hidden_states, hidden_states_scaling_factor)
 
         hidden_states, hidden_states_scaling_factor = \
-                self.out_act(hidden_states, hidden_states_scaling_factor) 
+                self.output_activation(hidden_states, hidden_states_scaling_factor) 
         return hidden_states, hidden_states_scaling_factor
 
 
@@ -400,7 +406,7 @@ class IBertIntermediate(nn.Module):
 
         assert config.hidden_act == 'gelu'
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
-        self.output_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
     def forward(self, hidden_states, hidden_states_scaling_factor):
         hidden_states, hidden_states_scaling_factor = \
@@ -410,7 +416,7 @@ class IBertIntermediate(nn.Module):
 
         # Requantization: 32bit -> 8-bit
         hidden_states, hidden_states_scaling_factor = \
-                self.output_act(hidden_states, hidden_states_scaling_factor)
+                self.output_activation(hidden_states, hidden_states_scaling_factor)
         return hidden_states, hidden_states_scaling_factor
 
 
@@ -431,7 +437,7 @@ class IBertOutput(nn.Module):
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
         self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
-        self.out_act = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
+        self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode) 
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, hidden_states_scaling_factor, 
@@ -447,7 +453,7 @@ class IBertOutput(nn.Module):
                 self.LayerNorm(hidden_states, hidden_states_scaling_factor)
 
         hidden_states, hidden_states_scaling_factor = \
-                self.out_act(hidden_states, hidden_states_scaling_factor) 
+                self.output_activation(hidden_states, hidden_states_scaling_factor) 
         return hidden_states, hidden_states_scaling_factor
 
 
@@ -473,11 +479,10 @@ class IBertLayer(nn.Module):
         self.pre_intermediate_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.pre_output_act = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
-        self.input_act = QuantAct(8, quant_mode=self.quant_mode) #TODO remove this
-
     def forward(
         self,
         hidden_states,
+        hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -487,7 +492,6 @@ class IBertLayer(nn.Module):
     ):
         assert past_key_value is None
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        hidden_states, hidden_states_scaling_factor = self.input_act(hidden_states) #TODO remove this
         self_attention_outputs, self_attention_outputs_scaling_factor = \
             self.attention(
                 hidden_states,
@@ -534,6 +538,7 @@ class IBertEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
+        hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -562,6 +567,7 @@ class IBertEncoder(nn.Module):
             else:
                 layer_outputs = layer_module(
                     hidden_states,
+                    hidden_states_scaling_factor,
                     attention_mask,
                     layer_head_mask,
                     encoder_hidden_states,
@@ -855,25 +861,28 @@ class IBertModel(IBertPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=extended_attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        embedding_output, embedding_output_scaling_factor = \
+            self.embeddings(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
+                inputs_embeds=inputs_embeds,
+                past_key_values_length=past_key_values_length,
+            )
+        encoder_outputs = \
+            self.encoder(
+                embedding_output,
+                embedding_output_scaling_factor,
+                attention_mask=extended_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_extended_attention_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
