@@ -20,9 +20,8 @@ import subprocess
 import time
 import unittest
 
-import requests
 from requests.exceptions import HTTPError
-from transformers.hf_api import HfApi, HfFolder, ModelInfo, PresignedUrl, RepoObj, S3Obj
+from transformers.hf_api import HfApi, HfFolder, ModelInfo, RepoObj
 from transformers.testing_utils import require_git_lfs
 
 
@@ -79,42 +78,6 @@ class HfApiEndpointsTest(HfApiCommonTest):
         user, orgs = self._api.whoami(token=self._token)
         self.assertEqual(user, USER)
         self.assertIsInstance(orgs, list)
-
-    def test_presign_invalid_org(self):
-        with self.assertRaises(HTTPError):
-            _ = self._api.presign(
-                token=self._token, filetype="datasets", filename="nested/fake_org.txt", organization="fake"
-            )
-
-    def test_presign_valid_org(self):
-        urls = self._api.presign(
-            token=self._token, filetype="datasets", filename="nested/valid_org.txt", organization="valid_org"
-        )
-        self.assertIsInstance(urls, PresignedUrl)
-
-    def test_presign(self):
-        for FILE_KEY, FILE_PATH in FILES:
-            urls = self._api.presign(token=self._token, filetype="datasets", filename=FILE_KEY)
-            self.assertIsInstance(urls, PresignedUrl)
-            self.assertEqual(urls.type, "text/plain")
-
-    def test_presign_and_upload(self):
-        for FILE_KEY, FILE_PATH in FILES:
-            access_url = self._api.presign_and_upload(
-                token=self._token, filetype="datasets", filename=FILE_KEY, filepath=FILE_PATH
-            )
-            self.assertIsInstance(access_url, str)
-            with open(FILE_PATH, "r") as f:
-                body = f.read()
-            r = requests.get(access_url)
-            self.assertEqual(r.text, body)
-
-    def test_list_objs(self):
-        objs = self._api.list_objs(token=self._token, filetype="datasets")
-        self.assertIsInstance(objs, list)
-        if len(objs) > 0:
-            o = objs[-1]
-            self.assertIsInstance(o, S3Obj)
 
     def test_list_repos_objs(self):
         objs = self._api.list_repos_objs(token=self._token)
