@@ -192,6 +192,7 @@ class IBertSelfAttention(nn.Module):
         self.query_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.key_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.value_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
+        self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -277,6 +278,10 @@ class IBertSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
+
+        # requantization: 32-bit -> 8-bit
+        context_layer, context_layer_scaling_factor = \
+                self.output_activation(context_layer, context_layer_scaling_factor)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         output_scaling_factor = (context_layer_scaling_factor, attention_probs_scaling_factor) \
