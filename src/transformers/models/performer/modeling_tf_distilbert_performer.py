@@ -47,6 +47,9 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from .performer_attention_utils import init_performer_attention
+from .modeling_tf_performer_attention import TFPerformerAttention
+from .configuration_performer_attention import PerformerAttentionConfig
+from copy import copy, deepcopy
 from ...utils import logging
 from .configuration_distilbert import DistilBertConfig
 
@@ -280,9 +283,9 @@ class TFFFN(tf.keras.layers.Layer):
 
 
 class TFTransformerBlock(tf.keras.layers.Layer):
-    @init_performer_attention(softmax_attention_class=TFMultiHeadSelfAttention,
-                              linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'),
-                              d_model='dim', num_heads='n_heads')
+    #@init_performer_attention(softmax_attention_class=TFMultiHeadSelfAttention,
+    #                          linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'),
+    #                          d_model='dim', num_heads='n_heads')
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
 
@@ -296,6 +299,37 @@ class TFTransformerBlock(tf.keras.layers.Layer):
         assert (
             config.dim % config.n_heads == 0
         ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
+
+
+        ############
+
+        pos_embed_type = getattr(config, "position_embedding_type", "absolute")
+        assert pos_embed_type == "absolute",\
+            "Relative positional embeddings are not currently supported in combination with Performer attention"
+
+        attn_config = config.performer_attention_config or PerformerAttentionConfig()
+        kwarg_copy = copy(kwargs)
+
+        attn_config.attention_dropout = getattr(
+            config,
+            kwarg_copy.pop('attention_dropout', 'attention_dropout'),
+            0.0
+        )
+        attn_config.d_model = getattr(config, kwarg_copy.pop('d_model', 'd_model'))
+        attn_config.num_heads = getattr(config, kwarg_copy.pop('num_heads', 'num_heads'))
+        attn_config.__dict__.update(kwarg_copy)    # Apply any remaining kwargs directly
+
+        #if _layer_is_tf(softmax_attention_class):
+        #    attn_obj = TFPerformerAttention(attn_config, name=attention_attribute_name)
+        #else:
+        #    attn_obj = PerformerAttention(attn_config)
+        #setattr(self, attention_attribute_name, attn_obj)
+
+        self.attention = TFPerformerAttention(attn_config, name="attention")
+
+
+        ####################
+
 
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
 
