@@ -76,6 +76,67 @@ the sequences for sequence-to-sequence fine-tuning.
     assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"
 
 
+MBart-50
+-----------------------------------------------------------------------------------------------------------------------
+
+MBart-50 was introduced in the `Multilingual Translation with Extensible
+Multilingual Pretraining and Finetuning <https://arxiv.org/abs/2008.00401>` paper by Yuqing Tang, Chau Tran, Xian Li,
+Peng-Jen Chen, Naman Goyal, Vishrav Chaudhary, Jiatao Gu, Angela Fan. mBART-50 is pre-traied on 50 languages using
+the original `mbart-large-cc25` checkpoint and extendeding it's embeddings to support a set of 25 languages
+in addition to the 25 languages mBART model.
+
+According to the abstract
+
+*Multilingual translation models can be created through multilingual finetuning. Instead of finetuning on one
+direction, a pretrained model is finetuned on many directions at the same time. It demonstrate that pretrained models
+can be extended to incorporate additional languages without loss of performance. Multilingual finetuning improves on
+average 1 BLEU over the strongest baselines (being either multilingual from scratch or bilingual finetuning) while
+improving 9.3 BLEU on average over bilingual baselines from scratch.*
+
+
+Training
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The text format for mBART-50 is slightly different from mBART. For mBART-50 the language id token is used as a prefix
+for both source and target text i.e the text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is
+source language id for source text and target language id for target text, with :obj:`X` being the source or 
+target text respectivelyt. 
+
+
+mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer`.
+
+- Generation
+
+    To generate using the mBART-50 multilingual translation models, :obj:`eos_token_id` is used as the
+    `:obj:`decoder_start_token_id` and the target language id is forced as the first generated token. To force the
+    target language id as the first generated token, pass the `forced_bos_token_id` parameter to the `generate` method.
+    The following example shows how to translate between Hindi to French and Arabic to English using the
+    `facebook/mbart-50-large-many-to-many` model.
+
+.. code-block::
+
+    from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+
+    article_hi = "संयुक्त राष्ट्र के प्रमुख का कहना है कि सीरिया में कोई सैन्य समाधान नहीं है"
+    article_ar = "الأمين العام للأمم المتحدة يقول إنه لا يوجد حل عسكري في سوريا."
+
+    model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+    tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
+
+    # translate Hindi to French
+    encoded_hi = tokenizer.prepare_seq2seq_batch(src_texts=article_hi, src_lang="hi_IN", return_tensors="pt")
+    generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"])
+
+    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    # => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire dans la Syrie."
+    # translate Arabic to English
+    encoded_ar = tokenizer.prepare_seq2seq_batch(src_texts=article_ar, src_lang="ar_AR", return_tensors="pt")
+
+    generated_tokens = model.generate(**encoded_ar, forced_bos_token_id=tokenizer.lang_code_to_id["en_XX"])
+    tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    # => "The Secretary-General of the United Nations says there is no military solution in Syria."
+
+
 MBartConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
