@@ -128,16 +128,13 @@ class DistilBertPerformerConfig(PretrainedConfig):
         self.seq_classif_dropout = seq_classif_dropout
 
         # Prepare Performer Attention Config
-        self.performer_attention_config = performer_attention_config
-
-        self.performer_attention_config.attention_dropout = attention_dropout
-        self.performer_attention_config.d_model = dim
-        self.performer_attention_config.num_heads = n_heads
-        self.performer_attention_config.__dict__.update(kwargs)    # Apply any remaining kwargs directly
+        performer_attention_config.attention_dropout = attention_dropout
+        performer_attention_config.d_model = dim
+        performer_attention_config.num_heads = n_heads
+        performer_attention_config.__dict__.update(kwargs)  # Apply any remaining kwargs directly
 
         # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives
-        self.performer_attention_config = self.performer_attention_config.to_dict()
-
+        self.performer_attention_config = performer_attention_config.to_dict()
 
     @property
     def hidden_size(self):
