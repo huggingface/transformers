@@ -105,6 +105,23 @@ respectivelyt.
 
 mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer`.
 
+.. code-block::
+
+    from transformers import MBartForConditionalGeneration, MBart50TokenizerFast
+
+    model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-50")
+    tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50", src_lang="en_XX", tgt_lang="ro_RO")
+
+    src_text = " UN Chief Says There Is No Military Solution in Syria"
+    tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
+
+    model_inputs = tokenizer(src_text, return_tensors="pt")
+    with tokenizer.as_target_tokenizer():
+        labels = tokenizer(tgt_text, return_tensors="pt").input_ids
+
+    model(**model_inputs, labels=labels) # forward pass
+
+
 - Generation
 
     To generate using the mBART-50 multilingual translation models, :obj:`eos_token_id` is used as the
@@ -128,7 +145,7 @@ mBART-50 has it's own tokenizer :class:`~transformers.MBart50Tokenizer`.
     encoded_hi = tokenizer(article_hi, return_tensors="pt")
     generated_tokens = model.generate(**encoded_hi, forced_bos_token_id=tokenizer.lang_code_to_id["fr_XX"])
     tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-    # => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire dans la Syrie."
+    # => "Le chef de l 'ONU affirme qu 'il n 'y a pas de solution militaire en Syria."
 
     # translate Arabic to English
     tokenizer.src_lang = "ar_AR"
