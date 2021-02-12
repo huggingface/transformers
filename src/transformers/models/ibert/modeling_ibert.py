@@ -391,16 +391,15 @@ class IBertIntermediate(nn.Module):
                 quant_mode=self.quant_mode, per_channel=True)
         self.dense.set_param(nn.Linear(config.hidden_size, config.intermediate_size))
 
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
+        assert config.hidden_act == 'gelu'
+        self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
 
     def forward(self, hidden_states, hidden_states_scaling_factor):
         hidden_states, hidden_states_scaling_factor = \
                 self.dense(hidden_states, hidden_states_scaling_factor)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states, None
+        hidden_states, hidden_states_scaling_factor = \
+                self.intermediate_act_fn(hidden_states, hidden_states_scaling_factor)
+        return hidden_states, hidden_states_scaling_factor
 
 
 # Copied from transformers.models.bert.modeling_bert.BertOutput
