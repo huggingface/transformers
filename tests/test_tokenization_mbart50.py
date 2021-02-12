@@ -129,7 +129,7 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class MBartOneToManyIntegrationTest(unittest.TestCase):
-    checkpoint_name = "facebook/mbart-50-large-one-to-many"
+    checkpoint_name = "facebook/mbart-large-50-one-to-many-mmt"
     src_text = [
         " UN Chief Says There Is No Military Solution in Syria",
         """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
