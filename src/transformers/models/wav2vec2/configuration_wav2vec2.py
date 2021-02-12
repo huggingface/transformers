@@ -134,6 +134,7 @@ class Wav2Vec2Config(PretrainedConfig):
         num_conv_pos_embedding_groups=16,
         do_stable_layer_norm=False,
         freeze_feat_extract_train=True,
+        feat_extract_out_grad_mult=0.1,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -178,6 +179,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
         self.freeze_feat_extract_train = freeze_feat_extract_train
+        self.feat_extract_out_grad_mult = feat_extract_out_grad_mult
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)

@@ -167,6 +167,18 @@ def compute_mask_indices(
     return mask
 
 
+class GradMultiply(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x, scale):
+        ctx.scale = scale
+        res = x.new(x)
+        return res
+
+    @staticmethod
+    def backward(ctx, grad):
+        return grad * ctx.scale, None
+
+
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
@@ -833,6 +845,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.feature_extractor(input_values)
+
+        # scale gradients if needed
+        if self.training and self.config.feat_extract_out_grad_mult != 1.0:
+            hidden_states = GradMultiply.apply(hidden_states, self.config.feat_extract_out_grad_mult)
+
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
