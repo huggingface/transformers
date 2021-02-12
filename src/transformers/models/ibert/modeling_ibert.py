@@ -380,14 +380,20 @@ class IBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.weight_bit = 8
+        self.bias_bit = 32
+        self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
+                quant_mode=self.quant_mode, per_channel=True)
+        self.dense.set_param(nn.Linear(config.hidden_size, config.intermediate_size))
+
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states, hidden_states_scaling_factor):
-        hidden_states = self.dense(hidden_states)
+        hidden_states, hidden_states_scaling_factor = \
+                self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states, None
 
@@ -397,15 +403,26 @@ class IBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.weight_bit = 8
+        self.bias_bit = 32
+        self.ln_input_bit = 22
+        self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, 
+                quant_mode=self.quant_mode, per_channel=True)
+        self.dense.set_param(nn.Linear(config.intermediate_size, config.hidden_size))
+        self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, hidden_states_scaling_factor, 
                input_tensor, input_tensor_scaling_factor):
-        hidden_states = self.dense(hidden_states)
+        hidden_states, hidden_states_scaling_factor= \
+                self.dense(hidden_states, hidden_states_scaling_factor)
         hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+        hidden_states, hidden_states_scaling_factor = self.ln_input_act(
+                hidden_states, hidden_states_scaling_factor,
+                identity=input_tensor,
+                identity_scaling_factor=input_tensor_scaling_factor)
+        hidden_states = self.LayerNorm(hidden_states)
         return hidden_states, None
 
 
