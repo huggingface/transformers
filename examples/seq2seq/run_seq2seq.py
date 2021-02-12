@@ -356,19 +356,7 @@ def main():
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
-    # update config with task specific params
-    task_specific_params = model.config.task_specific_params
-    if task_specific_params is not None:
-        params = task_specific_params.get(data_args.task, {})
-        logger.info(f"Updating model.config with task specific params for {data_args.task}:\n {params}")
-        logger.info("Note: command line args may override some of these.")
-        model.config.update(params)
-
-    # Get the default prefix if None is passed.
-    if data_args.source_prefix is None:
-        prefix = getattr(model.config, "prefix", "")
-    else:
-        prefix = data_args.source_prefix
+    prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
