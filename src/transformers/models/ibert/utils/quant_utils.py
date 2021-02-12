@@ -218,10 +218,7 @@ class fixedpoint_mul(Function):
             reshape = lambda x : x.view(1, 1, -1)
         ctx.identity = identity
 
-        if quant_mode == 'symmetric':
-            n = 2 ** (bit_num - 1) - 1
-        else:
-            n = 2 ** bit_num - 1
+        n = 2 ** (bit_num - 1) - 1
 
         with torch.no_grad():
             pre_act_scaling_factor = reshape(pre_act_scaling_factor)
@@ -256,13 +253,7 @@ class fixedpoint_mul(Function):
 
                 output = output1 + output
 
-            if bit_num in [4, 8, 16]:
-                if quant_mode == 'symmetric':
-                    return torch.clamp( output.type(torch.float), -n - 1, n)
-                else:
-                    return torch.clamp( output.type(torch.float), 0, n)
-            else:
-                return output.type(torch.float)
+            return torch.clamp( output.type(torch.float), -n - 1, n)
 
     @ staticmethod
     def backward(ctx, grad_output):
