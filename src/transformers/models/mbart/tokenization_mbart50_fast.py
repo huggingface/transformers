@@ -36,9 +36,9 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
-_all_mbart_models = ["facebook/mbart-50-large-one-to-many"]
-SPM_URL = "https://huggingface.co/facebook/mbart-50-large-one-to-many/resolve/main/sentencepiece.bpe.model"
-tokenizer_URL = "https://huggingface.co/facebook/mbart-50-large-one-to-many/resolve/main/tokenizer.json"
+_all_mbart50_models = ["facebook/mbart-large-50-one-to-many-mmt"]
+SPM_URL = "https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt/resolve/main/sentencepiece.bpe.model"
+tokenizer_URL = "https://huggingface.co/facebook/mbart-large-50-one-to-many-mmt/resolve/main/tokenizer.json"
 
 # fmt: off
 FAIRSEQ_LANGUAGE_CODES = ["ar_AR", "cs_CZ", "de_DE", "en_XX", "es_XX", "et_EE", "fi_FI", "fr_XX", "gu_IN", "hi_IN", "it_IT", "ja_XX", "kk_KZ", "ko_KR", "lt_LT", "lv_LV", "my_MM", "ne_NP", "nl_XX", "ro_RO", "ru_RU", "si_LK", "tr_TR", "vi_VN", "zh_CN", "af_ZA", "az_AZ", "bn_IN", "fa_IR", "he_IL", "hr_HR", "id_ID", "ka_GE", "km_KH", "mk_MK", "ml_IN", "mn_MN", "mr_IN", "pl_PL", "ps_AF", "pt_XX", "sv_SE", "sw_KE", "ta_IN", "te_IN", "th_TH", "tl_XX", "uk_UA", "ur_PK", "xh_ZA", "gl_ES", "sl_SI"]
@@ -81,7 +81,7 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     Examples::
 
         >>> from transformers import MBart50TokenizerFast
-        >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-50-large-one-to-many", src_lang="en_XX", tgt_lang="ro_RO")
+        >>> tokenizer = MBart50TokenizerFast.from_pretrained("facebook/mbart-large-50-one-to-many-mmt", src_lang="en_XX", tgt_lang="ro_RO")
         >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
         >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> model_inputs = tokenizer(src_text, return_tensors="pt")
@@ -91,8 +91,8 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    max_model_input_sizes = {m: 1024 for m in _all_mbart50_models}
+    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart50_models}}
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = MBart50Tokenizer
 
@@ -137,10 +137,19 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
             lang_code: self.convert_tokens_to_ids(lang_code) for lang_code in FAIRSEQ_LANGUAGE_CODES
         }
 
-        self.src_lang = src_lang if src_lang is not None else "en_XX"
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
         self.tgt_lang = tgt_lang
-        self.cur_lang_code = self.lang_code_to_id[self.src_lang]
-        self.set_src_lang_special_tokens(self.src_lang)
+        self.cur_lang_code_id = self.lang_code_to_id[self._src_lang]
+        self.set_src_lang_special_tokens(self._src_lang)
+
+    @property
+    def src_lang(self) -> str:
+        return self._src_lang
+
+    @src_lang.setter
+    def src_lang(self, new_src_lang: str) -> None:
+        self._src_lang = new_src_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -226,10 +235,10 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         yield
         self.set_src_lang_special_tokens(self.src_lang)
 
-    def set_src_lang_special_tokens(self, src_lang) -> None:
+    def set_src_lang_special_tokens(self, src_lang: str) -> None:
         """Reset the special tokens to the source lang setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code = self.convert_tokens_to_ids(src_lang)
-        self.prefix_tokens = [self.cur_lang_code]
+        self.cur_lang_code_id = self.convert_tokens_to_ids(src_lang)
+        self.prefix_tokens = [self.cur_lang_code_id]
         self.suffix_tokens = [self.eos_token_id]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
@@ -241,10 +250,10 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
             special_tokens=list(zip(prefix_tokens_str + suffix_tokens_str, self.prefix_tokens + self.suffix_tokens)),
         )
 
-    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
         """Reset the special tokens to the target language setting. prefix=[src_lang_code] and suffix=[eos]."""
-        self.cur_lang_code = self.convert_tokens_to_ids(lang)
-        self.prefix_tokens = [self.cur_lang_code]
+        self.cur_lang_code_id = self.convert_tokens_to_ids(tgt_lang)
+        self.prefix_tokens = [self.cur_lang_code_id]
         self.suffix_tokens = [self.eos_token_id]
 
         prefix_tokens_str = self.convert_ids_to_tokens(self.prefix_tokens)
