@@ -7,7 +7,7 @@ import random
 import torch
 import torch.nn.functional as F
 
-from ...configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
+from .configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
 from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer
