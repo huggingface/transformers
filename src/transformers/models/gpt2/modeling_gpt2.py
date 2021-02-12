@@ -1039,8 +1039,8 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
             1[``.
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for language modeling. Note that the labels **are shifted** inside the model, i.e. you can set
-            ``labels = input_ids`` Indices are selected in ``[-1, 0, ..., config.vocab_size]`` All labels set to
-            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size]``
+            ``labels = input_ids`` Indices are selected in ``[-100, 0, ..., config.vocab_size - 1]`` All labels set to
+            ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ..., config.vocab_size - 1]``
         mc_labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size)`, `optional`):
             Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
             num_choices]`` where `num_choices` is the size of the second dimension of the input tensors. (see
