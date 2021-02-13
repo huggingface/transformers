@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    speech_to_text_transformer,
     albert,
     auto,
     bart,
