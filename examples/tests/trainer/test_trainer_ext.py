@@ -30,6 +30,7 @@ from transformers.testing_utils import (
 from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
+
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 MBART_TINY = "sshleifer/tiny-mbart"
@@ -58,7 +59,6 @@ def require_apex(test_case):
 
 
 class TestTrainerExt(TestCasePlus):
-
     def run_seq2seq_quick(self, distributed=False, extra_args_str=None):
         output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, extra_args_str)
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
@@ -161,7 +161,6 @@ class TestTrainerExt(TestCasePlus):
             --target_lang ro_RO
             --source_lang en_XX
         """.split()
-
 
         if extra_args_str is not None:
             args.extend(extra_args_str.split())
