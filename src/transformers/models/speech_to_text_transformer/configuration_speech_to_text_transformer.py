@@ -98,7 +98,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=10000,
         max_position_embeddings=1024,
         encoder_layers=12,
         encoder_ffn_dim=2048,
@@ -127,7 +127,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
         max_target_positions=1024,
         conv_kernel_sizes='5,5',
         conv_channels=1024,
-        input_feat_per_channel=8,
+        input_feat_per_channel=80,
         input_channels=1,
         **kwargs
     ):
@@ -161,7 +161,12 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-
+        self.max_source_positions = max_source_positions
+        self.max_target_positions = max_target_positions
+        self.conv_kernel_sizes = conv_kernel_sizes  
+        self.conv_channels = conv_channels
+        self.input_feat_per_channel = input_feat_per_channel
+        self.input_channels = input_channels
         
     @property
     def num_attention_heads(self) -> int:
