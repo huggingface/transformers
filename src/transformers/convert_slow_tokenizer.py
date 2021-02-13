@@ -322,10 +322,11 @@ class SpmConverter(Converter):
         if model_type == 1:
             tokenizer = Tokenizer(Unigram(vocab, unk_id))
         elif model_type == 2:
-            vocab, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
+            _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
+            bpe_vocab = {word: i for i, (word, score) in enumerate(vocab)}
             tokenizer = Tokenizer(
                 BPE(
-                    vocab,
+                    bpe_vocab,
                     merges,
                     unk_token=proto.trainer_spec.unk_piece,
                     fuse_unk=True,
@@ -424,9 +425,10 @@ class CamembertConverter(SpmConverter):
             ("<pad>", 0.0),
             ("</s>NOTUSED", 0.0),
             ("<unk>", 0.0),
+            ("<unk>NOTUSED", -100),
         ]
         # We down-grade the original SentencePiece by -100 to avoid using it and use our added token instead
-        vocab += [(piece.piece, piece.score if i != 0 else piece.score - 100) for i, piece in enumerate(proto.pieces)]
+        vocab += [(piece.piece, piece.score) for piece in proto.pieces[1:]]
         vocab += [("<mask>", 0.0)]
         return vocab
 
