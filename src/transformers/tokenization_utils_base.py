@@ -1977,11 +1977,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
+        logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
         # Sanitize AddedTokens in special_tokens_map
         write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(write_dict, ensure_ascii=False))
+        logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
@@ -2020,6 +2022,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, ensure_ascii=False)
                 f.write(out_str)
+                logger.info(f"added tokens file saved in {added_tokens_file}")
 
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
