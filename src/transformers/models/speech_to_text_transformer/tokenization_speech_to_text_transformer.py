@@ -44,7 +44,7 @@ _all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
 SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
 
 
-class SpeechToTextTransformerTokenizerFast(PreTrainedTokenizer):
+class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
     """
     Construct an M2M100MT tokenizer.
     :class:`~transformers.M2M100MTTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer` and adds a new
@@ -104,14 +104,10 @@ class SpeechToTextTransformerTokenizerFast(PreTrainedTokenizer):
         return self.sp_model.EncodeAsPieces(text)
 
     def _convert_token_to_id(self, token):
-        if token in self.lang_token_to_id:
-            return self.lang_token_to_id[token]
         return self.encoder.get(token, self.encoder[self.unk_token])
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the decoder."""
-        if index in self.id_to_lang_token:
-            return self.id_to_lang_token[index]
         return self.decoder.get(index, self.unk_token)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
