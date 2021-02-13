@@ -117,6 +117,12 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
 
+def lengths_to_padding_mask(lens: torch.LongTensor) -> torch.BoolTensor:
+    bsz, max_lens = lens.size(0), torch.max(lens).item()
+    mask = torch.arange(max_lens).to(lens.device).view(1, max_lens)
+    mask = mask.expand(bsz, -1) > lens.view(bsz, 1).expand(-1, max_lens)
+    return mask.long()
+
 class Conv1dSubsampler(nn.Module):
     """Convolutional subsampler: a stack of 1D convolution (along temporal
     dimension) followed by non-linear activation via gated linear units
@@ -781,6 +787,7 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        src_lengths=src_lengths,
         attention_mask=None,
         head_mask=None,
         inputs_embeds=None,
@@ -831,21 +838,23 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
+        # if input_ids is not None and inputs_embeds is not None:
+        #     raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        # elif input_ids is not None:
+        #     input_shape = input_ids.size()
+        #     input_ids = input_ids.view(-1, input_shape[-1])
+        # elif inputs_embeds is not None:
+        #     input_shape = inputs_embeds.size()[:-1]
+        # else:
+        #     raise ValueError("You have to specify either input_ids or inputs_embeds")
         
         if inputs_embeds is None:
-            hidden_states, input_lengths = self.subsample(src_tokens, src_lengths)
+            hidden_states, input_lengths = self.subsample(input_ids, src_lengths)
             hidden_states = self.embed_scale * hidden_states
+        
+        attention_mask = lengths_to_padding_mask(input_lengths)
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(attention_mask)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1213,6 +1222,7 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        src_lengths=src_lengths,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1237,6 +1247,7 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
+                src_lengths=src_lengths,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
@@ -1335,6 +1346,7 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
     def forward(
         self,
         input_ids=None,
+        src_lengths=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1382,6 +1394,7 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
 
         outputs = self.model(
             input_ids,
+            src_lengths=src_lengths
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
