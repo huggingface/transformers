@@ -462,6 +462,8 @@ def main():
 
     if training_args.do_train:
         train_dataset = datasets["train"]
+        if "train" not in datasets:
+            raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
@@ -474,6 +476,8 @@ def main():
 
     if training_args.do_eval:
         max_target_length = data_args.val_max_target_length
+        if "validation" not in datasets:
+            raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = datasets["validation"]
         if data_args.max_val_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
@@ -487,6 +491,8 @@ def main():
 
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
+        if "test" not in datasets:
+            raise ValueError("--do_predict requires a test dataset")
         test_dataset = datasets["test"]
         if data_args.max_test_samples is not None:
             test_dataset = test_dataset.select(range(data_args.max_test_samples))
