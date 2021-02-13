@@ -31,6 +31,11 @@ from transformers.trainer_callback import TrainerState
 from transformers.trainer_utils import set_seed
 
 
+bindir = os.path.abspath(os.path.dirname(__file__))
+sys.path.append(f"{bindir}/../../seq2seq")
+from run_seq2seq import main  # noqa
+
+
 set_seed(42)
 MARIAN_MODEL = "sshleifer/student_marian_en_ro_6_1"
 MBART_TINY = "sshleifer/tiny-mbart"
@@ -176,12 +181,6 @@ class TestTrainerExt(TestCasePlus):
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
-            # XXX: need to find a better way to import the script (but keeping it portable)
-            s2s_dir = f"{self.examples_dir_str}/seq2seq/"
-            if s2s_dir not in sys.path:
-                sys.path.append(s2s_dir)
-            from run_seq2seq import main
-
             testargs = ["run_seq2seq.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()
