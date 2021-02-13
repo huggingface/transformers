@@ -18,7 +18,7 @@
 import math
 import copy
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, List
 
 import torch
 import torch.nn.functional as F
