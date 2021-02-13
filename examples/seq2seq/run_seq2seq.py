@@ -251,22 +251,6 @@ summarization_name_mapping = {
 }
 
 
-def handle_metrics(split, metrics, output_dir):
-    """
-    Log and save metrics
-
-    Args:
-    - split: one of train, val, test
-    - metrics: metrics dict
-    - output_dir: where to save the metrics
-    """
-
-    logger.info(f"***** {split} metrics *****")
-    for key in sorted(metrics.keys()):
-        logger.info(f"  {key} = {metrics[key]}")
-    save_json(metrics, os.path.join(output_dir, f"{split}_results.json"))
-
-
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -580,6 +564,7 @@ def main():
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
     )
 
+    all_metrics = {}
     # Training
     if training_args.do_train:
         if last_checkpoint is not None:
@@ -592,9 +577,13 @@ def main():
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
-        metrics["train_n_objs"] = data_args.max_train_samples
+        metrics["train_samples"] = min(data_args.max_train_samples, len(train_dataset))
         if trainer.is_world_process_zero():
-            handle_metrics("train", metrics, training_args.output_dir)
+            logger.info("***** train metrics *****")
+            for key in sorted(metrics.keys()):
+                logger.info(f"  {key} = {metrics[key]}")
+            save_json(metrics, os.path.join(training_args.output_dir, "train_results.json"))
+            all_metrics.update(metrics)
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
@@ -608,10 +597,14 @@ def main():
             max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="val"
         )
         metrics = {k: round(v, 4) for k, v in metrics.items()}
-        metrics["val_n_objs"] = data_args.max_val_samples
+        metrics["val_samples"] = min(data_args.max_val_samples, len(eval_dataset))
 
         if trainer.is_world_process_zero():
-            handle_metrics("val", metrics, training_args.output_dir)
+            logger.info("***** val metrics *****")
+            for key in sorted(metrics.keys()):
+                logger.info(f"  {key} = {metrics[key]}")
+            save_json(metrics, os.path.join(training_args.output_dir, "val_results.json"))
+            all_metrics.update(metrics)
 
     if training_args.do_predict:
         logger.info("*** Test ***")
@@ -623,11 +616,15 @@ def main():
             num_beams=data_args.num_beams,
         )
         metrics = test_results.metrics
-        metrics["test_n_objs"] = data_args.max_test_samples
-        metrics["test_loss"] = round(metrics["test_loss"], 4)
+        metrics["test_samples"] = min(data_args.max_test_samples, len(test_dataset))
+        metrics = {k: round(v, 4) for k, v in metrics.items()}
 
         if trainer.is_world_process_zero():
-            handle_metrics("test", metrics, training_args.output_dir)
+            logger.info("***** test metrics *****")
+            for key in sorted(metrics.keys()):
+                logger.info(f"  {key} = {metrics[key]}")
+            save_json(metrics, os.path.join(training_args.output_dir, "test_results.json"))
+            all_metrics.update(metrics)
 
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
@@ -637,6 +634,9 @@ def main():
                 output_test_preds_file = os.path.join(training_args.output_dir, "test_preds_seq2seq.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
+
+    if trainer.is_world_process_zero():
+        save_json(all_metrics, os.path.join(training_args.output_dir, "all_results.json"))
 
     return results
 
