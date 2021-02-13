@@ -170,13 +170,12 @@ class TestTrainerExt(TestCasePlus):
         if extra_args_str is not None:
             args.extend(extra_args_str.split())
 
-        script = f"{self.examples_dir_str}/seq2seq/run_seq2seq.py"
         if distributed:
             n_gpu = get_gpu_count()
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
-                {script}
+                {self.examples_dir_str}/seq2seq/run_seq2seq.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
