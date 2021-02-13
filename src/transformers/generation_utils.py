@@ -1245,7 +1245,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
                 break
 
@@ -1451,7 +1451,7 @@ class GenerationMixin:
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
                 break
 
