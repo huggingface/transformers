@@ -551,7 +551,7 @@ class TFGenerationMixin:
                 # unfinished_sents is set to zero if eos in sentence
                 unfinished_sents -= is_sents_unfinished_and_token_to_add_is_eos
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if tf.math.reduce_max(unfinished_sents) == 0:
                 break
 
