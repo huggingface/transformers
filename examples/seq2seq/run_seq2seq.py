@@ -18,6 +18,7 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import re
@@ -38,6 +39,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
     HfArgumentParser,
     MBartTokenizer,
+    MBartTokenizerFast,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     default_data_collator,
@@ -51,6 +53,11 @@ with FileLock(".lock") as lock:
 
 
 logger = logging.getLogger(__name__)
+
+
+def save_json(content, path, indent=4, **json_dump_kwargs):
+    with open(path, "w") as f:
+        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 @dataclass
@@ -244,6 +251,22 @@ summarization_name_mapping = {
 }
 
 
+def handle_metrics(split, metrics, output_dir):
+    """
+    Log and save metrics
+
+    Args:
+    - split: one of train, val, test
+    - metrics: metrics dict
+    - output_dir: where to save the metrics
+    """
+
+    logger.info(f"***** {split} metrics *****")
+    for key in sorted(metrics.keys()):
+        logger.info(f"  {key} = {metrics[key]}")
+    save_json(metrics, os.path.join(output_dir, f"{split}_results.json"))
+
+
 def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
@@ -351,8 +374,15 @@ def main():
     )
 
     # Set decoder_start_token_id
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
-        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+        assert (
+            data_args.target_lang is not None and data_args.source_lang is not None
+        ), "mBart requires --target_lang and --source_lang"
+        if isinstance(tokenizer, MBartTokenizer):
+            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+        else:
+            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.target_lang)
+
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
@@ -561,13 +591,10 @@ def main():
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
+        metrics = train_result.metrics
+        metrics["train_n_objs"] = data_args.max_train_samples
         if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+            handle_metrics("train", metrics, training_args.output_dir)
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
@@ -577,16 +604,14 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        results = trainer.evaluate(max_length=data_args.val_max_target_length, num_beams=data_args.num_beams)
-        results = {k: round(v, 4) for k, v in results.items()}
+        metrics = trainer.evaluate(
+            max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="val"
+        )
+        metrics = {k: round(v, 4) for k, v in metrics.items()}
+        metrics["val_n_objs"] = data_args.max_val_samples
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_seq2seq.txt")
         if trainer.is_world_process_zero():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in sorted(results.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+            handle_metrics("val", metrics, training_args.output_dir)
 
     if training_args.do_predict:
         logger.info("*** Test ***")
@@ -597,16 +622,12 @@ def main():
             max_length=data_args.val_max_target_length,
             num_beams=data_args.num_beams,
         )
-        test_metrics = test_results.metrics
-        test_metrics["test_loss"] = round(test_metrics["test_loss"], 4)
+        metrics = test_results.metrics
+        metrics["test_n_objs"] = data_args.max_test_samples
+        metrics["test_loss"] = round(metrics["test_loss"], 4)
 
-        output_test_result_file = os.path.join(training_args.output_dir, "test_results_seq2seq.txt")
         if trainer.is_world_process_zero():
-            with open(output_test_result_file, "w") as writer:
-                logger.info("***** Test results *****")
-                for key, value in sorted(test_metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+            handle_metrics("test", metrics, training_args.output_dir)
 
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
