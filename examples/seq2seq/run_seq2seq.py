@@ -583,7 +583,10 @@ def main():
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
-        metrics["train_samples"] = min(data_args.max_train_samples, len(train_dataset))
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
         if trainer.is_world_process_zero():
             logger.info("***** train metrics *****")
             for key in sorted(metrics.keys()):
@@ -603,7 +606,8 @@ def main():
             max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="val"
         )
         metrics = {k: round(v, 4) for k, v in metrics.items()}
-        metrics["val_samples"] = min(data_args.max_val_samples, len(eval_dataset))
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["val_samples"] = min(max_val_samples, len(eval_dataset))
 
         if trainer.is_world_process_zero():
             logger.info("***** val metrics *****")
@@ -622,7 +626,8 @@ def main():
             num_beams=data_args.num_beams,
         )
         metrics = test_results.metrics
-        metrics["test_samples"] = min(data_args.max_test_samples, len(test_dataset))
+        max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
+        metrics["test_samples"] = min(max_test_samples, len(test_dataset))
         metrics = {k: round(v, 4) for k, v in metrics.items()}
 
         if trainer.is_world_process_zero():
