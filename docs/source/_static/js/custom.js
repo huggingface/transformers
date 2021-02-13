@@ -132,7 +132,7 @@ function addVersionControl() {
         versionIndex = parts.length - 1;
     }
     // Main classes and models are nested so we need to go deeper
-    else if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc") {
+    else if (parts[versionIndex] == "main_classes" || parts[versionIndex] == "model_doc" || parts[versionIndex] == "internal") {
         versionIndex = versionIndex - 1;
     } 
     const version = parts[versionIndex];
