@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch RoBERTa model. """
+"""PyTorch IBert model. """
 
 import math
 
@@ -56,7 +56,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "IBertConfig"
 _TOKENIZER_FOR_DOC = "IBertTokenizer"
 
-ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = [
+IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "kssteven/ibert-roberta-base",
     "kssteven/ibert-roberta-large",
     "kssteven/ibert-roberta-large-mnli",
@@ -68,7 +68,7 @@ class IBertEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
+    # Referred from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -165,7 +165,7 @@ class IBertEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Roberta
+# Referred from transformers.models.bert.modeling_bert.BertSelfAttention
 class IBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -259,7 +259,7 @@ class IBertSelfAttention(nn.Module):
             attention_scores_scaling_factor = None
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in RobertaModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in IBertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -296,7 +296,7 @@ class IBertSelfAttention(nn.Module):
         return outputs, output_scaling_factor
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput
+# Referred from transformers.models.bert.modeling_bert.BertSelfOutput
 class IBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -334,7 +334,7 @@ class IBertSelfOutput(nn.Module):
         return hidden_states, hidden_states_scaling_factor
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Roberta
+# Referred from transformers.models.bert.modeling_bert.BertAttention
 class IBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -392,7 +392,7 @@ class IBertAttention(nn.Module):
         return outputs, outputs_scaling_factor
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate
+# Referred from transformers.models.bert.modeling_bert.BertIntermediate
 class IBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -420,7 +420,7 @@ class IBertIntermediate(nn.Module):
         return hidden_states, hidden_states_scaling_factor
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput
+# Referred from transformers.models.bert.modeling_bert.BertOutput
 class IBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -457,7 +457,7 @@ class IBertOutput(nn.Module):
         return hidden_states, hidden_states_scaling_factor
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Roberta
+# Referred from transformers.models.bert.modeling_bert.BertLayer
 class IBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -527,7 +527,7 @@ class IBertLayer(nn.Module):
         return layer_output, layer_output_scaling_factor
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Roberta
+# Referred from transformers.models.bert.modeling_bert.BertEncoder
 class IBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -608,8 +608,8 @@ class IBertEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
-class RobertaPooler(nn.Module):
+# Referred from transformers.models.bert.modeling_bert.BertPooler
+class IBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         selg.quant_mode = config.quant_mode
@@ -634,7 +634,7 @@ class IBertPreTrainedModel(PreTrainedModel):
     config_class = IBertConfig
     base_model_prefix = "ibert"
 
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
+    # Referred from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -648,7 +648,7 @@ class IBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
-ROBERTA_START_DOCSTRING = r"""
+IBERT_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
@@ -659,18 +659,18 @@ ROBERTA_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.RobertaConfig`): Model configuration class with all the parameters of the
+        config (:class:`~transformers.IBertConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
-ROBERTA_INPUTS_DOCSTRING = r"""
+IBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.RobertaTokenizer`. See
+            Indices can be obtained using :class:`~transformers.IBertTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -717,8 +717,8 @@ ROBERTA_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
-    ROBERTA_START_DOCSTRING,
+    "The bare IBert Model transformer outputting raw hidden-states without any specific head on top.",
+    IBERT_START_DOCSTRING,
 )
 class IBertModel(IBertPreTrainedModel):
     """
@@ -739,7 +739,7 @@ class IBertModel(IBertPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Roberta
+    # Referred from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->IBert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -748,7 +748,7 @@ class IBertModel(IBertPreTrainedModel):
         self.embeddings = IBertEmbeddings(config)
         self.encoder = IBertEncoder(config)
 
-        self.pooler = RobertaPooler(config) if add_pooling_layer else None
+        self.pooler = IBertPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -766,14 +766,14 @@ class IBertModel(IBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint="ibert-roberta-base",
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
+    # Referred from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids=None,
@@ -900,7 +900,7 @@ class IBertModel(IBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning. """, ROBERTA_START_DOCSTRING
+    """IBert Model with a `language modeling` head on top for CLM fine-tuning. """, IBERT_START_DOCSTRING
 )
 class IBertForCausalLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
@@ -910,10 +910,10 @@ class IBertForCausalLM(IBertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `RobertaLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `IBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
-        self.lm_head = RobertaLMHead(config)
+        self.ibert = IBertModel(config, add_pooling_layer=False)
+        self.lm_head = IBertLMHead(config)
 
         self.init_weights()
 
@@ -923,7 +923,7 @@ class IBertForCausalLM(IBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -988,7 +988,7 @@ class IBertForCausalLM(IBertPreTrainedModel):
         if labels is not None:
             use_cache = False
 
-        outputs = self.roberta(
+        outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1047,7 +1047,7 @@ class IBertForCausalLM(IBertPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
+@add_start_docstrings("""IBert Model with a `language modeling` head on top. """, IBERT_START_DOCSTRING)
 class IBertForMaskedLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1057,12 +1057,12 @@ class IBertForMaskedLM(IBertPreTrainedModel):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `RobertaForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `IBertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
-        self.lm_head = RobertaLMHead(config)
+        self.ibert = IBertModel(config, add_pooling_layer=False)
+        self.lm_head = IBertLMHead(config)
 
         self.init_weights()
 
@@ -1072,10 +1072,10 @@ class IBertForMaskedLM(IBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint="ibert-roberta-base",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
@@ -1105,7 +1105,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.roberta(
+        outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1138,8 +1138,8 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         )
 
 
-class RobertaLMHead(nn.Module):
-    """Roberta Head for masked language modeling."""
+class IBertLMHead(nn.Module):
+    """IBert Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1165,10 +1165,10 @@ class RobertaLMHead(nn.Module):
 
 @add_start_docstrings(
     """
-    RoBERTa Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    IBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
     pooled output) e.g. for GLUE tasks.
     """,
-    ROBERTA_START_DOCSTRING,
+    IBERT_START_DOCSTRING,
 )
 class IBertForSequenceClassification(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1177,15 +1177,15 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = IBertModel(config, add_pooling_layer=False)
-        self.classifier = RobertaClassificationHead(config)
+        self.ibert = IBertModel(config, add_pooling_layer=False)
+        self.classifier = IBertClassificationHead(config)
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint="ibert-roberta-base",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1210,7 +1210,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.roberta(
+        outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1248,10 +1248,10 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Roberta Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    IBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
-    ROBERTA_START_DOCSTRING,
+    IBERT_START_DOCSTRING,
 )
 class IBertForMultipleChoice(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1259,16 +1259,16 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.roberta = RobertaModel(config)
+        self.ibert = IBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint="ibert-roberta-base",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1304,7 +1304,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             else None
         )
 
-        outputs = self.roberta(
+        outputs = self.ibert(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
@@ -1340,10 +1340,10 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Roberta Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    IBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
-    ROBERTA_START_DOCSTRING,
+    IBERT_START_DOCSTRING,
 )
 class IBertForTokenClassification(IBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1353,16 +1353,16 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
+        self.ibert = IBertModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint="ibert-roberta-base",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1386,7 +1386,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.roberta(
+        outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1429,7 +1429,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         )
 
 
-class RobertaClassificationHead(nn.Module):
+class IBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
@@ -1450,10 +1450,10 @@ class RobertaClassificationHead(nn.Module):
 
 @add_start_docstrings(
     """
-    Roberta Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    IBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    ROBERTA_START_DOCSTRING,
+    IBERT_START_DOCSTRING,
 )
 class IBertForQuestionAnswering(IBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1463,15 +1463,15 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.roberta = RobertaModel(config, add_pooling_layer=False)
+        self.ibert = IBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint="ibert-roberta-base",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1501,7 +1501,7 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.roberta(
+        outputs = self.ibert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
