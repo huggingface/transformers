@@ -123,7 +123,6 @@ from ..funnel.modeling_funnel import (
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 from ..ibert.modeling_ibert import (
-    IBertForCausalLM,
     IBertForMaskedLM,
     IBertForMultipleChoice,
     IBertForQuestionAnswering,
@@ -450,7 +449,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianForCausalLM),
         (BlenderbotConfig, BlenderbotForCausalLM),
         (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
-        (IBertConfig, IBertForCausalLM),
     ]
 )
 
