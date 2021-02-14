@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    big_bird,
     albert,
     auto,
     bart,
