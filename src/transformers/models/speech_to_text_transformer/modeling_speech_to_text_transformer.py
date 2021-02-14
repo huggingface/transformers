@@ -1326,7 +1326,7 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
         super().__init__(config)
         self.model = SpeechToTextTransformerModel(config)
         self.register_buffer("final_logits_bias", torch.zeros((1, self.config.d_model)))
-        self.lm_head = nn.Linear(config.d_model, self.config.d_model, bias=False)
+        self.lm_head = nn.Linear(config.d_model, self.config.vocab_size, bias=False)
 
         self.init_weights()
 
