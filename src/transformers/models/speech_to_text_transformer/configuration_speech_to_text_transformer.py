@@ -129,6 +129,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
+        share_embeds=False,
         **kwargs
     ):
         super().__init__(
@@ -167,6 +168,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
         self.conv_channels = conv_channels
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
+        self.share_embeds = share_embeds
         
     @property
     def num_attention_heads(self) -> int:

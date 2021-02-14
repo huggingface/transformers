@@ -213,7 +213,6 @@ class SpeechToTextTransformerSinusoidalPositionalEmbedding(nn.Module):
             position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
                 input_ids.device
             )
-            print(position_ids.shape)
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
@@ -522,6 +521,7 @@ class SpeechToTextTransformerDecoderLayer(nn.Module):
         cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -535,7 +535,6 @@ class SpeechToTextTransformerDecoderLayer(nn.Module):
             )
             hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
@@ -608,6 +607,15 @@ class SpeechToTextTransformerPreTrainedModel(PreTrainedModel):
             "input_ids": input_ids,
         }
         return dummy_inputs
+    
+    def get_encoder_attn_mask(self, attention_mask):
+        n_conv_layers = len(self.config.conv_kernel_sizes.split(","))
+        src_lengths = torch.tensor([torch.nonzero(t).shape[0] for t in attention_mask], device=attention_mask.device)
+        out = src_lengths.clone()
+        for _ in range(n_conv_layers):
+            out = ((out.float() - 1) / 2 + 1).floor().long()
+        mask = lengths_to_attn_mask(out)
+        return mask
 
 
 SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING = r"""
@@ -854,7 +862,7 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
         # src_lengths = torch.tensor([torch.nonzero(t).shape[0] for t in attention_mask], device=input_ids.device)
         
         if inputs_embeds is None:
-            inputs_embeds, input_lengths = self.subsample(input_ids, src_lengths)
+            inputs_embeds = self.subsample(input_ids, src_lengths)
             inputs_embeds = inputs_embeds.transpose(0, 1)
             inputs_embeds = self.embed_scale * inputs_embeds
         
@@ -1090,7 +1098,7 @@ class SpeechToTextTransformerDecoder(SpeechToTextTransformerPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids)
 
         hidden_states = inputs_embeds + positions
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1194,7 +1202,11 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        
+        if config.share_embeds:
+            self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        else:
+            self.shared = None
 
         self.encoder = SpeechToTextTransformerEncoder(config, self.shared)
         self.decoder = SpeechToTextTransformerDecoder(config, self.shared)
@@ -1215,14 +1227,6 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
     
-    def get_encoder_attn_mask(self, attention_mask):
-        n_conv_layers = len(self.config.conv_kernel_sizes.split(","))
-        src_lengths = torch.tensor([torch.nonzero(t).shape[0] for t in attention_mask], device=attention_mask.device)
-        out = src_lengths.clone()
-        for _ in range(n_conv_layers):
-            out = ((out.float() - 1) / 2 + 1).floor().long()
-        mask = lengths_to_attn_mask(out)
-
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1255,7 +1259,7 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        attention_mask = self.get_encoder_attn_mask(attention_mask)
+        ## attention_mask = self.get_encoder_attn_mask(attention_mask)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1277,10 +1281,10 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
+            input_ids=decoder_input_ids.long(),
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
+            encoder_attention_mask=None,
             head_mask=decoder_head_mask,
             encoder_head_mask=head_mask,
             past_key_values=past_key_values,
@@ -1321,8 +1325,8 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
     def __init__(self, config: SpeechToTextTransformerConfig):
         super().__init__(config)
         self.model = SpeechToTextTransformerModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
+        self.register_buffer("final_logits_bias", torch.zeros((1, self.config.d_model)))
+        self.lm_head = nn.Linear(config.d_model, self.config.d_model, bias=False)
 
         self.init_weights()
 
@@ -1421,7 +1425,7 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
+        lm_logits = self.lm_head(outputs[0])
 
         masked_lm_loss = None
         if labels is not None:
