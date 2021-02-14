@@ -99,8 +99,6 @@ class QuantAct(Module):
         Bitwidth for quantized activations.
     act_range_momentum : float, default 0.95
         Momentum for updating the activation quantization range.
-    running_stat : bool, default True
-        Whether to use running statistics for activation quantization range.
     per_channel : bool, default False
         Whether to use channel-wise quantization.
     channel_len : int, default None
@@ -111,7 +109,6 @@ class QuantAct(Module):
     def __init__(self,
                  activation_bit,
                  act_range_momentum=0.95,
-                 running_stat=True,
                  per_channel=False,
                  channel_len=None,
                  quant_mode=False):
@@ -119,7 +116,6 @@ class QuantAct(Module):
 
         self.activation_bit = activation_bit
         self.act_range_momentum = act_range_momentum
-        self.running_stat = running_stat
         self.quant_mode = quant_mode
         self.per_channel = per_channel
         self.percentile = False
@@ -141,17 +137,6 @@ class QuantAct(Module):
                "quant_mode: {2}, Act_min: {3:.2f}, " \
                "Act_max: {4:.2f})".format(self.__class__.__name__, self.activation_bit,
                                           self.quant_mode, self.x_min.item(), self.x_max.item())
-    def fix(self):
-        """
-        fix the activation range by setting running stat
-        """
-        self.running_stat = False
-        
-    def unfix(self):
-        """
-        unfix the activation range by setting running stat
-        """
-        self.running_stat = True
 
     def forward(self, x, 
                 pre_act_scaling_factor=None, 
@@ -160,9 +145,9 @@ class QuantAct(Module):
                 specified_min=None,
                 specified_max=None):
 
-        # collect runnng stats
         x_act = x if identity is None else identity + x
-        if self.running_stat:
+        # collect runnng stats if traiing
+        if self.training:
             assert not self.percentile, \
                     "percentile mode is not currently supported for activation."
             assert not self.per_channel, \
@@ -267,12 +252,6 @@ class QuantLinear(Module):
             self.bias = None
             self.bias_integer = None
 
-    def fix(self):
-        pass
-
-    def unfix(self):
-        pass
-
     def forward(self, x, prev_act_scaling_factor=None):
         """
         using quantized weights to forward activation x
@@ -344,12 +323,6 @@ class IntGELU(Module):
         self.coeff = [-0.2888, -1.769, 1] # a(x+b)**2 + c
         self.coeff[2] /= self.coeff[0]
 
-    def fix(self):
-        pass
-
-    def unfix(self):
-        pass
-
     def int_erf(self, x_int, scaling_factor):
         with torch.no_grad():
             b_int = torch.floor(self.coeff[1] / scaling_factor)
@@ -415,12 +388,6 @@ class IntSoftmax(Module):
         self.coef[1] /= self.coef[0]
         self.coef[2] /= self.coef[0]
 
-    def fix(self):
-        pass
-
-    def unfix(self):
-        pass
-
     def int_polynomial(self, x_int, scaling_factor):
         with torch.no_grad():
             b_int = torch.floor(self.coef[1] / scaling_factor)
@@ -470,8 +437,6 @@ class IntLayerNorm(Module):
     ----------
     output_bit : int
         Bitwidth for the LayerNorm output.
-    overflow_handling : bool, default True
-        Whether to do overflow handling if the intermediate values are larger than 32-bit.
     quant_mode : bool, default False
         The mode for quantization. True for quantization.
     force_dequant : str, default 'none'
@@ -479,7 +444,6 @@ class IntLayerNorm(Module):
     """
     def __init__(self,
                  output_bit,
-                 overflow_handling=True,
                  quant_mode=False,
                  force_dequant='none'):
         super(IntLayerNorm, self).__init__()
@@ -488,7 +452,6 @@ class IntLayerNorm(Module):
             logger.info("Force dequantize layernorm")
             self.quant_mode = False
 
-        self.overflow_handling = overflow_handling
         self.register_buffer('shift', torch.zeros(1))
         self.output_bit = output_bit
         self.max_bit = 32
@@ -499,12 +462,6 @@ class IntLayerNorm(Module):
             pass
         else:
             self.weight_function = SymmetricQuantFunction.apply
-
-    def fix(self):
-        self.overflow_handling = False
-
-    def unfix(self):
-        self.overflow_handling = True
 
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
@@ -557,7 +514,7 @@ class IntLayerNorm(Module):
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
         
         # overflow handling in training time
-        if self.overflow_handling:
+        if self.training:
             # if overflow is detected
             if var_int.max() >= 2 ** self.max_bit:
                 var_int = self.overflow_fallback(y_int)
