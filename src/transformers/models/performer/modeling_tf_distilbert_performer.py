@@ -652,7 +652,7 @@ class TFDistilBertPerformerForMaskedLM(TFDistilBertPerformerPreTrainedModel, TFM
         )
         self.act = get_tf_activation("gelu")
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
-        self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
+        self.vocab_projector = TFDistilBertPerformerLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
     def get_output_embeddings(self):
         return self.vocab_projector.input_embeddings
