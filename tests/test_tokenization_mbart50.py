@@ -62,9 +62,29 @@ class MBartTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
             tokens,
-            # fmt: off
-            [SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "9", "2", "0", "0", "0", ", ", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "é", "."],
-            # fmt: on
+            [
+                SPIECE_UNDERLINE + "I",
+                SPIECE_UNDERLINE + "was",
+                SPIECE_UNDERLINE + "b",
+                "or",
+                "n",
+                SPIECE_UNDERLINE + "in",
+                SPIECE_UNDERLINE + "",
+                "9",
+                "2",
+                "0",
+                "0",
+                "0",
+                ",",
+                SPIECE_UNDERLINE + "and",
+                SPIECE_UNDERLINE + "this",
+                SPIECE_UNDERLINE + "is",
+                SPIECE_UNDERLINE + "f",
+                "al",
+                "s",
+                "é",
+                ".",
+            ],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
