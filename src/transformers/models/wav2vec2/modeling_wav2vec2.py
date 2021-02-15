@@ -883,7 +883,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     no_overlap=self.config.no_mask_time_overlap,
                     min_space=self.config.mask_time_min_space,
                 )
-                hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed
+                hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
 
             if self.config.mask_channel_prob > 0:
                 mask_channel_indices = compute_mask_indices(
