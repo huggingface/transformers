@@ -333,6 +333,8 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
     test_head_masking = False
+    test_onnx = True
+    onnx_min_opset = 10
 
     def setUp(self):
         self.model_tester = TFGPT2ModelTester(self)
