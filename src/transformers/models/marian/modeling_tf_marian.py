@@ -138,7 +138,6 @@ class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         self.weight = self.add_weight(
             name="embeddings",
             shape=[self.num_positions, self.embedding_dim],
-            initializer=get_initializer(0.02),
         )
 
         self.weight.assign(weight)
