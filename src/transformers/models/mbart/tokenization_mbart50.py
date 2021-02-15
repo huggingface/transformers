@@ -283,7 +283,6 @@ class MBart50Tokenizer(PreTrainedTokenizer):
     ) -> BatchEncoding:
         self.src_lang = src_lang
         self.tgt_lang = tgt_lang
-        self.set_src_lang_special_tokens(self.src_lang)
         return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
     @contextmanager

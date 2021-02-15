@@ -10,14 +10,14 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-MBart
+MBart and MBart-50
 -----------------------------------------------------------------------------------------------------------------------
 
 **DISCLAIMER:** If you see something strange, file a `Github Issue
 <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`__ and assign
 @patrickvonplaten
 
-Overview
+Overview of MBart
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The MBart model was presented in `Multilingual Denoising Pre-training for Neural Machine Translation
@@ -31,16 +31,8 @@ on the encoder, decoder, or reconstructing parts of the text.
 
 The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/mbart>`__
 
-Examples
+Training of MBart
 _______________________________________________________________________________________________________________________
-
-- Examples and scripts for fine-tuning mBART and other models for sequence to sequence tasks can be found in
-  :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
-- Given the large embeddings table, mBART consumes a large amount of GPU RAM, especially for fine-tuning.
-  :class:`MarianMTModel` is usually a better choice for bilingual machine translation.
-
-Training
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 MBart is a multilingual encoder-decoder (seq-to-seq) model primarily intended for translation task. As the model is
 multilingual it expects the sequences in a different format. A special language id token is added in both the source
@@ -76,8 +68,8 @@ the sequences for sequence-to-sequence fine-tuning.
     assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"
 
 
-MBart-50
------------------------------------------------------------------------------------------------------------------------
+Overview of MBart-50
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 MBart-50 was introduced in the `Multilingual Translation with Extensible Multilingual Pretraining and Finetuning
 <https://arxiv.org/abs/2008.00401>` paper by Yuqing Tang, Chau Tran, Xian Li, Peng-Jen Chen, Naman Goyal, Vishrav
@@ -94,8 +86,8 @@ average 1 BLEU over the strongest baselines (being either multilingual from scra
 improving 9.3 BLEU on average over bilingual baselines from scratch.*
 
 
-Training
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Training of mBART-50
+_______________________________________________________________________________________________________________________
 
 The text format for mBART-50 is slightly different from mBART. For mBART-50 the language id token is used as a prefix
 for both source and target text i.e the text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is source
