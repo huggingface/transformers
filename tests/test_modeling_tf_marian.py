@@ -247,10 +247,6 @@ class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_mixed_precision(self):
-        # TODO JP: Make Marian float16 compliant
-        pass
-
     def test_xla_mode(self):
         # TODO JP: Make Marian XLA compliant
         pass
