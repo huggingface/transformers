@@ -71,12 +71,13 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
-    # "Verify that `labels` has only positive values and -100"
-    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+    if tf.executing_eagerly():
+        # "Verify that `labels` has only positive values and -100"
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
 
-    # Make sure the assertion op is called by wrapping the result in an identity no-op
-    with tf.control_dependencies([assert_gte0]):
-        shifted_input_ids = tf.identity(shifted_input_ids)
+        # Make sure the assertion op is called by wrapping the result in an identity no-op
+        with tf.control_dependencies([assert_gte0]):
+            shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 
@@ -248,43 +249,57 @@ class TFPegasusAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        tf.debugging.assert_equal(
-            shape_list(attn_weights),
-            [bsz * self.num_heads, tgt_len, src_len],
-            message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
-        )
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_weights),
+                [bsz * self.num_heads, tgt_len, src_len],
+                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+            )
 
         if attention_mask is not None:
-            tf.debugging.assert_equal(
-                shape_list(attention_mask),
-                [bsz, 1, tgt_len, src_len],
-                message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
-            )
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(attention_mask),
+                    [bsz, 1, tgt_len, src_len],
+                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                )
+
+            attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            tf.debugging.assert_equal(
-                shape_list(layer_head_mask),
-                [self.num_heads],
-                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
-            )
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(layer_head_mask),
+                    [self.num_heads],
+                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                )
+
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
             )
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_probs = self.dropout(attn_weights, training=training)
-
         attn_output = tf.matmul(attn_probs, value_states)
 
-        tf.debugging.assert_equal(
-            shape_list(attn_output),
-            [bsz * self.num_heads, tgt_len, self.head_dim],
-            message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
-        )
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_output),
+                [bsz * self.num_heads, tgt_len, self.head_dim],
+                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+            )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -327,11 +342,16 @@ class TFPegasusEncoderLayer(tf.keras.layers.Layer):
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
-        tf.debugging.assert_equal(
-            shape_list(hidden_states),
-            shape_list(residual),
-            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-        )
+
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(hidden_states),
+                shape_list(residual),
+                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+            )
+
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
@@ -750,12 +770,15 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
         all_attentions = () if inputs["output_attentions"] else None
 
         # check if head_mask has a correct number of layers specified if desired
-        if inputs["head_mask"] is not None:
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if inputs["head_mask"] is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(inputs["head_mask"])[0],
                 len(self.layers),
                 message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
             )
+
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
 
@@ -972,12 +995,15 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         present_key_values = ()
 
         # check if head_mask has a correct number of layers specified if desired
-        if inputs["head_mask"] is not None:
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if inputs["head_mask"] is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(inputs["head_mask"])[0],
                 len(self.layers),
                 message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
             )
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
