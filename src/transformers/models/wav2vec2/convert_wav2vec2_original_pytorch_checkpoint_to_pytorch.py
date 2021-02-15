@@ -40,6 +40,7 @@ MAPPING = {
     "encoder.layer_norm": "encoder.layer_norm",
     "w2v_model.layer_norm": "feature_projection.layer_norm",
     "w2v_encoder.proj": "lm_head",
+    "mask_emb": "masked_spec_embed",
 }
 
 
@@ -47,7 +48,11 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
     for attribute in key.split("."):
         hf_pointer = getattr(hf_pointer, attribute)
 
-    hf_shape = getattr(hf_pointer, weight_type).shape
+    if weight_type is not None:
+        hf_shape = getattr(hf_pointer, weight_type).shape
+    else:
+        hf_shape = hf_pointer.shape
+
     assert (
         hf_shape == value.shape
     ), f"Shape of hf {key + '.' + weight_type} is {hf_shape}, but should be {value.shape} for {full_name}"
@@ -59,7 +64,10 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
         hf_pointer.weight_v.data = value
     elif weight_type == "bias":
         hf_pointer.bias.data = value
-    logger.info(f"{key + '.' + weight_type} was initialized from {full_name}.")
+    else:
+        hf_pointer.data = value
+
+    logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
 
 def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
@@ -95,6 +103,8 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
                         weight_type = "weight"
                     elif "bias" in name:
                         weight_type = "bias"
+                    else:
+                        weight_type = None
                     set_recursively(hf_model, mapped_key, value, name, weight_type)
                 continue
         if not is_used:
