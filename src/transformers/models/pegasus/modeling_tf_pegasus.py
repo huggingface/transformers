@@ -118,9 +118,7 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
-        super().__init__(
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
