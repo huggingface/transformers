@@ -1,7 +1,9 @@
+import fairseq
 import torch
 from torch import nn
-import fairseq
+
 from transformers import SpeechToTextTransformerConfig, SpeechToTextTransformerForConditionalGeneration
+
 
 def remove_ignore_keys_(state_dict):
     ignore_keys = [
@@ -17,11 +19,13 @@ def remove_ignore_keys_(state_dict):
     for k in ignore_keys:
         state_dict.pop(k, None)
 
+
 def rename_keys(s_dict):
     keys = list(s_dict.keys())
     for key in keys:
         if "transformer_layers" in key:
             s_dict[key.replace("transformer_layers", "layers")] = s_dict.pop(key)
+
 
 def make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
