@@ -279,7 +279,7 @@ class DebertaV2ModelIntegrationTest(unittest.TestCase):
         np.random.seed(0)
         torch.manual_seed(0)
         torch.cuda.manual_seed_all(0)
-        model = DebertaV2Model.from_pretrained("microsoft/deberta-xlarge-v2")
+        model = DebertaV2Model.from_pretrained("microsoft/deberta-v2-xlarge")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         output = model(input_ids)[0]
