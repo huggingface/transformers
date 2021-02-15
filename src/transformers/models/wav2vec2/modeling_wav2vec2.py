@@ -606,7 +606,7 @@ class Wav2Vec2Encoder(nn.Module):
 
             dropout_probability = np.random.uniform(0, 1)
             if self.training and (dropout_probability < self.config.layerdrop):
-                hidden_states, attn_weights = None, None
+                attn_weights = None
             else:
                 hidden_states, attn_weights = layer(
                     hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
@@ -795,8 +795,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         self.feature_extractor = Wav2Vec2FeatureExtractor(config)
         self.feature_projection = Wav2Vec2FeatureProjection(config)
 
-        # question is this trained
-        self.mask_time_emb_vector = nn.Parameter(torch.FloatTensor(config.conv_dim[-1]).uniform_())
+        self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
 
         if config.do_stable_layer_norm:
             self.encoder = Wav2Vec2EncoderStableLayerNorm(config)
@@ -884,7 +883,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     no_overlap=self.config.no_mask_time_overlap,
                     min_space=self.config.mask_time_min_space,
                 )
-                hidden_states[torch.from_numpy(mask_time_indices)] = self.mask_time_emb_vector
+                hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed
 
             if self.config.mask_channel_prob > 0:
                 mask_channel_indices = compute_mask_indices(

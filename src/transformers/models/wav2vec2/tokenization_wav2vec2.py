@@ -131,7 +131,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         word_delimiter_token="|",
         do_lower_case=False,
-        do_normalize=False,
+        do_normalize=True,
         return_attention_mask=False,
         **kwargs
     ):

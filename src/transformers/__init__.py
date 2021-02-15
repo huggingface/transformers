@@ -332,6 +332,7 @@ if is_torch_available():
         "DataCollatorForTokenClassification",
         "DataCollatorForWholeWordMask",
         "DataCollatorWithPadding",
+        "DataCollatorCTCWithPadding",
         "default_data_collator",
     ]
     _import_structure["data.datasets"] = [
@@ -1447,6 +1448,7 @@ if TYPE_CHECKING:
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
         from .data.data_collator import (
             DataCollator,
+            DataCollatorCTCWithPadding,
             DataCollatorForLanguageModeling,
             DataCollatorForPermutationLanguageModeling,
             DataCollatorForSeq2Seq,
