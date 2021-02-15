@@ -73,9 +73,9 @@ Overview of MBart-50
 
 MBart-50 was introduced in the `Multilingual Translation with Extensible Multilingual Pretraining and Finetuning
 <https://arxiv.org/abs/2008.00401>` paper by Yuqing Tang, Chau Tran, Xian Li, Peng-Jen Chen, Naman Goyal, Vishrav
-Chaudhary, Jiatao Gu, Angela Fan. mBART-50 is created using the original `mbart-large-cc25` checkpoint by extendeding
-its embedding layers with randomly initialized vectors for an extra set of 25 language tokens and then pre-trained on
-50 languages.
+Chaudhary, Jiatao Gu, Angela Fan. MBart-50 is created using the original `mbart-large-cc25` checkpoint by extendeding
+its embedding layers with randomly initialized vectors for an extra set of 25 language tokens and then pretrained on 50
+languages.
 
 According to the abstract
 
@@ -86,16 +86,16 @@ average 1 BLEU over the strongest baselines (being either multilingual from scra
 improving 9.3 BLEU on average over bilingual baselines from scratch.*
 
 
-Training of mBART-50
+Training of MBart-50
 _______________________________________________________________________________________________________________________
 
-The text format for mBART-50 is slightly different from mBART. For mBART-50 the language id token is used as a prefix
+The text format for MBart-50 is slightly different from mBART. For MBart-50 the language id token is used as a prefix
 for both source and target text i.e the text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is source
 language id for source text and target language id for target text, with :obj:`X` being the source or target text
 respectively.
 
 
-mBART-50 has its own tokenizer :class:`~transformers.MBart50Tokenizer`.
+MBart-50 has its own tokenizer :class:`~transformers.MBart50Tokenizer`.
 
 -  Supervised training
 
