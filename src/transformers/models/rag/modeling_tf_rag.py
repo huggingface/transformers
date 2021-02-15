@@ -924,9 +924,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             If :obj:`True`, the logits are marginalized over all documents by making use of
             ``torch.nn.functional.log_softmax``.
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss according to Rag-Token model formulation
-            See https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Token formulation.
-            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+            Labels for computing the cross entropy classification loss according to Rag-Token model formulation See
+            https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Token formulation. Indices should be
+            in ``[0, ..., config.vocab_size - 1]``.
         reduce_loss (:obj:`bool`, `optional`):
             Only relevant if ``labels`` is passed. If :obj:`True`, the NLL loss is reduced using the ``tf.Tensor.sum``
             operation.
@@ -1957,9 +1957,9 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             Only relevant if ``labels`` is passed. If :obj:`True`, the score of the BOS token is disregarded when
             computing the loss.
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the cross entropy classification loss according to Rag-Sequence model formulation
-            See https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Sequence formulation.
-            Indices should be in ``[0, ..., config.vocab_size - 1]``.
+            Labels for computing the cross entropy classification loss according to Rag-Sequence model formulation See
+            https://arxiv.org/pdf/2005.11401.pdf Section 2.1 for details about Rag-Sequence formulation. Indices should
+            be in ``[0, ..., config.vocab_size - 1]``.
         reduce_loss (:obj:`bool`, `optional`):
             Only relevant if ``labels`` is passed. If :obj:`True`, the NLL loss is reduced using the ``tf.Tensor.sum``
             operation.

@@ -64,6 +64,11 @@ class TFRagTestMixin:
         if is_tf_available() and is_datasets_available() and is_faiss_available()
         else ()
     )
+    all_generative_model_classes = (
+        (TFRagTokenForGeneration, TFRagSequenceForGeneration)
+        if is_tf_available() and is_datasets_available() and is_faiss_available()
+        else ()
+    )
 
     retrieval_vector_size = 32
     n_docs = 3
@@ -206,9 +211,7 @@ class TFRagTestMixin:
 
         retriever = self.get_retriever(config)
 
-        for i, model_class in enumerate(self.all_model_classes):
-            if i == 0:
-                continue  # TFRagModel does not have generate function
+        for i, model_class in enumerate(self.all_generative_model_classes):
             model = model_class(config)
             self.assertTrue(model.config.is_encoder_decoder)
 
@@ -248,7 +251,7 @@ class TFRagTestMixin:
         self.assertIsNotNone(config.question_encoder)
         self.assertIsNotNone(config.generator)
 
-        for model_class in self.all_model_classes[1:]:
+        for model_class in self.all_generative_model_classes:
             model = model_class(config, retriever=self.get_retriever(config))
 
             self.assertTrue(model.config.is_encoder_decoder)
