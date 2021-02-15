@@ -91,7 +91,7 @@ class BigBirdConfig(PretrainedConfig):
     model_type = "big_bird"
     def __init__(
         self,
-        vocab_size=30522,
+        vocab_size=50358,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -99,7 +99,7 @@ class BigBirdConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
+        max_position_embeddings=4096,
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
@@ -108,6 +108,12 @@ class BigBirdConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        attention_type="block_sparse",
+        use_bias=True,
+        rescale_embedding=False,
+        norm_type="postnorm",
+        block_size=64,
+        num_random_blocks=3,
         **kwargs
     ):
         super().__init__(
@@ -130,4 +136,14 @@ class BigBirdConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        
+        self.is_encoder_decoder = is_encoder_decoder
+
+        self.attention_type = attention_type
+        self.use_bias = use_bias
+        self.rescale_embedding = rescale_embedding
+        self.norm_type = norm_type
+        self.block_size = block_size
+        self.num_random_blocks = num_random_blocks
+
+        # TODO: update config-docs
+        # TODO: check tie_embeddings in config

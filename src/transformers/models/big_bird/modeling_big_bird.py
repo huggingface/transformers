@@ -63,7 +63,7 @@ BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_big_bird(model, config, tf_checkpoint_path):
+def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
         import re
@@ -112,6 +112,12 @@ def load_tf_weights_in_big_bird(model, config, tf_checkpoint_path):
                 pointer = getattr(pointer, "weight")
             elif scope_names[0] == "squad":
                 pointer = getattr(pointer, "classifier")
+            elif scope_names[0] == "transform":
+                pointer = getattr(pointer, "transform")
+                if ("bias" in name) or ("kernel" in name):
+                    pointer = getattr(pointer, "dense")
+                elif ("beta" in name) or ("gamma" in name):
+                    pointer = getattr(pointer, "LayerNorm")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
@@ -152,12 +158,12 @@ class BigBirdEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)    # TODO: extra
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))    # TODO: extra
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")    # TODO: extra
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -209,7 +215,7 @@ class BigBirdSelfAttention(nn.Module):
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size) # TODO: check it 
 
         self.is_decoder = config.is_decoder
 
@@ -494,6 +500,8 @@ class BigBirdEncoder(nn.Module):
         self.config = config
         self.layer = nn.ModuleList([BigBirdLayer(config) for _ in range(config.num_hidden_layers)])
 
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
     def forward(
         self,
         hidden_states,
@@ -609,12 +617,12 @@ class BigBirdLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False) # TODO: check this later
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
+        self.decoder.bias = self.bias # TODO: check this later
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -626,9 +634,11 @@ class BigBirdOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.predictions = BigBirdLMPredictionHead(config)
+        self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
+        # self.seq_relationship
         return prediction_scores
 
 
@@ -744,6 +754,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         self.embeddings = BigBirdEmbeddings(config)
         self.encoder = BigBirdEncoder(config)
+
+        self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
 
         self.init_weights()
 
@@ -903,10 +915,13 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.big_bird = BigBirdModel(config)
+        self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)
 
         self.init_weights()
+
+    def get_input_embeddings(self):
+        return self.bert.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
