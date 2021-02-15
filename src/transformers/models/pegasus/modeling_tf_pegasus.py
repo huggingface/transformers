@@ -42,7 +42,8 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    TFWrappedEmbeddings, get_initializer,
+    TFWrappedEmbeddings,
+    get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
@@ -117,11 +118,13 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
-        super().__init__(**kwargs,)
+        super().__init__(
+            **kwargs,
+        )
 
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        
+
         self.embedding_dim = embedding_dim
         self.num_positions = num_positions
 
@@ -130,7 +133,7 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         Build shared token embedding layer Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
-        
+
         weight = self._init_weight(self.num_positions, self.embedding_dim)
 
         self.weight = self.add_weight(
@@ -140,7 +143,6 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         )
 
         self.weight.assign(weight)
-        
 
         super().build(input_shape)
 
