@@ -181,6 +181,7 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFMBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFMBartModelTester(self)
@@ -219,6 +220,10 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make MBart float16 compliant
+        pass
+
+    def test_xla_mode(self):
+        # TODO JP: Make MBart XLA compliant
         pass
 
     def test_resize_token_embeddings(self):

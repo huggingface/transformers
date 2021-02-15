@@ -131,6 +131,10 @@ def default_compute_objective(metrics: Dict[str, float]) -> float:
     metrics = copy.deepcopy(metrics)
     loss = metrics.pop("eval_loss", None)
     _ = metrics.pop("epoch", None)
+    # Remove speed metrics
+    speed_metrics = [m for m in metrics.keys() if m.endswith("_runtime") or m.endswith("_samples_per_second")]
+    for sm in speed_metrics:
+        _ = metrics.pop(sm, None)
     return loss if len(metrics) == 0 else sum(metrics.values())
 
 

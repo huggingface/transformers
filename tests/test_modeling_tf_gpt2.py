@@ -333,6 +333,8 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
     test_head_masking = False
+    test_onnx = True
+    onnx_min_opset = 10
 
     def setUp(self):
         self.model_tester = TFGPT2ModelTester(self)
@@ -389,6 +391,10 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make GPT2 float16 compliant
+        pass
+
+    def test_xla_mode(self):
+        # TODO JP: Make GPT2 XLA compliant
         pass
 
     @slow

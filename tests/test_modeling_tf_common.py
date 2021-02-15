@@ -16,6 +16,7 @@
 
 import copy
 import inspect
+import json
 import os
 import random
 import tempfile
@@ -24,7 +25,7 @@ from importlib import import_module
 from typing import List, Tuple
 
 from transformers import is_tf_available
-from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_onnx, require_tf, slow
 
 
 if is_tf_available():
@@ -141,6 +142,19 @@ class TFModelTesterMixin:
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
 
+    def test_xla_mode(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            @tf.function(experimental_compile=True)
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -187,6 +201,67 @@ class TFModelTesterMixin:
             model.save_pretrained(tmpdirname, saved_model=True)
             saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
+
+    def test_onnx_compliancy(self):
+        if not self.test_onnx:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        INTERNAL_OPS = [
+            "Assert",
+            "AssignVariableOp",
+            "EmptyTensorList",
+            "ReadVariableOp",
+            "ResourceGather",
+            "TruncatedNormal",
+            "VarHandleOp",
+            "VarIsInitializedOp",
+        ]
+        onnx_ops = []
+
+        with open(os.path.join(".", "utils", "tf_ops", "onnx.json")) as f:
+            onnx_opsets = json.load(f)["opsets"]
+
+        for i in range(1, self.onnx_min_opset + 1):
+            onnx_ops.extend(onnx_opsets[str(i)])
+
+        for model_class in self.all_model_classes:
+            model_op_names = set()
+
+            with tf.Graph().as_default() as g:
+                model = model_class(config)
+                model(model.dummy_inputs)
+
+                for op in g.get_operations():
+                    model_op_names.add(op.node_def.op)
+
+            model_op_names = sorted(model_op_names)
+            incompatible_ops = []
+
+            for op in model_op_names:
+                if op not in onnx_ops and op not in INTERNAL_OPS:
+                    incompatible_ops.append(op)
+
+            self.assertEqual(len(incompatible_ops), 0, incompatible_ops)
+
+    @require_onnx
+    @slow
+    def test_onnx_runtime_optimize(self):
+        if not self.test_onnx:
+            return
+
+        import keras2onnx
+        import onnxruntime
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model(model.dummy_inputs)
+
+            onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
+
+            onnxruntime.InferenceSession(onnx_model.SerializeToString())
 
     @slow
     def test_saved_model_creation_extended(self):
@@ -853,7 +928,8 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
 
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+            inputs = copy.deepcopy(inputs_dict)
+
             if not self.is_encoder_decoder:
                 input_ids = inputs["input_ids"]
                 del inputs["input_ids"]
@@ -869,7 +945,41 @@ class TFModelTesterMixin:
                 inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
                 inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
 
+            inputs = self._prepare_for_class(inputs, model_class)
+
             model(inputs)
+
+    def test_graph_mode_with_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+
+            inputs = copy.deepcopy(inputs_dict)
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            if not self.is_encoder_decoder:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(input_ids)
+            else:
+                inputs["inputs_embeds"] = model.get_input_embeddings()(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = model.get_input_embeddings()(decoder_input_ids)
+
+            inputs = self._prepare_for_class(inputs, model_class)
+
+            @tf.function
+            def run_in_graph_mode():
+                return model(inputs)
+
+            outputs = run_in_graph_mode()
+            self.assertIsNotNone(outputs)
 
     def test_numpy_arrays_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

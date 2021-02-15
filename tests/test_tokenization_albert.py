@@ -18,7 +18,7 @@ import os
 import unittest
 
 from transformers import AlbertTokenizer, AlbertTokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_tokenizers
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -102,3 +102,50 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert encoded_pair == [tokenizer.cls_token_id] + text + [tokenizer.sep_token_id] + text_2 + [
             tokenizer.sep_token_id
         ]
+
+    @slow
+    def test_tokenizer_integration(self):
+        tokenizer_classes = [self.tokenizer_class]
+        if self.test_rust_tokenizer:
+            tokenizer_classes.append(self.rust_tokenizer_class)
+
+        for tokenizer_class in tokenizer_classes:
+            tokenizer = tokenizer_class.from_pretrained("albert-base-v2")
+
+            sequences = [
+                "ALBERT: A Lite BERT for Self-supervised Learning of Language Representations",
+                "ALBERT incorporates two parameter reduction techniques",
+                "The first one is a factorized embedding parameterization. By decomposing the large vocabulary embedding matrix into two small matrices, we separate the size of the hidden layers from the size of vocabulary embedding.",  # noqa: E231
+            ]
+
+            encoding = tokenizer(sequences, padding=True)
+            decoded_sequences = [tokenizer.decode(seq, skip_special_tokens=True) for seq in encoding["input_ids"]]
+
+            # fmt: off
+            expected_encoding = {
+                'input_ids': [
+                    [2, 2953, 45, 21, 13, 10601, 11502, 26, 1119, 8, 8542, 3762, 69, 2477, 16, 816, 18667, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # noqa: E231
+                    [2, 2953, 13760, 81, 18906, 5895, 4212, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # noqa: E231
+                    [2, 14, 64, 53, 25, 21, 3932, 1333, 11911, 69, 3258, 18906, 1829, 9, 34, 121, 960, 14717, 14, 370, 18630, 11911, 69, 3258, 8187, 77, 81, 284, 24849, 15, 95, 1725, 14, 1072, 16, 14, 3689, 9124, 37, 14, 1072, 16, 18630, 11911, 69, 3258, 9, 3]],  # noqa: E231
+                'token_type_ids': [
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # noqa: E231
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # noqa: E231
+                    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],  # noqa: E231
+                'attention_mask': [
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # noqa: E231
+                    [1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # noqa: E231
+                    [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # noqa: E231
+                ]
+            }
+
+            expected_decoded_sequence = [
+                "albert: a lite bert for self-supervised learning of language representations",
+                'albert incorporates two parameter reduction techniques',
+                'the first one is a factorized embedding parameterization. by decomposing the large vocabulary embedding matrix into two small matrices, we separate the size of the hidden layers from the size of vocabulary embedding.'  # noqa: E231
+            ]
+            # fmt: on
+
+            self.assertDictEqual(encoding.data, expected_encoding)
+
+            for expected, decoded in zip(expected_decoded_sequence, decoded_sequences):
+                self.assertEqual(expected, decoded)

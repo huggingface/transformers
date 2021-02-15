@@ -486,15 +486,17 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
             (a) For sequence pairs (for a pair title+text for example):
 
-                ``tokens: [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]``
+            ::
 
-                ``token_type_ids: 0 0 0 0 0 0 0 0 1 1 1 1 1 1``
+                tokens:         [CLS] is this jack ##son ##ville ? [SEP] no it is not . [SEP]
+                token_type_ids:   0   0  0    0    0     0       0   0   1  1  1  1   1   1
 
             (b) For single sequences (for a question for example):
 
-                ``tokens: [CLS] the dog is hairy . [SEP]``
+            ::
 
-                ``token_type_ids: 0 0 0 0 0 0 0``
+                tokens:         [CLS] the dog is hairy . [SEP]
+                token_type_ids:   0   0   0   0  0     0   0
 
             DPR is a model with absolute position embeddings so it's usually advised to pad the inputs on the right
             rather than the left.
@@ -502,6 +504,8 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
             Indices can be obtained using :class:`~transformers.DPRTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 

@@ -36,7 +36,8 @@ def find_code_in_transformers(object_name):
     module = parts[i]
     while i < len(parts) and not os.path.isfile(os.path.join(TRANSFORMERS_PATH, f"{module}.py")):
         i += 1
-        module = os.path.join(module, parts[i])
+        if i < len(parts):
+            module = os.path.join(module, parts[i])
     if i >= len(parts):
         raise ValueError(
             f"`object_name` should begin with the name of a module of transformers but got {object_name}."
@@ -49,7 +50,9 @@ def find_code_in_transformers(object_name):
     indent = ""
     line_index = 0
     for name in parts[i + 1 :]:
-        while line_index < len(lines) and re.search(fr"^{indent}(class|def)\s+{name}", lines[line_index]) is None:
+        while (
+            line_index < len(lines) and re.search(fr"^{indent}(class|def)\s+{name}(\(|\:)", lines[line_index]) is None
+        ):
             line_index += 1
         indent += "    "
         line_index += 1

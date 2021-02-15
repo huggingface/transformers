@@ -292,6 +292,7 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
         (TFFlaubertWithLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFFlaubertModelTester(self)
@@ -332,6 +333,10 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make Flaubert float16 compliant
+        pass
+
+    def test_xla_mode(self):
+        # TODO JP: Make Flaubert XLA compliant
         pass
 
 

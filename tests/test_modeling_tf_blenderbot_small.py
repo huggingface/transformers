@@ -179,6 +179,7 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFBlenderbotSmallForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFBlenderbotSmallModelTester(self)
@@ -280,6 +281,10 @@ class TFBlenderbotSmallModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_mixed_precision(self):
         # TODO JP: Make Blenderbot Small float16 compliant
+        pass
+
+    def test_xla_mode(self):
+        # TODO JP: Make Blenderbot Small XLA compliant
         pass
 
 
