@@ -36,12 +36,11 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_ibert"] = [
         "IBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        #"IBertForCausalLM",
-        #"IBertForMaskedLM",
-        #"IBertForMultipleChoice",
-        #"IBertForQuestionAnswering",
+        "IBertForMaskedLM",
+        "IBertForMultipleChoice",
+        "IBertForQuestionAnswering",
         "IBertForSequenceClassification",
-        #"IBertForTokenClassification",
+        "IBertForTokenClassification",
         "IBertModel",
     ]
 
@@ -55,12 +54,11 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_ibert import (
             IBERT_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            #IBertForCausalLM,
-            #IBertForMaskedLM,
-            #IBertForMultipleChoice,
-            #IBertForQuestionAnswering,
+            IBertForMaskedLM,
+            IBertForMultipleChoice,
+            IBertForQuestionAnswering,
             IBertForSequenceClassification,
-            #IBertForTokenClassification,
+            IBertForTokenClassification,
             IBertModel,
         )
 
