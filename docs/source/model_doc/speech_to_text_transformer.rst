@@ -62,26 +62,3 @@ SpeechToTextTransformerForConditionalGeneration
 
 .. autoclass:: transformers.SpeechToTextTransformerForConditionalGeneration
     :members: forward
-
-
-SpeechToTextTransformerForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.SpeechToTextTransformerForSequenceClassification
-    :members: forward
-
-
-SpeechToTextTransformerForQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.SpeechToTextTransformerForQuestionAnswering
-    :members: forward
-
-
-SpeechToTextTransformerForCausalLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.SpeechToTextTransformerForCausalLM
-    :members: forward
-
-

@@ -25,9 +25,6 @@ from ...utils import logging
 # Add modeling imports here
 from ..speech_to_text_transformer.modeling_speech_to_text_transformer import (
     SpeechToTextTransformerForConditionalGeneration,
-    SpeechToTextTransformerForCausalLM,
-    SpeechToTextTransformerForQuestionAnswering,
-    SpeechToTextTransformerForSequenceClassification,
     SpeechToTextTransformerModel,
 )
 from ..albert.modeling_albert import (
@@ -77,9 +74,6 @@ from ..camembert.modeling_camembert import (
 # Add modeling imports here
 from ..speech_to_text_transformer.modeling_speech_to_text_transformer import (
     SpeechToTextTransformerForConditionalGeneration,
-    SpeechToTextTransformerForCausalLM,
-    SpeechToTextTransformerForQuestionAnswering,
-    SpeechToTextTransformerForSequenceClassification,
     SpeechToTextTransformerModel,
 )
 from ..convbert.modeling_convbert import (
@@ -458,7 +452,6 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-        (SpeechToTextTransformerConfig, SpeechToTextTransformerForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
@@ -540,7 +533,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-        (SpeechToTextTransformerConfig, SpeechToTextTransformerForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
@@ -576,7 +568,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-        (SpeechToTextTransformerConfig, SpeechToTextTransformerForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),

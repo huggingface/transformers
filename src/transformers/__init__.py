@@ -382,10 +382,7 @@ if is_torch_available():
     _import_structure["models.speech_to_text_transformer"].extend(
         [
             "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SpeechToTextTransformerForCausalLM",
             "SpeechToTextTransformerForConditionalGeneration",
-            "SpeechToTextTransformerForQuestionAnswering",
-            "SpeechToTextTransformerForSequenceClassification",
             "SpeechToTextTransformerModel",
         ]
     )
@@ -1526,9 +1523,6 @@ if TYPE_CHECKING:
         from .models.speech_to_text_transformer import (
             SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             SpeechToTextTransformerForConditionalGeneration,
-            SpeechToTextTransformerForCausalLM,
-            SpeechToTextTransformerForQuestionAnswering,
-            SpeechToTextTransformerForSequenceClassification,
             SpeechToTextTransformerModel,
         )
 

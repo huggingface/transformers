@@ -34,9 +34,6 @@ if is_torch_available():
     from transformers import (
         SpeechToTextTransformerConfig,
         SpeechToTextTransformerForConditionalGeneration,
-        SpeechToTextTransformerForQuestionAnswering,
-        SpeechToTextTransformerForCausalLM,
-        SpeechToTextTransformerForSequenceClassification,
         SpeechToTextTransformerModel,
         SpeechToTextTransformerTokenizer,
     )
@@ -204,7 +201,7 @@ class SpeechToTextTransformerModelTester:
 @require_torch
 class SpeechToTextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (SpeechToTextTransformerModel, SpeechToTextTransformerForConditionalGeneration, SpeechToTextTransformerForSequenceClassification, SpeechToTextTransformerForQuestionAnswering)
+        (SpeechToTextTransformerModel, SpeechToTextTransformerForConditionalGeneration)
         if is_torch_available()
         else ()
     )
@@ -239,11 +236,10 @@ class SpeechToTextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, 
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # SpeechToTextTransformerForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (SpeechToTextTransformerModel, SpeechToTextTransformerForConditionalGeneration, SpeechToTextTransformerForQuestionAnswering):
+        for model_class in (SpeechToTextTransformerModel, SpeechToTextTransformerForConditionalGeneration):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -573,31 +569,3 @@ class SpeechToTextTransformerStandaloneDecoderModelTester:
         }
         return config, inputs_dict
 
-
-@require_torch
-class SpeechToTextTransformerStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (SpeechToTextTransformerDecoder, SpeechToTextTransformerForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (SpeechToTextTransformerForCausalLM,) if is_torch_available() else ()
-    test_pruning = False
-    is_encoder_decoder = False
-
-    def setUp(
-        self,
-    ):
-        self.model_tester = SpeechToTextTransformerStandaloneDecoderModelTester(self, is_training=False)
-        self.config_tester = ConfigTester(self, config_class=SpeechToTextTransformerConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_decoder_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
-
-    def test_decoder_model_attn_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
-        return
