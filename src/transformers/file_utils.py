@@ -144,7 +144,21 @@ try:
     _faiss_version = importlib_metadata.version("faiss")
     logger.debug(f"Successfully imported faiss version {_faiss_version}")
 except importlib_metadata.PackageNotFoundError:
-    _faiss_available = False
+    try:
+        _faiss_version = importlib_metadata.version("faiss-cpu")
+        logger.debug(f"Successfully imported faiss version {_faiss_version}")
+    except importlib_metadata.PackageNotFoundError:
+        _faiss_available = False
+
+
+_onnx_available = (
+    importlib.util.find_spec("keras2onnx") is not None and importlib.util.find_spec("onnxruntime") is not None
+)
+try:
+    _onxx_version = importlib_metadata.version("onnx")
+    logger.debug(f"Successfully imported onnx version {_onxx_version}")
+except importlib_metadata.PackageNotFoundError:
+    _onnx_available = False
 
 
 _scatter_available = importlib.util.find_spec("torch_scatter") is not None
@@ -224,6 +238,10 @@ def is_torch_available():
 
 def is_tf_available():
     return _tf_available
+
+
+def is_onnx_available():
+    return _onnx_available
 
 
 def is_flax_available():

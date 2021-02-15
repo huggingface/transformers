@@ -28,6 +28,7 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_onnx_available,
     is_pandas_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -156,6 +157,13 @@ def require_git_lfs(test_case):
     """
     if not _run_git_lfs_tests:
         return unittest.skip("test of git lfs workflow")(test_case)
+    else:
+        return test_case
+
+
+def require_onnx(test_case):
+    if not is_onnx_available():
+        return unittest.skip("test requires ONNX")(test_case)
     else:
         return test_case
 

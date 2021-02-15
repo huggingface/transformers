@@ -298,6 +298,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         else ()
     )
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFLongformerModelTester(self)
@@ -340,15 +341,8 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_saved_model_with_attentions_output(self):
-        # This test don't pass because of the error:
-        # condition [13,8,4,5], then [13,8,4,5], and else [13,8,4,6] must be broadcastable
-        # This occurs line 323 in modeling_tf_led.py because the condition line 255
-        # returns a tensor of shape
-        # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 2]
-        # if is_global_attn is True and a tensor of shape
-        # [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1]
-        # This is due to the tf.concat call line 703 that adds one dimension
-        # Need to check with PVP how to properly fix this
+        # Temporarily disable this test in order to find
+        # how to better handle it without timing out the CI
         pass
 
     @slow
@@ -372,7 +366,7 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
     def test_xla_mode(self):
-        # TODO JP: Make Blenderbot XLA compliant
+        # TODO JP: Make Longformer XLA compliant
         pass
 
 
@@ -517,8 +511,10 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         attention_mask = tf.where(tf.range(4)[None, :, None, None] > 1, -10000.0, attention_mask[:, :, None, None])
         is_index_masked = tf.math.less(attention_mask[:, :, 0, 0], 0)
 
+        layer_head_mask = None
+
         output_hidden_states = layer(
-            [hidden_states, attention_mask, is_index_masked, is_index_global_attn, is_global_attn]
+            [hidden_states, attention_mask, layer_head_mask, is_index_masked, is_index_global_attn, is_global_attn]
         )[0]
 
         expected_slice = tf.convert_to_tensor(
@@ -549,8 +545,17 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         is_index_global_attn = tf.math.greater(attention_mask[:, :, 0, 0], 0)
         is_global_attn = tf.math.reduce_any(is_index_global_attn)
 
+        layer_head_mask = None
+
         output_hidden_states = layer(
-            [hidden_states, -tf.math.abs(attention_mask), is_index_masked, is_index_global_attn, is_global_attn]
+            [
+                hidden_states,
+                -tf.math.abs(attention_mask),
+                layer_head_mask,
+                is_index_masked,
+                is_index_global_attn,
+                is_global_attn,
+            ]
         )[0]
 
         self.assertTrue(output_hidden_states.shape, (2, 4, 8))
@@ -584,8 +589,17 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         is_index_global_attn = tf.math.greater(attention_mask[:, :, 0, 0], 0)
         is_global_attn = tf.math.reduce_any(is_index_global_attn)
 
+        layer_head_mask = None
+
         output_hidden_states, local_attentions, global_attentions = layer(
-            [hidden_states, -tf.math.abs(attention_mask), is_index_masked, is_index_global_attn, is_global_attn]
+            [
+                hidden_states,
+                -tf.math.abs(attention_mask),
+                layer_head_mask,
+                is_index_masked,
+                is_index_global_attn,
+                is_global_attn,
+            ]
         )
 
         self.assertEqual(local_attentions.shape, (2, 4, 2, 8))
