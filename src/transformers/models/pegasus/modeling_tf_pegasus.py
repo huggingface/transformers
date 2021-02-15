@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    TFWrappedEmbeddings,
+    TFWrappedEmbeddings, get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
@@ -113,27 +113,36 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
 
 
 # Copied from transformers.models.marian.modeling_tf_marian.TFMarianSinusoidalPositionalEmbedding with Marian->Pegasus
-class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
+class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, **kwargs):
+        super().__init__(**kwargs,)
 
         if embedding_dim % 2 != 0:
             raise NotImplementedError(f"odd embedding_dim {embedding_dim} not supported")
-        super().__init__(
-            num_positions,
-            embedding_dim,
-            **kwargs,
-        )
+        
+        self.embedding_dim = embedding_dim
+        self.num_positions = num_positions
 
     def build(self, input_shape: tf.TensorShape):
         """
         Build shared token embedding layer Shared weights logic adapted from
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
-        super().build(input_shape)  # Instantiates self.weight so it can be loaded
-        weight: np.ndarray = self._init_weight(self.input_dim, self.output_dim)
-        self.set_weights([weight])  # overwrite self.weight to correct value
+        
+        weight = self._init_weight(self.num_positions, self.embedding_dim)
+
+        self.weight = self.add_weight(
+            name="embeddings",
+            shape=[self.num_positions, self.embedding_dim],
+            initializer=get_initializer(0.02),
+        )
+
+        self.weight.assign(weight)
+        
+
+        super().build(input_shape)
 
     @staticmethod
     def _init_weight(n_pos: int, dim: int):
@@ -159,7 +168,7 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Embedding):
         positions = tf.range(
             past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
         )
-        return super().call(positions)
+        return tf.gather(self.weight, positions)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Pegasus

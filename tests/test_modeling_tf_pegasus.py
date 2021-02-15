@@ -245,10 +245,6 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_xla_mode(self):
-        # TODO JP: Make Pegasus XLA compliant
-        pass
-
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
