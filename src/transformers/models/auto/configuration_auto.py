@@ -19,7 +19,6 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-from ..speech_to_text_transformer.configuration_speech_to_text_transformer import SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechToTextTransformerConfig
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
@@ -59,6 +58,10 @@ from ..rag.configuration_rag import RagConfig
 from ..reformer.configuration_reformer import ReformerConfig
 from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from ..speech_to_text_transformer.configuration_speech_to_text_transformer import (
+    SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    SpeechToTextTransformerConfig,
+)
 from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig

@@ -41,8 +41,8 @@ class SpeechToTextTransformerTokenizerFast(BartTokenizerFast):
     r"""
     Construct a "fast" SpeechToTextTransformer tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.SpeechToTextTransformerTokenizerFast` is identical to :class:`~transformers.BartTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+    :class:`~transformers.SpeechToTextTransformerTokenizerFast` is identical to
+    :class:`~transformers.BartTokenizerFast` and runs end-to-end tokenization: punctuation splitting and wordpiece.
 
     Refer to superclass :class:`~transformers.BartTokenizerFast` for usage examples and documentation concerning
     parameters.

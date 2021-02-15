@@ -153,7 +153,9 @@ class SpeechToTextTransformerModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -201,9 +203,7 @@ class SpeechToTextTransformerModelTester:
 @require_torch
 class SpeechToTextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (SpeechToTextTransformerModel, SpeechToTextTransformerForConditionalGeneration)
-        if is_torch_available()
-        else ()
+        (SpeechToTextTransformerModel, SpeechToTextTransformerForConditionalGeneration) if is_torch_available() else ()
     )
     all_generative_model_classes = (SpeechToTextTransformerForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
@@ -309,10 +309,10 @@ TOLERANCE = 1e-4
 class SpeechToTextTransformerModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return SpeechToTextTransformerTokenizer.from_pretrained('s2t_transformer_s')
+        return SpeechToTextTransformerTokenizer.from_pretrained("s2t_transformer_s")
 
     def test_inference_no_head(self):
-        model = SpeechToTextTransformerModel.from_pretrained('s2t_transformer_s').to(torch_device)
+        model = SpeechToTextTransformerModel.from_pretrained("s2t_transformer_s").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
         inputs_dict = prepare_speech_to_text_transformer_inputs_dict(model.config, input_ids, decoder_input_ids)
@@ -327,7 +327,7 @@ class SpeechToTextTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = SpeechToTextTransformerForConditionalGeneration.from_pretrained('s2t_transformer_s').to(torch_device)
+        model = SpeechToTextTransformerForConditionalGeneration.from_pretrained("s2t_transformer_s").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -344,8 +344,8 @@ class SpeechToTextTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = SpeechToTextTransformerForConditionalGeneration.from_pretrained('s2t_transformer_s').to(torch_device)
-        tok = SpeechToTextTransformerTokenizer.from_pretrained('s2t_transformer_s')
+        hf = SpeechToTextTransformerForConditionalGeneration.from_pretrained("s2t_transformer_s").to(torch_device)
+        tok = SpeechToTextTransformerTokenizer.from_pretrained("s2t_transformer_s")
 
         batch_input = [
             # string 1,
@@ -568,4 +568,3 @@ class SpeechToTextTransformerStandaloneDecoderModelTester:
             "attention_mask": attention_mask,
         }
         return config, inputs_dict
-

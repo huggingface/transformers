@@ -19,9 +19,13 @@ from pathlib import Path
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
-import sentencepiece
+import numpy as np
+import torch
 
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
+import sentencepiece
+import torchaudio.compliance.kaldi as ta_kaldi
+
+from ...tokenization_utils import BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TensorType
 from ...utils import logging
 
 
@@ -36,42 +40,21 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "m2m_100_418M": "https://huggingface.co/m2m_100_418M/resolve/main/vocab.json",
-    }
+        "s2t_librispeech_transformer_small": "https://huggingface.co/valhalla/s2t_librispeech_transformer_small/resolve/main/vocab.json",
+    },
+    "spm_file": {
+        "s2t_librispeech_transformer_small": "https://huggingface.co/valhalla/s2t_librispeech_transformer_small/resolve/main/sentencepiece.bpe.model"
+    },
 }
-
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
 
 
 class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
     """
-    Construct an M2M100MT tokenizer.
-    :class:`~transformers.M2M100MTTokenizer` is a subclass of :class:`~transformers.XLMRobertaTokenizer` and adds a new
-    :meth:`~transformers.M2M100MTTokenizer.prepare_seq2seq_batch`
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizer` for usage examples and documentation concerning the
-    initialization parameters and other methods.
-    .. warning::
-        ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
-        properly.
-    The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
-    <tokens> <eos>``` for target language documents.
-    Examples::
-        >>> from transformers import M2M100MTTokenizer
-        >>> tokenizer = M2M100MTTokenizer.from_pretrained('facebook/mbart-large-en-ro')
-        >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
-        >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> batch: dict = tokenizer.prepare_seq2seq_batch(
-        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
-        ... )
+    Construct an SpeechToTextTransformer tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-
-    prefix_tokens: List[int] = []
-    suffix_tokens: List[int] = []
 
     def __init__(
         self,
@@ -96,6 +79,8 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         self.spm_file = spm_file
         self.sp_model = load_spm(spm_file)
 
+        self.transforms = [UtteranceCMVN()]
+
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
@@ -114,36 +99,6 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
-
-    def get_special_tokens_mask(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
-    ) -> List[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer ``prepare_for_model`` method.
-        Args:
-            token_ids_0 (:obj:`List[int]`):
-                List of IDs.
-            token_ids_1 (:obj:`List[int]`, `optional`):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-        Returns:
-            :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
-        prefix_ones = [1] * len(self.prefix_tokens)
-        suffix_ones = [1] * len(self.suffix_tokens)
-        if token_ids_1 is None:
-            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
@@ -183,18 +138,83 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
 
         return (str(vocab_save_path), str(spm_save_path))
 
-    def prepare_seq2seq_batch(
+    def __call__(
         self,
-        src_texts: List[str],
-        src_lang: str = "en",
-        tgt_texts: Optional[List[str]] = None,
-        tgt_lang: str = "ro",
-        **kwargs,
-    ) -> BatchEncoding:
-        self.src_lang = src_lang
-        self.tgt_lang = tgt_lang
-        self.set_src_lang_special_tokens(self.src_lang)
-        return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
+        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        padding: Union[bool, str, PaddingStrategy] = False,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        verbose: bool = True,
+        **kwargs
+    ):
+        is_batched = bool(
+            isinstance(raw_speech, (list, tuple))
+            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
+        )
+
+        # make sure input is in list format
+        if is_batched and not isinstance(raw_speech[0], np.ndarray):
+            raw_speech = [np.asarray(speech) for speech in raw_speech]
+        elif not is_batched and not isinstance(raw_speech, np.ndarray):
+            raw_speech = np.asarray(raw_speech)
+
+        # always return batch
+        if not is_batched:
+            raw_speech = [raw_speech]
+
+        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+
+        for transform in self.transforms:
+            features = [transform(feature) for feature in features]
+
+        encoded_inputs = BatchEncoding({"input_values": features})
+
+        padded_inputs = self.pad(
+            encoded_inputs,
+            padding=padding,
+            max_length=max_length,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_attention_mask=self.return_attention_mask,
+            return_tensors=return_tensors,
+            verbose=verbose,
+        )
+
+        return padded_inputs
+
+    def _extract_fbank_features(
+        self,
+        waveform,
+        sample_rate: int,
+        num_mel_bins: int = 80,
+    ):
+        waveform = waveform * (2 ** 15)  # Kaldi compliance: 16-bit signed integers
+        waveform = torch.from_numpy(waveform).unsqueeze(0)
+        features = ta_kaldi.fbank(waveform, num_mel_bins=num_mel_bins, sample_frequency=sample_rate)
+        return features.numpy()
+
+
+class UtteranceCMVN:
+    """Utterance-level CMVN (cepstral mean and variance normalization)"""
+
+    def __init__(self, norm_means=True, norm_vars=True):
+        self.norm_means, self.norm_vars = norm_means, norm_vars
+
+    def __repr__(self):
+        return self.__class__.__name__ + f"(norm_means={self.norm_means}, norm_vars={self.norm_vars})"
+
+    def __call__(self, x):
+        mean = x.mean(axis=0)
+        square_sums = (x ** 2).sum(axis=0)
+
+        if self.norm_means:
+            x = np.subtract(x, mean)
+        if self.norm_vars:
+            var = square_sums / x.shape[0] - mean ** 2
+            std = np.sqrt(np.maximum(var, 1e-10))
+            x = np.divide(x, std)
+
+        return x
 
 
 def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:

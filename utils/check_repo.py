@@ -34,7 +34,7 @@ IGNORE_NON_TESTED = [
     "M2M100Decoder",  # Building part of bigger (tested) model.
 "SpeechToTextTransformerEncoder",  # Building part of bigger (tested) model.
     "SpeechToTextTransformerDecoder",  # Building part of bigger (tested) model.
-    "SpeechToTextTransformerDecoderWrapper", # Building part of bigger (tested) model.
+    "SpeechToTextTransformerDecoderWrapper",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
     "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoderWrapper",  # Building part of bigger (tested) model.

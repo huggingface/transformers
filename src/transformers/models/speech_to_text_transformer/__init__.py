@@ -16,9 +16,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _BaseLazyModule, is_torch_available, is_tokenizers_available, is_sentencepiece_available
+
+from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
-    "configuration_speech_to_text_transformer": ["SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechToTextTransformerConfig"],
+    "configuration_speech_to_text_transformer": [
+        "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SpeechToTextTransformerConfig",
+    ],
 }
 
 if is_sentencepiece_available():
@@ -36,10 +42,11 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
-    from .configuration_speech_to_text_transformer import SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechToTextTransformerConfig
+    from .configuration_speech_to_text_transformer import (
+        SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SpeechToTextTransformerConfig,
+    )
     from .tokenization_speech_to_text_transformer import SpeechToTextTransformerTokenizer
 
     if is_tokenizers_available():

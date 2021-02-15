@@ -28,20 +28,21 @@ SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SpeechToTextTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.SpeechToTextTransformerModel`.
-    It is used to instantiate an SpeechToTextTransformer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the SpeechToTextTransformer `s2t_transformer_s <https://huggingface.co/s2t_transformer_s>`__ architecture.
+    This is the configuration class to store the configuration of a
+    :class:`~transformers.SpeechToTextTransformerModel`. It is used to instantiate an SpeechToTextTransformer model
+    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the SpeechToTextTransformer `s2t_transformer_s
+    <https://huggingface.co/s2t_transformer_s>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the SpeechToTextTransformer model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.SpeechToTextTransformerModel` or
+            Vocabulary size of the SpeechToTextTransformer model. Defines the number of different tokens that can be
+            represented by the :obj:`inputs_ids` passed when calling
+            :class:`~transformers.SpeechToTextTransformerModel` or
             :class:`~transformers.TFSpeechToTextTransformerModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
@@ -81,6 +82,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+
         Example::
 
         >>> from transformers import SpeechToTextTransformerModel, SpeechToTextTransformerConfig
@@ -96,6 +98,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
     """
     model_type = "speech_to_text_transformer"
     keys_to_ignore_at_inference = ["past_key_values"]
+
     def __init__(
         self,
         vocab_size=10000,
@@ -125,7 +128,8 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
         eos_token_id=2,
         max_source_positions=6000,
         max_target_positions=1024,
-        conv_kernel_sizes='5,5',
+        num_conv_layers=2,
+        conv_kernel_sizes=(5, 5),
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
@@ -138,7 +142,7 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size
@@ -164,12 +168,13 @@ class SpeechToTextTransformerConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
-        self.conv_kernel_sizes = conv_kernel_sizes  
+        self.num_conv_layers = num_conv_layers
+        self.conv_kernel_sizes = conv_kernel_sizes
         self.conv_channels = conv_channels
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
         self.share_embeds = share_embeds
-        
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
