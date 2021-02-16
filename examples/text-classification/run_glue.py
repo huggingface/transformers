@@ -21,10 +21,11 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
+from packaging import version
 from typing import Optional
+import datasets
 
 import numpy as np
-from datasets import load_dataset, load_metric
 
 import transformers
 from transformers import (
@@ -227,7 +228,9 @@ def main():
                     "The labels assignment is overwritten with the old assignment"
                     "['contradiction', 'entailment', 'neutral'] from transformers<3.5.0."
                 )
-                datasets = load_dataset(
+                if version.parse(datasets.__version__) < version.parse("1.3.0"):
+                    raise ImportError("Please update `datasets` to >1.3.0 to overwrite the labels.")
+                task_datasets = datasets.load_dataset(
                     "glue", data_args.task_name, label_classes=["contradiction", "entailment", "neutral"]
                 )
             else:
@@ -235,9 +238,9 @@ def main():
                     "Please be aware that since the version 3.5.0, the label assignment of MNLI has been changed."
                     "Use `--mnli_compat_mode` if you are loading a checkpoint trained with an older version of script."
                 )
-                datasets = load_dataset("glue", data_args.task_name)
+                task_datasets = datasets.load_dataset("glue", data_args.task_name)
         else:
-            datasets = load_dataset("glue", data_args.task_name)
+            task_datasets = datasets.load_dataset("glue", data_args.task_name)
     else:
         # Loading a dataset from your local files.
         # CSV/JSON training and evaluation files are needed.
@@ -261,10 +264,10 @@ def main():
 
         if data_args.train_file.endswith(".csv"):
             # Loading a dataset from local csv files
-            datasets = load_dataset("csv", data_files=data_files)
+            task_datasets = datasets.load_dataset("csv", data_files=data_files)
         else:
             # Loading a dataset from local json files
-            datasets = load_dataset("json", data_files=data_files)
+            task_datasets = datasets.load_dataset("json", data_files=data_files)
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -272,19 +275,19 @@ def main():
     if data_args.task_name is not None:
         is_regression = data_args.task_name == "stsb"
         if not is_regression:
-            label_list = datasets["train"].features["label"].names
+            label_list = task_datasets["train"].features["label"].names
             num_labels = len(label_list)
         else:
             num_labels = 1
     else:
         # Trying to have good defaults here, don't hesitate to tweak to your needs.
-        is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
+        is_regression = task_datasets["train"].features["label"].dtype in ["float32", "float64"]
         if is_regression:
             num_labels = 1
         else:
             # A useful fast method:
             # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.unique
-            label_list = datasets["train"].unique("label")
+            label_list = task_datasets["train"].unique("label")
             label_list.sort()  # Let's sort it for determinism
             num_labels = len(label_list)
 
@@ -321,7 +324,7 @@ def main():
         sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
     else:
         # Again, we try to have some nice defaults but don't hesitate to tweak to your use case.
-        non_label_column_names = [name for name in datasets["train"].column_names if name != "label"]
+        non_label_column_names = [name for name in task_datasets["train"].column_names if name != "label"]
         if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
             sentence1_key, sentence2_key = "sentence1", "sentence2"
         else:
@@ -376,12 +379,12 @@ def main():
             result["label"] = [label_to_id[l] for l in examples["label"]]
         return result
 
-    datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+    task_datasets = task_datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
 
-    train_dataset = datasets["train"]
-    eval_dataset = datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
+    train_dataset = task_datasets["train"]
+    eval_dataset = task_datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
     if data_args.task_name is not None or data_args.test_file is not None:
-        test_dataset = datasets["test_matched" if data_args.task_name == "mnli" else "test"]
+        test_dataset = task_datasets["test_matched" if data_args.task_name == "mnli" else "test"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -389,7 +392,7 @@ def main():
 
     # Get the metric function
     if data_args.task_name is not None:
-        metric = load_metric("glue", data_args.task_name)
+        metric = datasets.load_metric("glue", data_args.task_name)
     # TODO: When datasets metrics include regular accuracy, make an else here and remove special branch from
     # compute_metrics
 
@@ -461,7 +464,7 @@ def main():
         eval_datasets = [eval_dataset]
         if data_args.task_name == "mnli":
             tasks.append("mnli-mm")
-            eval_datasets.append(datasets["validation_mismatched"])
+            eval_datasets.append(task_datasets["validation_mismatched"])
 
         for eval_dataset, task in zip(eval_datasets, tasks):
             eval_result = trainer.evaluate(eval_dataset=eval_dataset)
@@ -484,7 +487,7 @@ def main():
         test_datasets = [test_dataset]
         if data_args.task_name == "mnli":
             tasks.append("mnli-mm")
-            test_datasets.append(datasets["test_mismatched"])
+            test_datasets.append(task_datasets["test_mismatched"])
 
         for test_dataset, task in zip(test_datasets, tasks):
             # Removing the `label` columns because it contains -1 and Trainer won't like that.
