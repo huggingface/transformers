@@ -132,6 +132,7 @@ class QuantAct(nn.Module):
         self.quant_mode = quant_mode
         self.per_channel = per_channel
         self.percentile = False
+        self.act_function = SymmetricQuantFunction.apply
 
         if not self.per_channel:
             self.register_buffer("x_min", torch.zeros(1))
@@ -139,11 +140,6 @@ class QuantAct(nn.Module):
             self.register_buffer("act_scaling_factor", torch.zeros(1))
         else:
             raise NotImplementedError("per-channel mode is not currently supported for activation.")
-
-        if not self.quant_mode:
-            self.act_function = None
-        else:
-            self.act_function = SymmetricQuantFunction.apply
 
     def __repr__(self):
         return (
