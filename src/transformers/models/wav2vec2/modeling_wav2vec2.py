@@ -15,6 +15,7 @@
 """ PyTorch Wav2Vec2 model. """
 
 
+import contextlib
 import warnings
 from typing import Optional, Tuple
 
@@ -1006,7 +1007,13 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
+        # used for training
+        self.global_update_step: int = 0
+
         self.init_weights()
+
+    def set_update_step(self, step: int):
+        self.global_update_step = step
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1052,13 +1059,16 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.wav2vec2(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        freeze_encoder = self.global_update_step < self.config.num_steps_freeze_encoder
+
+        with torch.no_grad() if freeze_encoder else contextlib.ExitStack():
+            outputs = self.wav2vec2(
+                input_values,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
 
         hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
