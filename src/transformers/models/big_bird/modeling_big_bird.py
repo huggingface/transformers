@@ -15,8 +15,6 @@
 """ PyTorch BigBird model. """
 
 
-
-
 import math
 import os
 
@@ -80,16 +78,22 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
+
+    assert len(init_vars) > 0, "Loaded trained variables cannot be empty."
+
     names = []
-    arrays = []
+    tf_weights = {}
+    pt_names = list(model.state_dict().keys())
+
     for name, shape in init_vars:
         logger.info("Loading TF weight {} with shape {}".format(name, shape))
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
-        arrays.append(array)
+        tf_weights[name] = array
 
-    for name, array in zip(names, arrays):
-        name = name.split("/")
+    for txt_name in names:
+        array = tf_weights[txt_name]
+        name = txt_name.split("/")
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
         # which are not required for using pretrained model
         if any(
@@ -99,6 +103,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
             logger.info("Skipping {}".format("/".join(name)))
             continue
         pointer = model
+        pt_name = []
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
                 scope_names = re.split(r"_(\d+)", m_name)
@@ -106,29 +111,39 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
                 scope_names = [m_name]
             if scope_names[0] == "kernel" or scope_names[0] == "gamma":
                 pointer = getattr(pointer, "weight")
+                pt_name.append("weight")
             elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
                 pointer = getattr(pointer, "bias")
+                pt_name.append("bias")
             elif scope_names[0] == "output_weights":
                 pointer = getattr(pointer, "weight")
+                pt_name.append("weight")
             elif scope_names[0] == "squad":
                 pointer = getattr(pointer, "classifier")
+                pt_name.append("classifier")
             elif scope_names[0] == "transform":
                 pointer = getattr(pointer, "transform")
+                pt_name.append("transform")
                 if ("bias" in name) or ("kernel" in name):
                     pointer = getattr(pointer, "dense")
+                    pt_name.append("dense")
                 elif ("beta" in name) or ("gamma" in name):
                     pointer = getattr(pointer, "LayerNorm")
+                    pt_name.append("LayerNorm")
             else:
                 try:
                     pointer = getattr(pointer, scope_names[0])
+                    pt_name.append(f"{scope_names[0]}")
                 except AttributeError:
                     logger.info("Skipping {}".format("/".join(name)))
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
                 pointer = pointer[num]
+                pt_name.append(f"{num}")
         if m_name[-11:] == "_embeddings":
             pointer = getattr(pointer, "weight")
+            pt_name.append("weight")
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
@@ -138,8 +153,14 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        logger.info("Initialize PyTorch weight {}".format(name))
+        pt_weight_name = '.'.join(pt_name)
+        logger.info("Initialize PyTorch weight {} from {}".format(pt_weight_name, txt_name))
         pointer.data = torch.from_numpy(array)
+        tf_weights.pop(txt_name, None)
+        pt_names.remove(pt_weight_name)
+
+    logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
+    logger.info("Weights not initialized in PyTorch model: {}".format(", ".join(pt_names)))
     return model
 
 

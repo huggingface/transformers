@@ -17,8 +17,6 @@
 
 import argparse
 
-import torch
-
 from transformers import BigBirdConfig, BigBirdForMaskedLM, load_tf_weights_in_big_bird
 from transformers.utils import logging
 
@@ -26,9 +24,9 @@ from transformers.utils import logging
 logging.set_verbosity_info()
 
 
-def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytorch_dump_path):
+def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, pytorch_dump_path):
     # Initialise PyTorch model
-    config = BigBirdConfig.from_json_file(bert_config_file)
+    config = BigBirdConfig.from_json_file(big_bird_config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
     model = BigBirdForMaskedLM(config)
 
@@ -37,7 +35,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, bert_config_file, pytor
 
     # Save pytorch-model
     print("Save PyTorch model to {}".format(pytorch_dump_path))
-    torch.save(model.state_dict(), pytorch_dump_path)
+    model.save_pretrained(pytorch_dump_path)
 
 
 if __name__ == "__main__":
@@ -47,7 +45,7 @@ if __name__ == "__main__":
         "--tf_checkpoint_path", default=None, type=str, required=True, help="Path to the TensorFlow checkpoint path."
     )
     parser.add_argument(
-        "--bert_config_file",
+        "--big_bird_config_file",
         default=None,
         type=str,
         required=True,
@@ -58,4 +56,4 @@ if __name__ == "__main__":
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
-    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.bert_config_file, args.pytorch_dump_path)
+    convert_tf_checkpoint_to_pytorch(args.tf_checkpoint_path, args.big_bird_config_file, args.pytorch_dump_path)
