@@ -52,8 +52,9 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (:obj:`int`, `optional`, defaults to 0):
             The number of update steps to do during the current training.
-        total_flos (:obj:`int`, `optional`, defaults to 0):
-            The total number of floating operations done by the model since the beginning of training.
+        total_flos (:obj:`float`, `optional`, defaults to 0):
+            The total number of floating operations done by the model since the beginning of training (stored as floats
+            to avoid overflow).
         log_history (:obj:`List[Dict[str, float]]`, `optional`):
             The list of logs done since the beginning of training.
         best_metric (:obj:`float`, `optional`):
@@ -76,7 +77,7 @@ class TrainerState:
     global_step: int = 0
     max_steps: int = 0
     num_train_epochs: int = 0
-    total_flos: int = 0
+    total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None

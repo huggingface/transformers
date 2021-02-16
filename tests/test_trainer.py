@@ -881,6 +881,9 @@ class TrainerIntegrationTest(unittest.TestCase):
         # with enforced DataParallel
         assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
 
+        trainer.train()
+        self.assertTrue(isinstance(trainer.state.total_flos, float))
+
 
 @require_torch
 @require_optuna
