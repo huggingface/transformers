@@ -10,13 +10,13 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-SpeechToTextTransformer
+Speech2TextTransformer
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The SpeechToTextTransformer model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT
+The Speech2TextTransformer model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT
 AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -27,30 +27,30 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-SpeechToTextTransformerConfig
+Speech2TextTransformerConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.SpeechToTextTransformerConfig
+.. autoclass:: transformers.Speech2TextTransformerConfig
     :members:
 
 
-SpeechToTextTransformerTokenizer
+Speech2TextTransformerTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.SpeechToTextTransformerTokenizer
+.. autoclass:: transformers.Speech2TextTransformerTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-SpeechToTextTransformerModel
+Speech2TextTransformerModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.SpeechToTextTransformerModel
+.. autoclass:: transformers.Speech2TextTransformerModel
     :members: forward
 
 
-SpeechToTextTransformerForConditionalGeneration
+Speech2TextTransformerForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.SpeechToTextTransformerForConditionalGeneration
+.. autoclass:: transformers.Speech2TextTransformerForConditionalGeneration
     :members: forward

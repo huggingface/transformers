@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for SpeechToTextTransformer."""
+"""Tokenization classes for Speech2TextTransformer."""
 import json
 from pathlib import Path
 from shutil import copyfile
@@ -52,9 +52,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
+class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
     """
-    Construct an SpeechToTextTransformer tokenizer.
+    Construct an Speech2TextTransformer tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

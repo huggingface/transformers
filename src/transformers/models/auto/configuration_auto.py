@@ -60,7 +60,7 @@ from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCH
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
 from ..speech_to_text_transformer.configuration_speech_to_text_transformer import (
     SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    SpeechToTextTransformerConfig,
+    Speech2TextTransformerConfig,
 )
 from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
@@ -127,7 +127,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
-        ("speech_to_text_transformer", SpeechToTextTransformerConfig),
+        ("speech_to_text_transformer", Speech2TextTransformerConfig),
         ("wav2vec2", Wav2Vec2Config),
         ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
@@ -180,7 +180,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("speech_to_text_transformer", "SpeechToTextTransformer"),
+        ("speech_to_text_transformer", "Speech2TextTransformer"),
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),

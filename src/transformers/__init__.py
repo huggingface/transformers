@@ -381,8 +381,8 @@ if is_torch_available():
     _import_structure["models.speech_to_text_transformer"].extend(
         [
             "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SpeechToTextTransformerForConditionalGeneration",
-            "SpeechToTextTransformerModel",
+            "Speech2TextTransformerForConditionalGeneration",
+            "Speech2TextTransformerModel",
         ]
     )
 
@@ -1390,8 +1390,8 @@ if TYPE_CHECKING:
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SpeechToTextTransformerConfig,
-        SpeechToTextTransformerTokenizer,
+        Speech2TextTransformerConfig,
+        Speech2TextTransformerTokenizer,
     )
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
@@ -1878,8 +1878,8 @@ if TYPE_CHECKING:
         )
         from .models.speech_to_text_transformer import (
             SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SpeechToTextTransformerForConditionalGeneration,
-            SpeechToTextTransformerModel,
+            Speech2TextTransformerForConditionalGeneration,
+            Speech2TextTransformerModel,
         )
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

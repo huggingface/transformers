@@ -2163,7 +2163,7 @@ class RobertaModel:
 SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class SpeechToTextTransformerForConditionalGeneration:
+class Speech2TextTransformerForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -2172,7 +2172,7 @@ class SpeechToTextTransformerForConditionalGeneration:
         requires_pytorch(self)
 
 
-class SpeechToTextTransformerModel:
+class Speech2TextTransformerModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

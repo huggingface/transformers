@@ -23,36 +23,36 @@ from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_tokeni
 _import_structure = {
     "configuration_speech_to_text_transformer": [
         "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "SpeechToTextTransformerConfig",
+        "Speech2TextTransformerConfig",
     ],
 }
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_speech_to_text_transformer"] = ["SpeechToTextTransformerTokenizer"]
+    _import_structure["tokenization_speech_to_text_transformer"] = ["Speech2TextTransformerTokenizer"]
 
 
 if is_torch_available():
     _import_structure["modeling_speech_to_text_transformer"] = [
         "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SpeechToTextTransformerForConditionalGeneration",
-        "SpeechToTextTransformerModel",
-        "SpeechToTextTransformerPreTrainedModel",
+        "Speech2TextTransformerForConditionalGeneration",
+        "Speech2TextTransformerModel",
+        "Speech2TextTransformerPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        SpeechToTextTransformerConfig,
+        Speech2TextTransformerConfig,
     )
-    from .tokenization_speech_to_text_transformer import SpeechToTextTransformerTokenizer
+    from .tokenization_speech_to_text_transformer import Speech2TextTransformerTokenizer
 
     if is_torch_available():
         from .modeling_speech_to_text_transformer import (
             SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SpeechToTextTransformerForConditionalGeneration,
-            SpeechToTextTransformerModel,
-            SpeechToTextTransformerPreTrainedModel,
+            Speech2TextTransformerForConditionalGeneration,
+            Speech2TextTransformerModel,
+            Speech2TextTransformerPreTrainedModel,
         )
 
 

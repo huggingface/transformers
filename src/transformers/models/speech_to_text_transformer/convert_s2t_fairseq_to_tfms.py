@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from transformers import SpeechToTextTransformerConfig, SpeechToTextTransformerForConditionalGeneration
+from transformers import Speech2TextTransformerConfig, Speech2TextTransformerForConditionalGeneration
 
 
 def remove_ignore_keys_(state_dict):
@@ -41,7 +41,7 @@ def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
     rename_keys(state_dict)
     vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
 
-    config = SpeechToTextTransformerConfig(
+    config = Speech2TextTransformerConfig(
         vocab_size=vocab_size,
         max_position_embeddings=1024,
         encoder_layers=args.encoder_layers,
@@ -62,7 +62,7 @@ def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
     )
 
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    model = SpeechToTextTransformerForConditionalGeneration(config)
+    model = Speech2TextTransformerForConditionalGeneration(config)
     model.model.load_state_dict(state_dict)
     model.lm_head = make_linear_from_emb(model.model.shared)
 
