@@ -639,35 +639,18 @@ SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING = r"""
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-SPEECH_TO_TEXT_TRANSFORMER_GENERATION_EXAMPLE = r"""
-    Summarization example::
-
-        >>> from transformers import SpeechToTextTransformerTokenizer, SpeechToTextTransformerForConditionalGeneration, SpeechToTextTransformerConfig
-
-        >>> model = SpeechToTextTransformerForConditionalGeneration.from_pretrained('s2t_transformer_s')
-        >>> tokenizer = SpeechToTextTransformerTokenizer.from_pretrained('s2t_transformer_s')
-
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
-"""
-
 SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using :class:`~transformers.SpeechToTextTransformerTokenizer`. See
-            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
-            details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`):
+            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
+            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
+            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            :class:`SpeechToTextTransformerTokenizer` should be used for extracting the fbank features, padding and
+            conversion into a tensor of type `torch.FloatTensor`. See
+            :meth:`transformers.SpeechToTextTransformerTokenizer.__call__`
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`, `optional`):
+            Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
+            1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1342,7 +1325,6 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
 
     @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(SPEECH_TO_TEXT_TRANSFORMER_GENERATION_EXAMPLE)
     def forward(
         self,
         input_features=None,
@@ -1363,27 +1345,34 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
+            Labels for computing the language modeling loss. Indices should either be in ``[0, ...,
             config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
 
         Returns:
 
-        Conditional generation example::
+        Example::
 
+            >>> import torch
             >>> from transformers import SpeechToTextTransformerTokenizer, SpeechToTextTransformerForConditionalGeneration
-            >>> tokenizer = SpeechToTextTransformerTokenizer.from_pretrained('s2t_transformer_s')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
+            >>> from datasets import load_dataset
+            >>> import soundfile as sf
 
-            >>> model = SpeechToTextTransformerForConditionalGeneration.from_pretrained('s2t_transformer_s')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
+            >>> model = SpeechToTextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_transformer_small")
+            >>> tokenizer = SpeechToTextTransformerTokenizer.from_pretrained("facebook/s2t_librispeech_transformer_small")
 
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
+            >>> def map_to_array(batch):
+            >>>     speech, _ = sf.read(batch["file"])
+            >>>     batch["speech"] = speech
+            >>>     return batch
 
-            >>> tokenizer.decode(predictions).split()
+            >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+            >>> ds = ds.map(map_to_array)
+
+            >>> model_inputs = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> generated_ids = model.generate(**model_inputs)
+
+            >>> transcription = tokenizer.batch_decode(generated_ids)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
