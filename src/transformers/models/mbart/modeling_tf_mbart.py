@@ -64,19 +64,16 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    prev_output_tokens = tf.cast(input_ids, tf.int32)
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens = tf.where(
-        prev_output_tokens == -100, tf.fill(shape_list(prev_output_tokens), pad_token_id), prev_output_tokens
-    )
+    input_ids = tf.where(input_ids == -100, tf.fill(shape_list(input_ids), pad_token_id), input_ids)
     language_id_index = (
-        tf.reduce_sum(tf.cast(tf.math.not_equal(prev_output_tokens, pad_token_id), tf.int32), axis=-1) - 1
+        tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=input_ids.dtype), axis=-1) - 1
     )
     language_id_index = tf.stack([tf.range(shape_list(input_ids)[0]), language_id_index], axis=-1)
-    languages_ids = tf.gather_nd(prev_output_tokens, language_id_index)
+    languages_ids = tf.gather_nd(input_ids, language_id_index)
 
-    shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), prev_output_tokens[:, :-1]], axis=-1)
+    shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), input_ids[:, :-1]], axis=-1)
 
     return shifted_input_ids
 
@@ -128,9 +125,7 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_shape[:2]
 
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
-        )
+        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
         return super().call(positions + self.offset)
 
 
