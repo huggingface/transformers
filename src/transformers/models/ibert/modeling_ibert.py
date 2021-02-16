@@ -249,14 +249,8 @@ class IBertSelfAttention(nn.Module):
         hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
-        assert encoder_hidden_states is None
-        assert past_key_value is None
-
         # Projection
         mixed_query_layer, mixed_query_layer_scaling_factor = self.query(hidden_states, hidden_states_scaling_factor)
         mixed_key_layer, mixed_key_layer_scaling_factor = self.key(hidden_states, hidden_states_scaling_factor)
@@ -402,9 +396,6 @@ class IBertAttention(nn.Module):
         hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
         self_outputs, self_outputs_scaling_factor = self.self(
@@ -412,9 +403,6 @@ class IBertAttention(nn.Module):
             hidden_states_scaling_factor,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
             output_attentions,
         )
         attention_output, attention_output_scaling_factor = self.output(
@@ -441,7 +429,6 @@ class IBertIntermediate(nn.Module):
             quant_mode=self.quant_mode,
             per_channel=True,
         )
-
         assert config.hidden_act == "gelu", "I-BERT only supports 'gelu' for `config.hidden_act`"
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
@@ -510,9 +497,7 @@ class IBertLayer(nn.Module):
 
         self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.add_cross_attention = config.add_cross_attention
         assert self.chunk_size_feed_forward == 0, "I-BERT only support `config.chunk_size_feed_forward` == 0"
-        assert not self.add_cross_attention
 
         self.attention = IBertAttention(config)
         self.intermediate = IBertIntermediate(config)
@@ -527,20 +512,15 @@ class IBertLayer(nn.Module):
         hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
         output_attentions=False,
     ):
-        assert past_key_value is None
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        self_attn_past_key_value = None
         self_attention_outputs, self_attention_outputs_scaling_factor = self.attention(
             hidden_states,
             hidden_states_scaling_factor,
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
         attention_output_scaling_factor = self_attention_outputs_scaling_factor[0]
@@ -585,25 +565,20 @@ class IBertEncoder(nn.Module):
         hidden_states_scaling_factor,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
+        all_cross_attentions = None # `config.add_cross_attention` is not supported
+        next_decoder_cache = None # `config.use_cache` is not supported
 
-        next_decoder_cache = () if use_cache else None
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
                 raise NotImplementedError("gradient checkpointing is not currently supported")
@@ -614,19 +589,12 @@ class IBertEncoder(nn.Module):
                     hidden_states_scaling_factor,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
                     output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -801,40 +769,15 @@ class IBertModel(IBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``: ``1`` for
-            tokens that are NOT MASKED, ``0`` for MASKED tokens.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
-            instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        use_cache (:obj:`bool`, `optional`):
-            If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
-            decoding (see :obj:`past_key_values`).
-        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-
-        use_cache = False #TODO remeove this?
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -849,19 +792,14 @@ class IBertModel(IBertPreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = torch.ones(((batch_size, seq_length)), device=device)
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
-
-        encoder_extended_attention_mask = None #TODO remove this
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -875,17 +813,12 @@ class IBertModel(IBertPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
         )
         encoder_outputs = self.encoder(
             embedding_output,
             embedding_output_scaling_factor,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -940,8 +873,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         labels=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -964,8 +895,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
