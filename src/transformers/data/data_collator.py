@@ -164,6 +164,7 @@ class DataCollatorCTCWithPadding:
     max_length_labels: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
+    return_attention_mask: bool = True
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
@@ -173,6 +174,7 @@ class DataCollatorCTCWithPadding:
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
+            return_attention_mask=self.return_attention_mask,
             return_tensors="pt",
         )
         labels_batch = self.tokenizer.pad(
