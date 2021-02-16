@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-import datasets
-import torch
-from typing import Dict, List, Union, Optional
 from dataclasses import dataclass
+from typing import Dict, List, Optional, Union
+
+import datasets
+import numpy as np
+import torch
 
 import soundfile as sf
-from transformers import Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Tokenizer, PreTrainedTokenizer
-import numpy as np
-
 from jiwer import wer
+from transformers import PreTrainedTokenizer, Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Tokenizer
 
 
 model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base")
@@ -36,6 +36,11 @@ def prepare_dataset(batch):
 
 train_dataset = train_dataset.map(prepare_dataset, batch_size=16, batched=True, num_proc=32)
 val_dataset = val_dataset.map(prepare_dataset, batch_size=16, batched=True, num_proc=32)
+
+
+def get_length(batch):
+    batch["len"] = [len(x) for x in batch["input_values"]]
+    return batch
 
 
 @dataclass
@@ -68,7 +73,6 @@ class DataCollatorCTCWithPadding:
     max_length_labels: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
     pad_to_multiple_of_labels: Optional[int] = None
-    return_attention_mask: bool = True
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
@@ -78,7 +82,6 @@ class DataCollatorCTCWithPadding:
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_attention_mask=self.return_attention_mask,
             return_tensors="pt",
         )
         labels_batch = self.tokenizer.pad(
@@ -97,7 +100,7 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
-data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, padding=True, return_attention_mask=False)
+data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, padding=True)
 
 
 def compute_metrics(pred):
