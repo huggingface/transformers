@@ -75,15 +75,9 @@ class FillMaskPipeline(Pipeline):
         self.check_model_type(TF_MODEL_WITH_LM_HEAD_MAPPING if self.framework == "tf" else MODEL_FOR_MASKED_LM_MAPPING)
         self.top_k = top_k
 
-    def ensure_exactly_one_mask_token(self, masked_index: np.ndarray):
-        numel = np.prod(masked_index.shape)
-        if numel > 1:
-            raise PipelineException(
-                "fill-mask",
-                self.model.base_model_prefix,
-                f"More than one mask_token ({self.tokenizer.mask_token}) is not supported",
-            )
-        elif numel < 1:
+    def ensure_atleast_one_mask_token(self, masked_indices: np.ndarray):
+        numel = np.prod(masked_indices.shape)
+        if numel < 1:
             raise PipelineException(
                 "fill-mask",
                 self.model.base_model_prefix,
@@ -141,12 +135,12 @@ class FillMaskPipeline(Pipeline):
             result = []
 
             if self.framework == "tf":
-                masked_index = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
+                masked_indices = tf.where(input_ids == self.tokenizer.mask_token_id).numpy()
 
                 # Fill mask pipeline supports only one ${mask_token} per sample
-                self.ensure_exactly_one_mask_token(masked_index)
+                self.ensure_atleast_one_mask_token(masked_indices)
 
-                logits = outputs[i, masked_index.item(), :]
+                logits = outputs[i, masked_indices.item(), :]
                 probs = tf.nn.softmax(logits)
                 if targets is None:
                     topk = tf.math.top_k(probs, k=top_k if top_k is not None else self.top_k)
@@ -157,32 +151,40 @@ class FillMaskPipeline(Pipeline):
                     values = tf.gather_nd(values, tf.reshape(sort_inds, (-1, 1))).numpy()
                     predictions = target_inds[sort_inds.numpy()]
             else:
-                masked_index = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+                masked_indices = torch.nonzero(input_ids == self.tokenizer.mask_token_id, as_tuple=False)
+                # Fill mask pipeline supports at least one ${mask_token} per sample
+                self.ensure_atleast_one_mask_token(masked_indices.numpy())
 
-                # Fill mask pipeline supports only one ${mask_token} per sample
-                self.ensure_exactly_one_mask_token(masked_index.numpy())
+                logits_multiple = [outputs[i, index.item(), :] for index in masked_indices]
 
-                logits = outputs[i, masked_index.item(), :]
-                probs = logits.softmax(dim=0)
+                probs_multiple = [logits.softmax(dim=0) for logits in logits_multiple]
+
                 if targets is None:
-                    values, predictions = probs.topk(top_k if top_k is not None else self.top_k)
+                    values_all = []
+                    predictions_all = []
+                    for probs in probs_multiple:
+                        values, predictions = probs.topk(top_k if top_k is not None else self.top_k)
+                        values_all.append(values)
+                        predictions_all.append(predictions)
                 else:
+                    # pending for when the target tokens are specifically input to the model.
                     values = probs[..., target_inds]
                     sort_inds = list(reversed(values.argsort(dim=-1)))
                     values = values[..., sort_inds]
                     predictions = target_inds[sort_inds]
 
-            for v, p in zip(values.tolist(), predictions.tolist()):
+            for i, item in enumerate(values_all[0]):
                 tokens = input_ids.numpy()
-                tokens[masked_index] = p
-                # Filter padding out:
+                for i_inner, item_inner in enumerate(masked_indices.tolist()):
+                    masked_index = item_inner[0]
+                    tokens[masked_index] = predictions_all[i_inner].tolist()[i]
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
                 result.append(
                     {
                         "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
-                        "score": v,
-                        "token": p,
-                        "token_str": self.tokenizer.decode(p),
+                        "scores": [v.tolist()[i] for v in values_all],
+                        "tokens": [p.tolist()[i] for p in predictions_all],
+                        "tokens_strs": [self.tokenizer.decode(p.tolist()[i]) for p in predictions_all],
                     }
                 )
 
@@ -192,3 +194,6 @@ class FillMaskPipeline(Pipeline):
         if len(results) == 1:
             return results[0]
         return results
+
+
+# values = [loc1, loc2]
