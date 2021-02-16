@@ -35,8 +35,7 @@ class IBertConfig(PretrainedConfig):
     instantiate a I-BERT model according to the specified arguments,
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information. This code is
-    copied from both :class:`~transformers.BertConfig` and :class:`~transformers.RobertaConfig`.
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):

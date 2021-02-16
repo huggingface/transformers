@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PyTorch I-Bert model. """
+"""PyTorch I-BERT model. """
 
 import math
 
@@ -713,7 +713,7 @@ IBERT_INPUTS_DOCSTRING = r"""
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaModel
 @add_start_docstrings(
-    "The bare IBert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare I-BERT Model transformer outputting raw hidden-states without any specific head on top.",
     IBERT_START_DOCSTRING,
 )
 class IBertModel(IBertPreTrainedModel):
@@ -721,15 +721,13 @@ class IBertModel(IBertPreTrainedModel):
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need`_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
     Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
     set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
     argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
     input to the forward pass.
-
-    .. _`Attention is all you need`: https://arxiv.org/abs/1706.03762
 
     """
 
@@ -892,7 +890,7 @@ class IBertModel(IBertPreTrainedModel):
 
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM
-@add_start_docstrings("""IBert Model with a `language modeling` head on top. """, IBERT_START_DOCSTRING)
+@add_start_docstrings("""I-BERT Model with a `language modeling` head on top. """, IBERT_START_DOCSTRING)
 class IBertForMaskedLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -985,7 +983,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class IBertLMHead(nn.Module):
-    """IBert Head for masked language modeling."""
+    """I-BERT Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1012,7 +1010,7 @@ class IBertLMHead(nn.Module):
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification
 @add_start_docstrings(
     """
-    IBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    I-BERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
     IBERT_START_DOCSTRING,
@@ -1096,7 +1094,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice
 @add_start_docstrings(
     """
-    IBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    I-BERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
     IBERT_START_DOCSTRING,
@@ -1189,7 +1187,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification
 @add_start_docstrings(
     """
-    IBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    I-BERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     IBERT_START_DOCSTRING,
@@ -1301,7 +1299,7 @@ class IBertClassificationHead(nn.Module):
 # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering
 @add_start_docstrings(
     """
-    IBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    I-BERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     IBERT_START_DOCSTRING,

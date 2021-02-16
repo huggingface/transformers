@@ -319,8 +319,6 @@ class IntGELU(nn.Module):
 
         if not self.quant_mode:
             self.activation_fn = nn.GELU()
-        else:
-            pass
 
         self.k = 1.4142
         self.const = 14  # dummy integer constant
