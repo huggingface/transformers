@@ -109,8 +109,9 @@ class IBertEmbeddings(nn.Module):
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
-        self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
+        self.LayerNorm = IntLayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode
+        )
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -348,8 +349,9 @@ class IBertSelfOutput(nn.Module):
             per_channel=True,
         )
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
-        self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
-        self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
+        self.LayerNorm = IntLayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode
+        )
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
@@ -479,8 +481,9 @@ class IBertOutput(nn.Module):
             per_channel=True,
         )
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
-        self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
-        self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
+        self.LayerNorm = IntLayerNorm(
+            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode
+        )
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 

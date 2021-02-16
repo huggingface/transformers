@@ -448,8 +448,14 @@ class IntLayerNorm(nn.Module):
         Force dequantize LayerNorm if either 'layernorm' or 'nonlinear' is given.
     """
 
-    def __init__(self, output_bit, quant_mode=False, force_dequant="none"):
+    def __init__(self, normalized_shape, eps, output_bit=8, quant_mode=False, force_dequant="none"):
         super().__init__()
+        self.normalized_shape = normalized_shape
+        self.eps = eps
+
+        self.weight = nn.Parameter(torch.zeros(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+
         self.quant_mode = quant_mode
         if force_dequant in ["nonlinear", "layernorm"]:
             logger.info("Force dequantize layernorm")
@@ -460,12 +466,6 @@ class IntLayerNorm(nn.Module):
         self.max_bit = 32
         self.dim_sqrt = None
         self.activation = QuantAct(self.output_bit, quant_mode=self.quant_mode)
-
-    def set_param(self, ln):
-        self.normalized_shape = ln.normalized_shape
-        self.eps = ln.eps
-        self.weight = nn.Parameter(ln.weight.data.clone())
-        self.bias = nn.Parameter(ln.bias.data.clone())
 
     def set_shift(self, y_int):
         with torch.no_grad():
