@@ -608,14 +608,15 @@ class SpeechToTextTransformerPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
-    def _get_subsampled_encoder_attn_mask(self, input_ids, attention_mask):
+    def _get_subsampled_encoder_attn_mask(self, attention_mask):
         subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
         max_len = subsampled_lengths.max().item()
-        attention_mask = torch.zeros((input_ids.size()[0], max_len), dtype=input_ids.dtype, device=input_ids.device)
+        bsz = attention_mask.size()[0]
+        attention_mask = torch.zeros((bsz, max_len), dtype=attention_mask.dtype, device=attention_mask.device)
 
         # these two operations makes sure that all values
         # before the output lengths indices are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=input_ids.device), subsampled_lengths - 1)] = 1
+        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
         return attention_mask
 
@@ -1250,8 +1251,8 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if attention_mask is not None and encoder_outputs is None:
-            attention_mask = self._get_subsampled_encoder_attn_mask(input_ids, attention_mask)
+        if attention_mask is not None:
+            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1469,13 +1470,13 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
     ) -> Dict[str, Any]:
         # retrieve encoder hidden states
         encoder = self.get_encoder()
-        if "attention_mask" in model_kwargs:
-            model_kwargs["attention_mask"] = self._get_subsampled_encoder_attn_mask(
-                input_ids, model_kwargs["attention_mask"]
-            )
         encoder_kwargs = {
             argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
         }
+        if "attention_mask" in encoder_kwargs:
+            encoder_kwargs["attention_mask"] = self._get_subsampled_encoder_attn_mask(
+                encoder_kwargs["attention_mask"]
+            )
         model_kwargs["encoder_outputs"] = encoder(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
