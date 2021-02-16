@@ -146,24 +146,24 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
 def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
-
+# Working :)
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
         super().__init__()
+        self.rescale_embeddings = config.rescale_embeddings
+        self.hidden_size = config.hidden_size
+
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
-        # self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)    # TODO: extra
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))    # TODO: extra
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")    # TODO: extra
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -183,13 +183,17 @@ class BigBirdEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
+
+        if self.rescale_embeddings:
+            inputs_embeds = inputs_embeds * (self.hidden_size ** 0.5)
+
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
+
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -878,6 +882,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        self.input_ids = input_ids # TODO: remove
+        self.word_embeddings = embedding_output # TODO: remove
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -960,7 +966,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.big_bird(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

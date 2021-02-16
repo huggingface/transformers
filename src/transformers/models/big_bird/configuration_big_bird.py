@@ -110,10 +110,11 @@ class BigBirdConfig(PretrainedConfig):
         eos_token_id=2,
         attention_type="block_sparse",
         use_bias=True,
-        rescale_embedding=False,
+        rescale_embeddings=False,
         norm_type="postnorm",
         block_size=64,
         num_random_blocks=3,
+        position_embedding_type="absolute",
         **kwargs
     ):
         super().__init__(
@@ -138,12 +139,17 @@ class BigBirdConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
 
+        # embed layer
+        self.rescale_embeddings = rescale_embeddings
+        self.position_embedding_type = position_embedding_type
+
         self.attention_type = attention_type
         self.use_bias = use_bias
-        self.rescale_embedding = rescale_embedding
         self.norm_type = norm_type
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
+        
 
         # TODO: update config-docs
         # TODO: check tie_embeddings in config
+        # TODO: token_type_ids is irrelevant when type_vocab_size=1
