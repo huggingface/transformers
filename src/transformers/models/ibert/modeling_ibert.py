@@ -622,24 +622,11 @@ class IBertPooler(nn.Module):
 
 class IBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
+    An abstract class for a simple interface for downloading and loading pretrained models.
     """
 
     config_class = IBertConfig
     base_model_prefix = "ibert"
-
-    def _init_weights(self, module):
-        """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 IBERT_START_DOCSTRING = r"""
@@ -741,8 +728,6 @@ class IBertModel(IBertPreTrainedModel):
         self.encoder = IBertEncoder(config)
 
         self.pooler = IBertPooler(config) if add_pooling_layer else None
-
-        self.init_weights()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -906,8 +891,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         self.ibert = IBertModel(config, add_pooling_layer=False)
         self.lm_head = IBertLMHead(config)
 
-        self.init_weights()
-
     def get_output_embeddings(self):
         return self.lm_head.decoder
 
@@ -1024,8 +1007,6 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         self.ibert = IBertModel(config, add_pooling_layer=False)
         self.classifier = IBertClassificationHead(config)
 
-        self.init_weights()
-
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
@@ -1107,8 +1088,6 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         self.ibert = IBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
-
-        self.init_weights()
 
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
@@ -1202,8 +1181,6 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         self.ibert = IBertModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
 
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1313,8 +1290,6 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
 
         self.ibert = IBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.init_weights()
 
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
