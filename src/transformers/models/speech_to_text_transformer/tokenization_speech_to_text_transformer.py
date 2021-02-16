@@ -29,7 +29,7 @@ import sentencepiece
 try:
     import torchaudio.compliance.kaldi as ta_kaldi
 except ImportError:
-    raise ImportError("Please install or `torchaudio` to enable fbank feature extraction")
+    raise ImportError("Please install `torchaudio` to enable fbank feature extraction")
 
 from ...tokenization_utils import BatchEncoding, EncodedInput, PaddingStrategy, PreTrainedTokenizer, TensorType
 from ...utils import logging
