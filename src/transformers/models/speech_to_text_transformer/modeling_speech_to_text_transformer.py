@@ -186,18 +186,12 @@ class SpeechToTextTransformerSinusoidalPositionalEmbedding(nn.Module):
         return emb
 
     @torch.no_grad()
-    def forward(
-        self, input_ids: torch.Tensor = None, inputs_embeds: torch.Tensor = None, past_key_values_length: int = 0
-    ):
-        if input_ids is not None:
-            bsz, seq_len = input_ids.size()
-            # Create the position ids from the input token ids. Any padded tokens remain padded.
-            position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
-                input_ids.device
-            )
-        else:
-            bsz, seq_len = inputs_embeds.size()[:-1]
-            position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+        bsz, seq_len = input_ids.size()
+        # Create the position ids from the input token ids. Any padded tokens remain padded.
+        position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
+            input_ids.device
+        )
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len
@@ -689,10 +683,6 @@ SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size, sequence_length)`.
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
             representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
@@ -790,17 +780,16 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.SpeechToTextTransformerTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+            input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`):
+                Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_features`, the :class:`SpeechToTextTransformerTokenizer` should be used for extracting the fbank
+                features, padding and conversion into a tensor of type `torch.FloatTensor`. See
+                :meth:`transformers.SpeechToTextTransformerTokenizer.__call__`
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`, `optional`):
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
+                ``[0, 1]``:
 
                 - 1 for tokens that are **not masked**,
                 - 0 for tokens that are **masked**.
@@ -812,10 +801,6 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -1226,7 +1211,6 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
         decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        inputs_embeds=None,
         decoder_inputs_embeds=None,
         use_cache=None,
         output_attentions=None,
@@ -1335,7 +1319,6 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
         decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        inputs_embeds=None,
         decoder_inputs_embeds=None,
         labels=None,
         use_cache=None,
@@ -1391,7 +1374,6 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
