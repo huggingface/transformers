@@ -117,14 +117,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
 
-
-def lengths_to_attn_mask(lens: torch.LongTensor) -> torch.BoolTensor:
-    bsz, max_lens = lens.size(0), torch.max(lens).item()
-    mask = torch.arange(max_lens).to(lens.device).view(1, max_lens)
-    mask = mask.expand(bsz, -1) < lens.view(bsz, 1).expand(-1, max_lens)
-    return mask.long()
-
-
 class Conv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
