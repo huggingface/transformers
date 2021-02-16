@@ -275,7 +275,7 @@ class QuantLinear(nn.Module):
         # assert that prev_act_scaling_factor is a scalar tensor
         # i.e., it is not channel-wise quantized
         assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,), (
-            "Input activation to the QuantLinear layer should be globally (non-channel-wise) quantized."
+            "Input activation to the QuantLinear layer should be globally (non-channel-wise) quantized. "
             "Please add a QuantAct layer with `per_channel = True` before this QuantAct layer"
         )
 
@@ -520,7 +520,7 @@ class IntLayerNorm(nn.Module):
             if var_int.max() >= 2 ** self.max_bit:
                 var_int = self.overflow_fallback(y_int)
                 assert var_int.max() < 2 ** self.max_bit + 0.1, (
-                    "Error detected in overflow handling"
+                    "Error detected in overflow handling: "
                     "`var_int` exceeds `self.max_bit` (the maximum possible bit width)"
                 )
 
