@@ -571,8 +571,8 @@ class IBertEncoder(nn.Module):
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
-        all_cross_attentions = None # `config.add_cross_attention` is not supported
-        next_decoder_cache = None # `config.use_cache` is not supported
+        all_cross_attentions = None  # `config.add_cross_attention` is not supported
+        next_decoder_cache = None  # `config.use_cache` is not supported
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:

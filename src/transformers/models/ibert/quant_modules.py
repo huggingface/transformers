@@ -32,15 +32,16 @@ logger = logging.get_logger(__name__)
 
 class QuantEmbedding(nn.Module):
     """
-    Class to quantize given Embedding layer
+    Quantized version of :obj:`torch.nn.Embedding`. Adds quantization-specific arguments on top of
+    :obj:`torch.nn.Embedding`.
 
-    Parameters:
-    weight_bit : int
-        Bitwidth for quantized weights.
-    momentum : float, default 0.95
-        Momentum for updating the activation quantization range.
-    quant_mode : bool, default False
-        The mode for quantization. True for quantization.
+    Args:
+        weight_bit (:obj:`int`, `optiona`l, defaults to :obj:`8`):
+            Bitwidth for the quantized weight.
+        momentum (:obj:`float`, `optional, defaults to :obj:`0.95`):
+            Momentum for updating the activation quantization range.
+        quant_mode (:obj:`bool`, `optional, defaults to :obj:`False`):
+            Wheter or not the layer is quantized.
     """
 
     def __init__(
@@ -115,20 +116,19 @@ class QuantEmbedding(nn.Module):
 
 class QuantAct(nn.Module):
     """
-    Class to quantize given activations
+    Quantizes the given activation.
 
-    Parameters:
-    ----------
-    activation_bit : int
-        Bitwidth for quantized activations.
-    act_range_momentum : float, default 0.95
-        Momentum for updating the activation quantization range.
-    per_channel : bool, default False
-        Whether to use channel-wise quantization.
-    channel_len : int, default None
-        Specify the channel length when using the per_channel mode.
-    quant_mode : bool, default False
-        The mode for quantization. True for quantization.
+    Args:
+        activation_bit (:obj:`int`):
+            Bitwidth for the quantized activation.
+        act_range_momentum (:obj:`float`, `optional`, defaults to :obj:`0.95`):
+            Momentum for updating the activation quantization range.
+        per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to or not use channel-wise quantization.
+        channel_len (:obj:`int`, `optional`, defaults to :obj:`None`):
+            Specify the channel length when set the `per_channel` True.
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter or not the layer is quantized.
     """
 
     def __init__(self, activation_bit, act_range_momentum=0.95, per_channel=False, channel_len=None, quant_mode=False):
@@ -224,18 +224,17 @@ class QuantAct(nn.Module):
 
 class QuantLinear(nn.Module):
     """
-    Class to quantize weights of given Linear layer
+    Quantized version of :obj:`torch.nn.Linear`. Adds quantization-specific arguments on top of :obj:`torch.nn.Linear`.
 
-    Parameters:
-    ----------
-    weight_bit : int
-        Bitwidth for quantized weights.
-    bias_bit : int, default None
-        Bitwidth for quantized bias.
-    per_channel : bool, default False
-        Whether to use channel-wise quantization.
-    quant_mode : bool, default False
-        The mode for quantization. True for quantization.
+    Args:
+        weight_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
+            Bitwidth for the quantized weight.
+        bias_bit (:obj:`int`, `optional`, defaults to :obj:`32`):
+            Bitwidth for the quantized bias.
+        per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to use channel-wise quantization.
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter or not the layer is quantized.
     """
 
     def __init__(
@@ -266,14 +265,10 @@ class QuantLinear(nn.Module):
         return s
 
     def forward(self, x, prev_act_scaling_factor=None):
-        """
-        using quantized weights to forward activation x
-        """
         if not self.quant_mode:
             return F.linear(x, weight=self.weight, bias=self.bias), None
 
         # assert that prev_act_scaling_factor is a scalar tensor
-        # i.e., it is not channel-wise quantized
         assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,), (
             "Input activation to the QuantLinear layer should be globally (non-channel-wise) quantized. "
             "Please add a QuantAct layer with `per_channel = True` before this QuantAct layer"
@@ -309,14 +304,13 @@ class QuantLinear(nn.Module):
 
 class IntGELU(nn.Module):
     """
-    Class to quantize given GELU layer
+    Quantized version of :obj:`torch.nn.GELU`. Adds quantization-specific arguments on top of :obj:`torch.nn.GELU`.
 
-    Parameters:
-    ----------
-    quant_mode : bool, default False
-        The mode for quantization. True for quantization.
-    force_dequant : str, default 'none'
-        Force dequantize GELU if either 'gelu' or 'nonlinear' is given.
+    Args:
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter or not the layer is quantized.
+        force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
+            Force dequantize the layer if either "gelu" or "nonlinear" is given.
     """
 
     def __init__(self, quant_mode=True, force_dequant="none"):
@@ -369,16 +363,16 @@ class IntGELU(nn.Module):
 
 class IntSoftmax(nn.Module):
     """
-    Class to quantize given Softmax layer
+    Quantized version of :obj:`torch.nn.Softmax`. Adds quantization-specific arguments on top of
+    :obj:`torch.nn.Softmax`.
 
-    Parameters:
-    ----------
-    output_bit : int
-        Bitwidth for the Softmax output.
-    quant_mode : bool, default False
-        The mode for quantization. True for quantization.
-    force_dequant : str, default 'none'
-        Force dequantize Softmax if either 'softmax' or 'nonlinear' is given.
+    Args:
+        output_bit (:obj:`int`):
+            Bitwidth for the layer output activation.
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter or not the layer is quantized.
+        force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
+            Force dequantize the layer if either "softmax" or "nonlinear" is given.
     """
 
     def __init__(self, output_bit, quant_mode=False, force_dequant="none"):
@@ -441,16 +435,16 @@ class IntSoftmax(nn.Module):
 
 class IntLayerNorm(nn.Module):
     """
-    Class to quantize given LayerNorm layer
+    Quantized version of :obj:`torch.nn.LayerNorm`. Adds quantization-specific arguments on top of
+    :obj:`torch.nn.LayerNorm`.
 
-    Parameters:
-    ----------
-    output_bit : int
-        Bitwidth for the LayerNorm output.
-    quant_mode : bool, default False
-        The mode for quantization. True for quantization.
-    force_dequant : str, default 'none'
-        Force dequantize LayerNorm if either 'layernorm' or 'nonlinear' is given.
+    Args:
+        output_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
+            Bitwidth for the layer output activation.
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Wheter or not the layer is quantized.
+        force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
+            Force dequantize the layer if either "layernorm" or "nonlinear" is given.
     """
 
     def __init__(self, normalized_shape, eps, output_bit=8, quant_mode=False, force_dequant="none"):
