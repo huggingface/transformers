@@ -30,8 +30,6 @@ _import_structure = {
 if is_sentencepiece_available():
     _import_structure["tokenization_speech_to_text_transformer"] = ["SpeechToTextTransformerTokenizer"]
 
-if is_tokenizers_available():
-    _import_structure["tokenization_speech_to_text_transformer_fast"] = ["SpeechToTextTransformerTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_speech_to_text_transformer"] = [
@@ -48,9 +46,6 @@ if TYPE_CHECKING:
         SpeechToTextTransformerConfig,
     )
     from .tokenization_speech_to_text_transformer import SpeechToTextTransformerTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_speech_to_text_transformer_fast import SpeechToTextTransformerTokenizerFast
 
     if is_torch_available():
         from .modeling_speech_to_text_transformer import (

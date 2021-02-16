@@ -15,10 +15,9 @@
 """ PyTorch SpeechToTextTransformer model. """
 
 
-import copy
 import math
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -28,7 +27,6 @@ from torch.nn import CrossEntropyLoss
 from ...activations import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
@@ -36,11 +34,8 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -687,6 +682,7 @@ SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
+
 
 class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
     """

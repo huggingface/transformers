@@ -2160,6 +2160,27 @@ class RobertaModel:
         requires_pytorch(self)
 
 
+SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SpeechToTextTransformerForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class SpeechToTextTransformerModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

@@ -14,14 +14,12 @@
 # limitations under the License.
 """Tokenization classes for SpeechToTextTransformer."""
 import json
-from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
-from numpy.core.defchararray import encode
 
 import sentencepiece
 
@@ -31,7 +29,7 @@ try:
 except ImportError:
     raise ImportError("Please install `torchaudio` to enable fbank feature extraction")
 
-from ...tokenization_utils import BatchEncoding, EncodedInput, PaddingStrategy, PreTrainedTokenizer, TensorType
+from ...tokenization_utils import BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TensorType
 from ...utils import logging
 
 

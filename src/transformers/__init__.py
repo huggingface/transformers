@@ -290,7 +290,6 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.speech_to_text_transformer"].append("SpeechToTextTransformerTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -1509,7 +1508,6 @@ if TYPE_CHECKING:
         from .models.reformer import ReformerTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
-        from .models.speech_to_text_transformer import SpeechToTextTransformerTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast

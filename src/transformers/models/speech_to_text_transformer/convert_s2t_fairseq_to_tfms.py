@@ -1,4 +1,3 @@
-import fairseq
 import torch
 from torch import nn
 
