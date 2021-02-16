@@ -188,12 +188,33 @@ class IBertSelfAttention(nn.Module):
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
         # Q, K, V Linear layers
-        self.query = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
-        self.key = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
-        self.value = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
-        self.query.set_param(nn.Linear(config.hidden_size, self.all_head_size))
-        self.key.set_param(nn.Linear(config.hidden_size, self.all_head_size))
-        self.value.set_param(nn.Linear(config.hidden_size, self.all_head_size))
+        self.query = QuantLinear(
+            config.hidden_size,
+            self.all_head_size,
+            bias=True,
+            weight_bit=self.weight_bit,
+            bias_bit=self.bias_bit,
+            quant_mode=self.quant_mode,
+            per_channel=True,
+        )
+        self.key = QuantLinear(
+            config.hidden_size,
+            self.all_head_size,
+            bias=True,
+            weight_bit=self.weight_bit,
+            bias_bit=self.bias_bit,
+            quant_mode=self.quant_mode,
+            per_channel=True,
+        )
+        self.value = QuantLinear(
+            config.hidden_size,
+            self.all_head_size,
+            bias=True,
+            weight_bit=self.weight_bit,
+            bias_bit=self.bias_bit,
+            quant_mode=self.quant_mode,
+            per_channel=True,
+        )
 
         # Requantization (32bit -> 8bit) for Q, K, V activations
         self.query_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
@@ -310,8 +331,15 @@ class IBertSelfOutput(nn.Module):
         self.ln_input_bit = 22
         self.ln_output_bit = 32
 
-        self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
-        self.dense.set_param(nn.Linear(config.hidden_size, config.hidden_size))
+        self.dense = QuantLinear(
+            config.hidden_size,
+            config.hidden_size,
+            bias=True,
+            weight_bit=self.weight_bit,
+            bias_bit=self.bias_bit,
+            quant_mode=self.quant_mode,
+            per_channel=True,
+        )
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
         self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))
@@ -397,8 +425,15 @@ class IBertIntermediate(nn.Module):
         self.act_bit = 8
         self.weight_bit = 8
         self.bias_bit = 32
-        self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
-        self.dense.set_param(nn.Linear(config.hidden_size, config.intermediate_size))
+        self.dense = QuantLinear(
+            config.hidden_size,
+            config.intermediate_size,
+            bias=True,
+            weight_bit=self.weight_bit,
+            bias_bit=self.bias_bit,
+            quant_mode=self.quant_mode,
+            per_channel=True,
+        )
 
         assert config.hidden_act == "gelu", "I-BERT only supports 'gelu' for `config.hidden_act`"
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
@@ -427,8 +462,15 @@ class IBertOutput(nn.Module):
         self.ln_input_bit = 22
         self.ln_output_bit = 32
 
-        self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
-        self.dense.set_param(nn.Linear(config.intermediate_size, config.hidden_size))
+        self.dense = QuantLinear(
+            config.intermediate_size,
+            config.hidden_size,
+            bias=True,
+            weight_bit=self.weight_bit,
+            bias_bit=self.bias_bit,
+            quant_mode=self.quant_mode,
+            per_channel=True,
+        )
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = IntLayerNorm(self.ln_output_bit, quant_mode=self.quant_mode)
         self.LayerNorm.set_param(nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps))

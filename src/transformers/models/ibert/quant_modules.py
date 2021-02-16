@@ -226,13 +226,24 @@ class QuantLinear(nn.Module):
         The mode for quantization. True for quantization.
     """
 
-    def __init__(self, weight_bit, bias_bit=None, per_channel=False, quant_mode=False):
+    def __init__(
+        self, in_features, out_features, bias=True, weight_bit=8, bias_bit=32, per_channel=False, quant_mode=False
+    ):
         super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+
+        self.weight = nn.Parameter(torch.zeros([out_features, in_features]))
+        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
+        self.register_buffer("fc_scaling_factor", torch.zeros(self.out_features))
+        if bias:
+            self.bias = nn.Parameter(torch.zeros(out_features))
+            self.register_buffer("bias_integer", torch.zeros_like(self.bias))
+
         self.weight_bit = weight_bit
         self.quant_mode = quant_mode
         self.per_channel = per_channel
         self.bias_bit = bias_bit
-        self.quantize_bias = False if bias_bit is None else True
         self.quant_mode = quant_mode
         self.percentile_mode = False
         self.weight_function = SymmetricQuantFunction.apply
@@ -241,19 +252,6 @@ class QuantLinear(nn.Module):
         s = super().__repr__()
         s = "(" + s + " weight_bit={}, quant_mode={})".format(self.weight_bit, self.quant_mode)
         return s
-
-    def set_param(self, linear):
-        self.in_features = linear.in_features
-        self.out_features = linear.out_features
-        self.weight = nn.Parameter(linear.weight.data.clone())
-        self.register_buffer("fc_scaling_factor", torch.zeros(self.out_features))
-        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
-        try:
-            self.bias = nn.Parameter(linear.bias.data.clone())
-            self.register_buffer("bias_integer", torch.zeros_like(self.bias))
-        except AttributeError:
-            self.bias = None
-            self.bias_integer = None
 
     def forward(self, x, prev_act_scaling_factor=None):
         """
