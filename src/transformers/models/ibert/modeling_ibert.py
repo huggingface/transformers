@@ -235,8 +235,6 @@ class IBertSelfAttention(nn.Module):
         assert (
             self.position_embedding_type == "absolute"
         ), "I-BERT only supports 'absolute' for `config.position_embedding_type`"
-        self.is_decoder = config.is_decoder
-        assert not self.is_decoder
 
         self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode)
 
@@ -512,10 +510,8 @@ class IBertLayer(nn.Module):
 
         self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         assert self.chunk_size_feed_forward == 0, "I-BERT only support `config.chunk_size_feed_forward` == 0"
-        assert not self.is_decoder
         assert not self.add_cross_attention
 
         self.attention = IBertAttention(config)
@@ -762,11 +758,6 @@ class IBertModel(IBertPreTrainedModel):
     all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
     Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
-    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
-    input to the forward pass.
-
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -843,8 +834,7 @@ class IBertModel(IBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
-        if not self.config.is_decoder:
-            use_cache = False
+        use_cache = False #TODO remeove this?
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -871,16 +861,7 @@ class IBertModel(IBertPreTrainedModel):
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        encoder_extended_attention_mask = None #TODO remove this
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -933,12 +914,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `IBertForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
-            )
 
         self.ibert = IBertModel(config, add_pooling_layer=False)
         self.lm_head = IBertLMHead(config)
