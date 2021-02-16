@@ -78,12 +78,16 @@ class IBertEmbeddings(nn.Module):
         self.ln_input_bit = 22
         self.ln_output_bit = 32
 
-        self.word_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
-        self.word_embeddings.set_param(
-            nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = QuantEmbedding(
+            config.vocab_size,
+            config.hidden_size,
+            padding_idx=config.pad_token_id,
+            weight_bit=self.embedding_bit,
+            quant_mode=self.quant_mode,
         )
-        self.token_type_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
-        self.token_type_embeddings.set_param(nn.Embedding(config.type_vocab_size, config.hidden_size))
+        self.token_type_embeddings = QuantEmbedding(
+            config.type_vocab_size, config.hidden_size, weight_bit=self.embedding_bit, quant_mode=self.quant_mode
+        )
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
@@ -91,9 +95,12 @@ class IBertEmbeddings(nn.Module):
 
         # End copy
         self.padding_idx = config.pad_token_id
-        self.position_embeddings = QuantEmbedding(weight_bit=self.embedding_bit, quant_mode=self.quant_mode)
-        self.position_embeddings.set_param(
-            nn.Embedding(config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx)
+        self.position_embeddings = QuantEmbedding(
+            config.max_position_embeddings,
+            config.hidden_size,
+            padding_idx=self.padding_idx,
+            weight_bit=self.embedding_bit,
+            quant_mode=self.quant_mode,
         )
 
         # Integer-only addition between embeddings

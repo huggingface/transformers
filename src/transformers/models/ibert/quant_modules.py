@@ -43,28 +43,38 @@ class QuantEmbedding(nn.Module):
         The mode for quantization. True for quantization.
     """
 
-    def __init__(self, weight_bit, momentum=0.95, quant_mode=False):
+    def __init__(
+        self,
+        num_embeddings,
+        embedding_dim,
+        padding_idx=None,
+        max_norm=None,
+        norm_type=2.0,
+        scale_grad_by_freq=False,
+        sparse=False,
+        _weight=None,
+        weight_bit=8,
+        momentum=0.95,
+        quant_mode=False,
+    ):
         super().__init__()
+        self.num_ = num_embeddings
+        self.dim = embedding_dim
+        self.padding_idx = padding_idx
+        self.max_norm = max_norm
+        self.norm_type = norm_type
+        self.scale_grad_by_freq = scale_grad_by_freq
+        self.sparse = sparse
+
+        self.weight = nn.Parameter(torch.zeros([num_embeddings, embedding_dim]))
+        self.register_buffer("weight_scaling_factor", torch.zeros(1))
+        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
 
         self.weight_bit = weight_bit
         self.momentum = momentum
         self.quant_mode = quant_mode
         self.percentile_mode = False
-
         self.weight_function = SymmetricQuantFunction.apply
-
-    def set_param(self, embedding):
-        self.num_embeddings = embedding.num_embeddings
-        self.embedding_dim = embedding.embedding_dim
-        self.padding_idx = embedding.padding_idx
-        self.max_norm = embedding.max_norm
-        self.norm_type = embedding.norm_type
-        self.scale_grad_by_freq = embedding.scale_grad_by_freq
-        self.sparse = embedding.sparse
-        self.weight = embedding.weight
-
-        self.register_buffer("weight_scaling_factor", torch.zeros(1))
-        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
 
     def forward(self, x, positions=None, incremental_state=None):
         if not self.quant_mode:
