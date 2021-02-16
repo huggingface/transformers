@@ -20,10 +20,17 @@ from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
+from numpy.core.defchararray import encode
 import torch
 
 import sentencepiece
-import torchaudio.compliance.kaldi as ta_kaldi
+
+try:
+    import torchaudio.compliance.kaldi as ta_kaldi
+except ImportError:
+    raise ImportError(
+        "Please install or `torchaudio` to enable fbank feature extraction"
+    )
 
 from ...tokenization_utils import BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TensorType, EncodedInput
 from ...utils import logging
@@ -68,7 +75,7 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         super().__init__(
-            bos_token="<s>",
+            bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
@@ -149,7 +156,7 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
-        return_attention_mask: bool = False,
+        return_attention_mask: bool = True,
         **kwargs
     ):
         is_batched = bool(
@@ -168,21 +175,16 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
             raw_speech = [raw_speech]
 
         features = [self._extract_fbank_features(waveform, sample_rate, num_mel_bins) for waveform in raw_speech]
-
         for transform in self.transforms:
             features = [transform(feature) for feature in features]
-
-        encoded_inputs = BatchEncoding({"input_ids": features})
-
-        padded_inputs = self.pad(
-            encoded_inputs,
-            padding=padding,
-            max_length=max_length,
-            pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
-            return_tensors=return_tensors,
-            verbose=verbose,
+        
+        # Convert padding_strategy in PaddingStrategy
+        padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
+            padding=padding, max_length=max_length, verbose=verbose
         )
+
+        padded_inputs = self._pad_frames(features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask)
+        padded_inputs = BatchEncoding(padded_inputs, tensor_type=return_tensors)
 
         return padded_inputs
 
@@ -197,77 +199,37 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         features = ta_kaldi.fbank(waveform, num_mel_bins=num_mel_bins, sample_frequency=sample_rate)
         return features.numpy()
     
-    def _pad(
-        self,
-        encoded_inputs: Union[Dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-    ) -> dict:
-        """
-        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
-
-        Args:
-            encoded_inputs: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
-            max_length: maximum length of the returned list and optionally padding length (see below).
-                Will truncate by taking into account the special tokens.
-            padding_strategy: PaddingStrategy to use for padding.
-
-                - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
-                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
-                - PaddingStrategy.DO_NOT_PAD: Do not pad
-                The tokenizer padding sides are defined in self.padding_side:
-
-                    - 'left': pads on the left of the sequences
-                    - 'right': pads on the right of the sequences
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
-        """
-        # Load from model defaults
-        if return_attention_mask is None:
-            return_attention_mask = "attention_mask" in self.model_input_names
-
-        required_input = encoded_inputs[self.model_input_names[0]]
-
+    def _pad_frames(self, features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask):
+        cur_max_length = max(feature.shape[0] for feature in features) 
+        
         if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = len(required_input)
-
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
+            max_length = cur_max_length
+        
+        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
-
-        if needs_to_be_padded:
-            difference = max_length - len(required_input)
-            if self.padding_side == "right":
-                if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [1] * len(required_input) + [0] * difference
-                if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = (
-                        encoded_inputs["token_type_ids"] + [self.pad_token_type_id] * difference
-                    )
-                if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
-            elif self.padding_side == "left":
-                if return_attention_mask:
-                    encoded_inputs["attention_mask"] = [0] * difference + [1] * len(required_input)
-                if "token_type_ids" in encoded_inputs:
-                    encoded_inputs["token_type_ids"] = [self.pad_token_type_id] * difference + encoded_inputs[
-                        "token_type_ids"
-                    ]
-                if "special_tokens_mask" in encoded_inputs:
-                    encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
-            else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        elif return_attention_mask and "attention_mask" not in encoded_inputs:
-            encoded_inputs["attention_mask"] = [1] * len(required_input)
-
+        
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
+            input_features = np.zeros((len(features), max_length, features[0].shape[1]))
+            for i, v in enumerate(features):
+                input_features[i, : v.shape[0]] = v
+            
+            if return_attention_mask:
+                attention_mask = np.not_equal(input_features, 0).astype(np.long).tolist()
+            
+            input_features = input_features.tolist()
+        else:
+            features = features
+            if return_attention_mask:
+                attention_mask = [np.not_equal(feature, 0).astype(np.long).tolist() for feature in features]
+            
+            input_features= [feature.tolist() for feature in features]
+        
+        encoded_inputs = {"input_features": input_features}
+        if return_attention_mask:
+            encoded_inputs["attention_mask"] = attention_mask
+        
         return encoded_inputs
+
 
 class UtteranceCMVN:
     """Utterance-level CMVN (cepstral mean and variance normalization)"""
