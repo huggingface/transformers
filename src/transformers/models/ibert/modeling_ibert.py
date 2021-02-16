@@ -203,8 +203,9 @@ class IBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        assert self.position_embedding_type == "absolute", \
-            "I-BERT only supports 'absolute' for `config.position_embedding_type`"
+        assert (
+            self.position_embedding_type == "absolute"
+        ), "I-BERT only supports 'absolute' for `config.position_embedding_type`"
         self.is_decoder = config.is_decoder
         assert not self.is_decoder
 
@@ -399,8 +400,7 @@ class IBertIntermediate(nn.Module):
         self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
         self.dense.set_param(nn.Linear(config.hidden_size, config.intermediate_size))
 
-        assert config.hidden_act == "gelu" ,\
-            "I-BERT only supports 'gelu' for `config.hidden_act`"
+        assert config.hidden_act == "gelu", "I-BERT only supports 'gelu' for `config.hidden_act`"
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
@@ -462,8 +462,7 @@ class IBertLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
-        assert self.chunk_size_feed_forward == 0, \
-                "I-BERT only support `config.chunk_size_feed_forward` == 0" 
+        assert self.chunk_size_feed_forward == 0, "I-BERT only support `config.chunk_size_feed_forward` == 0"
         assert not self.is_decoder
         assert not self.add_cross_attention
 
@@ -721,8 +720,8 @@ class IBertModel(IBertPreTrainedModel):
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
     cross-attention is added between the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
-    Kaiser and Illia Polosukhin.
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
     set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
