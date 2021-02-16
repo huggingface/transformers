@@ -171,7 +171,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
 """
 
 
-def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
+def get_masks(slen, lengths, causal, padding_mask=None):
     """
     Generate hidden states mask, and optionally an attention mask.
     """
@@ -196,9 +196,6 @@ def get_masks(slen, lengths, causal, padding_mask=None, dtype=tf.float32):
     if tf.executing_eagerly():
         tf.debugging.assert_equal(shape_list(mask), [bs, slen])
         assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
-
-    mask = tf.cast(mask, dtype=dtype)
-    attn_mask = tf.cast(attn_mask, dtype=dtype)
 
     return mask, attn_mask
 
@@ -372,8 +369,8 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
 
             cache[self.layer_id] = (k, v)
 
-        q = tf.cast(q, dtype=tf.float32)
-        q = tf.multiply(q, tf.math.rsqrt(tf.cast(dim_per_head, dtype=tf.float32)))  # (bs, n_heads, qlen, dim_per_head)
+        dim_per_head = tf.cast(dim_per_head, dtype=q.dtype)
+        q = tf.multiply(q, tf.math.rsqrt(dim_per_head))  # (bs, n_heads, qlen, dim_per_head)
         k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
