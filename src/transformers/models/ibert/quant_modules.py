@@ -491,7 +491,7 @@ class IntLayerNorm(nn.Module):
         # compute sqrt of the feature dimension if it is the first run
         if self.dim_sqrt is None:
             n = torch.tensor(x.shape[2], dtype=torch.float)
-            self.dim_sqrt = torch.sqrt(n).cuda()
+            self.dim_sqrt = torch.sqrt(n).to(x.device)
 
         # Normalization: computes mean and variance(std)
         x_int = x / scaling_factor
@@ -619,17 +619,13 @@ class SymmetricQuantFunction(Function):
     """
 
     @staticmethod
-    def forward(ctx, x, k, percentile_mode=False, specified_scale=None):
+    def forward(ctx, x, k, percentile_mode, scale):
         """
         x: floating point tensor to be quantized k: quantization bitwidth Note that the current implementation of
         SymmetricQuantFunction requires pre-calculated scaling factor. specified_scale: pre-calculated scaling factor
         for the tensor x
         """
-
-        if specified_scale is not None:
-            scale = specified_scale
-
-        zero_point = torch.tensor(0.0).cuda()
+        zero_point = torch.tensor(0.0).to(scale.device)
 
         n = 2 ** (k - 1) - 1
         new_quant_x = linear_quantize(x, scale, zero_point, inplace=False)
@@ -707,8 +703,9 @@ def batch_frexp(inputs, max_bit=31):
 
     output_e = float(max_bit) - output_e
 
-    return torch.from_numpy(output_m).cuda().view(shape_of_input), torch.from_numpy(output_e).cuda().view(
-        shape_of_input
+    return (
+        torch.from_numpy(output_m).to(inputs.device).view(shape_of_input),
+        torch.from_numpy(output_e).to(inputs.device).view(shape_of_input),
     )
 
 
