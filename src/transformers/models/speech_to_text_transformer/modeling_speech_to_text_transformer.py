@@ -609,6 +609,9 @@ class SpeechToTextTransformerPreTrainedModel(PreTrainedModel):
         return input_lengths
 
     def _get_subsampled_encoder_attn_mask(self, attention_mask):
+        # convert the 3D attention mask to 2D
+        attention_mask = attention_mask[:, :, -1]
+
         subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
         max_len = subsampled_lengths.max().item()
         bsz = attention_mask.size()[0]
@@ -845,6 +848,9 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if attention_mask is not None:
+            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
         inputs_embeds = self.subsample(input_values)
         inputs_embeds = self.embed_scale * inputs_embeds
@@ -1085,6 +1091,7 @@ class SpeechToTextTransformerDecoder(SpeechToTextTransformerPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            encoder_attention_mask = self._get_subsampled_encoder_attn_mask(encoder_attention_mask)
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
@@ -1250,9 +1257,6 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if attention_mask is not None:
-            attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
@@ -1464,35 +1468,6 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
             "head_mask": head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
-
-    def _prepare_encoder_decoder_kwargs_for_generation(
-        self, input_ids: torch.FloatTensor, model_kwargs
-    ) -> Dict[str, Any]:
-        # retrieve encoder hidden states
-        encoder = self.get_encoder()
-        encoder_kwargs = {
-            argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
-        }
-        if "attention_mask" in encoder_kwargs:
-            encoder_kwargs["attention_mask"] = self._get_subsampled_encoder_attn_mask(
-                encoder_kwargs["attention_mask"]
-            )
-        model_kwargs["encoder_outputs"] = encoder(input_ids, return_dict=True, **encoder_kwargs)
-        return model_kwargs
-    
-    def _prepare_attention_mask_for_generation(
-        self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
-    ) -> torch.LongTensor:
-        # ugly hack
-        pad_token_id = 0
-        input_shape = input_ids.shape[:2]
-        is_pad_token_in_inputs_ids = (pad_token_id is not None) and (pad_token_id in input_ids)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
-            (eos_token_id is not None) and (pad_token_id != eos_token_id)
-        )
-        if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
-            return input_ids[:, :, -1].ne(pad_token_id).long()
-        return torch.new_ones(input_shape)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
