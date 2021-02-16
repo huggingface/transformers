@@ -100,24 +100,6 @@ class DataCollatorCTCWithPadding:
 data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, padding=True, return_attention_mask=False)
 
 
-class Wav2Vec2Trainer(Trainer):
-
-    def compute_loss(self, model, inputs):
-        """
-        How the loss is computed by Trainer. By default, all models return the loss in the first element.
-
-        Subclass and override for custom behavior.
-        """
-        if self.args.n_gpu > 1:
-            model.module.set_update_step(self.state.global_step)
-        else:
-            model.set_update_step(self.state.global_step)
-
-        outputs = model(**inputs)
-
-        return outputs.loss
-
-
 def compute_metrics(pred):
     pred_logits = pred.predictions
     pred_ids = np.argmax(pred_logits, axis=-1)
@@ -134,7 +116,7 @@ def compute_metrics(pred):
 
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=40,
+    num_train_epochs=25,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=16,
     evaluation_strategy="steps",
@@ -150,7 +132,7 @@ training_args = TrainingArguments(
     fp16=True,
 )
 
-trainer = Wav2Vec2Trainer(
+trainer = Trainer(
     model=model,
     data_collator=data_collator,
     args=training_args,

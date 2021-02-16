@@ -14,8 +14,6 @@
 # limitations under the License.
 """ PyTorch Wav2Vec2 model. """
 
-
-import contextlib
 import warnings
 from typing import Optional, Tuple
 
@@ -75,8 +73,6 @@ def compute_mask_indices(
         no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
         min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
     """
-
-    np.random.seed(0)
     bsz, all_sz = shape
     mask = np.full((bsz, all_sz), False)
 
@@ -166,18 +162,6 @@ def compute_mask_indices(
         mask[i, mask_idc] = True
 
     return mask
-
-
-class GradMultiply(torch.autograd.Function):
-    @staticmethod
-    def forward(ctx, x, scale):
-        ctx.scale = scale
-        res = x.new(x)
-        return res
-
-    @staticmethod
-    def backward(ctx, grad):
-        return grad * ctx.scale, None
 
 
 class Wav2Vec2NoLayerNormConvLayer(nn.Module):
@@ -846,11 +830,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         hidden_states = self.feature_extractor(input_values)
-
-        # scale gradients if needed
-        if self.training and self.config.feat_extract_out_grad_mult != 1.0:
-            hidden_states = GradMultiply.apply(hidden_states, self.config.feat_extract_out_grad_mult)
-
         hidden_states = hidden_states.transpose(1, 2)
 
         if attention_mask is not None:
@@ -1007,13 +986,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         self.dropout = nn.Dropout(config.final_dropout)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
-        # used for training
-        self.global_update_step: int = 0
-
         self.init_weights()
-
-    def set_update_step(self, step: int):
-        self.global_update_step = step
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1059,16 +1032,13 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        freeze_encoder = self.global_update_step < self.config.num_steps_freeze_encoder
-
-        with torch.no_grad() if freeze_encoder else contextlib.ExitStack():
-            outputs = self.wav2vec2(
-                input_values,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
+        outputs = self.wav2vec2(
+            input_values,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         hidden_states = outputs[0]
         hidden_states = self.dropout(hidden_states)
