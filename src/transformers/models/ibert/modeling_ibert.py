@@ -14,6 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """PyTorch IBert model. """
 
 import math
@@ -49,7 +50,14 @@ from ...modeling_utils import (
 from ...utils import logging
 from .configuration_ibert import IBertConfig
 
-from .utils.quant_modules import *
+from .quant_modules import (
+    QuantEmbedding,
+    QuantAct,
+    QuantLinear,
+    IntGELU,
+    IntSoftmax,
+    IntLayerNorm
+)
 
 
 logger = logging.get_logger(__name__)
