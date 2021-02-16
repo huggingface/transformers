@@ -211,7 +211,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "mT5"),
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
-        ("ibert", "I-BERT")
+        ("ibert", "I-BERT"),
     ]
 )
 

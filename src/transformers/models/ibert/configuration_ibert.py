@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao, 
+# Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao,
 # Michael Mahoney, Kurt Keutzer - UC Berkeley) and The HuggingFace Inc. team.
 # Copyright (c) 20121, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -16,8 +16,9 @@
 # limitations under the License.
 """ I-BERT configuration """
 
-from ...utils import logging
 from ...configuration_utils import PretrainedConfig
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -30,12 +31,12 @@ IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class IBertConfig(PretrainedConfig):
     """
-    This is the configuration class to store the configuration of a :class:`~transformers.IBertModel`.
-    It is used to instantiate a I-BERT model according to the specified arguments,
+    This is the configuration class to store the configuration of a :class:`~transformers.IBertModel`. It is used to
+    instantiate a I-BERT model according to the specified arguments,
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
-    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
-    This code is referred from :class:`~transformers.BertConfig` and :class:`~transformers.RobertaConfig`.
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information. This code is
+    referred from :class:`~transformers.BertConfig` and :class:`~transformers.RobertaConfig`.
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):

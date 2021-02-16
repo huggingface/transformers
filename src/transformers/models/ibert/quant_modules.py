@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao, 
+# Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao,
 # Michael Mahoney, Kurt Keutzer - UC Berkeley) and The HuggingFace Inc. team.
 # Copyright (c) 20121, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,19 +15,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
 import decimal
+
 import numpy as np
+import torch
+import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.multiprocessing as mp
 from torch.autograd import Function, Variable
-from torch.nn import Linear as _linear
 from torch.nn import Embedding as _Embedding
+from torch.nn import Linear as _linear
 from torch.nn import Module, Parameter
 
 from ...utils import logging
+
+
 logger = logging.get_logger(__name__)
+
 
 class QuantEmbedding(Module):
     """
@@ -41,10 +45,8 @@ class QuantEmbedding(Module):
     quant_mode : bool, default False
         The mode for quantization. True for quantization.
     """
-    def __init__(self,
-                 weight_bit,
-                 momentum=0.95,
-                 quant_mode=False):
+
+    def __init__(self, weight_bit, momentum=0.95, quant_mode=False):
         super(QuantEmbedding, self).__init__()
 
         self.weight_bit = weight_bit
@@ -56,7 +58,7 @@ class QuantEmbedding(Module):
             self.weight_function = None
         else:
             self.weight_function = SymmetricQuantFunction.apply
-                 
+
     def set_param(self, embedding):
         self.num_embeddings = embedding.num_embeddings
         self.embedding_dim = embedding.embedding_dim
@@ -67,31 +69,33 @@ class QuantEmbedding(Module):
         self.sparse = embedding.sparse
         self.weight = embedding.weight
 
-        self.register_buffer('weight_scaling_factor', torch.zeros(1))
-        self.register_buffer('weight_integer', torch.zeros_like(self.weight))
+        self.register_buffer("weight_scaling_factor", torch.zeros(1))
+        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
 
     def forward(self, x, positions=None, incremental_state=None):
         if not self.quant_mode:
-            return F.embedding(
-                x,
-                self.weight,
-                self.padding_idx,
-                self.max_norm,
-                self.norm_type,
-                self.scale_grad_by_freq,
-                self.sparse,
-            ), None
+            return (
+                F.embedding(
+                    x,
+                    self.weight,
+                    self.padding_idx,
+                    self.max_norm,
+                    self.norm_type,
+                    self.scale_grad_by_freq,
+                    self.sparse,
+                ),
+                None,
+            )
 
         w = self.weight
         w_transform = w.data.detach()
         w_min = w_transform.min().expand(1)
         w_max = w_transform.max().expand(1)
 
-        self.weight_scaling_factor = symmetric_linear_quantization_params(
-                    self.weight_bit, w_min, w_max, False)
+        self.weight_scaling_factor = symmetric_linear_quantization_params(self.weight_bit, w_min, w_max, False)
         self.weight_integer = self.weight_function(
-                    self.weight, self.weight_bit, self.percentile_mode, 
-                    self.weight_scaling_factor)
+            self.weight, self.weight_bit, self.percentile_mode, self.weight_scaling_factor
+        )
 
         emb_int = F.embedding(
             x,
@@ -122,12 +126,8 @@ class QuantAct(Module):
     quant_mode : bool, default False
         The mode for quantization. True for quantization.
     """
-    def __init__(self,
-                 activation_bit,
-                 act_range_momentum=0.95,
-                 per_channel=False,
-                 channel_len=None,
-                 quant_mode=False):
+
+    def __init__(self, activation_bit, act_range_momentum=0.95, per_channel=False, channel_len=None, quant_mode=False):
         super(QuantAct, self).__init__()
 
         self.activation_bit = activation_bit
@@ -137,9 +137,9 @@ class QuantAct(Module):
         self.percentile = False
 
         if not self.per_channel:
-            self.register_buffer('x_min', torch.zeros(1))
-            self.register_buffer('x_max', torch.zeros(1))
-            self.register_buffer('act_scaling_factor', torch.zeros(1))
+            self.register_buffer("x_min", torch.zeros(1))
+            self.register_buffer("x_max", torch.zeros(1))
+            self.register_buffer("act_scaling_factor", torch.zeros(1))
         else:
             raise NotImplementedError("per-channel mode is not currently supported for activation.")
 
@@ -149,28 +149,32 @@ class QuantAct(Module):
             self.act_function = SymmetricQuantFunction.apply
 
     def __repr__(self):
-        return "{0}(activation_bit={1}, " \
-               "quant_mode: {2}, Act_min: {3:.2f}, " \
-               "Act_max: {4:.2f})".format(self.__class__.__name__, self.activation_bit,
-                                          self.quant_mode, self.x_min.item(), self.x_max.item())
+        return (
+            "{0}(activation_bit={1}, "
+            "quant_mode: {2}, Act_min: {3:.2f}, "
+            "Act_max: {4:.2f})".format(
+                self.__class__.__name__, self.activation_bit, self.quant_mode, self.x_min.item(), self.x_max.item()
+            )
+        )
 
-    def forward(self, x, 
-                pre_act_scaling_factor=None, 
-                identity=None, 
-                identity_scaling_factor=None,
-                specified_min=None,
-                specified_max=None):
+    def forward(
+        self,
+        x,
+        pre_act_scaling_factor=None,
+        identity=None,
+        identity_scaling_factor=None,
+        specified_min=None,
+        specified_max=None,
+    ):
 
         x_act = x if identity is None else identity + x
         # collect runnng stats if traiing
         if self.training:
-            assert not self.percentile, \
-                    "percentile mode is not currently supported for activation."
-            assert not self.per_channel, \
-                    "per-channel mode is not currently supported for activation."
+            assert not self.percentile, "percentile mode is not currently supported for activation."
+            assert not self.per_channel, "per-channel mode is not currently supported for activation."
             x_min = x_act.data.min()
             x_max = x_act.data.max()
-            
+
             assert x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0
 
             # Initialization
@@ -184,10 +188,8 @@ class QuantAct(Module):
                 self.x_min = torch.min(self.x_min, x_min)
                 self.x_max = torch.max(self.x_max, x_max)
             else:
-                self.x_min = self.x_min * self.act_range_momentum +\
-                        x_min * (1 - self.act_range_momentum)
-                self.x_max = self.x_max * self.act_range_momentum +\
-                        x_max * (1 - self.act_range_momentum)
+                self.x_min = self.x_min * self.act_range_momentum + x_min * (1 - self.act_range_momentum)
+                self.x_max = self.x_max * self.act_range_momentum + x_max * (1 - self.act_range_momentum)
 
         if not self.quant_mode:
             return x_act, None
@@ -196,19 +198,22 @@ class QuantAct(Module):
         x_max = self.x_max if specified_max is None else specified_max
 
         self.act_scaling_factor = symmetric_linear_quantization_params(
-            self.activation_bit, x_min, x_max, 
-            per_channel=self.per_channel)
+            self.activation_bit, x_min, x_max, per_channel=self.per_channel
+        )
 
         if pre_act_scaling_factor is None:
-            # this is for the input quantization 
-            quant_act_int = self.act_function(x, self.activation_bit, \
-                    self.percentile, self.act_scaling_factor)
+            # this is for the input quantization
+            quant_act_int = self.act_function(x, self.activation_bit, self.percentile, self.act_scaling_factor)
         else:
             quant_act_int = fixedpoint_mul.apply(
-                    x, pre_act_scaling_factor, 
-                    self.activation_bit, self.quant_mode, 
-                    self.act_scaling_factor, 
-                    identity, identity_scaling_factor)
+                x,
+                pre_act_scaling_factor,
+                self.activation_bit,
+                self.quant_mode,
+                self.act_scaling_factor,
+                identity,
+                identity_scaling_factor,
+            )
 
         correct_output_scale = self.act_scaling_factor.view(-1)
 
@@ -218,7 +223,7 @@ class QuantAct(Module):
 class QuantLinear(Module):
     """
     Class to quantize weights of given Linear layer
-    
+
     Parameters:
     ----------
     weight_bit : int
@@ -230,17 +235,14 @@ class QuantLinear(Module):
     quant_mode : bool, default False
         The mode for quantization. True for quantization.
     """
-    def __init__(self,
-                 weight_bit,
-                 bias_bit=None,
-                 per_channel=False,
-                 quant_mode=False):
+
+    def __init__(self, weight_bit, bias_bit=None, per_channel=False, quant_mode=False):
         super(QuantLinear, self).__init__()
         self.weight_bit = weight_bit
         self.quant_mode = quant_mode
         self.per_channel = per_channel
         self.bias_bit = bias_bit
-        self.quantize_bias = (False if bias_bit is None else True)
+        self.quantize_bias = False if bias_bit is None else True
         self.quant_mode = quant_mode
         self.percentile_mode = False
 
@@ -251,19 +253,18 @@ class QuantLinear(Module):
 
     def __repr__(self):
         s = super(QuantLinear, self).__repr__()
-        s = "(" + s + " weight_bit={}, quant_mode={})".format(
-            self.weight_bit, self.quant_mode)
+        s = "(" + s + " weight_bit={}, quant_mode={})".format(self.weight_bit, self.quant_mode)
         return s
 
     def set_param(self, linear):
         self.in_features = linear.in_features
         self.out_features = linear.out_features
         self.weight = Parameter(linear.weight.data.clone())
-        self.register_buffer('fc_scaling_factor', torch.zeros(self.out_features))
-        self.register_buffer('weight_integer', torch.zeros_like(self.weight))
+        self.register_buffer("fc_scaling_factor", torch.zeros(self.out_features))
+        self.register_buffer("weight_integer", torch.zeros_like(self.weight))
         try:
             self.bias = Parameter(linear.bias.data.clone())
-            self.register_buffer('bias_integer', torch.zeros_like(self.bias))
+            self.register_buffer("bias_integer", torch.zeros_like(self.bias))
         except AttributeError:
             self.bias = None
             self.bias_integer = None
@@ -277,8 +278,7 @@ class QuantLinear(Module):
 
         # assert that prev_act_scaling_factor is a scalar tensor
         # i.e., it is not channel-wise quantized
-        assert prev_act_scaling_factor is not None and \
-              prev_act_scaling_factor.shape == (1,) 
+        assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,)
 
         w = self.weight
         w_transform = w.data.detach()
@@ -289,23 +289,23 @@ class QuantLinear(Module):
             w_min = w_transform.min().expand(1)
             w_max = w_transform.max().expand(1)
 
-        self.fc_scaling_factor = symmetric_linear_quantization_params(
-                self.weight_bit, w_min, w_max, self.per_channel)
+        self.fc_scaling_factor = symmetric_linear_quantization_params(self.weight_bit, w_min, w_max, self.per_channel)
         self.weight_integer = self.weight_function(
-                self.weight, self.weight_bit, self.percentile_mode, 
-                self.fc_scaling_factor)
+            self.weight, self.weight_bit, self.percentile_mode, self.fc_scaling_factor
+        )
 
         bias_scaling_factor = self.fc_scaling_factor * prev_act_scaling_factor
 
         if self.bias is not None:
-            self.bias_integer = self.weight_function(self.bias, 
-                    self.bias_bit, False, bias_scaling_factor)
+            self.bias_integer = self.weight_function(self.bias, self.bias_bit, False, bias_scaling_factor)
 
         prev_act_scaling_factor = prev_act_scaling_factor.view(1, -1)
         x_int = x / prev_act_scaling_factor
 
-        return F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) \
-                * bias_scaling_factor, bias_scaling_factor
+        return (
+            F.linear(x_int, weight=self.weight_integer, bias=self.bias_integer) * bias_scaling_factor,
+            bias_scaling_factor,
+        )
 
 
 class IntGELU(Module):
@@ -319,13 +319,12 @@ class IntGELU(Module):
     force_dequant : str, default 'none'
         Force dequantize GELU if either 'gelu' or 'nonlinear' is given.
     """
-    def __init__(self,
-                 quant_mode=True,
-                 force_dequant='none'):
+
+    def __init__(self, quant_mode=True, force_dequant="none"):
         super(IntGELU, self).__init__()
         self.quant_mode = quant_mode
 
-        if force_dequant in ['nonlinear', 'gelu']:
+        if force_dequant in ["nonlinear", "gelu"]:
             logger.info("Force dequantize gelu")
             self.quant_mode = False
 
@@ -335,8 +334,8 @@ class IntGELU(Module):
             pass
 
         self.k = 1.4142
-        self.const = 14 # dummy integer constant
-        self.coeff = [-0.2888, -1.769, 1] # a(x+b)**2 + c
+        self.const = 14  # dummy integer constant
+        self.coeff = [-0.2888, -1.769, 1]  # a(x+b)**2 + c
         self.coeff[2] /= self.coeff[0]
 
     def int_erf(self, x_int, scaling_factor):
@@ -353,7 +352,7 @@ class IntGELU(Module):
         # avoid overflow
         y_int = floor_ste.apply(y_int / 2 ** self.const)
         scaling_factor = scaling_factor * 2 ** self.const
-        
+
         return y_int, scaling_factor
 
     def forward(self, x, scaling_factor=None):
@@ -363,7 +362,7 @@ class IntGELU(Module):
         x_int = x / scaling_factor
         sigmoid_int, sigmoid_scaling_factor = self.int_erf(x_int, scaling_factor / self.k)
 
-        shift_int = torch.floor(1. / sigmoid_scaling_factor)
+        shift_int = torch.floor(1.0 / sigmoid_scaling_factor)
 
         x_int = x_int * (sigmoid_int + shift_int)
         scaling_factor = scaling_factor * sigmoid_scaling_factor / 2
@@ -384,23 +383,21 @@ class IntSoftmax(Module):
     force_dequant : str, default 'none'
         Force dequantize Softmax if either 'softmax' or 'nonlinear' is given.
     """
-    def __init__(self,
-                 output_bit,
-                 quant_mode=False,
-                 force_dequant='none'):
+
+    def __init__(self, output_bit, quant_mode=False, force_dequant="none"):
         super(IntSoftmax, self).__init__()
         self.output_bit = output_bit
         self.max_bit = 32
         self.quant_mode = quant_mode
 
-        if force_dequant in ['nonlinear', 'softmax']:
+        if force_dequant in ["nonlinear", "softmax"]:
             logger.info("Force dequantize softmax")
             self.quant_mode = False
 
         self.act = QuantAct(16, quant_mode=self.quant_mode)
-        self.x0 = -0.6931 # -ln2
-        self.const = 30 # dummy integer constant
-        self.coef = [0.35815147, 0.96963238, 1.] # ax**2 + bx + c
+        self.x0 = -0.6931  # -ln2
+        self.const = 30  # dummy integer constant
+        self.coef = [0.35815147, 0.96963238, 1.0]  # ax**2 + bx + c
         self.coef[1] /= self.coef[0]
         self.coef[2] /= self.coef[0]
 
@@ -458,17 +455,15 @@ class IntLayerNorm(Module):
     force_dequant : str, default 'none'
         Force dequantize LayerNorm if either 'layernorm' or 'nonlinear' is given.
     """
-    def __init__(self,
-                 output_bit,
-                 quant_mode=False,
-                 force_dequant='none'):
+
+    def __init__(self, output_bit, quant_mode=False, force_dequant="none"):
         super(IntLayerNorm, self).__init__()
         self.quant_mode = quant_mode
-        if force_dequant in ['nonlinear', 'layernorm']:
+        if force_dequant in ["nonlinear", "layernorm"]:
             logger.info("Force dequantize layernorm")
             self.quant_mode = False
 
-        self.register_buffer('shift', torch.zeros(1))
+        self.register_buffer("shift", torch.zeros(1))
         self.output_bit = output_bit
         self.max_bit = 32
         self.dim_sqrt = None
@@ -492,16 +487,14 @@ class IntLayerNorm(Module):
             shift = (torch.log2(torch.sqrt(var_int / 2 ** self.max_bit)).ceil()).max()
             shift_old = self.shift
             self.shift = torch.max(self.shift, shift)
-            logger.info("Dynamic shift adjustment: {} -> {}".format(
-                int(shift_old), int(self.shift))
-            )
+            logger.info("Dynamic shift adjustment: {} -> {}".format(int(shift_old), int(self.shift)))
 
     def overflow_fallback(self, y_int):
         """
-        This fallback function is called when overflow is detected during training time,
-        and adjusts the `self.shift` to avoid overflow in the subsequent runs.
+        This fallback function is called when overflow is detected during training time, and adjusts the `self.shift`
+        to avoid overflow in the subsequent runs.
         """
-        self.set_shift(y_int) # adjusts `self.shift`
+        self.set_shift(y_int)  # adjusts `self.shift`
         y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
         y_sq_int = y_int_shifted ** 2
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
@@ -518,29 +511,29 @@ class IntLayerNorm(Module):
 
         # compute sqrt of the feature dimension if it is the first run
         if self.dim_sqrt is None:
-            n = torch.tensor(x.shape[2], dtype=torch.float) 
+            n = torch.tensor(x.shape[2], dtype=torch.float)
             self.dim_sqrt = torch.sqrt(n).cuda()
 
         # Normalization: computes mean and variance(std)
         x_int = x / scaling_factor
         mean_int = round_ste.apply(x_int.mean(axis=2, keepdim=True))
         y_int = x_int - mean_int
-        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift) 
+        y_int_shifted = floor_ste.apply(y_int / 2 ** self.shift)
         y_sq_int = y_int_shifted ** 2
         var_int = torch.sum(y_sq_int, axis=2, keepdim=True)
-        
+
         # overflow handling in training time
         if self.training:
             # if overflow is detected
             if var_int.max() >= 2 ** self.max_bit:
                 var_int = self.overflow_fallback(y_int)
                 assert var_int.max() < 2 ** self.max_bit + 0.1
-        
+
         # To be replaced with integer-sqrt kernel that produces the same output
-        std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift 
+        std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift
         factor = floor_ste.apply(2 ** 31 / std_int)
         y_int = floor_ste.apply(y_int * factor / 2)
-        scaling_factor = self.dim_sqrt / 2**30
+        scaling_factor = self.dim_sqrt / 2 ** 30
 
         # scaling and shifting
         bias = self.bias.data.detach() / (self.weight.data.detach())
@@ -556,7 +549,7 @@ class IntLayerNorm(Module):
 def get_percentile_min_max(input, lower_percentile, upper_percentile, output_tensor=False):
     """
     Calculate the percentile max and min values in a given tensor
-    
+
     Parameters:
     ----------
     input: tensor
@@ -611,14 +604,12 @@ def linear_quantize(input, scale, zero_point, inplace=False):
         zero_point = zero_point.view(-1)
     # quantized = float / scale + zero_point
     if inplace:
-        input.mul_(1. / scale).add_(zero_point).round_()
+        input.mul_(1.0 / scale).add_(zero_point).round_()
         return input
-    return torch.round(1. / scale * input + zero_point)
+    return torch.round(1.0 / scale * input + zero_point)
 
-def symmetric_linear_quantization_params(num_bits,
-                                        saturation_min,
-                                        saturation_max,
-                                        per_channel=False):
+
+def symmetric_linear_quantization_params(num_bits, saturation_min, saturation_max, per_channel=False):
     """
     Compute the scaling factor with the given quantization range for symmetric quantization.
 
@@ -634,38 +625,38 @@ def symmetric_linear_quantization_params(num_bits,
 
         if per_channel:
             scale, _ = torch.max(torch.stack([saturation_min.abs(), saturation_max.abs()], dim=1), dim=1)
-            scale = torch.clamp(scale, min=1e-8) / n 
+            scale = torch.clamp(scale, min=1e-8) / n
 
         else:
             scale = max(saturation_min.abs(), saturation_max.abs())
-            scale = torch.clamp(scale, min=1e-8) / n 
+            scale = torch.clamp(scale, min=1e-8) / n
 
-    return scale 
+    return scale
 
 
 class SymmetricQuantFunction(Function):
     """
     Class to quantize the given floating-point values using symmetric quantization with given range and bitwidth.
     """
+
     @staticmethod
     def forward(ctx, x, k, percentile_mode=False, specified_scale=None):
         """
-        x: floating point tensor to be quantized
-        k: quantization bitwidth
-        Note that the current implementation of SymmetricQuantFunction requires pre-calculated scaling factor.
-        specified_scale: pre-calculated scaling factor for the tensor x
+        x: floating point tensor to be quantized k: quantization bitwidth Note that the current implementation of
+        SymmetricQuantFunction requires pre-calculated scaling factor. specified_scale: pre-calculated scaling factor
+        for the tensor x
         """
-        
+
         if specified_scale is not None:
             scale = specified_scale
 
-        zero_point = torch.tensor(0.).cuda()
+        zero_point = torch.tensor(0.0).cuda()
 
         n = 2 ** (k - 1) - 1
         new_quant_x = linear_quantize(x, scale, zero_point, inplace=False)
-        new_quant_x = torch.clamp(new_quant_x, -n, n-1)
+        new_quant_x = torch.clamp(new_quant_x, -n, n - 1)
 
-        ctx.scale = scale 
+        ctx.scale = scale
         return new_quant_x
 
     @staticmethod
@@ -687,6 +678,7 @@ class floor_ste(Function):
     """
     Straight-through Estimator(STE) for torch.floor()
     """
+
     @staticmethod
     def forward(ctx, x):
         return torch.floor(x)
@@ -700,6 +692,7 @@ class round_ste(Function):
     """
     Straight-through Estimator(STE) for torch.round()
     """
+
     @staticmethod
     def forward(ctx, x):
         return torch.round(x)
@@ -723,19 +716,22 @@ def batch_frexp(inputs, max_bit=31):
 
     # trans the input to be a 1-d tensor
     inputs = inputs.view(-1)
-    
+
     output_m, output_e = np.frexp(inputs.cpu().numpy())
     tmp_m = []
     for m in output_m:
-        int_m_shifted = int(decimal.Decimal(m * (2**max_bit)).quantize(
-            decimal.Decimal('1'), rounding=decimal.ROUND_HALF_UP))
+        int_m_shifted = int(
+            decimal.Decimal(m * (2 ** max_bit)).quantize(decimal.Decimal("1"), rounding=decimal.ROUND_HALF_UP)
+        )
         tmp_m.append(int_m_shifted)
     output_m = np.array(tmp_m)
 
     output_e = float(max_bit) - output_e
 
-    return torch.from_numpy( output_m ).cuda().view(shape_of_input), \
-           torch.from_numpy( output_e ).cuda().view(shape_of_input)
+    return torch.from_numpy(output_m).cuda().view(shape_of_input), torch.from_numpy(output_e).cuda().view(
+        shape_of_input
+    )
+
 
 class fixedpoint_mul(Function):
     """
@@ -751,16 +747,24 @@ class fixedpoint_mul(Function):
     identity: identity tensor
     identity_scaling_factor: the scaling factor of the identity tensor
     """
-    @ staticmethod
-    def forward (ctx, pre_act, pre_act_scaling_factor, 
-                 bit_num, quant_mode, z_scaling_factor, 
-                 identity=None, identity_scaling_factor=None):
 
-        #TODO(Sehoon): May require other type of reshape
+    @staticmethod
+    def forward(
+        ctx,
+        pre_act,
+        pre_act_scaling_factor,
+        bit_num,
+        quant_mode,
+        z_scaling_factor,
+        identity=None,
+        identity_scaling_factor=None,
+    ):
+
+        # TODO(Sehoon): May require other type of reshape
         if len(pre_act_scaling_factor.shape) == 3:
-            reshape = lambda x : x
+            reshape = lambda x: x
         else:
-            reshape = lambda x : x.view(1, 1, -1)
+            reshape = lambda x: x.view(1, 1, -1)
         ctx.identity = identity
 
         n = 2 ** (bit_num - 1) - 1
@@ -771,8 +775,8 @@ class fixedpoint_mul(Function):
                 identity_scaling_factor = reshape(identity_scaling_factor)
 
             ctx.z_scaling_factor = z_scaling_factor
-            
-            z_int = torch.round(pre_act / pre_act_scaling_factor) 
+
+            z_int = torch.round(pre_act / pre_act_scaling_factor)
             _A = pre_act_scaling_factor.type(torch.double)
             _B = (z_scaling_factor.type(torch.float)).type(torch.double)
             new_scale = _A / _B
@@ -781,7 +785,7 @@ class fixedpoint_mul(Function):
             m, e = batch_frexp(new_scale)
 
             output = z_int.type(torch.double) * m.type(torch.double)
-            output = torch.round( output / (2.0**e) )
+            output = torch.round(output / (2.0 ** e))
 
             if identity is not None:
                 # needs addition of identity activation
@@ -794,16 +798,15 @@ class fixedpoint_mul(Function):
 
                 m1, e1 = batch_frexp(new_scale)
                 output1 = wx_int.type(torch.double) * m1.type(torch.double)
-                output1 = torch.round(output1 / (2.0**e1))
+                output1 = torch.round(output1 / (2.0 ** e1))
 
                 output = output1 + output
 
-            return torch.clamp( output.type(torch.float), -n - 1, n)
+            return torch.clamp(output.type(torch.float), -n - 1, n)
 
-    @ staticmethod
+    @staticmethod
     def backward(ctx, grad_output):
         identity_grad = None
         if ctx.identity is not None:
             identity_grad = grad_output.clone() / ctx.z_scaling_factor
-        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, None,\
-                identity_grad, None
+        return grad_output.clone() / ctx.z_scaling_factor, None, None, None, None, identity_grad, None
