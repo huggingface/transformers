@@ -48,7 +48,7 @@ TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 def angle_defn(pos, i, d_model_size):
-    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / np.float32(d_model_size))
+    angle_rates = 1 / np.power(10000, (2 * (i // 2)) / d_model_size)
     return pos * angle_rates
 
 
@@ -58,9 +58,8 @@ def positional_encoding(position, d_model_size):
 
     sines = np.sin(angle_rads[:, 0::2])
     cosines = np.cos(angle_rads[:, 1::2])
+    pos_encoding = tf.convert_to_tensor(np.concatenate([sines, cosines], axis=-1))
 
-    # pos_encoding = tf.cast(np.concatenate([sines, cosines], axis=-1)[np.newaxis, ...], dtype=tf.float32)
-    pos_encoding = tf.cast(np.concatenate([sines, cosines], axis=-1), dtype=tf.float32)
     return pos_encoding
 
 
@@ -333,7 +332,6 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
 
-            # inputs["attention_mask"] = tf.cast(inputs["attention_mask"], tf.float32)
             one_cst = tf.constant(1.0)
             ten_thousand_cst = tf.constant(-10000.0)
             inputs["attention_mask"] = tf.cast(inputs["attention_mask"], dtype=one_cst.dtype)
