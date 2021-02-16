@@ -23,9 +23,6 @@ import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Function, Variable
-from torch.nn import Embedding as _Embedding
-from torch.nn import Linear as _linear
-from torch.nn import Module, Parameter
 
 from ...utils import logging
 
@@ -33,7 +30,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class QuantEmbedding(Module):
+class QuantEmbedding(nn.Module):
     """
     Class to quantize given Embedding layer
 
@@ -109,7 +106,7 @@ class QuantEmbedding(Module):
         return emb_int * self.weight_scaling_factor, self.weight_scaling_factor
 
 
-class QuantAct(Module):
+class QuantAct(nn.Module):
     """
     Class to quantize given activations
 
@@ -220,7 +217,7 @@ class QuantAct(Module):
         return quant_act_int * correct_output_scale, self.act_scaling_factor
 
 
-class QuantLinear(Module):
+class QuantLinear(nn.Module):
     """
     Class to quantize weights of given Linear layer
 
@@ -259,11 +256,11 @@ class QuantLinear(Module):
     def set_param(self, linear):
         self.in_features = linear.in_features
         self.out_features = linear.out_features
-        self.weight = Parameter(linear.weight.data.clone())
+        self.weight = nn.Parameter(linear.weight.data.clone())
         self.register_buffer("fc_scaling_factor", torch.zeros(self.out_features))
         self.register_buffer("weight_integer", torch.zeros_like(self.weight))
         try:
-            self.bias = Parameter(linear.bias.data.clone())
+            self.bias = nn.Parameter(linear.bias.data.clone())
             self.register_buffer("bias_integer", torch.zeros_like(self.bias))
         except AttributeError:
             self.bias = None
@@ -308,7 +305,7 @@ class QuantLinear(Module):
         )
 
 
-class IntGELU(Module):
+class IntGELU(nn.Module):
     """
     Class to quantize given GELU layer
 
@@ -370,7 +367,7 @@ class IntGELU(Module):
         return x_int * scaling_factor, scaling_factor
 
 
-class IntSoftmax(Module):
+class IntSoftmax(nn.Module):
     """
     Class to quantize given Softmax layer
 
@@ -442,7 +439,7 @@ class IntSoftmax(Module):
         return exp_int * scaling_factor, scaling_factor
 
 
-class IntLayerNorm(Module):
+class IntLayerNorm(nn.Module):
     """
     Class to quantize given LayerNorm layer
 
@@ -477,8 +474,8 @@ class IntLayerNorm(Module):
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
         self.eps = ln.eps
-        self.weight = Parameter(ln.weight.data.clone())
-        self.bias = Parameter(ln.bias.data.clone())
+        self.weight = nn.Parameter(ln.weight.data.clone())
+        self.bias = nn.Parameter(ln.bias.data.clone())
 
     def set_shift(self, y_int):
         with torch.no_grad():
