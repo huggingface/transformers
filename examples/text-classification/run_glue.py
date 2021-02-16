@@ -20,11 +20,11 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from packaging import version
 from typing import Optional
-import datasets
 
+import datasets
 import numpy as np
+from packaging import version
 
 import transformers
 from transformers import (
@@ -365,7 +365,9 @@ def main():
             result["label"] = [label_to_id[l] for l in examples["label"]]
         return result
 
-    task_datasets = task_datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
+    task_datasets = task_datasets.map(
+        preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
+    )
 
     train_dataset = task_datasets["train"]
     eval_dataset = task_datasets["validation_matched" if data_args.task_name == "mnli" else "validation"]
