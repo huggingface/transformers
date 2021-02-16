@@ -20,19 +20,18 @@ from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
-from numpy.core.defchararray import encode
 import torch
+from numpy.core.defchararray import encode
 
 import sentencepiece
+
 
 try:
     import torchaudio.compliance.kaldi as ta_kaldi
 except ImportError:
-    raise ImportError(
-        "Please install or `torchaudio` to enable fbank feature extraction"
-    )
+    raise ImportError("Please install or `torchaudio` to enable fbank feature extraction")
 
-from ...tokenization_utils import BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TensorType, EncodedInput
+from ...tokenization_utils import BatchEncoding, EncodedInput, PaddingStrategy, PreTrainedTokenizer, TensorType
 from ...utils import logging
 
 
@@ -177,13 +176,15 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         features = [self._extract_fbank_features(waveform, sample_rate, num_mel_bins) for waveform in raw_speech]
         for transform in self.transforms:
             features = [transform(feature) for feature in features]
-        
+
         # Convert padding_strategy in PaddingStrategy
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
             padding=padding, max_length=max_length, verbose=verbose
         )
 
-        padded_inputs = self._pad_frames(features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask)
+        padded_inputs = self._pad_frames(
+            features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask
+        )
         padded_inputs = BatchEncoding(padded_inputs, tensor_type=return_tensors)
 
         return padded_inputs
@@ -198,36 +199,36 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
         waveform = torch.from_numpy(waveform).unsqueeze(0)
         features = ta_kaldi.fbank(waveform, num_mel_bins=num_mel_bins, sample_frequency=sample_rate)
         return features.numpy()
-    
+
     def _pad_frames(self, features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask):
-        cur_max_length = max(feature.shape[0] for feature in features) 
-        
+        cur_max_length = max(feature.shape[0] for feature in features)
+
         if padding_strategy == PaddingStrategy.LONGEST:
             max_length = cur_max_length
-        
+
         if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
             max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-        
+
         if padding_strategy != PaddingStrategy.DO_NOT_PAD:
             input_features = np.zeros((len(features), max_length, features[0].shape[1]))
             for i, v in enumerate(features):
                 input_features[i, : v.shape[0]] = v
-            
+
             if return_attention_mask:
                 attention_mask = np.not_equal(input_features, 0).astype(np.long).tolist()
-            
+
             input_features = input_features.tolist()
         else:
             features = features
             if return_attention_mask:
                 attention_mask = [np.not_equal(feature, 0).astype(np.long).tolist() for feature in features]
-            
-            input_features= [feature.tolist() for feature in features]
-        
+
+            input_features = [feature.tolist() for feature in features]
+
         encoded_inputs = {"input_features": input_features}
         if return_attention_mask:
             encoded_inputs["attention_mask"] = attention_mask
-        
+
         return encoded_inputs
 
 
