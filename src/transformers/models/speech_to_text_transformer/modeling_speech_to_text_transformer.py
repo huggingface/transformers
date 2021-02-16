@@ -1410,17 +1410,17 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
         )
         lm_logits = self.lm_head(outputs[0])
 
-        masked_lm_loss = None
+        loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
+            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
+            return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
-            loss=masked_lm_loss,
+            loss=loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
