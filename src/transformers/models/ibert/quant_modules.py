@@ -51,10 +51,7 @@ class QuantEmbedding(nn.Module):
         self.quant_mode = quant_mode
         self.percentile_mode = False
 
-        if not self.quant_mode:
-            self.weight_function = None
-        else:
-            self.weight_function = SymmetricQuantFunction.apply
+        self.weight_function = SymmetricQuantFunction.apply
 
     def set_param(self, embedding):
         self.num_embeddings = embedding.num_embeddings
@@ -454,12 +451,7 @@ class IntLayerNorm(nn.Module):
         self.output_bit = output_bit
         self.max_bit = 32
         self.dim_sqrt = None
-
         self.activation = QuantAct(self.output_bit, quant_mode=self.quant_mode)
-        if not self.quant_mode:
-            pass
-        else:
-            self.weight_function = SymmetricQuantFunction.apply
 
     def set_param(self, ln):
         self.normalized_shape = ln.normalized_shape
