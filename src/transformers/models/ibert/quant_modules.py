@@ -44,7 +44,7 @@ class QuantEmbedding(nn.Module):
     """
 
     def __init__(self, weight_bit, momentum=0.95, quant_mode=False):
-        super(QuantEmbedding, self).__init__()
+        super().__init__()
 
         self.weight_bit = weight_bit
         self.momentum = momentum
@@ -125,7 +125,7 @@ class QuantAct(nn.Module):
     """
 
     def __init__(self, activation_bit, act_range_momentum=0.95, per_channel=False, channel_len=None, quant_mode=False):
-        super(QuantAct, self).__init__()
+        super().__init__()
 
         self.activation_bit = activation_bit
         self.act_range_momentum = act_range_momentum
@@ -234,7 +234,7 @@ class QuantLinear(nn.Module):
     """
 
     def __init__(self, weight_bit, bias_bit=None, per_channel=False, quant_mode=False):
-        super(QuantLinear, self).__init__()
+        super().__init__()
         self.weight_bit = weight_bit
         self.quant_mode = quant_mode
         self.per_channel = per_channel
@@ -242,14 +242,10 @@ class QuantLinear(nn.Module):
         self.quantize_bias = False if bias_bit is None else True
         self.quant_mode = quant_mode
         self.percentile_mode = False
-
-        if not self.quant_mode:
-            self.weight_function = None
-        else:
-            self.weight_function = SymmetricQuantFunction.apply
+        self.weight_function = SymmetricQuantFunction.apply
 
     def __repr__(self):
-        s = super(QuantLinear, self).__repr__()
+        s = super().__repr__()
         s = "(" + s + " weight_bit={}, quant_mode={})".format(self.weight_bit, self.quant_mode)
         return s
 
@@ -318,7 +314,7 @@ class IntGELU(nn.Module):
     """
 
     def __init__(self, quant_mode=True, force_dequant="none"):
-        super(IntGELU, self).__init__()
+        super().__init__()
         self.quant_mode = quant_mode
 
         if force_dequant in ["nonlinear", "gelu"]:
@@ -382,7 +378,7 @@ class IntSoftmax(nn.Module):
     """
 
     def __init__(self, output_bit, quant_mode=False, force_dequant="none"):
-        super(IntSoftmax, self).__init__()
+        super().__init__()
         self.output_bit = output_bit
         self.max_bit = 32
         self.quant_mode = quant_mode
@@ -454,7 +450,7 @@ class IntLayerNorm(nn.Module):
     """
 
     def __init__(self, output_bit, quant_mode=False, force_dequant="none"):
-        super(IntLayerNorm, self).__init__()
+        super().__init__()
         self.quant_mode = quant_mode
         if force_dequant in ["nonlinear", "layernorm"]:
             logger.info("Force dequantize layernorm")
