@@ -175,7 +175,9 @@ class QuantAct(nn.Module):
             x_min = x_act.data.min()
             x_max = x_act.data.max()
 
-            assert x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0
+            assert (
+                x_max.isnan().sum() == 0 and x_min.isnan().sum() == 0
+            ), "NaN detected when computing min/max of the activation"
 
             # Initialization
             if torch.eq(self.x_min, self.x_max).all():
@@ -272,7 +274,10 @@ class QuantLinear(nn.Module):
 
         # assert that prev_act_scaling_factor is a scalar tensor
         # i.e., it is not channel-wise quantized
-        assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,)
+        assert prev_act_scaling_factor is not None and prev_act_scaling_factor.shape == (1,), (
+            "Input activation to the QuantLinear layer should be globally (non-channel-wise) quantized."
+            "Please add a QuantAct layer with `per_channel = True` before this QuantAct layer"
+        )
 
         w = self.weight
         w_transform = w.data.detach()
@@ -514,7 +519,10 @@ class IntLayerNorm(nn.Module):
             # if overflow is detected
             if var_int.max() >= 2 ** self.max_bit:
                 var_int = self.overflow_fallback(y_int)
-                assert var_int.max() < 2 ** self.max_bit + 0.1
+                assert var_int.max() < 2 ** self.max_bit + 0.1, (
+                    "Error detected in overflow handling"
+                    "`var_int` exceeds `self.max_bit` (the maximum possible bit width)"
+                )
 
         # To be replaced with integer-sqrt kernel that produces the same output
         std_int = floor_ste.apply(torch.sqrt(var_int)) * 2 ** self.shift
