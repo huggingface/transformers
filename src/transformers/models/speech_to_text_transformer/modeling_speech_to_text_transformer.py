@@ -1096,7 +1096,7 @@ class SpeechToTextTransformerDecoder(SpeechToTextTransformerPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_ids)
+        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
