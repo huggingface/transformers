@@ -116,11 +116,11 @@ def compute_metrics(pred):
 
 training_args = TrainingArguments(
     output_dir="./results",
-    num_train_epochs=25,
+    num_train_epochs=40,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=16,
     evaluation_strategy="steps",
-    gradient_accumulation_steps=2,
+    gradient_accumulation_steps=4,
     save_total_limit=3,
     save_steps=500,
     eval_steps=100,

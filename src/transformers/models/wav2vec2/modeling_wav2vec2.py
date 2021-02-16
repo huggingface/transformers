@@ -1069,7 +1069,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
                     input_lengths,
                     target_lengths,
                     blank=self.config.pad_token_id,
-                    reduction="sum",
+                    reduction="mean",
                     zero_infinity=False,
                 )
 
