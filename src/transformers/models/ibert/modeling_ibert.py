@@ -203,7 +203,8 @@ class IBertSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        assert self.position_embedding_type == "absolute"
+        assert self.position_embedding_type == "absolute", \
+            "I-BERT only supports 'absolute' for `config.position_embedding_type`"
         self.is_decoder = config.is_decoder
         assert not self.is_decoder
 
@@ -398,7 +399,8 @@ class IBertIntermediate(nn.Module):
         self.dense = QuantLinear(self.weight_bit, bias_bit=self.bias_bit, quant_mode=self.quant_mode, per_channel=True)
         self.dense.set_param(nn.Linear(config.hidden_size, config.intermediate_size))
 
-        assert config.hidden_act == "gelu"
+        assert config.hidden_act == "gelu" ,\
+            "I-BERT only supports 'gelu' for `config.hidden_act`"
         self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
@@ -460,7 +462,8 @@ class IBertLayer(nn.Module):
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
-        assert self.chunk_size_feed_forward == 0
+        assert self.chunk_size_feed_forward == 0, \
+                "I-BERT only support `config.chunk_size_feed_forward` == 0" 
         assert not self.is_decoder
         assert not self.add_cross_attention
 
@@ -708,6 +711,7 @@ IBERT_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaModel
 @add_start_docstrings(
     "The bare IBert Model transformer outputting raw hidden-states without any specific head on top.",
     IBERT_START_DOCSTRING,
@@ -887,6 +891,7 @@ class IBertModel(IBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM
 @add_start_docstrings("""IBert Model with a `language modeling` head on top. """, IBERT_START_DOCSTRING)
 class IBertForMaskedLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
@@ -978,6 +983,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class IBertLMHead(nn.Module):
     """IBert Head for masked language modeling."""
 
@@ -1003,6 +1009,7 @@ class IBertLMHead(nn.Module):
         return x
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification
 @add_start_docstrings(
     """
     IBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
@@ -1086,6 +1093,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice
 @add_start_docstrings(
     """
     IBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
@@ -1178,6 +1186,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification
 @add_start_docstrings(
     """
     IBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
@@ -1269,6 +1278,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
 class IBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1288,6 +1298,7 @@ class IBertClassificationHead(nn.Module):
         return x
 
 
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering
 @add_start_docstrings(
     """
     IBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
