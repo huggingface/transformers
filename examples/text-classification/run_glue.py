@@ -222,7 +222,7 @@ def main():
                     "['contradiction', 'entailment', 'neutral'] from transformers<3.5.0."
                 )
                 if version.parse(datasets.__version__) < version.parse("1.3.0"):
-                    raise ImportError("Please update `datasets` to >1.3.0 to overwrite the labels.")
+                    raise ImportError("Please update `datasets` to >=1.3.0 to overwrite the labels.")
                 task_datasets = datasets.load_dataset(
                     "glue", data_args.task_name, label_classes=["contradiction", "entailment", "neutral"]
                 )
