@@ -205,7 +205,7 @@ class QuantAct(Module):
             # this is for the input quantization
             quant_act_int = self.act_function(x, self.activation_bit, self.percentile, self.act_scaling_factor)
         else:
-            quant_act_int = fixedpoint_mul.apply(
+            quant_act_int = FixedPointMul.apply(
                 x,
                 pre_act_scaling_factor,
                 self.activation_bit,
@@ -733,7 +733,7 @@ def batch_frexp(inputs, max_bit=31):
     )
 
 
-class fixedpoint_mul(Function):
+class FixedPointMul(Function):
     """
     Function to perform fixed-point arthmetic that can match integer arthmetic on hardware.
 
@@ -760,7 +760,6 @@ class fixedpoint_mul(Function):
         identity_scaling_factor=None,
     ):
 
-        # TODO(Sehoon): May require other type of reshape
         if len(pre_act_scaling_factor.shape) == 3:
             reshape = lambda x: x
         else:

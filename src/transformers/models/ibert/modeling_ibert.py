@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""PyTorch IBert model. """
+"""PyTorch I-Bert model. """
 
 import math
 
@@ -69,7 +69,6 @@ class IBertEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Referred from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
         self.quant_mode = config.quant_mode
@@ -171,7 +170,6 @@ class IBertEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Referred from transformers.models.bert.modeling_bert.BertSelfAttention
 class IBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -300,7 +298,6 @@ class IBertSelfAttention(nn.Module):
         return outputs, output_scaling_factor
 
 
-# Referred from transformers.models.bert.modeling_bert.BertSelfOutput
 class IBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -336,7 +333,6 @@ class IBertSelfOutput(nn.Module):
         return hidden_states, hidden_states_scaling_factor
 
 
-# Referred from transformers.models.bert.modeling_bert.BertAttention
 class IBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -392,7 +388,6 @@ class IBertAttention(nn.Module):
         return outputs, outputs_scaling_factor
 
 
-# Referred from transformers.models.bert.modeling_bert.BertIntermediate
 class IBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -420,7 +415,6 @@ class IBertIntermediate(nn.Module):
         return hidden_states, hidden_states_scaling_factor
 
 
-# Referred from transformers.models.bert.modeling_bert.BertOutput
 class IBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -456,7 +450,6 @@ class IBertOutput(nn.Module):
         return hidden_states, hidden_states_scaling_factor
 
 
-# Referred from transformers.models.bert.modeling_bert.BertLayer
 class IBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -529,7 +522,6 @@ class IBertLayer(nn.Module):
         return layer_output, layer_output_scaling_factor
 
 
-# Referred from transformers.models.bert.modeling_bert.BertEncoder
 class IBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -610,7 +602,6 @@ class IBertEncoder(nn.Module):
         )
 
 
-# Referred from transformers.models.bert.modeling_bert.BertPooler
 class IBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -636,7 +627,6 @@ class IBertPreTrainedModel(PreTrainedModel):
     config_class = IBertConfig
     base_model_prefix = "ibert"
 
-    # Referred from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """ Initialize the weights """
         if isinstance(module, (nn.Linear, nn.Embedding)):
@@ -741,7 +731,6 @@ class IBertModel(IBertPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Referred from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->IBert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -775,7 +764,6 @@ class IBertModel(IBertPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Referred from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids=None,
