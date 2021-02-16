@@ -799,7 +799,7 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
 
     def forward(
         self,
-        input_values,
+        input_features,
         attention_mask=None,
         head_mask=None,
         output_attentions=None,
@@ -852,7 +852,7 @@ class SpeechToTextTransformerEncoder(SpeechToTextTransformerPreTrainedModel):
         if attention_mask is not None:
             attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
-        inputs_embeds = self.subsample(input_values)
+        inputs_embeds = self.subsample(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 
         if attention_mask is None:
@@ -1236,7 +1236,7 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1260,7 +1260,7 @@ class SpeechToTextTransformerModel(SpeechToTextTransformerPreTrainedModel):
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
-                input_ids,
+                input_features,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
@@ -1358,7 +1358,7 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
     @add_end_docstrings(SPEECH_TO_TEXT_TRANSFORMER_GENERATION_EXAMPLE)
     def forward(
         self,
-        input_ids=None,
+        input_features=None,
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
@@ -1407,7 +1407,7 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
                 )
 
         outputs = self.model(
-            input_ids,
+            input_features,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
@@ -1460,7 +1460,6 @@ class SpeechToTextTransformerForConditionalGeneration(SpeechToTextTransformerPre
             decoder_input_ids = decoder_input_ids[:, -1:]
 
         return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
