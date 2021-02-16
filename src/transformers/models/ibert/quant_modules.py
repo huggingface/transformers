@@ -41,7 +41,7 @@ class QuantEmbedding(nn.Module):
         momentum (:obj:`float`, `optional, defaults to :obj:`0.95`):
             Momentum for updating the activation quantization range.
         quant_mode (:obj:`bool`, `optional, defaults to :obj:`False`):
-            Wheter or not the layer is quantized.
+            Whether or not the layer is quantized.
     """
 
     def __init__(
@@ -128,7 +128,7 @@ class QuantAct(nn.Module):
         channel_len (:obj:`int`, `optional`, defaults to :obj:`None`):
             Specify the channel length when set the `per_channel` True.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter or not the layer is quantized.
+            Whether or not the layer is quantized.
     """
 
     def __init__(self, activation_bit, act_range_momentum=0.95, per_channel=False, channel_len=None, quant_mode=False):
@@ -211,7 +211,6 @@ class QuantAct(nn.Module):
                 x,
                 pre_act_scaling_factor,
                 self.activation_bit,
-                self.quant_mode,
                 self.act_scaling_factor,
                 identity,
                 identity_scaling_factor,
@@ -234,7 +233,7 @@ class QuantLinear(nn.Module):
         per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use channel-wise quantization.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter or not the layer is quantized.
+            Whether or not the layer is quantized.
     """
 
     def __init__(
@@ -308,7 +307,7 @@ class IntGELU(nn.Module):
 
     Args:
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter or not the layer is quantized.
+            Whether or not the layer is quantized.
         force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
             Force dequantize the layer if either "gelu" or "nonlinear" is given.
     """
@@ -370,7 +369,7 @@ class IntSoftmax(nn.Module):
         output_bit (:obj:`int`):
             Bitwidth for the layer output activation.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter or not the layer is quantized.
+            Whether or not the layer is quantized.
         force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
             Force dequantize the layer if either "softmax" or "nonlinear" is given.
     """
@@ -442,7 +441,7 @@ class IntLayerNorm(nn.Module):
         output_bit (:obj:`int`, `optional`, defaults to :obj:`8`):
             Bitwidth for the layer output activation.
         quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Wheter or not the layer is quantized.
+            Whether or not the layer is quantized.
         force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
             Force dequantize the layer if either "layernorm" or "nonlinear" is given.
     """
@@ -539,16 +538,18 @@ def get_percentile_min_max(input, lower_percentile, upper_percentile, output_ten
     """
     Calculate the percentile max and min values in a given tensor
 
-    Parameters:
-    ----------
-    input: tensor
-        the tensor to calculate percentile max and min
-    lower_percentile: float
-        if 0.1, means we return the value of the smallest 0.1% value in the tensor as percentile min
-    upper_percentile: float
-        if 99.9, means we return the value of the largest 0.1% value in the tensor as percentile max
-    output_tensor: bool, default False
-        if True, this function returns tensors, otherwise it returns values
+    Args:
+        input (:obj:`torch.Tensor`):
+            The target tensor to calculate percentile max and min.
+        lower_percentile (:obj:`float`):
+            If 0.1, means we return the value of the smallest 0.1% value in the tensor as percentile min.
+        upper_percentile (:obj:`float`):
+            If 99.9, means we return the value of the largest 0.1% value in the tensor as percentile max.
+        output_tensor (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, this function returns tensors, otherwise it returns values.
+
+    Returns:
+        :obj:`Tuple(torch.Tensor, torch.Tensor)`: Percentile min and max value of `input`
     """
     input_length = input.shape[0]
 
@@ -573,13 +574,19 @@ def linear_quantize(input, scale, zero_point, inplace=False):
     """
     Quantize single-precision input tensor to integers with the given scaling factor and zeropoint.
 
-    Parameters:
-    ----------
-    input: single-precision input tensor to be quantized
-    scale: scaling factor for quantization
-    zero_pint: shift for quantization
-    """
+    Args:
+        input (:obj:`torch.Tensor`):
+            Single-precision input tensor to be quantized.
+        scale (:obj:`torch.Tensor`):
+            Scaling factor for quantization.
+        zero_pint (:obj:`torch.Tensor`):
+            Shift for quantization.
+        inplace (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to compute inplace or not.
 
+    Returns:
+        :obj:`torch.Tensor`: Linearly quantized value of `input` according to `scale` and `zero_point`.
+    """
     # reshape scale and zeropoint for convolutional weights and activation
     if len(input.shape) == 4:
         scale = scale.view(-1, 1, 1, 1)
@@ -602,10 +609,17 @@ def symmetric_linear_quantization_params(num_bits, saturation_min, saturation_ma
     """
     Compute the scaling factor with the given quantization range for symmetric quantization.
 
-    Parameters:
-    ----------
-    saturation_min: lower bound for quantization range
-    saturation_max: upper bound for quantization range
+    Args:
+        saturation_min (:obj:`torch.Tensor`):
+            Lower bound for quantization range.
+        saturation_max (:obj:`torch.Tensor`):
+            Upper bound for quantization range.
+        per_channel (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to or not use channel-wise quantization.
+
+    Returns:
+        :obj:`torch.Tensor`: Scaling factor that linearly quantizes the given range between `saturation_min` and
+        `saturation_max`.
     """
     # in this part, we do not need any gradient computation,
     # in order to enfore this, we put torch.no_grad()
@@ -631,9 +645,19 @@ class SymmetricQuantFunction(Function):
     @staticmethod
     def forward(ctx, x, k, percentile_mode, scale):
         """
-        x: floating point tensor to be quantized k: quantization bitwidth Note that the current implementation of
-        SymmetricQuantFunction requires pre-calculated scaling factor. specified_scale: pre-calculated scaling factor
-        for the tensor x
+        Args:
+            x (:obj:`torch.Tensor`):
+                Floating point tensor to be quantized.
+            k (:obj:`int`):
+                Quantization bitwidth.
+            percentile_mode (:obj:`bool`):
+                Whether or not to use percentile calibration.
+            scale (:obj:`torch.Tensor`):
+                Pre-calculated scaling factor for `x`. Note that the current implementation of SymmetricQuantFunction
+                requires pre-calculated scaling factor.
+
+        Returns:
+            :obj:`torch.Tensor`: Symmetric-quantized value of `input`.
         """
         zero_point = torch.tensor(0.0).to(scale.device)
 
@@ -691,10 +715,12 @@ def batch_frexp(inputs, max_bit=31):
     """
     Decompose the scaling factor into mantissa and twos exponent.
 
-    Parameters:
-    ----------
-    inputs: scaling factor
-    return: (mantissa, exponent)
+    Args:
+        scaling_factor (:obj:`torch.Tensor`):
+            Target scaling factor to decompose.
+
+    Returns:
+        :obj:``Tuple(torch.Tensor, torch.Tensor)`: mantisa and exponent
     """
 
     shape_of_input = inputs.size()
@@ -723,15 +749,23 @@ class FixedPointMul(Function):
     """
     Function to perform fixed-point arthmetic that can match integer arthmetic on hardware.
 
-    Parameters:
-    ----------
-    pre_act: input tensor
-    pre_act_scaling_factor: ithe scaling factor of the input tensor
-    bit_num: quantization bitwidth
-    quant_mode: The mode for quantization, 'symmetric' or 'asymmetric'
-    z_scaling_factor: the scaling factor of the output tensor
-    identity: identity tensor
-    identity_scaling_factor: the scaling factor of the identity tensor
+    Args:
+        pre_act (:obj:`torch.Tensor`):
+            Input tensor.
+        pre_act_scaling_factor (:obj:`torch.Tensor`):
+            Scaling factor of the input tensor `pre_act`.
+        bit_num (:obj:`int`):
+            Quantization bitwidth.
+        z_scaling_factor (:obj:`torch.Tensor`):
+            Scaling factor of the output tensor.
+        identity (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+            Identity tensor, if exists.
+        identity_scaling_factor (:obj:`torch.Tensor`, `optional`, defaults to :obj:`None`):
+            Scaling factor of the identity tensor `identity`, if exists.
+
+    Returns:
+        :obj:`torch.Tensor`: Output tensor(`pre_act` if `identity` is not given, otherwise the addition of `pre_act`
+        and `identity`), whose scale is rescaled to `z_scaling_factor`.
     """
 
     @staticmethod
@@ -740,7 +774,6 @@ class FixedPointMul(Function):
         pre_act,
         pre_act_scaling_factor,
         bit_num,
-        quant_mode,
         z_scaling_factor,
         identity=None,
         identity_scaling_factor=None,
