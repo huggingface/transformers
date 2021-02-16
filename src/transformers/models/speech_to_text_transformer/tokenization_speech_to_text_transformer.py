@@ -62,7 +62,7 @@ class SpeechToTextTransformerTokenizer(PreTrainedTokenizer):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["input_ids", "attention_mask"]
+    model_input_names = ["input_features", "attention_mask"]
 
     def __init__(
         self,
