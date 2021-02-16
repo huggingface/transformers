@@ -113,7 +113,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = 2
         super().__init__(num_embeddings + self.offset, embedding_dim)
-        self.weight.data[:self.offset].fill_(0)
+        self.weight.data[: self.offset].fill_(0)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
