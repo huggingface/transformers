@@ -178,8 +178,8 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
 
             cache[self.layer_id] = (k, v)
 
-        dim_per_head = tf.cast(dim_per_head, dtype=q.dtype)
-        q = tf.multiply(q, tf.math.rsqrt(dim_per_head))  # (bs, n_heads, qlen, dim_per_head)
+        f_dim_per_head = tf.cast(dim_per_head, dtype=q.dtype)
+        q = tf.multiply(q, tf.math.rsqrt(f_dim_per_head))  # (bs, n_heads, qlen, dim_per_head)
         k = tf.cast(k, dtype=q.dtype)
         scores = tf.matmul(q, k, transpose_b=True)  # (bs, n_heads, qlen, klen)
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
