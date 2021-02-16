@@ -333,7 +333,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
 
-            #inputs["attention_mask"] = tf.cast(inputs["attention_mask"], tf.float32)
+            # inputs["attention_mask"] = tf.cast(inputs["attention_mask"], tf.float32)
             one_cst = tf.constant(1.0)
             ten_thousand_cst = tf.constant(-10000.0)
             inputs["attention_mask"] = tf.cast(inputs["attention_mask"], dtype=one_cst.dtype)
@@ -866,7 +866,10 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             if inputs["input_ids"] is not None:
                 sequence_lengths = (
                     tf.reduce_sum(
-                        tf.cast(tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), dtype=inputs["input_ids"].dtype),
+                        tf.cast(
+                            tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id),
+                            dtype=inputs["input_ids"].dtype,
+                        ),
                         -1,
                         keepdims=False,
                     )
