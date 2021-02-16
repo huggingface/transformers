@@ -613,7 +613,7 @@ class IBertEncoder(nn.Module):
 class IBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
-        selg.quant_mode = config.quant_mode
+        self.quant_mode = config.quant_mode
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
 
