@@ -258,17 +258,16 @@ To deploy this feature:
 2. Add ``--sharded_ddp`` to the command line arguments, and make sure you have added the distributed launcher ``-m
    torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
 
-For example here is how you could use it for ``finetune_trainer.py`` with 2 GPUs:
+For example here is how you could use it for ``run_seq2seq.py`` with 2 GPUs:
 
 .. code-block:: bash
 
-    cd examples/seq2seq
-    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py \
-    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
+    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_seq2seq.py \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir \
-    --do_train --n_train 500 --num_train_epochs 1 \
-    --per_device_train_batch_size 1  --freeze_embeds \
-    --src_lang en_XX --tgt_lang ro_RO --task translation \
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: " \
     --fp16 --sharded_ddp
 
 Notes:
@@ -344,17 +343,18 @@ In fact, you can continue using ``-m torch.distributed.launch`` with DeepSpeed a
 the ``deepspeed`` launcher. But since in the DeepSpeed documentation it'll be used everywhere, for consistency we will
 use it here as well.
 
-Here is an example of running ``finetune_trainer.py`` under DeepSpeed deploying all available GPUs:
+Here is an example of running ``run_seq2seq.py`` under DeepSpeed deploying all available GPUs:
 
 .. code-block:: bash
 
-    cd examples/seq2seq
-    deepspeed ./finetune_trainer.py --deepspeed ds_config.json \
-    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
-    --output_dir output_dir --overwrite_output_dir \
-    --do_train --n_train 500 --num_train_epochs 1 \
-    --per_device_train_batch_size 1  --freeze_embeds \
-    --src_lang en_XX --tgt_lang ro_RO --task translation
+    deepspeed examples/seq2seq/run_seq2seq.py \
+    --deepspeed examples/tests/deepspeed/ds_config.json \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
+    --output_dir output_dir --overwrite_output_dir --fp16 \
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: "
+
 
 Note that in the DeepSpeed documentation you are likely to see ``--deepspeed --deepspeed_config ds_config.json`` - i.e.
 two DeepSpeed-related arguments, but for the sake of simplicity, and since there are already so many arguments to deal
@@ -372,13 +372,13 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 
 .. code-block:: bash
 
-    cd examples/seq2seq
-    deepspeed --num_gpus=1 ./finetune_trainer.py --deepspeed ds_config.json \
-    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
-    --output_dir output_dir --overwrite_output_dir \
-    --do_train --n_train 500 --num_train_epochs 1 \
-    --per_device_train_batch_size 1  --freeze_embeds \
-    --src_lang en_XX --tgt_lang ro_RO --task translation
+    deepspeed --num_gpus=1 examples/seq2seq/run_seq2seq.py \
+    --deepspeed examples/tests/deepspeed/ds_config.json \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
+    --output_dir output_dir --overwrite_output_dir --fp16 \
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: "
 
 This is almost the same as with multiple-GPUs, but here we tell DeepSpeed explicitly to use just one GPU. By default,
 DeepSpeed deploys all GPUs it can see. If you have only 1 GPU to start with, then you don't need this argument. The
@@ -424,17 +424,17 @@ Notes:
 
    .. code-block:: bash
 
-       deepspeed --include localhost:1 ./finetune_trainer.py
+       deepspeed --include localhost:1 examples/seq2seq/run_seq2seq.py ...
 
-   In this example, we tell DeepSpeed to use GPU 1.
+   In this example, we tell DeepSpeed to use GPU 1 (second gpu).
 
 
 
 Deployment in Notebooks
 =======================================================================================================================
 
-The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so under certain setups we
-have to emulate it.
+The problem with running notebook cells as a script is that there is no normal ``deepspeed`` launcher to rely on, so
+under certain setups we have to emulate it.
 
 Here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
 
@@ -508,6 +508,24 @@ cell with:
         "wall_clock_breakdown": false
     }
     EOT
+
+
+That's said if the script is not in the notebook cells, you can launch ``deepspeed`` normally via shell from a cell
+with:
+
+.. code-block::
+
+   !deepspeed examples/seq2seq/run_seq2seq.py ...
+
+or with bash magic, where you can write a multi-line code for the shell to run:
+
+.. code-block::
+
+   %%bash
+
+   cd /somewhere
+   deepspeed examples/seq2seq/run_seq2seq.py ...
+
 
 
 
