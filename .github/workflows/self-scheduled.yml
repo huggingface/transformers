@@ -9,7 +9,9 @@ on:
   repository_dispatch:
   schedule:
     - cron: "0 0 * * *"
-
+  push:
+    branches:
+      - stas00-patch-3
 jobs:
   run_all_tests_torch_gpu:
     runs-on: [self-hosted, gpu, single-gpu]
