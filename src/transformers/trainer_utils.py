@@ -245,6 +245,7 @@ class SchedulerType(ExplicitEnum):
 
 
 class TrainerMemoryTracker:
+
     def __init__(self, skip_memory_metrics=False):
         if is_torch_cuda_available():
             import torch
@@ -254,16 +255,27 @@ class TrainerMemoryTracker:
         else:
             self.torch = None
 
-        self.stage = "none"
+        self.cur_stage = None
         self.cpu = {}
         self.init_reported = False
         self.skip_memory_metrics = skip_memory_metrics
+
+    # notes: since eval calls may be intermixed with train calls, we can't handle nested invocations
+    # because torch.cuda.max_memory_allocated is a single counter, so if it gets reset by a nested
+    # eval call, train will report incorrect info. One day pytorch will fix this issue:
+    # https://github.com/pytorch/pytorch/issues/16266
+    # and then it will be possible to be re-entrant
+    # for now only track the outer level train / evaluation / predict functions
 
     def start(self, stage):
         if self.skip_memory_metrics:
             return
 
-        self.stage = stage
+        # deal with nested calls of eval during train - simply ignore those
+        if self.cur_stage is not None and self.cur_stage != stage:
+            return
+
+        self.cur_stage = stage
 
         if self.torch is not None:
             self.torch.cuda.reset_peak_memory_stats()
@@ -273,16 +285,20 @@ class TrainerMemoryTracker:
 
         # gpu
         if self.torch is not None:
-            self.gpu[self.stage] = {}
-            self.gpu[self.stage]["alloc"] = self.torch.cuda.memory_allocated()
-            self.gpu[self.stage]["peaked"] = 0
+            self.gpu[self.cur_stage] = {}
+            self.gpu[self.cur_stage]["alloc"] = self.torch.cuda.memory_allocated()
+            self.gpu[self.cur_stage]["peaked"] = 0
 
         # cpu
-        self.cpu[self.stage] = {}
+        self.cpu[self.cur_stage] = {}
         tracemalloc.start()
 
-    def stop(self):
+    def stop(self, stage):
         if self.skip_memory_metrics:
+            return
+
+        # deal with nested calls of eval during train - simply ignore those
+        if self.cur_stage is not None and self.cur_stage != stage:
             return
 
         if self.torch is not None:
@@ -294,19 +310,27 @@ class TrainerMemoryTracker:
         if self.torch is not None:
             mem_cur = self.torch.cuda.memory_allocated()
             # this is the difference between the start and the end allocated memory
-            self.gpu[self.stage]["alloc"] = mem_cur - self.gpu[self.stage]["alloc"]  # can be negative
+            self.gpu[self.cur_stage]["alloc"] = mem_cur - self.gpu[self.cur_stage]["alloc"]  # can be negative
             # this is the difference if any between the start and the peak
-            self.gpu[self.stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
+            self.gpu[self.cur_stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
 
         # cpu
         cpu_mem_used_delta, cpu_mem_used_peak = tracemalloc.get_traced_memory()
         tracemalloc.stop()  # reset accounting
-        self.cpu[self.stage]["alloc"] = cpu_mem_used_delta  # can be negative
-        self.cpu[self.stage]["peaked"] = max(0, cpu_mem_used_peak - cpu_mem_used_delta)
+        self.cpu[self.cur_stage]["alloc"] = cpu_mem_used_delta  # can be negative
+        self.cpu[self.cur_stage]["peaked"] = max(0, cpu_mem_used_peak - cpu_mem_used_delta)
+
+        # reset - cycle finished
+        self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
         if self.skip_memory_metrics:
             return
+
+        # deal with nested calls of eval during train - simply ignore those
+        if self.cur_stage is not None and self.cur_stage != stage:
+            return
+
         # since we don't have a way to return init metrics, we push them into the first of train/val/predict
         stages = [stage]
         if not self.init_reported:
@@ -315,6 +339,7 @@ class TrainerMemoryTracker:
 
         for stage in stages:
             for t in ["alloc", "peaked"]:
-                metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
-                if self.torch is not None:
+                if stage in self.cpu and t in self.cpu[stage]:
+                    metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
+                if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]

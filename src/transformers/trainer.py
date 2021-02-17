@@ -391,7 +391,7 @@ class Trainer:
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # very last
-        self.mem.stop()
+        self.mem.stop("init")
 
     def add_callback(self, callback):
         """
@@ -1073,7 +1073,7 @@ class Trainer:
             self.store_flos()
             metrics["total_flos"] = self.state.total_flos
 
-        self.mem.stop()
+        self.mem.stop("train")
         self.mem.update_metrics("train", metrics)
         self.log(metrics)
 
@@ -1593,7 +1593,7 @@ class Trainer:
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
-        self.mem.stop()
+        self.mem.stop("eval")
         self.mem.update_metrics("eval", output.metrics)
         return output.metrics
 
@@ -1644,7 +1644,7 @@ class Trainer:
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
 
-        self.mem.stop()
+        self.mem.stop("test")
         self.mem.update_metrics("test", output.metrics)
         return output
 
