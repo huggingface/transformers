@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
+import itertools
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
@@ -172,22 +173,32 @@ class FillMaskPipeline(Pipeline):
                     sort_inds = list(reversed(values.argsort(dim=-1)))
                     values = values[..., sort_inds]
                     predictions = target_inds[sort_inds]
-
-            for i, item in enumerate(values_all[0]):
+            
+            values_indices = [[i for i in range(value.size()[0])] for value in values_all]
+            values_combinatorial_val = list(itertools.product(*values_all))
+            values_combinatorial_ind = list(itertools.product(*values_indices))
+            values_combinatorial = []
+            for values_comb_val, values_comb_ind in zip(values_combinatorial_val, values_combinatorial_ind):
+                values_combinatorial.append([np.prod(values_comb_val), list(values_comb_ind)])
+            values_combinatorial = sorted(values_combinatorial, key=lambda x:x[0], reverse=True)[0:self.top_k]
+            
+            for value_combinatorial in values_combinatorial:
                 tokens = input_ids.numpy()
-                for i_inner, item_inner in enumerate(masked_indices.tolist()):
-                    masked_index = item_inner[0]
-                    tokens[masked_index] = predictions_all[i_inner].tolist()[i]
+                tokens_collated = []
+                for mask_iter, element_index in enumerate(value_combinatorial[1]):
+                    masked_index = masked_indices.tolist()[mask_iter][0]
+                    tokens[masked_index] = predictions_all[mask_iter].tolist()[element_index]
+                    tokens_collated.append(predictions_all[mask_iter].tolist()[element_index])
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
                 result.append(
                     {
                         "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
-                        "scores": [v.tolist()[i] for v in values_all],
-                        "tokens": [p.tolist()[i] for p in predictions_all],
-                        "tokens_strs": [self.tokenizer.decode(p.tolist()[i]) for p in predictions_all],
+                        "score" : value_combinatorial[0],
+                        "tokens" : tokens_collated,
+                        "tokens_strs" : [self.tokenizer.decode(token) for token in tokens_collated]
                     }
                 )
-
+                  
             # Append
             results += [result]
 
