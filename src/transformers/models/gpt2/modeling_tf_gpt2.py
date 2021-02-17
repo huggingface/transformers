@@ -112,6 +112,7 @@ class TFAttention(tf.keras.layers.Layer):
 
         if attention_mask is not None:
             # Apply the attention mask
+            attention_mask = tf.cast(attention_mask, dtype=w.dtype)
             w = w + attention_mask
 
         w = tf.nn.softmax(w, axis=-1)
@@ -224,19 +225,25 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
+        self.n_positions = config.n_positions
+        self.initializer_range = config.initializer_range
 
         self.wte = TFSharedEmbeddings(
             config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
         )
-        self.wpe = tf.keras.layers.Embedding(
-            config.n_positions,
-            config.n_embd,
-            embeddings_initializer=get_initializer(config.initializer_range),
-            name="wpe",
-        )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+    
+    def build(self, input_shape):
+        with tf.name_scope("wpe"):
+            self.wpe = self.add_weight(
+                name="embeddings",
+                shape=[self.n_positions, self.n_embd],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        super().build(input_shape)
 
     def get_input_embeddings(self):
         return self.wte
@@ -343,7 +350,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         if inputs["inputs_embeds"] is None:
             inputs["inputs_embeds"] = self.wte(inputs["input_ids"], mode="embedding")
 
-        position_embeds = self.wpe(inputs["position_ids"])
+        position_embeds = tf.gather(self.wpe, inputs["position_ids"])
 
         if inputs["token_type_ids"] is not None:
             inputs["token_type_ids"] = tf.reshape(
@@ -351,7 +358,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             )
             token_type_embeds = self.wte(inputs["token_type_ids"], mode="embedding")
         else:
-            token_type_embeds = 0
+            token_type_embeds = tf.constant(0.0)
 
         position_embeds = tf.cast(position_embeds, dtype=inputs["inputs_embeds"].dtype)
         token_type_embeds = tf.cast(token_type_embeds, dtype=inputs["inputs_embeds"].dtype)
