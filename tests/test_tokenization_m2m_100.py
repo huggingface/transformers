@@ -13,14 +13,16 @@
 # limitations under the License.
 
 import os
-from shutil import copyfile
 import tempfile
 import unittest
 from pathlib import Path
+from shutil import copyfile
 
+from hubconf import tokenizer
 from transformers import SPIECE_UNDERLINE, BatchEncoding, M2M100Tokenizer, is_torch_available
 from transformers.file_utils import is_sentencepiece_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
+
 
 if is_sentencepiece_available():
     from transformers.models.m2m_100.tokenization_m2m_100 import save_json, VOCAB_FILES_NAMES
@@ -35,8 +37,8 @@ if is_sentencepiece_available():
 if is_torch_available():
     from transformers.models.mbart.modeling_mbart import shift_tokens_right
 
-EN_CODE = 250004
-RO_CODE = 250020
+EN_CODE = 128022
+FR_CODE = 128028
 
 
 @require_sentencepiece
@@ -58,16 +60,16 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         print(self.tmpdirname)
         tokenizer = M2M100Tokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
-    
+
     def get_tokenizer(self, **kwargs):
         return M2M100Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
-    
+
     def get_input_output_texts(self, tokenizer):
         return (
             "This is a test",
             "This is a test",
         )
-    
+
     @unittest.skip("Skip this test while all models are still to be uploaded.")
     def test_pretrained_model_lists(self):
         pass
@@ -87,80 +89,73 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(back_tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
         text = tokenizer.convert_tokens_to_string(tokens)
-        self.assertEqual(text, "This is a test")    
+        self.assertEqual(text, "This is a test")
 
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
-class MBartOneToManyIntegrationTest(unittest.TestCase):
-    checkpoint_name = "facebook/mbart-large-50-one-to-many-mmt"
+class M2M100TokenizerIntegrationTest(unittest.TestCase):
+    checkpoint_name = "valhalla/m2m100_418M"
     src_text = [
-        " UN Chief Says There Is No Military Solution in Syria",
-        """ Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for Syria is that "there is no military solution" to the nearly five-year conflict and more weapons will only worsen the violence and misery for millions of people.""",
+        "In my opinion, there are two levels of response from the French government.",
+        "NSA Affair Emphasizes Complete Lack of Debate on Intelligence",
     ]
     tgt_text = [
-        "Şeful ONU declară că nu există o soluţie militară în Siria",
-        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.',
+        "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
+        "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
     ]
-    expected_src_tokens = [EN_CODE, 8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2]
+
+    # fmt: off
+    expected_src_tokens = [EN_CODE, 593, 1949, 115781, 4, 71586, 4234, 60633, 126233, 432, 123808, 15592, 1197, 117132, 120618, 5, 2]
+    # fmt: on
 
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: M2M100Tokenizer = M2M100Tokenizer.from_pretrained(
-            cls.checkpoint_name, src_lang="en_XX", tgt_lang="ro_RO"
+            cls.checkpoint_name, src_lang="en", tgt_lang="fr"
         )
         cls.pad_token_id = 1
         return cls
 
     def check_language_codes(self):
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ar_AR"], 250001)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["en_EN"], 250004)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["ro_RO"], 250020)
-        self.assertEqual(self.tokenizer.fairseq_tokens_to_ids["mr_IN"], 250038)
+        self.assertEqual(self.tokenizer.get_lang_id("ar"), 128006)
+        self.assertEqual(self.tokenizer.get_lang_id("en"), 128022)
+        self.assertEqual(self.tokenizer.get_lang_id("ro"), 128076)
+        self.assertEqual(self.tokenizer.get_lang_id("mr"), 128063)
 
     def test_tokenizer_batch_encode_plus(self):
+        self.tokenizer.src_lang = "en"
         ids = self.tokenizer.batch_encode_plus(self.src_text).input_ids[0]
         self.assertListEqual(self.expected_src_tokens, ids)
 
     def test_tokenizer_decode_ignores_language_codes(self):
-        self.assertIn(RO_CODE, self.tokenizer.all_special_ids)
-        generated_ids = [RO_CODE, 884, 9019, 96, 9, 916, 86792, 36, 18743, 15596, 5, 2]
+        self.assertIn(FR_CODE, self.tokenizer.all_special_ids)
+        # fmt: off
+        generated_ids = [FR_CODE, 5364, 82, 8642, 4, 294, 47, 8, 14028, 136, 3286, 9706, 6, 90797, 6, 144012, 162, 88128, 30061, 5, 2]
+        # fmt: on
         result = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
-        expected_romanian = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
-        self.assertEqual(result, expected_romanian)
+        expected_french = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
+        self.assertEqual(result, expected_french)
         self.assertNotIn(self.tokenizer.eos_token, result)
-
-    def test_tokenizer_truncation(self):
-        src_text = ["this is gunna be a long sentence " * 20]
-        assert isinstance(src_text[0], str)
-        desired_max_length = 10
-        ids = self.tokenizer.prepare_seq2seq_batch(
-            src_text,
-            max_length=desired_max_length,
-        ).input_ids[0]
-        self.assertEqual(ids[0], EN_CODE)
-        self.assertEqual(ids[-1], 2)
-        self.assertEqual(len(ids), desired_max_length)
-
-    def test_mask_token(self):
-        self.assertListEqual(self.tokenizer.convert_tokens_to_ids(["<mask>", "ar_AR"]), [250053, 250001])
 
     def test_special_tokens_unaffacted_by_save_load(self):
         tmpdirname = tempfile.mkdtemp()
-        original_special_tokens = self.tokenizer.fairseq_tokens_to_ids
+        original_special_tokens = self.tokenizer.lang_token_to_id
         self.tokenizer.save_pretrained(tmpdirname)
         new_tok = M2M100Tokenizer.from_pretrained(tmpdirname)
-        self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
-
-    # prepare_seq2seq_batch tests below
+        self.assertDictEqual(new_tok.lang_token_to_id, original_special_tokens)
 
     @require_torch
     def test_batch_fairseq_parity(self):
-        batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
+        self.tokenizer.src_lang = "en"
+        self.tokenizer.tgt_lang = "fr"
+
+        batch = self.tokenizer(self.src_text, padding=True, return_tensors="pt")
+        with self.tokenizer.as_target_tokenizer():
+            batch["labels"] = self.tokenizer(self.tgt_text, padding=True, return_tensors="pt").input_ids
+
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         for k in batch:
             batch[k] = batch[k].tolist()
@@ -169,38 +164,30 @@ class MBartOneToManyIntegrationTest(unittest.TestCase):
         # batch.decoder_inputs_ids[0][0] ==
         assert batch.input_ids[1][0] == EN_CODE
         assert batch.input_ids[1][-1] == 2
-        assert batch.labels[1][0] == RO_CODE
+        assert batch.labels[1][0] == FR_CODE
         assert batch.labels[1][-1] == 2
-        assert batch.decoder_input_ids[1][:2] == [2, RO_CODE]
+        assert batch.decoder_input_ids[1][:2] == [2, FR_CODE]
 
     @require_torch
-    def test_tokenizer_prepare_seq2seq_batch(self):
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens), return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
-        self.assertIsInstance(batch, BatchEncoding)
+    def test_src_lang_setter(self):
+        self.tokenizer.src_lang = "mr"
+        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("mr")])
+        self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
 
-        self.assertEqual((2, 14), batch.input_ids.shape)
-        self.assertEqual((2, 14), batch.attention_mask.shape)
-        result = batch.input_ids.tolist()[0]
-        self.assertListEqual(self.expected_src_tokens, result)
-        self.assertEqual(2, batch.decoder_input_ids[0, 0])  # decoder_start_token_id
-        # Test that special tokens are reset
-        self.assertEqual(self.tokenizer.prefix_tokens, [EN_CODE])
-        self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.tokenizer.src_lang = "zh"
+        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")])
+        self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
 
-    def test_seq2seq_max_target_length(self):
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=3, max_target_length=10, return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
-        self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.decoder_input_ids.shape[1], 10)
-        # max_target_length will default to max_length if not specified
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=3, return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
-        self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.decoder_input_ids.shape[1], 3)
+    @require_torch
+    def test_as_target_tokenizer(self):
+        self.tokenizer.tgt_lang = "mr"
+        with self.tokenizer.as_target_tokenizer():
+            self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("mr")])
+            self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id(self.tokenizer.src_lang)])
+
+        self.tokenizer.tgt_lang = "zh"
+        with self.tokenizer.as_target_tokenizer():
+            self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")])
+            self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
+        self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id(self.tokenizer.src_lang)])
