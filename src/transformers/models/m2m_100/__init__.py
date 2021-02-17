@@ -25,8 +25,6 @@ _import_structure = {
     "tokenization_m2m_100": ["M2M100Tokenizer"],
 }
 
-if is_tokenizers_available():
-    _import_structure["tokenization_m2m_100_fast"] = ["M2M100TokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_m2m_100"] = [
@@ -40,9 +38,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .tokenization_m2m_100 import M2M100Tokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_m2m_100_fast import M2M100TokenizerFast
 
     if is_torch_available():
         from .modeling_m2m_100 import (
