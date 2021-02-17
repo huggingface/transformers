@@ -16,8 +16,9 @@ Speech2TextTransformer
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Speech2TextTransformer model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT
-AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The Speech2TextTransformer model was proposed in `fairseq S2T: Fast Speech-to-Text Modeling with fairseq
+<https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
+
 
 The abstract from the paper is the following:
 

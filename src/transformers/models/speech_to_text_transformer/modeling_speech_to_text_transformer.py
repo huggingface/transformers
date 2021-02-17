@@ -712,9 +712,7 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
             embed_dim,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList(
-            [Speech2TextTransformerEncoderLayer(config) for _ in range(config.encoder_layers)]
-        )
+        self.layers = nn.ModuleList([Speech2TextTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -869,9 +867,7 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
             config.d_model,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList(
-            [Speech2TextTransformerDecoderLayer(config) for _ in range(config.decoder_layers)]
-        )
+        self.layers = nn.ModuleList([Speech2TextTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()

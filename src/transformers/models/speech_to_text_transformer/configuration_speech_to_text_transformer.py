@@ -28,11 +28,10 @@ SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Speech2TextTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a
-    :class:`~transformers.Speech2TextTransformerModel`. It is used to instantiate an Speech2TextTransformer model
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the Speech2TextTransformer `s2t_transformer_s
-    <https://huggingface.co/s2t_transformer_s>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextTransformerModel`.
+    It is used to instantiate an Speech2TextTransformer model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    Speech2TextTransformer `s2t_transformer_s <https://huggingface.co/s2t_transformer_s>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -41,9 +40,7 @@ class Speech2TextTransformerConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the Speech2TextTransformer model. Defines the number of different tokens that can be
-            represented by the :obj:`inputs_ids` passed when calling
-            :class:`~transformers.Speech2TextTransformerModel` or
-            :class:`~transformers.TFSpeech2TextTransformerModel`.
+            represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.Speech2TextTransformerModel`
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
