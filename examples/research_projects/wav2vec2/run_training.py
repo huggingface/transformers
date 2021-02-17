@@ -49,11 +49,6 @@ train_dataset = train_dataset.map(prepare_dataset, batch_size=16, batched=True, 
 val_dataset = val_dataset.map(prepare_dataset, batch_size=16, batched=True, num_proc=32)
 
 
-def get_length(batch):
-    batch["len"] = [len(x) for x in batch["input_values"]]
-    return batch
-
-
 @dataclass
 class DataCollatorCTCWithPadding:
     """
