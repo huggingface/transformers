@@ -69,6 +69,7 @@ class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         unk_token="<unk>",
+        do_upper_case=False,
         **kwargs,
     ):
         super().__init__(
@@ -76,8 +77,10 @@ class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
+            do_upper_case=do_upper_case,
             **kwargs,
         )
+        self.do_upper_case = do_upper_case
 
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -103,6 +106,9 @@ class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Converts a sequence of tokens (strings for sub-words) in a single string."""
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+
+        if self.do_upper_case:
+            out_string = out_string.upper()
         return out_string
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
