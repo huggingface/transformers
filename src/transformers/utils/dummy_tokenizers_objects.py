@@ -209,7 +209,7 @@ class MT5TokenizerFast:
         requires_tokenizers(self)
 
 
-class M2M100MTTokenizerFast:
+class M2M100TokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
 

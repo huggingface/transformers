@@ -21,35 +21,35 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 
 _import_structure = {
-    "configuration_mtm_100_mt": ["M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100MTConfig"],
-    "tokenization_mtm_100_mt": ["M2M100MTTokenizer"],
+    "configuration_m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
+    "tokenization_m2m_100": ["M2M100Tokenizer"],
 }
 
 if is_tokenizers_available():
-    _import_structure["tokenization_mtm_100_mt_fast"] = ["M2M100MTTokenizerFast"]
+    _import_structure["tokenization_m2m_100_fast"] = ["M2M100TokenizerFast"]
 
 if is_torch_available():
-    _import_structure["modeling_mtm_100_mt"] = [
-        "M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "M2M100MTForConditionalGeneration",
-        "M2M100MTModel",
-        "M2M100MTPreTrainedModel",
+    _import_structure["modeling_m2m_100"] = [
+        "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "M2M100ForConditionalGeneration",
+        "M2M100Model",
+        "M2M100PreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_mtm_100_mt import M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100MTConfig
-    from .tokenization_mtm_100_mt import M2M100MTTokenizer
+    from .configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
+    from .tokenization_m2m_100 import M2M100Tokenizer
 
     if is_tokenizers_available():
-        from .tokenization_mtm_100_mt_fast import M2M100MTTokenizerFast
+        from .tokenization_m2m_100_fast import M2M100TokenizerFast
 
     if is_torch_available():
-        from .modeling_mtm_100_mt import (
-            M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            M2M100MTForConditionalGeneration,
-            M2M100MTModel,
-            M2M100MTPreTrainedModel,
+        from .modeling_m2m_100 import (
+            M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST,
+            M2M100ForConditionalGeneration,
+            M2M100Model,
+            M2M100PreTrainedModel,
         )
 
 

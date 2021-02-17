@@ -1745,10 +1745,10 @@ class MT5Model:
         requires_pytorch(self)
 
 
-M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class M2M100MTForConditionalGeneration:
+class M2M100ForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -1757,7 +1757,7 @@ class M2M100MTForConditionalGeneration:
         requires_pytorch(self)
 
 
-class M2M100MTModel:
+class M2M100Model:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

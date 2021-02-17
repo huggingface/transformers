@@ -169,7 +169,7 @@ from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
 
 # Add modeling imports here
 # Add modeling imports here
-from ..mtm_100_mt.modeling_mtm_100_mt import M2M100MTForConditionalGeneration, M2M100MTModel
+from ..m2m_100.modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel
@@ -266,7 +266,7 @@ from .configuration_auto import (
     LEDConfig,
     LongformerConfig,
     LxmertConfig,
-    M2M100MTConfig,
+    M2M100Config,
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
@@ -298,7 +298,7 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (Wav2Vec2Config, Wav2Vec2Model),
-        (M2M100MTConfig, M2M100MTModel),
+        (M2M100Config, M2M100Model),
         (ConvBertConfig, ConvBertModel),
         (LEDConfig, LEDModel),
         (BlenderbotSmallConfig, BlenderbotSmallModel),
@@ -379,7 +379,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
-        (M2M100MTConfig, M2M100MTForConditionalGeneration),
+        (M2M100Config, M2M100ForConditionalGeneration),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
@@ -474,7 +474,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-        (M2M100MTConfig, M2M100MTForConditionalGeneration),
+        (M2M100Config, M2M100ForConditionalGeneration),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),

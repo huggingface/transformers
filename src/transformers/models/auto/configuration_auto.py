@@ -48,7 +48,7 @@ from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBa
 from ..mobilebert.configuration_mobilebert import MobileBertConfig
 from ..mpnet.configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig
 from ..mt5.configuration_mt5 import MT5Config
-from ..mtm_100_mt.configuration_mtm_100_mt import M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100MTConfig
+from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..openai.configuration_openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig
 from ..pegasus.configuration_pegasus import PegasusConfig
 from ..prophetnet.configuration_prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig
@@ -75,7 +75,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -119,7 +119,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("wav2vec2", Wav2Vec2Config),
-        ("mtm_100_mt", M2M100MTConfig),
+        ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
@@ -169,7 +169,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("wav2vec2", "Wav2Vec2"),
-        ("mtm_100_mt", "M2M100MT"),
+        ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),

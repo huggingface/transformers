@@ -17,7 +17,7 @@ import argparse
 import torch
 from torch import nn
 
-from transformers import M2M100MTConfig, M2M100MTForConditionalGeneration
+from transformers import M2M100Config, M2M100ForConditionalGeneration
 
 
 def remove_ignore_keys_(state_dict):
@@ -49,7 +49,7 @@ def convert_fairseq_m2m100_checkpoint_from_disk(checkpoint_path):
     remove_ignore_keys_(state_dict)
     vocab_size = state_dict["encoder.embed_tokens.weight"].shape[0]
 
-    config = M2M100MTConfig(
+    config = M2M100Config(
         vocab_size=vocab_size,
         max_position_embeddings=1024,
         encoder_layers=args.encoder_layers,
@@ -68,7 +68,7 @@ def convert_fairseq_m2m100_checkpoint_from_disk(checkpoint_path):
     )
 
     state_dict["shared.weight"] = state_dict["decoder.embed_tokens.weight"]
-    model = M2M100MTForConditionalGeneration(config)
+    model = M2M100ForConditionalGeneration(config)
     model.model.load_state_dict(state_dict)
     model.lm_head = make_linear_from_emb(model.model.shared)
 
