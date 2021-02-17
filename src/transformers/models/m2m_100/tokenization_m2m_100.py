@@ -31,6 +31,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "spm_file": "sentencepiece.bpe.model",
+    "tokenizer_config_file": "tokenizer_config.json",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -110,6 +111,8 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         **kwargs,
     ):
         super().__init__(
+            src_lang=src_lang,
+            tgt_lang=tgt_lang,
             bos_token=bos_token,
             eos_token=eos_token,
             sep_token=sep_token,
