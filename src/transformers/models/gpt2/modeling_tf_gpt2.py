@@ -328,9 +328,10 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             one_cst = tf.constant(1.0)
-            ten_thousand_cst = tf.constant(-10000.0)
             inputs["attention_mask"] = tf.cast(inputs["attention_mask"], dtype=one_cst.dtype)
-            inputs["attention_mask"] = tf.multiply(tf.subtract(one_cst, inputs["attention_mask"]), ten_thousand_cst)
+            inputs["attention_mask"] = tf.multiply(
+                tf.subtract(one_cst, inputs["attention_mask"]), tf.constant(-10000.0)
+            )
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
