@@ -19,6 +19,7 @@ from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
+from transformers.models.mtm_100_mt.tokenization_mtm_100_mt_fast import ALL_M2M100_MODELS
 
 from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
@@ -35,12 +36,12 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "m2m_100_418M": "https://huggingface.co/m2m_100_418M/resolve/main/vocab.json",
+        "m2m_100_418M": "https://huggingface.co/m2m100_418M/resolve/main/vocab.json",
     }
 }
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
+ALL_M2M100_MODELS = ["facebook/m2m100_418M", "facebook/m2m100_1.2B"]
+SPM_URL = "https://huggingface.co/facebook/m2m100_418M/resolve/main/sentence.bpe.model"
 
 # fmt: off
 FAIRSEQ_LANGUAGE_CODES = ["af", "am", "ar", "ast", "az", "ba", "be", "bg", "bn", "br", "bs", "ca", "ceb", "cs", "cy", "da", "de", "el", "en", "es", "et", "fa", "ff", "fi", "fr", "fy", "ga", "gd", "gl", "gu", "ha", "he", "hi", "hr", "ht", "hu", "hy", "id", "ig", "ilo", "is", "it", "ja", "jv", "ka", "kk", "km", "kn", "ko", "lb", "lg", "ln", "lo", "lt", "lv", "mg", "mk", "ml", "mn", "mr", "ms", "my", "ne", "nl", "no", "ns", "oc", "or", "pa", "pl", "ps", "pt", "ro", "ru", "sd", "si", "sk", "sl", "so", "sq", "sr", "ss", "su", "sv", "sw", "ta", "th", "tl", "tn", "tr", "uk", "ur", "uz", "vi", "wo", "xh", "yi", "yo", "zh", "zu"]
@@ -58,8 +59,8 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         vocab_file (:obj:`str`):
             Path to the vocabulary file.
         spm_file (:obj:`str`):
-            Path to `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension) that
-            contains the vocabulary.
+            Path to `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a .spm extension)
+            that contains the vocabulary.
         src_lang (:obj:`str`, `optional`):
             A string representing the source language.
         tgt_lang (:obj:`str`, `optional`):
@@ -70,9 +71,6 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
             The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
             sequence classification or for a text and a question for question answering. It is also used as the last
             token of a sequence built with special tokens.
-        cls_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
-            The classifier token which is used when doing sequence classification (classification of the whole sequence
-            instead of per-token classification). It is the first token of the sequence when built with special tokens.
         unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
@@ -80,8 +78,9 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
             The token used for padding, for example when batching sequences of different lengths.
 
     Examples::
+
         >>> from transformers import M2M100MTTokenizer
-        >>> tokenizer = M2M100MTTokenizer.from_pretrained("facebook/m2m100_418m, src_lang="en_XX", tgt_lang="ro_RO")
+        >>> tokenizer = M2M100MTTokenizer.from_pretrained("facebook/m2m100_418M, src_lang="en_XX", tgt_lang="ro_RO")
         >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
         >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> model_inputs = tokenizer(src_text, return_tensors="pt")
@@ -91,9 +90,9 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
+    max_model_input_sizes = {m: 1024 for m in ALL_M2M100_MODELS}
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
@@ -106,6 +105,7 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         tgt_lang=None,
         bos_token="<s>",
         eos_token="</s>",
+        sep_token="</s>",
         pad_token="<pad>",
         unk_token="<unk>",
         **kwargs,
@@ -113,6 +113,7 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
+            sep_token=sep_token,
             unk_token=unk_token,
             pad_token=pad_token,
             **kwargs,
@@ -143,7 +144,7 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.encoder) + len(self.lang_token_to_id) + self.num_madeup_words
-    
+
     @property
     def src_lang(self) -> str:
         return self._src_lang
@@ -285,24 +286,24 @@ class M2M100MTTokenizer(PreTrainedTokenizer):
         yield
         self.set_src_lang_special_tokens(self.src_lang)
 
-    def set_src_lang_special_tokens(self, src_lang) -> None:
+    def set_src_lang_special_tokens(self, src_lang: str) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""
         lang_token = self.get_lang_token(src_lang)
         self.cur_lang_id = self.lang_token_to_id[lang_token]
         self.prefix_tokens = [self.cur_lang_id]
         self.suffix_tokens = [self.eos_token_id]
 
-    def set_tgt_lang_special_tokens(self, lang: str) -> None:
+    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
         """Reset the special tokens to the target language setting. No prefix and suffix=[eos, tgt_lang_code]."""
-        lang_token = self.get_lang_token(lang)
+        lang_token = self.get_lang_token(tgt_lang)
         self.cur_lang_id = self.lang_token_to_id[lang_token]
         self.prefix_tokens = [self.cur_lang_id]
         self.suffix_tokens = [self.eos_token_id]
 
-    def get_lang_token(self, lang):
+    def get_lang_token(self, lang: str) -> str:
         return self.lang_code_to_token[lang]
 
-    def get_lang_id(self, lang):
+    def get_lang_id(self, lang: str) -> int:
         lang_token = self.get_lang_token(lang)
         return self.lang_token_to_id[lang_token]
 
