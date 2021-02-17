@@ -239,6 +239,9 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
 
+        # force device and distributed setup init explicitly
+        args._setup_devices
+
         if model is None:
             if model_init is not None:
                 self.model_init = model_init
@@ -269,7 +272,7 @@ class Trainer:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
         # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
         #    and we only use deepspeed for training at the moment
-        if not self.is_model_parallel and not (args.deepspeed and args.do_train):
+        if not (self.is_model_parallel or (args.deepspeed and args.do_train)) and self.args.place_model_on_device:
             model = model.to(args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -316,6 +319,7 @@ class Trainer:
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
+        self._signature_columns = None
         if is_datasets_available():
             if isinstance(train_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.train_dataset, description="training")
@@ -422,18 +426,22 @@ class Trainer:
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
             return
-        # Inspect model forward signature to keep only the arguments it accepts.
-        signature = inspect.signature(self.model.forward)
-        signature_columns = list(signature.parameters.keys())
-        # Labels may be named label or label_ids, the default data collator handles that.
-        signature_columns += ["label", "label_ids"]
-        columns = [k for k in signature_columns if k in dataset.column_names]
-        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
-        dset_description = "" if description is None else f"in the {description} set "
-        logger.info(
-            f"The following columns {dset_description}don't have a corresponding argument in `{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
-        )
-        dataset.set_format(type=dataset.format["type"], columns=columns)
+        if self._signature_columns is None:
+            # Inspect model forward signature to keep only the arguments it accepts.
+            signature = inspect.signature(self.model.forward)
+            self._signature_columns = list(signature.parameters.keys())
+            # Labels may be named label or label_ids, the default data collator handles that.
+            self._signature_columns += ["label", "label_ids"]
+        columns = [k for k in self._signature_columns if k in dataset.column_names]
+        ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
+        if len(ignored_columns) > 0:
+            dset_description = "" if description is None else f"in the {description} set "
+            logger.info(
+                f"The following columns {dset_description} don't have a corresponding argument in "
+                f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
+            )
+
+        dataset.set_format(type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"])
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
@@ -688,6 +696,45 @@ class Trainer:
 
         return model
 
+    def _wrap_model(self, model, training=True):
+        # Mixed precision training with apex (torch < 1.6)
+        if self.use_apex and training:
+            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
+
+        # Multi-gpu training (should be after apex fp16 initialization)
+        if self.args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
+
+        # Note: in torch.distributed mode, there's no point in wrapping the model
+        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        if not training:
+            return model
+
+        # Distributed training (should be after apex fp16 initialization)
+        if self.sharded_dpp:
+            model = ShardedDDP(model, self.optimizer)
+        elif is_sagemaker_distributed_available():
+            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+        elif self.deepspeed:
+            pass  # already initialized its own DDP earlier
+        elif self.args.local_rank != -1:
+            if self.args.ddp_find_unused_parameters is not None:
+                find_unused_parameters = self.args.ddp_find_unused_parameters
+            elif isinstance(model, PreTrainedModel):
+                # find_unused_parameters breaks checkpointing as per
+                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+            else:
+                find_unused_parameters = True
+            model = torch.nn.parallel.DistributedDataParallel(
+                model,
+                device_ids=[self.args.local_rank],
+                output_device=self.args.local_rank,
+                find_unused_parameters=find_unused_parameters,
+            )
+
+        return model
+
     def train(
         self,
         resume_from_checkpoint: Optional[str] = None,
@@ -740,7 +787,7 @@ class Trainer:
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
-            if not self.is_model_parallel:
+            if not self.is_model_parallel and self.args.place_model_on_device:
                 self.model = self.model.to(self.args.device)
             self.model_wrapped = self.model
 
@@ -787,38 +834,7 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
-        model = self.model_wrapped
-
-        # Mixed precision training with apex (torch < 1.6)
-        if self.use_apex:
-            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
-
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
-
-        # Distributed training (should be after apex fp16 initialization)
-        if self.sharded_dpp:
-            model = ShardedDDP(model, self.optimizer)
-        elif is_sagemaker_distributed_available():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        elif self.deepspeed:
-            pass  # already initialized its own DDP earlier
-        elif self.args.local_rank != -1:
-            if self.args.ddp_find_unused_parameters is not None:
-                find_unused_parameters = self.args.ddp_find_unused_parameters
-            elif isinstance(model, PreTrainedModel):
-                # find_unused_parameters breaks checkpointing as per
-                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
-            else:
-                find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.args.local_rank],
-                output_device=self.args.local_rank,
-                find_unused_parameters=find_unused_parameters,
-            )
+        model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -951,7 +967,7 @@ class Trainer:
                         tr_loss += self.training_step(model, inputs)
                 else:
                     tr_loss += self.training_step(model, inputs)
-                self._total_flos += self.floating_point_ops(inputs)
+                self._total_flos += float(self.floating_point_ops(inputs))
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
@@ -1024,7 +1040,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not self.is_model_parallel:
+                if not self.is_model_parallel and self.args.place_model_on_device:
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
@@ -1614,13 +1630,7 @@ class Trainer:
             # flagging only for when --do_train wasn't passed as only then it's redundant
             logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
-        model = self.model
-
-        # multi-gpu eval
-        if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
-        # Note: in torch.distributed mode, there's no point in wrapping the model
-        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        model = self._wrap_model(self.model, training=False)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)

@@ -3,9 +3,11 @@ How to add BigBird to 🤗 Transformers?
 
 Mentor: [Patrick](https://github.com/patrickvonplaten)
 
-Begin: 19.02.2020
+Begin: 12.02.2020
 
 Estimated End: 19.03.2020
+
+Contributor: [Vasudev](https://github.com/vasudevgupta7)
 
 Adding a new model is often difficult and requires an in-depth knowledge
 of the 🤗 Transformers library and ideally also of the model's original

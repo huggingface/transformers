@@ -18,6 +18,7 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import re
@@ -25,10 +26,12 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
+import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
+from filelock import FileLock
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -36,6 +39,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
     HfArgumentParser,
     MBartTokenizer,
+    MBartTokenizerFast,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     default_data_collator,
@@ -44,7 +48,16 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
+with FileLock(".lock") as lock:
+    nltk.download("punkt", quiet=True)
+
+
 logger = logging.getLogger(__name__)
+
+
+def save_json(content, path, indent=4, **json_dump_kwargs):
+    with open(path, "w") as f:
+        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 @dataclass
@@ -110,10 +123,22 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The name of the column in the datasets containing the summaries (for summarization)."},
     )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
+    train_file: Optional[str] = field(
+        default=None, metadata={"help": "The input training data file (a jsonlines or csv file)."}
+    )
     validation_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
+        metadata={
+            "help": "An optional input evaluation data file to evaluate the metrics (rouge/sacreblue) on "
+            "(a jsonlines or csv file)."
+        },
+    )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "An optional input test data file to evaluate the metrics (rouge/sacreblue) on "
+            "(a jsonlines or csv file)."
+        },
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -298,6 +323,9 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
             extension = data_args.validation_file.split(".")[-1]
+        if data_args.test_file is not None:
+            data_files["test"] = data_args.test_file
+            extension = data_args.test_file.split(".")[-1]
         datasets = load_dataset(extension, data_files=data_files)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -330,20 +358,19 @@ def main():
     )
 
     # Set decoder_start_token_id
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, MBartTokenizer):
-        model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+        assert (
+            data_args.target_lang is not None and data_args.source_lang is not None
+        ), "mBart requires --target_lang and --source_lang"
+        if isinstance(tokenizer, MBartTokenizer):
+            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
+        else:
+            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.target_lang)
+
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
-    # Get the default prefix if None is passed.
-    if data_args.source_prefix is None:
-        task_specific_params = model.config.task_specific_params
-        if task_specific_params is not None:
-            prefix = task_specific_params.get("prefix", "")
-        else:
-            prefix = ""
-    else:
-        prefix = data_args.source_prefix
+    prefix = data_args.source_prefix if data_args.source_prefix is not None else ""
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
@@ -359,7 +386,7 @@ def main():
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
-    if data_args.task.startswith("translation"):
+    if data_args.task.startswith("translation") or isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         if data_args.source_lang is not None:
             tokenizer.src_lang = data_args.source_lang
         if data_args.target_lang is not None:
@@ -435,6 +462,8 @@ def main():
 
     if training_args.do_train:
         train_dataset = datasets["train"]
+        if "train" not in datasets:
+            raise ValueError("--do_train requires a train dataset")
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
         train_dataset = train_dataset.map(
@@ -447,6 +476,8 @@ def main():
 
     if training_args.do_eval:
         max_target_length = data_args.val_max_target_length
+        if "validation" not in datasets:
+            raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = datasets["validation"]
         if data_args.max_val_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
@@ -460,6 +491,8 @@ def main():
 
     if training_args.do_predict:
         max_target_length = data_args.val_max_target_length
+        if "test" not in datasets:
+            raise ValueError("--do_predict requires a test dataset")
         test_dataset = datasets["test"]
         if data_args.max_test_samples is not None:
             test_dataset = test_dataset.select(range(data_args.max_test_samples))
@@ -487,6 +520,19 @@ def main():
     metric_name = "rouge" if data_args.task.startswith("summarization") else "sacrebleu"
     metric = load_metric(metric_name)
 
+    def postprocess_text(preds, labels):
+        preds = [pred.strip() for pred in preds]
+        labels = [label.strip() for label in labels]
+
+        # rougeLSum expects newline after each sentence
+        if metric_name == "rouge":
+            preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in preds]
+            labels = ["\n".join(nltk.sent_tokenize(label)) for label in labels]
+        else:  # sacrebleu
+            labels = [[label] for label in labels]
+
+        return preds, labels
+
     def compute_metrics(eval_preds):
         preds, labels = eval_preds
         if isinstance(preds, tuple):
@@ -498,22 +544,19 @@ def main():
         decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
         # Some simple post-processing
-        decoded_preds = [pred.strip() for pred in decoded_preds]
-        decoded_labels = [label.strip() for label in decoded_labels]
-        if metric_name == "sacrebleu":
-            decoded_labels = [[label] for label in decoded_labels]
+        decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
-        result = metric.compute(predictions=decoded_preds, references=decoded_labels)
-
-        # Extract a few results from ROUGE
         if metric_name == "rouge":
+            result = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+            # Extract a few results from ROUGE
             result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
         else:
+            result = metric.compute(predictions=decoded_preds, references=decoded_labels)
             result = {"bleu": result["score"]}
 
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
-
+        result = {k: round(v, 4) for k, v in result.items()}
         return result
 
     # Initialize our Trainer
@@ -527,6 +570,7 @@ def main():
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
     )
 
+    all_metrics = {}
     # Training
     if training_args.do_train:
         if last_checkpoint is not None:
@@ -538,13 +582,17 @@ def main():
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
+        metrics = train_result.metrics
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
         if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+            logger.info("***** train metrics *****")
+            for key in sorted(metrics.keys()):
+                logger.info(f"  {key} = {metrics[key]}")
+            save_json(metrics, os.path.join(training_args.output_dir, "train_results.json"))
+            all_metrics.update(metrics)
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
             trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
@@ -554,15 +602,19 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        results = trainer.evaluate(max_length=data_args.val_max_target_length, num_beams=data_args.num_beams)
+        metrics = trainer.evaluate(
+            max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="val"
+        )
+        metrics = {k: round(v, 4) for k, v in metrics.items()}
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["val_samples"] = min(max_val_samples, len(eval_dataset))
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_seq2seq.txt")
         if trainer.is_world_process_zero():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in sorted(results.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+            logger.info("***** val metrics *****")
+            for key in sorted(metrics.keys()):
+                logger.info(f"  {key} = {metrics[key]}")
+            save_json(metrics, os.path.join(training_args.output_dir, "val_results.json"))
+            all_metrics.update(metrics)
 
     if training_args.do_predict:
         logger.info("*** Test ***")
@@ -573,15 +625,17 @@ def main():
             max_length=data_args.val_max_target_length,
             num_beams=data_args.num_beams,
         )
-        test_metrics = test_results.metrics
+        metrics = test_results.metrics
+        max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
+        metrics["test_samples"] = min(max_test_samples, len(test_dataset))
+        metrics = {k: round(v, 4) for k, v in metrics.items()}
 
-        output_test_result_file = os.path.join(training_args.output_dir, "test_results_seq2seq.txt")
         if trainer.is_world_process_zero():
-            with open(output_test_result_file, "w") as writer:
-                logger.info("***** Test results *****")
-                for key, value in sorted(test_metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+            logger.info("***** test metrics *****")
+            for key in sorted(metrics.keys()):
+                logger.info(f"  {key} = {metrics[key]}")
+            save_json(metrics, os.path.join(training_args.output_dir, "test_results.json"))
+            all_metrics.update(metrics)
 
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
@@ -591,6 +645,9 @@ def main():
                 output_test_preds_file = os.path.join(training_args.output_dir, "test_preds_seq2seq.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
+
+    if trainer.is_world_process_zero():
+        save_json(all_metrics, os.path.join(training_args.output_dir, "all_results.json"))
 
     return results
 

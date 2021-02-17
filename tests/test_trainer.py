@@ -500,7 +500,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.check_trained_model(trainer.model)
 
         # Can return tensors.
-        train_dataset.set_format(type="torch")
+        train_dataset.set_format(type="torch", dtype=torch.float32)
         model = RegressionModel()
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
@@ -880,6 +880,9 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # with enforced DataParallel
         assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+
+        trainer.train()
+        self.assertTrue(isinstance(trainer.state.total_flos, float))
 
 
 @require_torch

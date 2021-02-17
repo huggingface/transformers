@@ -239,6 +239,7 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFConvBertModelTester(self)
@@ -300,10 +301,6 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
                     list(output[0].shape[-3:]),
                     [self.model_tester.num_attention_heads / 2, encoder_seq_length, encoder_key_length],
                 )
-
-    def test_xla_mode(self):
-        # TODO JP: Make ConvBert XLA compliant
-        pass
 
     @slow
     def test_model_from_pretrained(self):
