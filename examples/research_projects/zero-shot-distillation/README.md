@@ -64,9 +64,10 @@ class_names = ["the world", "sports", "business", "science/tech"]
 hypothesis_template = "This text is about {}."
 sequence = "A new moon has been discovered in Jupiter's orbit"
 zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli")
-outputs = zero_shot_classifier(sequence, class_names, hypothesis_template=hypothesis_template)
-outputs["labels"][0]
-# 'science/tech'
+zero_shot_classifier(sequence, class_names, hypothesis_template=hypothesis_template)
+# {'sequence': "A new moon has been discovered in Jupiter's orbit",
+#  'labels': ['science/tech', 'the world', 'business', 'sports'],
+#  'scores': [0.7035840153694153, 0.18744826316833496, 0.06027870625257492, 0.04868902638554573]}
 ```
 
 But unfortunately inference is slow since each of our 4 class names must be fed through the large model for every
@@ -101,12 +102,13 @@ tokenizer = AutoTokenizer.from_pretrained("./agnews/distilled")
 and even used with a `TextClassificationPipeline`:
 
 ```python
-distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer, return_all_scores=True)
-distilled_classifier("A new moon has been discovered in Jupiter's orbit")
-# [[{'label': 'the world', 'score': 0.17189696431159973},
-#   {'label': 'sports', 'score': 0.027876097708940506},
-#   {'label': 'business', 'score': 0.06644482910633087},
-#   {'label': 'science/tech', 'score': 0.7337821125984192}]]
+distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+outputs = distilled_classifier(sequence)
+outputs[0]["label"]
+# [[{'label': 'the world', 'score': 0.14899294078350067},
+#   {'label': 'sports', 'score': 0.03205857425928116},
+#   {'label': 'business', 'score': 0.05943061783909798},
+#   {'label': 'science/tech', 'score': 0.7595179080963135}]]
 ```
 
 As we can see, the results of the student are roughly the same as the trainer. Now let's do a quick & dirty speed
@@ -131,5 +133,5 @@ more drastic the speedup will be, since the zero-shot teacher's complexity scale
 classes.
 
 Since we secretly have access to ground truth labels for AG's news, we can evaluate the accuracy of each model. The
-original zero-shot model `roberta-large-mnli` gets an accuracy of 70% on the test set. After training a student on
-the unlabeled training set, the distilled model gets 70%.
+original zero-shot model `roberta-large-mnli` gets an accuracy of 70.2% on the hold-out test set. After training a
+student on the unlabeled training set, the distilled model gets 70.7%.
