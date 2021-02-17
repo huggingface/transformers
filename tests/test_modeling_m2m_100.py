@@ -310,8 +310,8 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
 
     def test_inference_no_head(self):
         model = M2M100Model.from_pretrained("m2m_100_418M").to(torch_device)
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
+        input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
+        decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
         inputs_dict = prepare_m2m_100_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
@@ -319,7 +319,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[-0.7780, -0.1676, 0.1038], [-6.7556, -1.3992, 0.0567], [-7.5383, -0.5920, -0.2779]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
@@ -327,8 +327,8 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         model = M2M100ForConditionalGeneration.from_pretrained("m2m_100_418M").to(torch_device)
 
         # change to intended input
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
+        decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
         inputs_dict = prepare_m2m_100_inputs_dict(model.config, input_ids, decoder_input_ids)
         with torch.no_grad():
             output = model(**inputs_dict)[0]
@@ -336,45 +336,36 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[-1.0448, -1.0411, 3.7992], [-3.2191, -3.2386, -1.3451], [-3.6210, -3.5993, 0.4925]], device=torch_device
         )
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = M2M100ForConditionalGeneration.from_pretrained("m2m_100_418M").to(torch_device)
-        tok = M2M100Tokenizer.from_pretrained("m2m_100_418M")
+        model = M2M100ForConditionalGeneration.from_pretrained("m2m_100_418M").to(torch_device)
+        tokenizer = M2M100Tokenizer.from_pretrained("m2m_100_418M", src_lang="fr", tgt_lang="en")
 
-        batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
+        src_fr = [
+            "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
+            "Selon moi, il y a deux niveaux de réponse de la part du gouvernement français.",
+            "Lorsque François Hollande téléphone à Barack Obama ou quand le ministre des affaires étrangères Laurent Fabius convoque l'ambassadeur des Etats-Unis, ils réagissent à une vraie découverte, qui est celle de l'ampleur de la surveillance américaine sur l'ensemble des communications en France.",
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
-            batch_input,
-            max_length=512,
-            padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
-            return_tensors="pt",
-        )
+        dct = tokenizer(src_fr, padding=True, return_tensors="pt")
 
-        hypotheses_batch = hf.generate(
+        hypotheses_batch = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
-            num_beams=2,
+            forced_bos_token_id=tokenizer.get_lang_id("en"),
         )
 
-        EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
+        expected_en = [
+            "The NSA case highlights the total absence of intelligence debate",
+            "I think there are two levels of response from the French government.",
+            "When François Hollande calls Barack Obama or when Foreign Minister Laurent Fabius calls the U.S. Ambassador, they respond to a real discovery, which is that of the scale of U.S. surveillance on all communications in France.",
         ]
 
-        generated = tok.batch_decode(
+        generated = tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
         )
-        assert generated == EXPECTED
+        assert generated == expected_en
