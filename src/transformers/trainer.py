@@ -1056,6 +1056,12 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
+        metrics = speed_metrics("train", start_time, self.state.max_steps)
+        if self._total_flos is not None:
+            self.store_flos()
+            metrics["total_flos"] = self.state.total_flos
+        self.log(metrics)
+
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
@@ -1068,14 +1074,8 @@ class Trainer:
             self.model_wrapped = self.model
             gc.collect()  # force memory release
 
-        metrics = speed_metrics("train", start_time, self.state.max_steps)
-        if self._total_flos is not None:
-            self.store_flos()
-            metrics["total_flos"] = self.state.total_flos
-
         self.mem.stop("train")
         self.mem.update_metrics("train", metrics)
-        self.log(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
