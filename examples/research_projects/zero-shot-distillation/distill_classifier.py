@@ -78,6 +78,10 @@ class StudentModelArguments:
 class DataTrainingArguments:
     data_file: str = field(metadata={"help": "Text file with one unlabeled instance per line."})
     class_names_file: str = field(metadata={"help": "Text file with one class name per line."})
+    use_fast_tokenizer: bool = field(
+        default=True,
+        metadata={"help": "Whether to use one of the fast tokenizer (backed by the Rust tokenizers library) or not."},
+    )
 
 
 @dataclass
@@ -150,24 +154,24 @@ def get_teacher_predictions(
         examples: List[str],
         class_names: List[str],
         hypothesis_template: str,
-        per_device_batch_size: int,
+        batch_size: int,
         temperature: float,
         multi_class: bool,
-        no_cuda: bool
+        use_fast_tokenizer: bool,
+        no_cuda: bool,
     ):
     """
     Gets predictions by the same method as the zero-shot pipeline but with DataParallel & more efficient batching
     """
     model = AutoModelForSequenceClassification.from_pretrained(model_path)
+    model_config = model.config
     if not no_cuda and torch.cuda.is_available():
-        model = model.cuda()
-    model = nn.DataParallel(model)
-    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+        model = nn.DataParallel(model)
+        batch_size *= len(model.device_ids)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=use_fast_tokenizer)
 
     premises, hypotheses = get_premise_hypothesis_pairs(examples, class_names, hypothesis_template)
     logits = []
-
-    batch_size = per_device_batch_size * max(len(model.device_ids), 1)
 
     for i in tqdm(range(0, len(premises), batch_size)):
         batch_premises = premises[i:i+batch_size]
@@ -185,7 +189,7 @@ def get_teacher_predictions(
             outputs = model(**encodings)
             logits.append(outputs.logits.detach().cpu())
 
-    entail_id = get_entailment_id(model.module.config)
+    entail_id = get_entailment_id(model_config)
     contr_id = -1 if entail_id == 0 else 0
     logits = torch.cat(logits, dim=0) # N*K x 3
     nli_logits = logits.reshape(len(examples), len(class_names), -1)[..., [contr_id, entail_id]] # N x K x 2
@@ -257,7 +261,7 @@ def main():
     class_names = read_lines(data_args.class_names_file)
 
     # 2. get teacher predictions and load into dataset
-    logging.info("Generating predictions from zero-shot teacher model")
+    logger.info("Generating predictions from zero-shot teacher model")
     teacher_soft_preds = get_teacher_predictions(
         teacher_args.teacher_name_or_path,
         examples,
@@ -266,6 +270,7 @@ def main():
         teacher_args.teacher_batch_size,
         teacher_args.temperature,
         teacher_args.multi_class,
+        data_args.use_fast_tokenizer,
         training_args.no_cuda,
     )
     dataset = Dataset.from_dict({
@@ -274,9 +279,9 @@ def main():
     })
 
     # 3. create student
-    logging.info("Initializing student model")
+    logger.info("Initializing student model")
     model = AutoModelForSequenceClassification.from_pretrained(student_args.student_name_or_path, num_labels=len(class_names))
-    tokenizer = AutoTokenizer.from_pretrained(student_args.student_name_or_path, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(student_args.student_name_or_path, use_fast=data_args.use_fast_tokenizer)
     model.config.id2label = {i: label for i, label in enumerate(class_names)}
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
 
@@ -298,12 +303,12 @@ def main():
     )
 
     if training_args.do_train:
-        logging.info("Training student model on teacher predictions")
+        logger.info("Training student model on teacher predictions")
         trainer.train()
 
     if training_args.do_eval:
         agreement = trainer.evaluate(eval_dataset=dataset)['eval_agreement']
-        logging.info(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
+        logger.info(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
 
     trainer.save_model()
 
