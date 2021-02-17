@@ -50,7 +50,7 @@ _TOKENIZER_FOR_DOC = "M2M100Tokenizer"
 
 
 M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "m2m_100_418M",
+    "facebook/m2m100_418M",
     # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
 ]
 
@@ -531,19 +531,19 @@ M2M_100_START_DOCSTRING = r"""
 """
 
 M2M_100_GENERATION_EXAMPLE = r"""
-    Summarization example::
+    Translation example::
 
-        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration, M2M100Config
+        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
 
-        >>> model = M2M100ForConditionalGeneration.from_pretrained('m2m_100_418M')
-        >>> tokenizer = M2M100Tokenizer.from_pretrained('m2m_100_418M')
+        >>> model = M2M100ForConditionalGeneration.from_pretrained('facebook/m2m100_418M')
+        >>> tokenizer = M2M100Tokenizer.from_pretrained('facebook/m2m100_418M')
 
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        >>> text_to_translate = "Life is like a box of chocolates"
+        >>> model_inputs = tokenizer(text_to_translate, return_tensors='pt')
 
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
+        >>> # translate to French
+        >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tok.get_lang_id("fr"))
+        >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
 """
 
 M2M_100_INPUTS_DOCSTRING = r"""
@@ -1020,7 +1020,7 @@ class M2M100Model(M2M100PreTrainedModel):
     @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="m2m_100_418M",
+        checkpoint="facebook/m2m100_418M",
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1165,21 +1165,19 @@ class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
 
         Returns:
 
-        Conditional generation example::
+        Example::
 
             >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
-            >>> tokenizer = M2M100Tokenizer.from_pretrained('m2m_100_418M')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-            >>> model = M2M100ForConditionalGeneration.from_pretrained('m2m_100_418M')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
+            >>> model = M2M100ForConditionalGeneration.from_pretrained('facebook/m2m100_418M')
+            >>> tokenizer = M2M100Tokenizer.from_pretrained('facebook/m2m100_418M')
 
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
+            >>> text_to_translate = "Life is like a box of chocolates"
+            >>> model_inputs = tokenizer(text_to_translate, return_tensors='pt')
 
-            >>> tokenizer.decode(predictions).split()
+            >>> # translate to French
+            >>> gen_tokens = model.generate( **model_inputs, forced_bos_token_id=tok.get_lang_id("fr"))
+            >>> print(tokenizer.batch_decode(gen_tokens, skip_special_tokens=True))
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
