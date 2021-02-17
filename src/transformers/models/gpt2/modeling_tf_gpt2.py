@@ -234,7 +234,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
-    
+
     def build(self, input_shape):
         with tf.name_scope("wpe"):
             self.wpe = self.add_weight(
@@ -309,9 +309,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             past_length = shape_list(inputs["past"][0][0])[-2]
 
         if inputs["position_ids"] is None:
-            inputs["position_ids"] = tf.expand_dims(
-                tf.range(past_length, input_shape[-1] + past_length), axis=0
-            )
+            inputs["position_ids"] = tf.expand_dims(tf.range(past_length, input_shape[-1] + past_length), axis=0)
 
         if inputs["attention_mask"] is not None:
             # We create a 3D attention mask from a 2D tensor mask.
@@ -1030,7 +1028,10 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             if inputs["input_ids"] is not None:
                 sequence_lengths = (
                     tf.reduce_sum(
-                        tf.cast(tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), dtype=inputs["input_ids"].dtype),
+                        tf.cast(
+                            tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id),
+                            dtype=inputs["input_ids"].dtype,
+                        ),
                         -1,
                         keepdims=False,
                     )
