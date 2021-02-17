@@ -331,14 +331,6 @@ class TFFlaubertModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFFlaubertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_mixed_precision(self):
-        # TODO JP: Make Flaubert float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make Flaubert XLA compliant
-        pass
-
 
 @require_tf
 @require_sentencepiece
