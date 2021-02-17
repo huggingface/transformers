@@ -188,7 +188,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         position_ids = torch.arange(
             self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
         )
-        return position_ids.unsqueeze(0).expand(input_shape)
+        return position_ids.unsqueeze(0).expand(input_shape).contiguous()
 
 
 class M2M100Attention(nn.Module):
