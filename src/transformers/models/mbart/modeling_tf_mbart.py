@@ -64,19 +64,16 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
     have a single `decoder_start_token_id` in contrast to other Bart-like models.
     """
-    prev_output_tokens = tf.cast(input_ids, tf.int32)
     assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
     # replace possible -100 values in labels by `pad_token_id`
-    prev_output_tokens = tf.where(
-        prev_output_tokens == -100, tf.fill(shape_list(prev_output_tokens), pad_token_id), prev_output_tokens
-    )
+    input_ids = tf.where(input_ids == -100, tf.fill(shape_list(input_ids), pad_token_id), input_ids)
     language_id_index = (
-        tf.reduce_sum(tf.cast(tf.math.not_equal(prev_output_tokens, pad_token_id), tf.int32), axis=-1) - 1
+        tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=input_ids.dtype), axis=-1) - 1
     )
     language_id_index = tf.stack([tf.range(shape_list(input_ids)[0]), language_id_index], axis=-1)
-    languages_ids = tf.gather_nd(prev_output_tokens, language_id_index)
+    languages_ids = tf.gather_nd(input_ids, language_id_index)
 
-    shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), prev_output_tokens[:, :-1]], axis=-1)
+    shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), input_ids[:, :-1]], axis=-1)
 
     return shifted_input_ids
 
@@ -87,14 +84,13 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = tf.ones((tgt_len, tgt_len), dtype=tf.float32) * LARGE_NEGATIVE
+    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
     mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
-    mask = tf.cast(mask, tf.float32)
 
     if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length), dtype=tf.float32), mask], axis=-1)
+        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
 
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
@@ -106,9 +102,11 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     """
     src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
-    expanded_mask = tf.cast(tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1)), tf.float32)
+    one_cst = tf.constant(1.0)
+    mask = tf.cast(mask, dtype=one_cst.dtype)
+    expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
 
-    return (1.0 - expanded_mask) * LARGE_NEGATIVE
+    return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartLearnedPositionalEmbedding with Bart->MBart
@@ -128,9 +126,7 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         """Input is expected to be of size [bsz x seqlen]."""
         bsz, seq_len = input_shape[:2]
 
-        positions = tf.range(
-            past_key_values_length, seq_len + past_key_values_length, delta=1, dtype=tf.int32, name="range"
-        )
+        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
         return super().call(positions + self.offset)
 
 
@@ -221,43 +217,57 @@ class TFMBartAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        tf.debugging.assert_equal(
-            shape_list(attn_weights),
-            [bsz * self.num_heads, tgt_len, src_len],
-            message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
-        )
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_weights),
+                [bsz * self.num_heads, tgt_len, src_len],
+                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+            )
 
         if attention_mask is not None:
-            tf.debugging.assert_equal(
-                shape_list(attention_mask),
-                [bsz, 1, tgt_len, src_len],
-                message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
-            )
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(attention_mask),
+                    [bsz, 1, tgt_len, src_len],
+                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                )
+
+            attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_weights = tf.nn.softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            tf.debugging.assert_equal(
-                shape_list(layer_head_mask),
-                [self.num_heads],
-                message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
-            )
+            # The tf.debugging asserts are not compliant with XLA then they
+            # have to be disabled in other modes than eager.
+            if tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(layer_head_mask),
+                    [self.num_heads],
+                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                )
+
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
             )
             attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
 
         attn_probs = self.dropout(attn_weights, training=training)
-
         attn_output = tf.matmul(attn_probs, value_states)
 
-        tf.debugging.assert_equal(
-            shape_list(attn_output),
-            [bsz * self.num_heads, tgt_len, self.head_dim],
-            message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
-        )
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(attn_output),
+                [bsz * self.num_heads, tgt_len, self.head_dim],
+                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+            )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -299,11 +309,16 @@ class TFMBartEncoderLayer(tf.keras.layers.Layer):
         hidden_states, self_attn_weights, _ = self.self_attn(
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
-        tf.debugging.assert_equal(
-            shape_list(hidden_states),
-            shape_list(residual),
-            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-        )
+
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if tf.executing_eagerly():
+            tf.debugging.assert_equal(
+                shape_list(hidden_states),
+                shape_list(residual),
+                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+            )
+
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
 
@@ -731,12 +746,15 @@ class TFMBartEncoder(tf.keras.layers.Layer):
         all_attentions = () if inputs["output_attentions"] else None
 
         # check if head_mask has a correct number of layers specified if desired
-        if inputs["head_mask"] is not None:
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if inputs["head_mask"] is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(inputs["head_mask"])[0],
                 len(self.layers),
                 message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
             )
+
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
 
@@ -956,12 +974,15 @@ class TFMBartDecoder(tf.keras.layers.Layer):
         present_key_values = ()
 
         # check if head_mask has a correct number of layers specified if desired
-        if inputs["head_mask"] is not None:
+        # The tf.debugging asserts are not compliant with XLA then they
+        # have to be disabled in other modes than eager.
+        if inputs["head_mask"] is not None and tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(inputs["head_mask"])[0],
                 len(self.layers),
                 message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
             )
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if inputs["output_hidden_states"]:
