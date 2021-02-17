@@ -28,9 +28,20 @@ train_dataset = train_dataset.map(map_to_array, remove_columns=["file"])
 val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
 
 
+def encode_labels(tokenizer, text):
+    batch_tokens = []
+    for text_str in text:
+        batch_tokens.append(list(text_str.strip().replace(" ", tokenizer.word_delimiter_token) + "|"))
+
+    batch_ids = []
+    for tokens in batch_tokens:
+        batch_ids.append(tokenizer.convert_tokens_to_ids(tokens))
+    return batch_ids
+
+
 def prepare_dataset(batch):
     batch["input_values"] = tokenizer(batch["speech"]).input_values
-    batch["labels"] = tokenizer.encode_labels(batch["text"]).labels
+    batch["labels"] = encode_labels(tokenizer, batch["text"])
     return batch
 
 
