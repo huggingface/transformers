@@ -441,6 +441,7 @@ class TFGenerationMixin:
         encoder_outputs,
         attention_mask,
         use_cache,
+        **kwargs
     ):
         """
         Generate sequences for each example without beam search (num_beams == 1). All returned sequence are generated
@@ -455,7 +456,7 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )
             outputs = self(**model_inputs)
             next_token_logits = outputs[0][:, -1, :]
@@ -609,6 +610,7 @@ class TFGenerationMixin:
         use_cache,
         forced_bos_token_id,
         forced_eos_token_id,
+        **kwargs,
     ):
         """Generate sequences for each example with beam search."""
 
@@ -637,7 +639,7 @@ class TFGenerationMixin:
 
         while cur_len < max_length:
             model_inputs = self.prepare_inputs_for_generation(
-                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache
+                input_ids, past=past, attention_mask=attention_mask, use_cache=use_cache, **kwargs
             )
             outputs = self(**model_inputs)  # (batch_size * num_beams, cur_len, vocab_size)
             next_token_logits = outputs[0][:, -1, :]  # (batch_size * num_beams, vocab_size)
