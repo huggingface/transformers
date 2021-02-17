@@ -57,7 +57,7 @@ def require_deepspeed(test_case):
 class TestDeepSpeed(TestCasePlus):
 
     # this setup emulates a notebook where a launcher needs to be emulated by hand
-    @mockenv(MASTER_ADDR="localhost", MASTER_PORT="109999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1")
+    @mockenv(MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1")
     def test_fake_notebook_no_launcher(self):
         sys.path.append(self.tests_dir_str)
         from test_trainer import get_regression_trainer
