@@ -306,10 +306,10 @@ TOLERANCE = 1e-4
 class M2M100ModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return M2M100Tokenizer.from_pretrained("m2m_100_418M")
+        return M2M100Tokenizer.from_pretrained("valhalla/m2m100_418M")
 
     def test_inference_no_head(self):
-        model = M2M100Model.from_pretrained("m2m_100_418M").to(torch_device)
+        model = M2M100Model.from_pretrained("valhalla/m2m100_418M").to(torch_device)
         input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
         decoder_input_ids = _long_tensor([[2, 128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38]])
         inputs_dict = prepare_m2m_100_inputs_dict(model.config, input_ids, decoder_input_ids)
@@ -324,7 +324,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = M2M100ForConditionalGeneration.from_pretrained("m2m_100_418M").to(torch_device)
+        model = M2M100ForConditionalGeneration.from_pretrained("valhalla/m2m100_418M").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[128028, 98, 12, 30527, 2732, 159, 7755, 61904, 39144, 38, 2]])
@@ -341,8 +341,8 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        model = M2M100ForConditionalGeneration.from_pretrained("m2m_100_418M").to(torch_device)
-        tokenizer = M2M100Tokenizer.from_pretrained("m2m_100_418M", src_lang="fr", tgt_lang="en")
+        model = M2M100ForConditionalGeneration.from_pretrained("valhalla/m2m100_418M").to(torch_device)
+        tokenizer = M2M100Tokenizer.from_pretrained("valhalla/m2m100_418M", src_lang="fr", tgt_lang="en")
 
         src_fr = [
             "L'affaire NSA souligne l'absence totale de débat sur le renseignement",
