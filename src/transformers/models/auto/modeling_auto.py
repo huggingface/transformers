@@ -154,6 +154,10 @@ from ..longformer.modeling_longformer import (
     LongformerModel,
 )
 from ..lxmert.modeling_lxmert import LxmertForPreTraining, LxmertForQuestionAnswering, LxmertModel
+
+# Add modeling imports here
+# Add modeling imports here
+from ..m2m_100.modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model
 from ..marian.modeling_marian import MarianForCausalLM, MarianModel, MarianMTModel
 from ..mbart.modeling_mbart import (
     MBartForCausalLM,
@@ -181,10 +185,6 @@ from ..mpnet.modeling_mpnet import (
     MPNetModel,
 )
 from ..mt5.modeling_mt5 import MT5ForConditionalGeneration, MT5Model
-
-# Add modeling imports here
-# Add modeling imports here
-from ..m2m_100.modeling_m2m_100 import M2M100ForConditionalGeneration, M2M100Model
 from ..openai.modeling_openai import OpenAIGPTForSequenceClassification, OpenAIGPTLMHeadModel, OpenAIGPTModel
 from ..pegasus.modeling_pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
 from ..prophetnet.modeling_prophetnet import ProphetNetForCausalLM, ProphetNetForConditionalGeneration, ProphetNetModel

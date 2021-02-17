@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Suraj Patil and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class M2M100Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.M2M100Model`. It is used to
-    instantiate an M2M100 model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the M2M100 `m2m_100_418M
+    instantiate an M2M100 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the M2M100 `m2m_100_418M
     <https://huggingface.co/m2m_100_418M>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -39,8 +39,8 @@ class M2M100Config(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the M2M100 model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.M2M100Model` or
+            Vocabulary size of the M2M100 model. Defines the number of different tokens that can be represented by the
+            :obj:`inputs_ids` passed when calling :class:`~transformers.M2M100Model` or
             :class:`~transformers.TFM2M100Model`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
