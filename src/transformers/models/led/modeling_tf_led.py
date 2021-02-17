@@ -673,6 +673,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         """ compute global attn indices required throughout forward pass """
         # helper variable
         num_global_attn_indices = tf.math.count_nonzero(is_index_global_attn, axis=1)
+        num_global_attn_indices = tf.cast(num_global_attn_indices, dtype=tf.constant(1).dtype)
 
         # max number of global attn indices in batch
         max_num_global_attn_indices = tf.reduce_max(num_global_attn_indices)
@@ -806,7 +807,6 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         training,
     ):
         batch_size, seq_len = shape_list(hidden_states)[:2]
-        max_num_global_attn_indices = tf.cast(max_num_global_attn_indices, dtype=tf.constant(self.head_dim).dtype)
 
         # prepare global hidden states
         global_attn_hidden_states = tf.gather_nd(hidden_states, is_index_global_attn_nonzero)
@@ -877,7 +877,6 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
                     [self.num_heads],
                     message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
                 )
-
             global_attn_probs_float = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 global_attn_probs_float, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
             )
