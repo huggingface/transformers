@@ -6,18 +6,20 @@ efficient student model from the zero-shot teacher's predictions over an unlabel
 The zero-shot classification pipeline uses a model pre-trained on natural language inference (NLI) to determine the
 compatibility of a set of candidate class names with a given sequence. This serves as a convenient out-of-the-box
 classifier without the need for labeled training data. However, for a given sequence, the method requires each
-possible label to be fed through the large NLI model separately. This requirement slows results considerably,
-particularly for tasks with a large number of classes `K`.
+possible label to be fed through the large NLI model separately. Thus for `N` sequences and `K` classes, a total of
+`N*K` forward passes through the model are required. This requirement slows inference considerably, particularly as
+`K` grows.
 
-Given (1) an unlabeled corpus and (2) a set of candidate class names, this trains a student model with a standard
-classification head with `K` output dimensions. The resulting student model can then be used for classifying novel
-text instances over these `K` classes with a significant boost in speed and memory performance.
+Given (1) an unlabeled corpus and (2) a set of candidate class names, the provided script trains a student model
+with a standard classification head with `K` output dimensions. The resulting student model can then be used for
+classifying novel text instances with a significant boost in speed and memory performance while retaining similar
+classification performance to the original zero-shot model
 
 ### Usage
 
-A teacher NLI model can be distilled to a student model by running `distill_classifier.py` like so:
+A teacher NLI model can be distilled to a more efficient student model by running `distill_classifier.py`:
 
-```bash
+```
 python distill_classifier.py \
 --data_file <unlabeled_data.txt> \
 --class_names_file <class_names.txt> \
@@ -34,8 +36,8 @@ be fine-tuned to copy the teacher predictions.
 - `--hypothesis_template` (default `"This example is {}."`): The template used to turn each label into an NLI-style
 hypothesis when generating teacher predictions. This template must include a `{}` or similar syntax for the
 candidate label to be inserted into the template. For example, the default template is `"This example is {}."` With
-the candidate label `"sports"`, this would be fed into the model like `"<cls> sequence to classify <sep> This
-example is sports . <sep>"`.
+the candidate label `sports`, this would be fed into the model like `[CLS] sequence to classify [SEP] This example
+is sports . [SEP]`.
 - `--multi_class`: Whether or not multiple candidate labels can be true. By default, the scores are normalized such
 that the sum of the label likelihoods for each sequence is 1. If `--multi_class` is passed, the labels are
 considered independent and probabilities are normalized for each candidate by doing a softmax of the entailment
@@ -48,14 +50,16 @@ Does not affect training. Use `--per_device_train_batch_size` to change the trai
 
 Any of the arguments in the 🤗 Trainer's
 [`TrainingArguments`](https://huggingface.co/transformers/main_classes/trainer.html?#trainingarguments) can also be
-modified, such as `--learning_rate`, `--fp16`, `--no_cuda`, `--warmup_steps`, etc. You can run `python
-distill_classifier.py -h` for a full list of available arguments.
+modified, such as `--learning_rate`, `--fp16`, `--no_cuda`, `--warmup_steps`, etc. Run `python distill_classifier.py
+-h` for a full list of available arguments or consult the [Trainer
+documentation](https://huggingface.co/transformers/main_classes/trainer.html#trainingarguments).
 
 ### Example: Topic classification
 
 Let's say we're interested in classifying news articles into one of four topic categories: "the world", "sports",
-"business", or "science/tech". We have an unlabeled dataset, AG's News, which corresponds to this problem (in
-reality AG's News is annotated, but we will pretend it is not for the sake of example).
+"business", or "science/tech". We have an unlabeled dataset, [AG's News](https://huggingface.co/datasets/ag_news),
+which corresponds to this problem (in reality AG's News is annotated, but we will pretend it is not for the sake of
+example).
 
 We can use an NLI model like `roberta-large-mnli` for zero-shot classification like so:
 
@@ -63,6 +67,7 @@ We can use an NLI model like `roberta-large-mnli` for zero-shot classification l
 class_names = ["the world", "sports", "business", "science/tech"]
 hypothesis_template = "This text is about {}."
 sequence = "A new moon has been discovered in Jupiter's orbit"
+
 zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli")
 zero_shot_classifier(sequence, class_names, hypothesis_template=hypothesis_template)
 # {'sequence': "A new moon has been discovered in Jupiter's orbit",
@@ -70,13 +75,13 @@ zero_shot_classifier(sequence, class_names, hypothesis_template=hypothesis_templ
 #  'scores': [0.7035840153694153, 0.18744826316833496, 0.06027870625257492, 0.04868902638554573]}
 ```
 
-But unfortunately inference is slow since each of our 4 class names must be fed through the large model for every
-example. But with our unlabeled data we can distill the model to a small distilbert classifier to make future
-inference much faster.
+Unfortunately, inference is slow since each of our 4 class names must be fed through the large model for every
+sequence to be classified. But with our unlabeled data we can distill the model to a small distilbert classifier to
+make future inference much faster.
 
-Suppose we've put each training example from AG's News on its own line in `agnews/train_unlabeled.txt`, and each of
-the four class names above in the newline-separated `agnews/class_names.txt`. Then we can run distillation by
-running the following command:
+To run the script, we will need to put each training example (text only) from AG's News on its own line in
+`agnews/train_unlabeled.txt`, and each of the four class names in the newline-separated `agnews/class_names.txt`.
+Then we can run distillation with the following command:
 
 ```bash
 python distill_classifier.py \
@@ -99,10 +104,10 @@ model = AutoModelForSequenceClassification.from_pretrained("./agnews/distilled")
 tokenizer = AutoTokenizer.from_pretrained("./agnews/distilled")
 ```
 
-and even used with a `TextClassificationPipeline`:
+and even used trivially with a `TextClassificationPipeline`:
 
 ```python
-distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer)
+distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer, return_all_scores=True)
 outputs = distilled_classifier(sequence)
 outputs[0]["label"]
 # [[{'label': 'the world', 'score': 0.14899294078350067},
@@ -111,8 +116,11 @@ outputs[0]["label"]
 #   {'label': 'science/tech', 'score': 0.7595179080963135}]]
 ```
 
-As we can see, the results of the student are roughly the same as the trainer. Now let's do a quick & dirty speed
-comparison:
+> Tip: pass `device=0` when constructing a pipeline to run on a GPU
+
+As we can see, the results of the student closely resemble that of the trainer despite never having seen this
+example during training. Now let's do a quick & dirty speed comparison simulating 16K examples with a batch size of
+16:
 
 ```python
 for _ in range(1000):
@@ -128,10 +136,9 @@ for _ in range(1000):
 ```
 
 As we can see, the distilled student model runs an order of magnitude faster than its teacher NLI model. This is
-also a case where we only have `K=4` possible labels. The higher the number of classes for a given task, the
-more drastic the speedup will be, since the zero-shot teacher's complexity scales linearly with the number of
-classes.
+also a seeting where we only have `K=4` possible labels. The higher the number of classes for a given task, the more
+drastic the speedup will be, since the zero-shot teacher's complexity scales linearly with the number of classes.
 
 Since we secretly have access to ground truth labels for AG's news, we can evaluate the accuracy of each model. The
-original zero-shot model `roberta-large-mnli` gets an accuracy of 70.2% on the hold-out test set. After training a
-student on the unlabeled training set, the distilled model gets 70.7%.
+original zero-shot model `roberta-large-mnli` gets an accuracy of 70.2% on the held-out test set. After training a
+student on the unlabeled training set, the distilled model gets a similar score of 70.7%.
