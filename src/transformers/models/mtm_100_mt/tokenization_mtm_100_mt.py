@@ -19,7 +19,6 @@ from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
-from transformers.models.mtm_100_mt.tokenization_mtm_100_mt_fast import ALL_M2M100_MODELS
 
 from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
 from ...utils import logging
