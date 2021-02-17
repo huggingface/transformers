@@ -245,7 +245,6 @@ class SchedulerType(ExplicitEnum):
 
 
 class TrainerMemoryTracker:
-
     def __init__(self, skip_memory_metrics=False):
         if is_torch_cuda_available():
             import torch
