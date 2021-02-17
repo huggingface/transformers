@@ -52,8 +52,6 @@ def compute_mask_indices(
     mask_type: str = "static",
     mask_other: float = 0.0,
     min_masks: int = 0,
-    no_overlap: bool = False,
-    min_space: int = 0,
 ) -> np.ndarray:
     """
     Computes random mask spans for a given shape
@@ -70,8 +68,6 @@ def compute_mask_indices(
             from normal distribution with mean mask_length and stdev mask_other. mask is min 1 element poisson = sample
             from possion distribution with lambda = mask length
         min_masks: minimum number of masked spans
-        no_overlap: if false, will switch to an alternative recursive algorithm that prevents spans from overlapping
-        min_space: only used if no_overlap is True, this is how many elements to keep unmasked between spans
     """
     bsz, all_sz = shape
     mask = np.full((bsz, all_sz), False)
@@ -830,8 +826,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     self.config.mask_time_length,
                     self.config.mask_time_selection,
                     min_masks=2,
-                    no_overlap=self.config.no_mask_time_overlap,
-                    min_space=self.config.mask_time_min_space,
                 )
                 hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
 
@@ -842,8 +836,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
                     self.config.mask_channel_prob,
                     self.config.mask_channel_length,
                     self.config.mask_channel_selection,
-                    no_overlap=self.config.no_mask_channel_overlap,
-                    min_space=self.config.mask_channel_min_space,
                 )
                 mask_channel_indices = torch.from_numpy(mask_channel_indices).to(hidden_states.device)
                 hidden_states[mask_channel_indices[:, None].expand(-1, sequence_length, -1)] = 0

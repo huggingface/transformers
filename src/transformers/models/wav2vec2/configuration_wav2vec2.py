@@ -139,12 +139,10 @@ class Wav2Vec2Config(PretrainedConfig):
         mask_time_length=10,
         mask_time_selection="static",
         mask_time_other=0.0,
-        mask_time_min_space=1,
         mask_channel_prob=0.008,
         mask_channel_length=10,
         mask_channel_selection="static",
         mask_channel_other=0.0,
-        mask_channel_min_space=1,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -195,9 +193,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.mask_time_length = mask_time_length
         self.mask_time_selection = mask_time_selection
         self.mask_time_other = mask_time_other
-        self.mask_time_min_space = mask_time_min_space
         self.mask_channel_prob = mask_channel_prob
         self.mask_channel_length = mask_channel_length
         self.mask_channel_selection = mask_channel_selection
         self.mask_channel_other = mask_channel_other
-        self.mask_channel_min_space = mask_channel_min_space
