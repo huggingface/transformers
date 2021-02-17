@@ -1,24 +1,24 @@
-import sys
 import logging
 import os
-from dataclasses import dataclass, field, asdict
-from typing import Optional, List
-from tqdm.auto import tqdm
+import sys
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 import torch
-from torch import nn
 from datasets import Dataset
+from torch import nn
+from tqdm.auto import tqdm
 
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    HfArgumentParser,
     Trainer,
     TrainingArguments,
-    HfArgumentParser,
     set_seed,
+    utils,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers import utils
 
 
 DESCRIPTION = """\
@@ -35,8 +35,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class TeacherModelArguments:
     teacher_name_or_path: Optional[str] = field(
-        default="roberta-large-mnli",
-        metadata={"help": "The NLI/zero-shot teacher model to be distilled."}
+        default="roberta-large-mnli", metadata={"help": "The NLI/zero-shot teacher model to be distilled."}
     )
     hypothesis_template: Optional[str] = field(
         default="This example is {}.",
@@ -45,11 +44,10 @@ class TeacherModelArguments:
                 "Template used to turn class names into mock hypotheses for teacher NLI model. Must include {{}}"
                 "where class name is inserted."
             )
-        }
+        },
     )
     teacher_batch_size: Optional[int] = field(
-        default=32,
-        metadata={"help": "Batch size for generating teacher predictions."}
+        default=32, metadata={"help": "Batch size for generating teacher predictions."}
     )
     multi_class: Optional[bool] = field(
         default=False,
@@ -58,19 +56,17 @@ class TeacherModelArguments:
                 "Allow multiple classes to be true rather than forcing them to sum to 1 (sometimes called"
                 "multi-class multi-label classification)."
             )
-        }
+        },
     )
     temperature: Optional[float] = field(
-        default=1.,
-        metadata={"help": "Temperature applied to teacher softmax for distillation."}
+        default=1.0, metadata={"help": "Temperature applied to teacher softmax for distillation."}
     )
 
 
 @dataclass
 class StudentModelArguments:
     student_name_or_path: Optional[str] = field(
-        default="distilbert-base-uncased",
-        metadata={"help": "The NLI/zero-shot teacher model to be distilled."}
+        default="distilbert-base-uncased", metadata={"help": "The NLI/zero-shot teacher model to be distilled."}
     )
 
 
@@ -105,12 +101,11 @@ class DistillTrainingArguments(TrainingArguments):
                 "Whether to evaluate the agreement of the final student predictions and the teacher predictions"
                 "after training."
             )
-        }
+        },
     )
 
 
 class DistillationTrainer(Trainer):
-
     def compute_loss(self, model, inputs, return_outputs=False):
         target_p = inputs["labels"]
         outputs = model(inputs["input_ids"], attention_mask=inputs["attention_mask"])
@@ -133,6 +128,7 @@ def read_lines(path):
                 lines.append(line)
     return lines
 
+
 def get_premise_hypothesis_pairs(examples, class_names, hypothesis_template):
     premises = []
     hypotheses = []
@@ -142,6 +138,7 @@ def get_premise_hypothesis_pairs(examples, class_names, hypothesis_template):
             hypotheses.append(hypothesis_template.format(name))
     return premises, hypotheses
 
+
 def get_entailment_id(config):
     for label, ind in config.label2id.items():
         if label.lower().startswith("entail"):
@@ -149,17 +146,18 @@ def get_entailment_id(config):
     logging.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
     return -1
 
+
 def get_teacher_predictions(
-        model_path: str,
-        examples: List[str],
-        class_names: List[str],
-        hypothesis_template: str,
-        batch_size: int,
-        temperature: float,
-        multi_class: bool,
-        use_fast_tokenizer: bool,
-        no_cuda: bool,
-    ):
+    model_path: str,
+    examples: List[str],
+    class_names: List[str],
+    hypothesis_template: str,
+    batch_size: int,
+    temperature: float,
+    multi_class: bool,
+    use_fast_tokenizer: bool,
+    no_cuda: bool,
+):
     """
     Gets predictions by the same method as the zero-shot pipeline but with DataParallel & more efficient batching
     """
@@ -174,8 +172,8 @@ def get_teacher_predictions(
     logits = []
 
     for i in tqdm(range(0, len(premises), batch_size)):
-        batch_premises = premises[i:i+batch_size]
-        batch_hypotheses = hypotheses[i:i+batch_size]
+        batch_premises = premises[i : i + batch_size]
+        batch_hypotheses = hypotheses[i : i + batch_size]
 
         encodings = tokenizer(
             batch_premises,
@@ -191,8 +189,8 @@ def get_teacher_predictions(
 
     entail_id = get_entailment_id(model_config)
     contr_id = -1 if entail_id == 0 else 0
-    logits = torch.cat(logits, dim=0) # N*K x 3
-    nli_logits = logits.reshape(len(examples), len(class_names), -1)[..., [contr_id, entail_id]] # N x K x 2
+    logits = torch.cat(logits, dim=0)  # N*K x 3
+    nli_logits = logits.reshape(len(examples), len(class_names), -1)[..., [contr_id, entail_id]]  # N x K x 2
 
     if multi_class:
         # softmax over (contr, entail) logits for each class independently
@@ -200,8 +198,8 @@ def get_teacher_predictions(
     else:
         # softmax over entail logits across classes s.t. class probabilities sum to 1.
         nli_prob = (nli_logits / temperature).softmax(1)
-    
-    return nli_prob[..., 1] # N x K
+
+    return nli_prob[..., 1]  # N x K
 
 
 def main():
@@ -209,11 +207,13 @@ def main():
         (DataTrainingArguments, TeacherModelArguments, StudentModelArguments, DistillTrainingArguments),
         description=DESCRIPTION,
     )
-    
+
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
-        data_args, teacher_args, student_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
+        data_args, teacher_args, student_args, training_args = parser.parse_json_file(
+            json_file=os.path.abspath(sys.argv[1])
+        )
     else:
         data_args, teacher_args, student_args, training_args = parser.parse_args_into_dataclasses()
 
@@ -255,7 +255,6 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-
     # 1. read in data
     examples = read_lines(data_args.data_file)
     class_names = read_lines(data_args.class_names_file)
@@ -273,14 +272,18 @@ def main():
         data_args.use_fast_tokenizer,
         training_args.no_cuda,
     )
-    dataset = Dataset.from_dict({
-        "text": examples,
-        "labels": teacher_soft_preds,
-    })
+    dataset = Dataset.from_dict(
+        {
+            "text": examples,
+            "labels": teacher_soft_preds,
+        }
+    )
 
     # 3. create student
     logger.info("Initializing student model")
-    model = AutoModelForSequenceClassification.from_pretrained(student_args.student_name_or_path, num_labels=len(class_names))
+    model = AutoModelForSequenceClassification.from_pretrained(
+        student_args.student_name_or_path, num_labels=len(class_names)
+    )
     tokenizer = AutoTokenizer.from_pretrained(student_args.student_name_or_path, use_fast=data_args.use_fast_tokenizer)
     model.config.id2label = {i: label for i, label in enumerate(class_names)}
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
@@ -291,7 +294,7 @@ def main():
 
     def compute_metrics(p, return_outputs=False):
         preds = p.predictions.argmax(-1)
-        proxy_labels = p.label_ids.argmax(-1) # "label_ids" are actually distributions
+        proxy_labels = p.label_ids.argmax(-1)  # "label_ids" are actually distributions
         return {"agreement": (preds == proxy_labels).mean().item()}
 
     trainer = DistillationTrainer(
@@ -307,7 +310,7 @@ def main():
         trainer.train()
 
     if training_args.do_eval:
-        agreement = trainer.evaluate(eval_dataset=dataset)['eval_agreement']
+        agreement = trainer.evaluate(eval_dataset=dataset)["eval_agreement"]
         logger.info(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
 
     trainer.save_model()
