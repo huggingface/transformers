@@ -356,6 +356,7 @@ class M2M100ModelIntegrationTests(unittest.TestCase):
         hypotheses_batch = model.generate(
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
+            num_beams=5,
             forced_bos_token_id=tokenizer.get_lang_id("en"),
         )
 
