@@ -38,11 +38,10 @@ open-source our scripts so that others may reproduce the data, evaluation, and f
 Training and Generation
 _______________________________________________________________________________________________________________________
 
-M2M100 is a multilingual encoder-decoder (seq-to-seq) model primarily intended for translation task. As the model is
-multilingual it expects the sequences in a different format. A special language id token is used as prefix in both the
-source and target text. The source text format is is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is source
-language id for source text and target language id for target text, with :obj:`X` being the source or target text
-respectively.
+M2M100 is a multilingual encoder-decoder (seq-to-seq) model primarily intended for translation tasks. As the model is
+multilingual it expects the sequences in a certain format: A special language id token is used as prefix in both the
+source and target text. The source text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is source language
+id for source text and target language id for target text, with :obj:`X` being the source or target text.
 
 - Supervised Training
 
@@ -60,16 +59,15 @@ respectively.
     with tokenizer.as_target_tokenizer():
         labels = tokenizer(tgt_text, return_tensors="pt").input_ids
 
-    model(**model_inputs, labels=labels) # forward pass
+    loss = model(**model_inputs, labels=labels) # forward pass
 
 
 - Generation
 
-    To generate using the M2M100 multilingual translation models, :obj:`eos_token_id` is used as the
-    :obj:`decoder_start_token_id` and the target language id is forced as the first generated token. To force the
-    target language id as the first generated token, pass the `forced_bos_token_id` parameter to the `generate` method.
-    The following example shows how to translate between Hindi to French and Chinese to English using the
-    `facebook/mbart-50-large-many-to-many` checkpoint.
+    M2M100 uses the :obj:`eos_token_id` as the :obj:`decoder_start_token_id` for generation with the target language id
+    being forced as the first generated token. To force the target language id as the first generated token, pass the
+    `forced_bos_token_id` parameter to the `generate` method. The following example shows how to translate between
+    Hindi to French and Chinese to English using the `facebook/m2m100_418M` checkpoint.
 
 .. code-block::
 
