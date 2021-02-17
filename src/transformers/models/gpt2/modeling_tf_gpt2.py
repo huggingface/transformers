@@ -303,7 +303,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
 
         if inputs["position_ids"] is None:
             inputs["position_ids"] = tf.expand_dims(
-                tf.range(past_length, input_shape[-1] + past_length, dtype=tf.int32), axis=0
+                tf.range(past_length, input_shape[-1] + past_length), axis=0
             )
 
         if inputs["attention_mask"] is not None:
@@ -322,11 +322,10 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-
-            inputs["attention_mask"] = tf.cast(inputs["attention_mask"], tf.float32)
-            inputs["attention_mask"] = (1.0 - inputs["attention_mask"]) * -10000.0
-        else:
-            inputs["attention_mask"] = None
+            one_cst = tf.constant(1.0)
+            ten_thousand_cst = tf.constant(-10000.0)
+            inputs["attention_mask"] = tf.cast(inputs["attention_mask"], dtype=one_cst.dtype)
+            inputs["attention_mask"] = tf.multiply(tf.subtract(one_cst, inputs["attention_mask"]), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -1024,7 +1023,7 @@ class TFGPT2ForSequenceClassification(TFGPT2PreTrainedModel, TFSequenceClassific
             if inputs["input_ids"] is not None:
                 sequence_lengths = (
                     tf.reduce_sum(
-                        tf.cast(tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), tf.int32),
+                        tf.cast(tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id), dtype=inputs["input_ids"].dtype),
                         -1,
                         keepdims=False,
                     )
