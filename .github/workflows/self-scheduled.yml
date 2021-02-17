@@ -11,7 +11,7 @@ on:
     - cron: "0 0 * * *"
   push:
     branches:
-    - short-multi-gpu-job
+      - short-multi-gpu-job
 
 jobs:
   run_all_tests_torch_gpu:
