@@ -1977,11 +1977,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         tokenizer_config = convert_added_tokens(tokenizer_config, add_type_field=True)
         with open(tokenizer_config_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(tokenizer_config, ensure_ascii=False))
+        logger.info(f"tokenizer config file saved in {tokenizer_config_file}")
 
         # Sanitize AddedTokens in special_tokens_map
         write_dict = convert_added_tokens(self.special_tokens_map_extended, add_type_field=False)
         with open(special_tokens_map_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(write_dict, ensure_ascii=False))
+        logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
 
@@ -2020,6 +2022,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             with open(added_tokens_file, "w", encoding="utf-8") as f:
                 out_str = json.dumps(added_vocab, ensure_ascii=False)
                 f.write(out_str)
+                logger.info(f"added tokens file saved in {added_tokens_file}")
 
         vocab_files = self.save_vocabulary(save_directory, filename_prefix=filename_prefix)
 
@@ -2573,7 +2576,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
@@ -2663,7 +2665,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if index < len(required_input):
                 first_element = required_input[index][0]
         # At this state, if `first_element` is still a list/tuple, it's an empty one so there is nothing to do.
-        if not isinstance(first_element, (int, float, list, tuple)):
+        if not isinstance(first_element, (int, list, tuple)):
             if is_tf_available() and _is_tensorflow(first_element):
                 return_tensors = "tf" if return_tensors is None else return_tensors
             elif is_torch_available() and _is_torch(first_element):
@@ -2691,7 +2693,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
-                pad_token_id=pad_token_id,
                 return_attention_mask=return_attention_mask,
             )
             return BatchEncoding(encoded_inputs, tensor_type=return_tensors)
@@ -2713,7 +2714,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
-                pad_token_id=pad_token_id,
                 return_attention_mask=return_attention_mask,
             )
 
@@ -2987,7 +2987,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
-        pad_token_id: Optional[int] = None,
     ) -> dict:
         """
         Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
@@ -3010,8 +3009,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 >= 7.5 (Volta).
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
-        pad_token_id = pad_token_id if pad_token_id is not None else self.pad_token_id
-
         # Load from model defaults
         if return_attention_mask is None:
             return_attention_mask = "attention_mask" in self.model_input_names
@@ -3037,7 +3034,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     )
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = encoded_inputs["special_tokens_mask"] + [1] * difference
-                encoded_inputs[self.model_input_names[0]] = required_input + [pad_token_id] * difference
+                encoded_inputs[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
                     encoded_inputs["attention_mask"] = [0] * difference + [1] * len(required_input)
@@ -3047,7 +3044,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     ]
                 if "special_tokens_mask" in encoded_inputs:
                     encoded_inputs["special_tokens_mask"] = [1] * difference + encoded_inputs["special_tokens_mask"]
-                encoded_inputs[self.model_input_names[0]] = [pad_token_id] * difference + required_input
+                encoded_inputs[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in encoded_inputs:
