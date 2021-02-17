@@ -222,14 +222,6 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-    def test_mixed_precision(self):
-        # TODO JP: Make CTRL float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make CTRL XLA compliant
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
