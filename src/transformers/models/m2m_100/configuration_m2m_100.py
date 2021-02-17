@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" M2M100MT model configuration """
+""" M2M100 model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,17 +20,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-M2M_100_MT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "m2m_100_418M": "https://huggingface.co/m2m_100_418M/resolve/main/config.json",
-    # See all M2M100MT models at https://huggingface.co/models?filter=mtm_100_mt
+    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
 }
 
 
-class M2M100MTConfig(PretrainedConfig):
+class M2M100Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.M2M100MTModel`. It is used to
-    instantiate an M2M100MT model according to the specified arguments, defining the model architecture. Instantiating
-    a configuration with the defaults will yield a similar configuration to that of the M2M100MT `m2m_100_418M
+    This is the configuration class to store the configuration of a :class:`~transformers.M2M100Model`. It is used to
+    instantiate an M2M100 model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the M2M100 `m2m_100_418M
     <https://huggingface.co/m2m_100_418M>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -39,9 +39,9 @@ class M2M100MTConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the M2M100MT model. Defines the number of different tokens that can be represented by
-            the :obj:`inputs_ids` passed when calling :class:`~transformers.M2M100MTModel` or
-            :class:`~transformers.TFM2M100MTModel`.
+            Vocabulary size of the M2M100 model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.M2M100Model` or
+            :class:`~transformers.TFM2M100Model`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -83,18 +83,18 @@ class M2M100MTConfig(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import M2M100MTModel, M2M100MTConfig
+        >>> from transformers import M2M100Model, M2M100Config
 
-        >>> # Initializing a M2M100MT m2m_100_418M style configuration
-        >>> configuration = M2M100MTConfig()
+        >>> # Initializing a M2M100 m2m_100_418M style configuration
+        >>> configuration = M2M100Config()
 
         >>> # Initializing a model from the m2m_100_418M style configuration
-        >>> model = M2M100MTModel(configuration)
+        >>> model = M2M100Model(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "mtm_100_mt"
+    model_type = "m2m_100"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

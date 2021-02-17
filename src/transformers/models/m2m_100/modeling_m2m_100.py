@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch M2M100MT model. """
+""" PyTorch M2M100 model. """
 
 
 import math
@@ -40,18 +40,18 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_mtm_100_mt import M2M100MTConfig
+from .configuration_m2m_100 import M2M100Config
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "M2M100MTConfig"
-_TOKENIZER_FOR_DOC = "M2M100MTTokenizer"
+_CONFIG_FOR_DOC = "M2M100Config"
+_TOKENIZER_FOR_DOC = "M2M100Tokenizer"
 
 
-M2M_100_MT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "m2m_100_418M",
-    # See all M2M100MT models at https://huggingface.co/models?filter=mtm_100_mt
+    # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
 ]
 
 
@@ -119,7 +119,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     return incremental_indices.long() + padding_idx
 
 
-class M2M100MTSinusoidalPositionalEmbedding(nn.Module):
+class M2M100SinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -191,7 +191,7 @@ class M2M100MTSinusoidalPositionalEmbedding(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class M2M100MTAttention(nn.Module):
+class M2M100Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -325,11 +325,11 @@ class M2M100MTAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class M2M100MTEncoderLayer(nn.Module):
-    def __init__(self, config: M2M100MTConfig):
+class M2M100EncoderLayer(nn.Module):
+    def __init__(self, config: M2M100Config):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = M2M100MTAttention(
+        self.self_attn = M2M100Attention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -380,12 +380,12 @@ class M2M100MTEncoderLayer(nn.Module):
         return outputs
 
 
-class M2M100MTDecoderLayer(nn.Module):
-    def __init__(self, config: M2M100MTConfig):
+class M2M100DecoderLayer(nn.Module):
+    def __init__(self, config: M2M100Config):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = M2M100MTAttention(
+        self.self_attn = M2M100Attention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -396,7 +396,7 @@ class M2M100MTDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = M2M100MTAttention(
+        self.encoder_attn = M2M100Attention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -488,8 +488,8 @@ class M2M100MTDecoderLayer(nn.Module):
         return outputs
 
 
-class M2M100MTPreTrainedModel(PreTrainedModel):
-    config_class = M2M100MTConfig
+class M2M100PreTrainedModel(PreTrainedModel):
+    config_class = M2M100Config
     base_model_prefix = "model"
 
     def _init_weights(self, module):
@@ -514,7 +514,7 @@ class M2M100MTPreTrainedModel(PreTrainedModel):
         return dummy_inputs
 
 
-M2M_100_MT_START_DOCSTRING = r"""
+M2M_100_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
@@ -524,19 +524,19 @@ M2M_100_MT_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.M2M100MTConfig`):
+        config (:class:`~transformers.M2M100Config`):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-M2M_100_MT_GENERATION_EXAMPLE = r"""
+M2M_100_GENERATION_EXAMPLE = r"""
     Summarization example::
 
-        >>> from transformers import M2M100MTTokenizer, M2M100MTForConditionalGeneration, M2M100MTConfig
+        >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration, M2M100Config
 
-        >>> model = M2M100MTForConditionalGeneration.from_pretrained('m2m_100_418M')
-        >>> tokenizer = M2M100MTTokenizer.from_pretrained('m2m_100_418M')
+        >>> model = M2M100ForConditionalGeneration.from_pretrained('m2m_100_418M')
+        >>> tokenizer = M2M100Tokenizer.from_pretrained('m2m_100_418M')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
@@ -546,13 +546,13 @@ M2M_100_MT_GENERATION_EXAMPLE = r"""
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 """
 
-M2M_100_MT_INPUTS_DOCSTRING = r"""
+M2M_100_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using :class:`~transformers.M2M100MTTokenizer`. See
+            Indices can be obtained using :class:`~transformers.M2M100Tokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -571,7 +571,7 @@ M2M_100_MT_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should read :func:`modeling_mtm_100_mt._prepare_decoder_inputs`
+            If you want to change padding behavior, you should read :func:`modeling_m2m_100._prepare_decoder_inputs`
             and modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
             information on the default strategy.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
@@ -611,17 +611,17 @@ M2M_100_MT_INPUTS_DOCSTRING = r"""
 """
 
 
-class M2M100MTEncoder(M2M100MTPreTrainedModel):
+class M2M100Encoder(M2M100PreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`M2M100MTEncoderLayer`.
+    :class:`M2M100EncoderLayer`.
 
     Args:
-        config: M2M100MTConfig
+        config: M2M100Config
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: M2M100MTConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: M2M100Config, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -637,12 +637,12 @@ class M2M100MTEncoder(M2M100MTPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = M2M100MTSinusoidalPositionalEmbedding(
+        self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList([M2M100MTEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([M2M100EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -662,7 +662,7 @@ class M2M100MTEncoder(M2M100MTPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.M2M100MTTokenizer`. See
+                Indices can be obtained using :class:`~transformers.M2M100Tokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -760,16 +760,16 @@ class M2M100MTEncoder(M2M100MTPreTrainedModel):
         )
 
 
-class M2M100MTDecoder(M2M100MTPreTrainedModel):
+class M2M100Decoder(M2M100PreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`M2M100MTDecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`M2M100DecoderLayer`
 
     Args:
-        config: M2M100MTConfig
+        config: M2M100Config
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: M2M100MTConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: M2M100Config, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -782,12 +782,12 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = M2M100MTSinusoidalPositionalEmbedding(
+        self.embed_positions = M2M100SinusoidalPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList([M2M100MTDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([M2M100DecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -811,7 +811,7 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
                 Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
                 provide it.
 
-                Indices can be obtained using :class:`~transformers.M2M100MTTokenizer`. See
+                Indices can be obtained using :class:`~transformers.M2M100Tokenizer`. See
                 :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
                 for details.
 
@@ -988,18 +988,18 @@ class M2M100MTDecoder(M2M100MTPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare M2M100MT Model outputting raw hidden-states without any specific head on top.",
-    M2M_100_MT_START_DOCSTRING,
+    "The bare M2M100 Model outputting raw hidden-states without any specific head on top.",
+    M2M_100_START_DOCSTRING,
 )
-class M2M100MTModel(M2M100MTPreTrainedModel):
-    def __init__(self, config: M2M100MTConfig):
+class M2M100Model(M2M100PreTrainedModel):
+    def __init__(self, config: M2M100Config):
         super().__init__(config)
 
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
         self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
 
-        self.encoder = M2M100MTEncoder(config, self.shared)
-        self.decoder = M2M100MTDecoder(config, self.shared)
+        self.encoder = M2M100Encoder(config, self.shared)
+        self.decoder = M2M100Decoder(config, self.shared)
 
         self.init_weights()
 
@@ -1017,7 +1017,7 @@ class M2M100MTModel(M2M100MTPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(M2M_100_MT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="m2m_100_418M",
@@ -1093,9 +1093,9 @@ class M2M100MTModel(M2M100MTPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The M2M100MT Model with a language modeling head. Can be used for summarization.", M2M_100_MT_START_DOCSTRING
+    "The M2M100 Model with a language modeling head. Can be used for summarization.", M2M_100_START_DOCSTRING
 )
-class M2M100MTForConditionalGeneration(M2M100MTPreTrainedModel):
+class M2M100ForConditionalGeneration(M2M100PreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"final_logits_bias",
@@ -1104,9 +1104,9 @@ class M2M100MTForConditionalGeneration(M2M100MTPreTrainedModel):
         r"lm_head\.weight",
     ]
 
-    def __init__(self, config: M2M100MTConfig):
+    def __init__(self, config: M2M100Config):
         super().__init__(config)
-        self.model = M2M100MTModel(config)
+        self.model = M2M100Model(config)
         self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
@@ -1138,9 +1138,9 @@ class M2M100MTForConditionalGeneration(M2M100MTPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(M2M_100_MT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(M2M_100_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(M2M_100_MT_GENERATION_EXAMPLE)
+    @add_end_docstrings(M2M_100_GENERATION_EXAMPLE)
     def forward(
         self,
         input_ids=None,
@@ -1167,11 +1167,11 @@ class M2M100MTForConditionalGeneration(M2M100MTPreTrainedModel):
 
         Conditional generation example::
 
-            >>> from transformers import M2M100MTTokenizer, M2M100MTForConditionalGeneration
-            >>> tokenizer = M2M100MTTokenizer.from_pretrained('m2m_100_418M')
+            >>> from transformers import M2M100Tokenizer, M2M100ForConditionalGeneration
+            >>> tokenizer = M2M100Tokenizer.from_pretrained('m2m_100_418M')
             >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-            >>> model = M2M100MTForConditionalGeneration.from_pretrained('m2m_100_418M')
+            >>> model = M2M100ForConditionalGeneration.from_pretrained('m2m_100_418M')
             >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
             >>> logits = model(input_ids).logits
 
