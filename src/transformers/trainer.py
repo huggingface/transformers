@@ -215,8 +215,8 @@ class Trainer:
         - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
           data parallelism, this means some of the model layers are split on different GPUs).
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
-          to :obj:`False` if model parallel or deepspeed is used, or if the default ``TrainingArguments.place_model_on_device`` is overridden to return
-          :obj:`False` .
+          to :obj:`False` if model parallel or deepspeed is used, or if the default
+          ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
 
     """
 
