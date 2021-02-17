@@ -32,6 +32,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -167,7 +168,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
 def mish(x):
     return x * torch.tanh(nn.functional.softplus(x))
 
-# Working :)
+
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -218,7 +219,7 @@ class BigBirdEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-# working for "original_full" :)
+
 class BigBirdSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -364,7 +365,7 @@ class BigBirdSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
-# working for "original_full" :)
+
 class BigBirdSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -378,7 +379,7 @@ class BigBirdSelfOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-# working for "original_full" :)
+
 class BigBirdAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -429,7 +430,7 @@ class BigBirdAttention(nn.Module):
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-# 
+
 class BigBirdIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -444,7 +445,7 @@ class BigBirdIntermediate(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
-# TODO: some bug in dense
+
 class BigBirdOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -671,7 +672,7 @@ class BigBirdEncoder(nn.Module):
 
             if self.layer[-1] == layer_module:
                 self.last_layer_output = hidden_states
-            # 
+            #
 
         if self.norm_type == "prenorm":
             hidden_states = self.LayerNorm(hidden_states)
@@ -834,7 +835,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
-
+# working for "original_full" :)
 @add_start_docstrings(
     "The bare BigBird Model transformer outputting raw hidden-states without any specific head on top.",
     BIG_BIRD_START_DOCSTRING,
@@ -855,14 +856,19 @@ class BigBirdModel(BigBirdPreTrainedModel):
     :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
         self.embeddings = BigBirdEmbeddings(config)
         self.encoder = BigBirdEncoder(config)
 
-        self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
+        if add_pooling_layer:
+            self.pooler = nn.Linear(config.hidden_size, config.hidden_size)
+            self.activation = nn.Tanh()
+        else:
+            self.pooler = None
+            self.activation = None
 
         self.init_weights()
 
@@ -884,7 +890,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/bigbird-base",
-        output_type=BaseModelOutputWithPastAndCrossAttentions,
+        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1001,11 +1007,14 @@ class BigBirdModel(BigBirdPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
 
-        if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+        pooler_output = self.activation(self.pooler(sequence_output[:, 0, :])) if (self.pooler is not None) else None
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        if not return_dict:
+            return (sequence_output, pooler_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
+            pooler_output=pooler_output,
             past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
@@ -1085,6 +1094,11 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         sequence_output = outputs[0]
         prediction_scores = self.cls(sequence_output)
+
+        # TODO:
+        self.sequence_output = sequence_output
+        self.pooler_output = outputs[1]
+        # 
 
         masked_lm_loss = None
         if labels is not None:
