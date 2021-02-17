@@ -1,17 +1,15 @@
 from dataclasses import dataclass, field, asdict
-from typing import Optional
-from tqdm import tqdm
+from typing import Optional, List
+from tqdm.auto import tqdm
 import sys
 import logging
 
-from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments, HfArgumentParser, default_data_collator
+from transformers import AutoModelForSequenceClassification, AutoTokenizer, Trainer, TrainingArguments, HfArgumentParser
 from datasets import Dataset
-from diskcache import Cache
 import torch
-import numpy as np
 
 
-DESCRIPTION = """
+DESCRIPTION = """\
 Distills an NLI-based zero-shot classifier to a smaller, more efficient model with a fixed set of candidate class
 names. Useful for speeding up zero-shot classification in cases where labeled training data is not available, but
 when only a single fixed set of classes is needed. Takes a teacher NLI model, student classifier model, unlabeled
@@ -81,7 +79,16 @@ class DistillTrainingArguments(TrainingArguments):
         default=128, metadata={"help": "Batch size per GPU/TPU core/CPU for evaluation."}
     )
     num_train_epochs: float = field(default=1.0, metadata={"help": "Total number of training epochs to perform."})
-    do_train: bool = field(default=True, metadata={"help": "Whether to run training."})
+    do_train: bool = field(default=True, metadata={"help": "Whether to run training of student model."})
+    do_eval: bool = field(
+        default=True,
+        metadata={
+            "help": (
+                "Whether to evaluate the agreement of the final student predictions and the teacher predictions"
+                "after training."
+            )
+        }
+    )
 
 
 class DistillationTrainer(Trainer):
@@ -124,9 +131,18 @@ def get_entailment_id(config):
     logging.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
     return -1
 
-def get_teacher_predictions(model_path, examples, class_names, hypothesis_template, batch_size, temperature, multi_class, device):
+def get_teacher_predictions(
+        model_path: str,
+        examples: List[str],
+        class_names: List[str],
+        hypothesis_template: str,
+        batch_size: int,
+        temperature: float,
+        multi_class: bool,
+        device: torch.device
+    ):
     """
-    Instantiates a zero-shot model from model_path and reduces
+    Gets teachers by the same method as the zero-shot pipeline, but with more efficient mini-batching than pipelines
     """
     model = AutoModelForSequenceClassification.from_pretrained(model_path).to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
@@ -182,6 +198,7 @@ def main():
     class_names = read_lines(data_args.class_names_file)
 
     # 2. get teacher predictions and load into dataset
+    logging.info("Generating predictions from zero-shot teacher model")
     teacher_device = torch.device("cuda:0") if torch.cuda.is_available() and not training_args.no_cuda else torch.device("cpu")
     teacher_soft_preds = get_teacher_predictions(
         teacher_args.teacher_name_or_path,
@@ -221,10 +238,13 @@ def main():
         compute_metrics=compute_metrics,
     )
 
-    trainer.train()
+    if training_args.do_train:
+        logging.info("Training student model on teacher predictions")
+        trainer.train()
 
-    agreement = trainer.evaluate(eval_dataset=dataset)['eval_agreement']
-    print(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
+    if training_args.do_eval:
+        agreement = trainer.evaluate(eval_dataset=dataset)['eval_agreement']
+        logging.info(f"Agreement of student and teacher predictions: {agreement * 100:0.2f}%")
 
     trainer.save_model()
 
