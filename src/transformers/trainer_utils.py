@@ -27,7 +27,13 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import is_sagemaker_distributed_available, is_tf_available, is_torch_available, is_torch_tpu_available
+from .file_utils import (
+    is_sagemaker_distributed_available,
+    is_tf_available,
+    is_torch_available,
+    is_torch_cuda_available,
+    is_torch_tpu_available,
+)
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -240,16 +246,15 @@ class SchedulerType(ExplicitEnum):
 
 class TrainerMemoryTracker:
     def __init__(self, skip_memory_metrics=False):
-        if is_torch_available():
+        if is_torch_cuda_available():
             import torch
 
             self.torch = torch
+            self.gpu = {}
         else:
-            self.skip_memory_metrics = True
-            return
+            self.torch = None
 
         self.stage = "none"
-        self.gpu = {}
         self.cpu = {}
         self.init_reported = False
         self.skip_memory_metrics = skip_memory_metrics
@@ -257,14 +262,20 @@ class TrainerMemoryTracker:
     def start(self, stage):
         if self.skip_memory_metrics:
             return
-        self.torch.cuda.reset_peak_memory_stats()
-        self.torch.cuda.empty_cache()
-        gc.collect()
+
         self.stage = stage
+
+        if self.torch is not None:
+            self.torch.cuda.reset_peak_memory_stats()
+            self.torch.cuda.empty_cache()
+
+        gc.collect()
+
         # gpu
-        self.gpu[self.stage] = {}
-        self.gpu[self.stage]["alloc"] = self.torch.cuda.memory_allocated()
-        self.gpu[self.stage]["peaked"] = 0
+        if self.torch is not None:
+            self.gpu[self.stage] = {}
+            self.gpu[self.stage]["alloc"] = self.torch.cuda.memory_allocated()
+            self.gpu[self.stage]["peaked"] = 0
 
         # cpu
         self.cpu[self.stage] = {}
@@ -274,14 +285,18 @@ class TrainerMemoryTracker:
         if self.skip_memory_metrics:
             return
 
-        # gpu
-        self.torch.cuda.empty_cache()
+        if self.torch is not None:
+            self.torch.cuda.empty_cache()
+
         gc.collect()
-        mem_cur = self.torch.cuda.memory_allocated()
-        # this is the difference between the start and the end allocated memory
-        self.gpu[self.stage]["alloc"] = mem_cur - self.gpu[self.stage]["alloc"]  # can be negative
-        # this is the difference if any between the start and the peak
-        self.gpu[self.stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
+
+        # gpu
+        if self.torch is not None:
+            mem_cur = self.torch.cuda.memory_allocated()
+            # this is the difference between the start and the end allocated memory
+            self.gpu[self.stage]["alloc"] = mem_cur - self.gpu[self.stage]["alloc"]  # can be negative
+            # this is the difference if any between the start and the peak
+            self.gpu[self.stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
 
         # cpu
         cpu_mem_used_delta, cpu_mem_used_peak = tracemalloc.get_traced_memory()
@@ -301,4 +316,5 @@ class TrainerMemoryTracker:
         for stage in stages:
             for t in ["alloc", "peaked"]:
                 metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
-                metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
+                if self.torch is not None:
+                    metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
