@@ -118,6 +118,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
+        self.vocab_file = vocab_file
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
