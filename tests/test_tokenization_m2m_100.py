@@ -18,8 +18,7 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from hubconf import tokenizer
-from transformers import SPIECE_UNDERLINE, BatchEncoding, M2M100Tokenizer, is_torch_available
+from transformers import M2M100Tokenizer, is_torch_available
 from transformers.file_utils import is_sentencepiece_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
@@ -57,7 +56,6 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
 
-        print(self.tmpdirname)
         tokenizer = M2M100Tokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
