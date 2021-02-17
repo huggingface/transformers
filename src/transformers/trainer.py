@@ -93,6 +93,7 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
+    TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
@@ -239,6 +240,10 @@ class Trainer:
         self.hp_name = None
         self.deepspeed = None
 
+        # memory metrics - must set up as early as possible
+        self.mem = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self.mem.start("init")
+
         # force device and distributed setup init explicitly
         args._setup_devices
 
@@ -384,6 +389,9 @@ class Trainer:
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+        # very last
+        self.mem.stop()
 
     def add_callback(self, callback):
         """
@@ -746,6 +754,10 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+
+        # memory metrics - must set up as early as possible
+        self.mem.start("train")
+
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
             warnings.warn(
@@ -1044,12 +1056,6 @@ class Trainer:
                     self.state.best_model_checkpoint, load_optimizer_states=False, load_lr_scheduler_states=False
                 )
 
-        metrics = speed_metrics("train", start_time, self.state.max_steps)
-        if self._total_flos is not None:
-            self.store_flos()
-            metrics["total_flos"] = self.state.total_flos
-        self.log(metrics)
-
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
@@ -1061,6 +1067,15 @@ class Trainer:
             self.lr_scheduler = None
             self.model_wrapped = self.model
             gc.collect()  # force memory release
+
+        metrics = speed_metrics("train", start_time, self.state.max_steps)
+        if self._total_flos is not None:
+            self.store_flos()
+            metrics["total_flos"] = self.state.total_flos
+
+        self.mem.stop()
+        self.mem.update_metrics("train", metrics)
+        self.log(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1290,6 +1305,29 @@ class Trainer:
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+
+    def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+        """
+        Reformat Trainer metrics values to a human-readable format
+
+        Args:
+            metrics (:obj:`Dict[str, float]`):
+                The metrics returned from train/evaluate/predict
+
+        Returns:
+            metrics (:obj:`Dict[str, float]`): The reformatted metrics
+        """
+
+        metrics_copy = metrics.copy()
+        for k, v in metrics_copy.items():
+            if "_mem_" in k:
+                metrics_copy[k] = f"{ v >> 20 }MB"
+            elif k == "total_flos":
+                metrics_copy[k] = f"{ int(v) >> 30 }GF"
+            elif type(metrics_copy[k]) == float:
+                metrics_copy[k] = round(v, 4)
+
+        return metrics_copy
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
@@ -1527,6 +1565,9 @@ class Trainer:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
+        # memory metrics - must set up as early as possible
+        self.mem.start("eval")
+
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
@@ -1552,6 +1593,8 @@ class Trainer:
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+        self.mem.stop()
+        self.mem.update_metrics("eval", output.metrics)
         return output.metrics
 
     def predict(
@@ -1587,6 +1630,9 @@ class Trainer:
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
+        # memory metrics - must set up as early as possible
+        self.mem.start("test")
+
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
 
@@ -1597,6 +1643,9 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
+
+        self.mem.stop()
+        self.mem.update_metrics("test", output.metrics)
         return output
 
     def prediction_loop(
