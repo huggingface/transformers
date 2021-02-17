@@ -361,14 +361,6 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         # how to better handle it without timing out the CI
         pass
 
-    def test_mixed_precision(self):
-        # TODO JP: Make Longformer float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make Longformer XLA compliant
-        pass
-
 
 @require_tf
 @require_sentencepiece
