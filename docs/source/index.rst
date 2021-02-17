@@ -422,6 +422,7 @@ TensorFlow and/or Flax.
     model_doc/longformer
     model_doc/lxmert
     model_doc/marian
+    model_doc/m2m_100
     model_doc/mbart
     model_doc/mobilebert
     model_doc/mpnet
