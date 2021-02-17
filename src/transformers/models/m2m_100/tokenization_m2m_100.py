@@ -36,7 +36,7 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "m2m_100_418M": "https://huggingface.co/m2m100_418M/resolve/main/vocab.json",
+        "m2m_100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/vocab.json",
     }
 }
 

@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "m2m_100_418M": "https://huggingface.co/m2m_100_418M/resolve/main/config.json",
+    "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/config.json",
     # See all M2M100 models at https://huggingface.co/models?filter=m2m_100
 }
 
@@ -30,8 +30,8 @@ class M2M100Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.M2M100Model`. It is used to
     instantiate an M2M100 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the M2M100 `m2m_100_418M
-    <https://huggingface.co/m2m_100_418M>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the M2M100 `m2m100_418M
+    <https://huggingface.co/facebook/m2m100_418M>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
