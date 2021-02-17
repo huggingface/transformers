@@ -75,6 +75,7 @@ class DataCollatorCTCWithPadding:
 
     tokenizer: PreTrainedTokenizer
     padding: Union[bool, str] = True
+    return_attention_mask: bool = True
     max_length: Optional[int] = None
     max_length_labels: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -88,6 +89,7 @@ class DataCollatorCTCWithPadding:
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
+            return_attention_mask=self.return_attention_mask,
             return_tensors="pt",
         )
         labels_batch = self.tokenizer.pad(
@@ -106,7 +108,7 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
-data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, padding=True)
+data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, return_attention_mask=False, padding=True)
 
 
 def compute_metrics(pred):
