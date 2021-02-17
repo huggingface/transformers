@@ -403,13 +403,7 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     else:
         # last token is separation token and should not be counted and in the middle are two separation tokens
         question_end_index = tf.tile(question_end_index + 1, (1, input_ids_shape[1]))
-        attention_mask = (
-            
-                attention_mask > question_end_index
-               
-            
-            * attention_mask < input_ids_shape[-1]
-        )
+        attention_mask = attention_mask > question_end_index * attention_mask < input_ids_shape[-1]
 
     return attention_mask
 
@@ -951,7 +945,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # - copying the lower triangle
         diagonal_attn_scores_low_triang = tf.concat(
             [
-                tf.zeros((batch_size * num_heads, 1, window_overlap, window_overlap), dtype=diagonal_chunked_attention_scores.dtype),
+                tf.zeros(
+                    (batch_size * num_heads, 1, window_overlap, window_overlap),
+                    dtype=diagonal_chunked_attention_scores.dtype,
+                ),
                 diagonal_chunked_attention_scores[:, :, -(window_overlap + 1) : -1, window_overlap + 1 :],
             ],
             axis=1,
@@ -963,7 +960,10 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
                     shift=[1, window_overlap],
                     axis=[2, 3],
                 )[:, :, :window_overlap, :window_overlap],
-                tf.zeros((batch_size * num_heads, 1, window_overlap, window_overlap), dtype=diagonal_chunked_attention_scores.dtype),
+                tf.zeros(
+                    (batch_size * num_heads, 1, window_overlap, window_overlap),
+                    dtype=diagonal_chunked_attention_scores.dtype,
+                ),
             ],
             axis=1,
         )
@@ -1192,7 +1192,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         # indices of global attn
         is_index_global_attn_nonzero = tf.where(is_index_global_attn)
-        
+
         # helper variable
         is_local_index_global_attn = tf.range(max_num_global_attn_indices) < tf.expand_dims(
             num_global_attn_indices, axis=-1
@@ -1335,7 +1335,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         global_value_vectors = self.value_global(hidden_states)
 
         # normalize
-        global_query_vectors_only_global /= tf.math.sqrt(tf.cast(self.head_dim, dtype=global_query_vectors_only_global.dtype))
+        global_query_vectors_only_global /= tf.math.sqrt(
+            tf.cast(self.head_dim, dtype=global_query_vectors_only_global.dtype)
+        )
         global_query_vectors_only_global = self.reshape_and_transpose(global_query_vectors_only_global, batch_size)
         global_key_vectors = self.reshape_and_transpose(global_key_vectors, batch_size)
         global_value_vectors = self.reshape_and_transpose(global_value_vectors, batch_size)
@@ -1718,7 +1720,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
         ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
         extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
-        
+
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
