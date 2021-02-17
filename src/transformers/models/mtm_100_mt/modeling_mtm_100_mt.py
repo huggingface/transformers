@@ -128,6 +128,7 @@ class M2M100MTSinusoidalPositionalEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
+        self.register_buffer("_float_tensor", torch.FloatTensor(1))
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -162,8 +163,16 @@ class M2M100MTSinusoidalPositionalEmbedding(nn.Module):
         else:
             bsz, seq_len = inputs_embeds.size()[:-1]
             position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
-        self.weights = self.weights.to(input_ids)
+        
+        # expand embeddings if needed
+        max_pos = self.padding_idx + 1 + seq_len
+        if max_pos > self.weights.size(0):
+            self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
+        
+        self.weights = self.weights.to(self._float_tensor)
+        
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
