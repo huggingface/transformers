@@ -218,7 +218,7 @@ class BigBirdEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings
 
-
+# working for "original_full" :)
 class BigBirdSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -285,6 +285,15 @@ class BigBirdSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
+        
+        # TODO
+        # print("query", query_layer.shape, end="\n\n")
+        # print("key:", key_layer.shape, end="\n\n")
+        # print("value:", value_layer.shape, end="\n\n")
+        self.q = query_layer
+        self.k = key_layer
+        self.v = value_layer
+        # 
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -320,12 +329,21 @@ class BigBirdSelfAttention(nn.Module):
             # Apply the attention mask is (precomputed for all layers in BigBirdModel forward() function)
             attention_scores = attention_scores + attention_mask
 
+        # TODO:
+        # print("attn_scores", attention_scores.shape)
+        self.attn_sc = attention_scores
+        # 
+
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
+
+        # TODO:
+        self.attn_p = attention_probs
+        # 
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -336,14 +354,17 @@ class BigBirdSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-
+        # TODO 
+        # print(context_layer.shape)
+        self.attn_o = context_layer.view(2,128,12,64)
+        # 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
 
-
+# working for "original_full" :)
 class BigBirdSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -357,7 +378,7 @@ class BigBirdSelfOutput(nn.Module):
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-
+# working for "original_full" :)
 class BigBirdAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -393,6 +414,7 @@ class BigBirdAttention(nn.Module):
         past_key_value=None,
         output_attentions=False,
     ):
+        # print(hidden_states[:,0,0])
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -402,11 +424,12 @@ class BigBirdAttention(nn.Module):
             past_key_value,
             output_attentions,
         )
+        # print(self_outputs[0].view(2, 128, 12, 64)[:,0,0,0])
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
-
+# 
 class BigBirdIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -421,7 +444,7 @@ class BigBirdIntermediate(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
-
+# TODO: some bug in dense
 class BigBirdOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -430,12 +453,15 @@ class BigBirdOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
+        self.io = hidden_states # TODO:  remove this
         hidden_states = self.dense(hidden_states)
+        self.o = hidden_states # TODO:  remove this
         hidden_states = self.dropout(hidden_states)
+        self.do = hidden_states # TODO:  remove this
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
-
+# TODO: add support to prenorm
 class BigBirdLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -471,6 +497,10 @@ class BigBirdLayer(nn.Module):
         )
         attention_output = self_attention_outputs[0]
 
+        # TODO:
+        self.attn_proj_o = attention_output
+        # 
+
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
             outputs = self_attention_outputs[1:-1]
@@ -505,6 +535,11 @@ class BigBirdLayer(nn.Module):
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
+
+        # TODO
+        self.l_o = layer_output
+        # 
+
         outputs = (layer_output,) + outputs
 
         # if decoder, return the attn key/values as the last output
@@ -515,6 +550,11 @@ class BigBirdLayer(nn.Module):
 
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
+        
+        # TODO
+        self.int_o = intermediate_output
+        # 
+
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
@@ -522,9 +562,13 @@ class BigBirdLayer(nn.Module):
 class BigBirdEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.norm_type = config.norm_type
+        self.attention_type = config.attention_type
+
         self.config = config
         self.layer = nn.ModuleList([BigBirdLayer(config) for _ in range(config.num_hidden_layers)])
 
+        # extra compared to orig-bert
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -545,6 +589,21 @@ class BigBirdEncoder(nn.Module):
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         next_decoder_cache = () if use_cache else None
+
+        if self.attention_type == "block_sparse":
+            raise NotImplementedError # TODO: fix this
+        else:
+            blocked_encoder_mask = None
+            encoder_to_mask = None
+            encoder_from_mask = None
+
+            # attention_mask = attention_mask # TODO
+            band_mask = None
+            # TODO: update layer_module for allowing above args
+
+        if self.norm_type == "postnorm":
+            hidden_states = self.LayerNorm(hidden_states)
+
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -552,6 +611,7 @@ class BigBirdEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
+            # TODO: check if gradient checkpointing is same
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
@@ -576,6 +636,17 @@ class BigBirdEncoder(nn.Module):
                     encoder_attention_mask,
                 )
             else:
+
+                # TODO: remove this
+                if self.layer[0] == layer_module:
+                    self.l1_layer_input = hidden_states
+                    self.l1_attention_mask = attention_mask
+                    # self.l1_band_mask = band_mask
+                    # self.l1_encoder_from_mask = encoder_from_mask
+                    # self.l1_encoder_to_mask = encoder_to_mask
+                    # self.l1_blocked_encoder_mask = blocked_encoder_mask
+                # 
+
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -593,6 +664,17 @@ class BigBirdEncoder(nn.Module):
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
                 if self.config.add_cross_attention:
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
+
+            # TODO
+            if self.layer[0] == layer_module:
+                self.l1_layer_output = hidden_states
+
+            if self.layer[-1] == layer_module:
+                self.last_layer_output = hidden_states
+            # 
+
+        if self.norm_type == "prenorm":
+            hidden_states = self.LayerNorm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
