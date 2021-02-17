@@ -164,15 +164,6 @@ class LxmertTokenizerFast:
         requires_tokenizers(self)
 
 
-class M2M100TokenizerFast:
-    def __init__(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-
 class MBart50TokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)

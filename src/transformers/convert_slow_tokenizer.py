@@ -447,34 +447,6 @@ class CamembertConverter(SpmConverter):
         )
 
 
-class M2M100Converter(SpmConverter):
-    def vocab(self, proto):
-        vocab = [
-            ("<s>", 0.0),
-            ("<pad>", 0.0),
-            ("</s>", 0.0),
-            ("<unk>", 0.0),
-        ]
-        vocab += [(piece.piece, piece.score) for piece in proto.pieces[3:]]
-        # fmt: off
-        vocab += [("__af__", 0.0), ("__am__", 0.0), ("__ar__", 0.0), ("__ast__", 0.0), ("__az__", 0.0), ("__ba__", 0.0), ("__be__", 0.0), ("__bg__", 0.0), ("__bn__", 0.0), ("__br__", 0.0), ("__bs__", 0.0), ("__ca__", 0.0), ("__ceb__", 0.0), ("__cs__", 0.0), ("__cy__", 0.0), ("__da__", 0.0), ("__de__", 0.0), ("__el__", 0.0), ("__en__", 0.0), ("__es__", 0.0), ("__et__", 0.0), ("__fa__", 0.0), ("__ff__", 0.0), ("__fi__", 0.0), ("__fr__", 0.0), ("__fy__", 0.0), ("__ga__", 0.0), ("__gd__", 0.0), ("__gl__", 0.0), ("__gu__", 0.0), ("__ha__", 0.0), ("__he__", 0.0), ("__hi__", 0.0), ("__hr__", 0.0), ("__ht__", 0.0), ("__hu__", 0.0), ("__hy__", 0.0), ("__id__", 0.0), ("__ig__", 0.0), ("__ilo__", 0.0), ("__is__", 0.0), ("__it__", 0.0), ("__ja__", 0.0), ("__jv__", 0.0), ("__ka__", 0.0), ("__kk__", 0.0), ("__km__", 0.0), ("__kn__", 0.0), ("__ko__", 0.0), ("__lb__", 0.0), ("__lg__", 0.0), ("__ln__", 0.0), ("__lo__", 0.0), ("__lt__", 0.0), ("__lv__", 0.0), ("__mg__", 0.0), ("__mk__", 0.0), ("__ml__", 0.0), ("__mn__", 0.0), ("__mr__", 0.0), ("__ms__", 0.0), ("__my__", 0.0), ("__ne__", 0.0), ("__nl__", 0.0), ("__no__", 0.0), ("__ns__", 0.0), ("__oc__", 0.0), ("__or__", 0.0), ("__pa__", 0.0), ("__pl__", 0.0), ("__ps__", 0.0), ("__pt__", 0.0), ("__ro__", 0.0), ("__ru__", 0.0), ("__sd__", 0.0), ("__si__", 0.0), ("__sk__", 0.0), ("__sl__", 0.0), ("__so__", 0.0), ("__sq__", 0.0), ("__sr__", 0.0), ("__ss__", 0.0), ("__su__", 0.0), ("__sv__", 0.0), ("__sw__", 0.0), ("__ta__", 0.0), ("__th__", 0.0), ("__tl__", 0.0), ("__tn__", 0.0), ("__tr__", 0.0), ("__uk__", 0.0), ("__ur__", 0.0), ("__uz__", 0.0), ("__vi__", 0.0), ("__wo__", 0.0), ("__xh__", 0.0), ("__yi__", 0.0), ("__yo__", 0.0), ("__zh__", 0.0), ("__zu__", 0.0)]
-        # fmt: on
-        return vocab
-
-    def unk_id(self, proto):
-        return 3
-
-    def post_processor(self):
-        return processors.TemplateProcessing(
-            single="$A </s> __en__",
-            pair="$A $B </s> __en__",
-            special_tokens=[
-                ("__en__", self.original_tokenizer.convert_tokens_to_ids("__en__")),
-                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
-            ],
-        )
-
-
 class MBartConverter(SpmConverter):
     def vocab(self, proto):
         vocab = [
@@ -693,7 +665,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
     "LxmertTokenizer": BertConverter,
-    "M2M100Tokenizer": M2M100Converter,
     "MBartTokenizer": MBartConverter,
     "MBart50Tokenizer": MBart50Converter,
     "MPNetTokenizer": MPNetConverter,
