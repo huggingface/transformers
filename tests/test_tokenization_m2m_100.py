@@ -34,7 +34,7 @@ if is_sentencepiece_available():
 
 
 if is_torch_available():
-    from transformers.models.mbart.modeling_mbart import shift_tokens_right
+    from transformers.models.m2m_100.modeling_m2m_100 import shift_tokens_right
 
 EN_CODE = 128022
 FR_CODE = 128028
@@ -153,7 +153,9 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
         with self.tokenizer.as_target_tokenizer():
             batch["labels"] = self.tokenizer(self.tgt_text, padding=True, return_tensors="pt").input_ids
 
-        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
+        batch["decoder_input_ids"] = shift_tokens_right(
+            batch["labels"], self.tokenizer.pad_token_id, self.tokenizer.eos_token_id
+        )
 
         for k in batch:
             batch[k] = batch[k].tolist()
