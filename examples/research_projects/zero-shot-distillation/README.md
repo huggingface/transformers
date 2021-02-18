@@ -101,7 +101,7 @@ save the resulting model in `./agnews/distilled`.
 The resulting model can then be loaded and used like any other pre-trained classifier:
 
 ```python
-from transformeres import AutoModelForSequenceClassification, AutoTokenizer
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 model = AutoModelForSequenceClassification.from_pretrained("./agnews/distilled")
 tokenizer = AutoTokenizer.from_pretrained("./agnews/distilled")
 ```
@@ -110,8 +110,7 @@ and even used trivially with a `TextClassificationPipeline`:
 
 ```python
 distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer, return_all_scores=True)
-outputs = distilled_classifier(sequence)
-outputs[0]["label"]
+distilled_classifier(sequence)
 # [[{'label': 'the world', 'score': 0.14899294078350067},
 #   {'label': 'sports', 'score': 0.03205857425928116},
 #   {'label': 'business', 'score': 0.05943061783909798},
