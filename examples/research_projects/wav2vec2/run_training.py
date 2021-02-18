@@ -10,9 +10,7 @@ from packaging import version
 
 import soundfile as sf
 from jiwer import wer
-from transformers import PreTrainedTokenizer, Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Tokenizer
-
-from .file_utils import is_apex_available
+from transformers import PreTrainedTokenizer, Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Tokenizer, is_apex_available
 
 
 if is_apex_available():
