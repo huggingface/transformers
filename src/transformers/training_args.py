@@ -164,7 +164,8 @@ class TrainingArguments:
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
             other choices will force the requested backend.
         fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use full 16-bit precision evaluation instead of 32-bit. This will be faster and save memory but can harm metric values.
+            Whether to use full 16-bit precision evaluation instead of 32-bit. This will be faster and save memory but
+            can harm metric values.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -495,7 +496,9 @@ class TrainingArguments:
             self.run_name = self.output_dir
 
         if is_torch_available() and self.device.type != "cuda" and (self.fp16 or self.fp16_full_eval):
-            raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) and FP16 evaluation can only be used on CUDA devices.")
+            raise ValueError(
+                "Mixed precision training with AMP or APEX (`--fp16`) and FP16 evaluation can only be used on CUDA devices."
+            )
         if self.report_to is None:
             logger.info(
                 "The default value for the training argument `--report_to` will change in v5 (from all installed "
