@@ -283,7 +283,6 @@ def booleans_processing(config, **kwargs):
 
         if "use_cache" in kwargs:
             final_booleans["use_cache"] = kwargs["use_cache"] if kwargs["use_cache"] is not None else config.use_cache
-
     else:
         if (
             kwargs["output_attentions"] is not None
