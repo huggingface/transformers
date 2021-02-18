@@ -146,8 +146,8 @@ also a seeting where we only have `K=4` possible labels. The higher the number o
 drastic the speedup will be, since the zero-shot teacher's complexity scales linearly with the number of classes.
 
 Since we secretly have access to ground truth labels for AG's news, we can evaluate the accuracy of each model. The
-original zero-shot model `roberta-large-mnli` gets an accuracy of 70.2% on the held-out test set. After training a
-student on the unlabeled training set, the distilled model gets a similar score of 70.7%.
+original zero-shot model `roberta-large-mnli` gets an accuracy of 69.3% on the held-out test set. After training a
+student on the unlabeled training set, the distilled model gets a similar score of 70.4%.
 
 Lastly, you can share the distilled model with the community and/or use it with our inference API by [uploading it
 to the 🤗 Hub](https://huggingface.co/transformers/model_sharing.html). We've uploaded the distilled model from this
