@@ -69,15 +69,15 @@ example).
 We can use an NLI model like `roberta-large-mnli` for zero-shot classification like so:
 
 ```python
-class_names = ["the world", "sports", "business", "science/tech"]
-hypothesis_template = "This text is about {}."
-sequence = "A new moon has been discovered in Jupiter's orbit"
+>>> class_names = ["the world", "sports", "business", "science/tech"]
+>>> hypothesis_template = "This text is about {}."
+>>> sequence = "A new moon has been discovered in Jupiter's orbit"
 
-zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli")
-zero_shot_classifier(sequence, class_names, hypothesis_template=hypothesis_template)
-# {'sequence': "A new moon has been discovered in Jupiter's orbit",
-#  'labels': ['science/tech', 'the world', 'business', 'sports'],
-#  'scores': [0.7035840153694153, 0.18744826316833496, 0.06027870625257492, 0.04868902638554573]}
+>>> zero_shot_classifier = pipeline("zero-shot-classification", model="roberta-large-mnli")
+>>> zero_shot_classifier(sequence, class_names, hypothesis_template=hypothesis_template)
+{'sequence': "A new moon has been discovered in Jupiter's orbit",
+ 'labels': ['science/tech', 'the world', 'business', 'sports'],
+ 'scores': [0.7035840153694153, 0.18744826316833496, 0.06027870625257492, 0.04868902638554573]}
 ```
 
 Unfortunately, inference is slow since each of our 4 class names must be fed through the large model for every
@@ -112,12 +112,12 @@ tokenizer = AutoTokenizer.from_pretrained("./agnews/distilled")
 and even used trivially with a `TextClassificationPipeline`:
 
 ```python
-distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer, return_all_scores=True)
-distilled_classifier(sequence)
-# [[{'label': 'the world', 'score': 0.14899294078350067},
-#   {'label': 'sports', 'score': 0.03205857425928116},
-#   {'label': 'business', 'score': 0.05943061783909798},
-#   {'label': 'science/tech', 'score': 0.7595179080963135}]]
+>>> distilled_classifier = TextClassificationPipeline(model=model, tokenizer=tokenizer, return_all_scores=True)
+>>> distilled_classifier(sequence)
+[[{'label': 'the world', 'score': 0.14899294078350067},
+  {'label': 'sports', 'score': 0.03205857425928116},
+  {'label': 'business', 'score': 0.05943061783909798},
+  {'label': 'science/tech', 'score': 0.7595179080963135}]]
 ```
 
 > Tip: pass `device=0` when constructing a pipeline to run on a GPU

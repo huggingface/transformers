@@ -21,7 +21,7 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
-DESCRIPTION = """\
+DESCRIPTION = """
 Distills an NLI-based zero-shot classifier to a smaller, more efficient model with a fixed set of candidate class
 names. Useful for speeding up zero-shot classification in cases where labeled training data is not available, but
 when only a single fixed set of classes is needed. Takes a teacher NLI model, student classifier model, unlabeled
