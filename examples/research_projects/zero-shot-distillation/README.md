@@ -56,6 +56,9 @@ modified, such as `--learning_rate`, `--fp16`, `--no_cuda`, `--warmup_steps`, et
 -h` for a full list of available arguments or consult the [Trainer
 documentation](https://huggingface.co/transformers/main_classes/trainer.html#trainingarguments).
 
+> **Note**: Distributed and TPU training are not currently supported. Single-node multi-GPU is supported, however,
+and will run automatically if multiple GPUs are available.
+
 ### Example: Topic classification
 
 Let's say we're interested in classifying news articles into one of four topic categories: "the world", "sports",

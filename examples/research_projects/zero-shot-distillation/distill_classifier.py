@@ -250,6 +250,12 @@ def main():
         utils.logging.set_verbosity_info()
         utils.logging.enable_default_handler()
         utils.logging.enable_explicit_format()
+
+    if training_args.local_rank != -1:
+        raise ValueError("Distributed training is not currently supported.")
+    if training_args.xla:
+        raise ValueError("XLA compilation is not currently supported.")
+
     logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
