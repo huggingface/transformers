@@ -353,7 +353,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
 
         self.layer = [TFMPNetLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
-    
+
     def build(self, input_shape):
         with tf.name_scope("relative_attention_bias"):
             self.relative_attention_bias = self.add_weight(
@@ -420,9 +420,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         is_small = tf.math.less(n, max_exact)
 
         val_if_large = max_exact + tf.cast(
-            tf.math.log(n / max_exact)
-            / math.log(max_distance / max_exact)
-            * (num_buckets - max_exact),
+            tf.math.log(n / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact),
             dtype=relative_position.dtype,
         )
 
