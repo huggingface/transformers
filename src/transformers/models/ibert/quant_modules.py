@@ -145,6 +145,8 @@ class QuantAct(nn.Module):
             self.register_buffer("x_min", torch.zeros(1))
             self.register_buffer("x_max", torch.zeros(1))
             self.register_buffer("act_scaling_factor", torch.zeros(1))
+            self.x_min -= 1e-5
+            self.x_max += 1e-5
         else:
             raise NotImplementedError("per-channel mode is not currently supported for activation.")
 
@@ -180,7 +182,7 @@ class QuantAct(nn.Module):
             ), "NaN detected when computing min/max of the activation"
 
             # Initialization
-            if torch.eq(self.x_min, self.x_max).all():
+            if self.x_min.min() > -1.1e-5 and self.x_max.max() < 1.1e-5:
                 self.x_min = self.x_min + x_min
                 self.x_max = self.x_max + x_max
 
