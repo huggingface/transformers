@@ -88,8 +88,8 @@ class TestDeepSpeed(TestCasePlus):
             extra_args_str="--do_eval",
             remove_args_str="--do_train",
         )
-        val_metrics = load_json(os.path.join(output_dir, "val_results.json"))
-        assert "val_bleu" in val_metrics
+        val_metrics = load_json(os.path.join(output_dir, "eval_results.json"))
+        assert "eval_bleu" in val_metrics
 
     # XXX: need to do better validation beyond just that the run was successful
     def run_quick(self, distributed=True, extra_args_str=None, remove_args_str=None):
