@@ -65,8 +65,6 @@ class IBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`"absolute"`):
             Type of position embedding. Choose one of :obj:`"absolute"`, :obj:`"relative_key"`,
             :obj:`"relative_key_query"`. For positional embeddings use :obj:`"absolute"`. For more information on
@@ -74,9 +72,6 @@ class IBertConfig(PretrainedConfig):
             <https://arxiv.org/abs/1803.02155>`__. For more information on :obj:`"relative_key_query"`, please refer to
             `Method 4` in `Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)
             <https://arxiv.org/abs/2009.13658>`__.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if ``config.is_decoder=True``.
     """
 
     model_type = "ibert"
@@ -98,9 +93,7 @@ class IBertConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        gradient_checkpointing=False,
         position_embedding_type="absolute",
-        use_cache=True,
         quant_mode=False,
         **kwargs
     ):
@@ -118,7 +111,5 @@ class IBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
         self.quant_mode = quant_mode
