@@ -157,6 +157,7 @@ def get_teacher_predictions(
     multi_class: bool,
     use_fast_tokenizer: bool,
     no_cuda: bool,
+    fp16: bool,
 ):
     """
     Gets predictions by the same method as the zero-shot pipeline but with DataParallel & more efficient batching
@@ -183,9 +184,10 @@ def get_teacher_predictions(
             return_tensors="pt",
         )
 
-        with torch.no_grad():
-            outputs = model(**encodings)
-            logits.append(outputs.logits.detach().cpu())
+        with torch.cuda.amp.autocast(enabled=fp16):
+            with torch.no_grad():
+                outputs = model(**encodings)
+        logits.append(outputs.logits.detach().cpu())
 
     entail_id = get_entailment_id(model_config)
     contr_id = -1 if entail_id == 0 else 0
@@ -277,6 +279,7 @@ def main():
         teacher_args.multi_class,
         data_args.use_fast_tokenizer,
         training_args.no_cuda,
+        training_args.fp16,
     )
     dataset = Dataset.from_dict(
         {
