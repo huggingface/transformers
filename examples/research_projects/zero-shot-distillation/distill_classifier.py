@@ -253,8 +253,8 @@ def main():
 
     if training_args.local_rank != -1:
         raise ValueError("Distributed training is not currently supported.")
-    if training_args.xla:
-        raise ValueError("XLA compilation is not currently supported.")
+    if training_args.tpu_num_cores is not None:
+        raise ValueError("TPU acceleration is not currently supported.")
 
     logger.info(f"Training/evaluation parameters {training_args}")
 
