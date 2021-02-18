@@ -251,11 +251,12 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.matmul(
             query_layer, key_layer, transpose_b=True
         )  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)  # scale attention_scores
+        dk = tf.cast(shape_list(key_layer)[-1], dtype=attention_scores.dtype)  # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFMobileBertModel call() function)
+            attention_mask = tf.cast(attention_mask, dtype=attention_scores.dtype)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
