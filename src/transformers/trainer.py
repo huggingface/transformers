@@ -400,7 +400,7 @@ class Trainer:
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
         # very last
-        self._memory_tracker.stop_n_update_metrics()
+        self._memory_tracker.stop_and_update_metrics()
 
     def add_callback(self, callback):
         """
@@ -1083,7 +1083,7 @@ class Trainer:
             self.model_wrapped = self.model
             gc.collect()  # force memory release
 
-        self._memory_tracker.stop_n_update_metrics(metrics)
+        self._memory_tracker.stop_and_update_metrics(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1602,7 +1602,7 @@ class Trainer:
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
 
-        self._memory_tracker.stop_n_update_metrics(output.metrics)
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
 
         return output.metrics
 
@@ -1653,7 +1653,7 @@ class Trainer:
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
 
-        self._memory_tracker.stop_n_update_metrics(output.metrics)
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
 
         return output
 

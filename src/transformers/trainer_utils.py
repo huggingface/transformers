@@ -257,7 +257,7 @@ class TrainerMemoryTracker:
         self._memory_tracker.start()
         code ...
         metrics = {"train_runtime": 10.5}
-        self._memory_tracker.stop_n_update_metrics(metrics)
+        self._memory_tracker.stop_and_update_metrics(metrics)
 
     At the moment gpu tracking is only for pytorch, but can be extended to support tensorflow.
 
@@ -404,7 +404,7 @@ class TrainerMemoryTracker:
                 if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
 
-    def stop_n_update_metrics(self, metrics=None):
+    def stop_and_update_metrics(self, metrics=None):
         """ combine stop + update in one call for simpler code """
         if self.skip_memory_metrics:
             return
