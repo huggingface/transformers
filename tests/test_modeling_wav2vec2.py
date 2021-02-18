@@ -18,7 +18,7 @@
 import math
 import unittest
 
-from tests.test_modeling_common import floats_tensor, random_attention_mask
+from tests.test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
 from transformers import is_torch_available
 from transformers.testing_utils import require_datasets, require_soundfile, require_torch, slow, torch_device
 
@@ -128,9 +128,7 @@ class Wav2Vec2ModelTester:
         )
 
     def create_and_check_batch_inference(self, config, input_values, *args):
-        # Not sure how to make this test pass at the moment. Batched input yields
-        # same results as official fairseq implementation, but gives different results
-        # depending on whether batched input is used or not
+        # test does not pass for models making use of `group_norm`
         # check: https://github.com/pytorch/fairseq/issues/3227
         model = Wav2Vec2Model(config=config)
         model.to(torch_device)
@@ -154,6 +152,60 @@ class Wav2Vec2ModelTester:
 
             batch_output = batch_outputs[i : i + 1, : output.shape[1]]
             self.parent.assertTrue(torch.allclose(output, batch_output, atol=1e-3))
+
+    def check_ctc_loss(self, config, input_values, *args):
+        model = Wav2Vec2ForCTC(config=config)
+        model.to(torch_device)
+
+        # make sure that dropout is disabled
+        model.eval()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], min(max_length_labels) - 1), model.config.vocab_size)
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0.0
+
+        model.config.ctc_loss_reduction = "sum"
+        sum_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+
+        model.config.ctc_loss_reduction = "mean"
+        mean_loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+
+        self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss.item() - sum_loss.item()) < 1e-3)
+
+    def check_training(self, config, input_values, *args):
+        model = Wav2Vec2ForCTC(config=config)
+        model.to(torch_device)
+        model.train()
+
+        input_values = input_values[:3]
+        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
+
+        input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
+        max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
+        labels = ids_tensor((input_values.shape[0], max(max_length_labels) - 2), model.config.vocab_size)
+
+        # pad input
+        for i in range(len(input_lengths)):
+            input_values[i, input_lengths[i] :] = 0.0
+            attention_mask[i, input_lengths[i] :] = 0.0
+
+            if max_length_labels[i] < labels.shape[-1]:
+                # it's important that we make sure that target lenghts are at least
+                # one shorter than logit lenghts to prevent -inf
+                labels[i, max_length_labels[i] - 1 :] = -100
+
+        loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        self.parent.assertFalse(torch.isinf(loss).item())
+
+        loss.backward()
 
     def prepare_config_and_inputs_for_common(self):
         config, input_values, attention_mask = self.prepare_config_and_inputs()
@@ -186,6 +238,14 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_loss(*config_and_inputs)
+
+    def test_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_training(*config_and_inputs)
+
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
         pass
@@ -213,7 +273,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "conv.weight" in name:
+                    if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
@@ -255,6 +315,14 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_batch_inference(*config_and_inputs)
 
+    def test_ctc_loss_inference(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_ctc_loss(*config_and_inputs)
+
+    def test_train(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_training(*config_and_inputs)
+
     # Wav2Vec2 has no inputs_embeds
     def test_inputs_embeds(self):
         pass
@@ -282,7 +350,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if "conv.weight" in name:
+                    if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),

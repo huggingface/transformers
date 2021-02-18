@@ -162,7 +162,7 @@ class Wav2Vec2Config(PretrainedConfig):
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
-        mask_feature_prob=0.008,
+        mask_feature_prob=0.0,
         mask_feature_length=10,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
