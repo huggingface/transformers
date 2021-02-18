@@ -103,6 +103,15 @@ class DistillTrainingArguments(TrainingArguments):
             )
         },
     )
+    save_total_limit: Optional[int] = field(
+        default=0,
+        metadata={
+            "help": (
+                "Limit the total amount of checkpoints."
+                "Deletes the older checkpoints in the output_dir. Default is 0 (no checkpoints)."
+            )
+        },
+    )
 
 
 class DistillationTrainer(Trainer):
@@ -187,7 +196,7 @@ def get_teacher_predictions(
         with torch.cuda.amp.autocast(enabled=fp16):
             with torch.no_grad():
                 outputs = model(**encodings)
-        logits.append(outputs.logits.detach().cpu())
+        logits.append(outputs.logits.detach().cpu().float())
 
     entail_id = get_entailment_id(model_config)
     contr_id = -1 if entail_id == 0 else 0
