@@ -202,6 +202,54 @@ class TFModelTesterMixin:
             saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
 
+    @slow
+    def test_saved_model_creation_extended(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        if hasattr(config, "use_cache"):
+            config.use_cache = True
+
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+            num_out = len(model(class_inputs_dict))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=True)
+                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
+                model = tf.keras.models.load_model(saved_model_dir)
+                outputs = model(class_inputs_dict)
+
+                if self.is_encoder_decoder:
+                    output_hidden_states = outputs["encoder_hidden_states"]
+                    output_attentions = outputs["encoder_attentions"]
+                else:
+                    output_hidden_states = outputs["hidden_states"]
+                    output_attentions = outputs["attentions"]
+
+                self.assertEqual(len(outputs), num_out)
+
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+                )
+
+                self.assertEqual(len(output_hidden_states), expected_num_layers)
+                self.assertListEqual(
+                    list(output_hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
+                )
+
+                self.assertEqual(len(output_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(output_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                )
+
     def test_onnx_compliancy(self):
         if not self.test_onnx:
             return
@@ -262,98 +310,6 @@ class TFModelTesterMixin:
             onnx_model = keras2onnx.convert_keras(model, model.name, target_opset=self.onnx_min_opset)
 
             onnxruntime.InferenceSession(onnx_model.SerializeToString())
-
-    @slow
-    def test_saved_model_creation_extended(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = True
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = True
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-
-            model(class_inputs_dict)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                self.assertTrue(os.path.exists(saved_model_dir))
-
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = True
-        config.output_attentions = False
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = False
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            num_out = len(model(class_inputs_dict))
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
-                outputs = model(class_inputs_dict)
-
-                if self.is_encoder_decoder:
-                    output = outputs["encoder_hidden_states"]
-                else:
-                    output = outputs["hidden_states"]
-
-                self.assertEqual(len(outputs), num_out)
-
-                expected_num_layers = getattr(
-                    self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-                )
-
-                self.assertEqual(len(output), expected_num_layers)
-                self.assertListEqual(
-                    list(output[0].shape[-2:]),
-                    [self.model_tester.seq_length, self.model_tester.hidden_size],
-                )
-
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_attentions = True
-        config.output_hidden_states = False
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = False
-
-        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", self.model_tester.seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            num_out = len(model(class_inputs_dict))
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname, saved_model=True)
-                saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-                model = tf.keras.models.load_model(saved_model_dir)
-                outputs = model(class_inputs_dict)
-
-                if self.is_encoder_decoder:
-                    output = outputs["encoder_attentions"]
-                else:
-                    output = outputs["attentions"]
-
-                self.assertEqual(len(outputs), num_out)
-                self.assertEqual(len(output), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(output[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
 
     def test_mixed_precision(self):
         tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
@@ -554,7 +510,6 @@ class TFModelTesterMixin:
                 shared = TFSharedEmbeddings(self.model_tester.vocab_size, self.model_tester.hidden_size, name="shared")
                 config.use_cache = False
                 main_layer = main_layer_class(config, embed_tokens=shared)
-                del inputs_dict["use_cache"]
             else:
                 main_layer = main_layer_class(config)
 
