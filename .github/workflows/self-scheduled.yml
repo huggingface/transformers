@@ -244,11 +244,13 @@ jobs:
         run: cat reports/tests_torch_multi_gpu_failures_short.txt
 
       - name: Run examples tests on multi-GPU
+        if: ${{ always() }}
         env:
           OMP_NUM_THREADS: 1
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
+          pip install -r examples/_tests_requirements.txt
           python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_examples_multi_gpu examples
 
       - name: Failure short reports

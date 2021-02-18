@@ -131,8 +131,11 @@ class TrainingArguments:
         lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
             The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
             values.
+        warmup_ratio (:obj:`float`, `optional`, defaults to 0.0):
+            Ratio of total training steps used for a linear warmup from 0 to :obj:`learning_rate`.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
-            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
+            :obj:`warmup_ratio`.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
@@ -249,6 +252,9 @@ class TrainingArguments:
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+            Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
+
     """
 
     output_dir: Optional[str] = field(
@@ -323,6 +329,9 @@ class TrainingArguments:
     lr_scheduler_type: SchedulerType = field(
         default="linear",
         metadata={"help": "The scheduler type to use."},
+    )
+    warmup_ratio: float = field(
+        default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
     )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
@@ -445,6 +454,9 @@ class TrainingArguments:
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
+    skip_memory_metrics: bool = field(
+        default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
@@ -494,6 +506,13 @@ class TrainingArguments:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
+
+        if self.warmup_ratio < 0 or self.warmup_ratio > 1:
+            raise ValueError("warmup_ratio must lie in range [0,1]")
+        elif self.warmup_ratio > 0 and self.warmup_steps > 0:
+            logger.info(
+                "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio during training"
+            )
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once

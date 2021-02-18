@@ -500,7 +500,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.check_trained_model(trainer.model)
 
         # Can return tensors.
-        train_dataset.set_format(type="torch")
+        train_dataset.set_format(type="torch", dtype=torch.float32)
         model = RegressionModel()
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
@@ -880,6 +880,37 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # with enforced DataParallel
         assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+
+        trainer.train()
+        self.assertTrue(isinstance(trainer.state.total_flos, float))
+
+    def check_mem_metrics(self, trainer, check_func):
+        metrics = trainer.train().metrics
+        check_func("init_mem_cpu_alloc_delta", metrics)
+        check_func("train_mem_cpu_alloc_delta", metrics)
+        if torch.cuda.device_count() > 0:
+            check_func("init_mem_gpu_alloc_delta", metrics)
+            check_func("train_mem_gpu_alloc_delta", metrics)
+
+        metrics = trainer.evaluate()
+        check_func("eval_mem_cpu_alloc_delta", metrics)
+        if torch.cuda.device_count() > 0:
+            check_func("eval_mem_gpu_alloc_delta", metrics)
+
+        metrics = trainer.predict(RegressionDataset()).metrics
+        check_func("test_mem_cpu_alloc_delta", metrics)
+        if torch.cuda.device_count() > 0:
+            check_func("test_mem_gpu_alloc_delta", metrics)
+
+    def test_mem_metrics(self):
+
+        # with mem metrics enabled
+        trainer = get_regression_trainer()
+        self.check_mem_metrics(trainer, self.assertIn)
+
+        # with mem metrics disabled
+        trainer = get_regression_trainer(skip_memory_metrics=True)
+        self.check_mem_metrics(trainer, self.assertNotIn)
 
 
 @require_torch
