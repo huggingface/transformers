@@ -281,10 +281,10 @@ class TrainerMemoryTracker:
 
     Because ``evaluation`` calls may happen during ``train``, we can't handle nested invocations because
     ``torch.cuda.max_memory_allocated`` is a single counter, so if it gets reset by a nested eval call, ``train``'s
-    tracker will report incorrect info. If this `pytorch issue <https://github.com/pytorch/pytorch/issues/16266>`__ gets
-    resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer level
-    of ``train``, ``evaluate`` and ``predict`` methods. Which means that if ``eval`` is called during ``train``, it's
-    the latter that will account for its memory usage and that of the former.
+    tracker will report incorrect info. If this `pytorch issue <https://github.com/pytorch/pytorch/issues/16266>`__
+    gets resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer
+    level of ``train``, ``evaluate`` and ``predict`` methods. Which means that if ``eval`` is called during ``train``,
+    it's the latter that will account for its memory usage and that of the former.
 
     This also means that if any other tool that is used along the :class:`~transformers.Trainer` calls
     ``torch.cuda.reset_peak_memory_stats``, the gpu peak memory stats could be invalid. And the
