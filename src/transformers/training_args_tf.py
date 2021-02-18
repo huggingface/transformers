@@ -94,8 +94,11 @@ class TFTrainingArguments(TrainingArguments):
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
+        warmup_ratio (:obj:`float`, `optional`, defaults to 0.0):
+            Ratio of total training steps used for a linear warmup from 0 to :obj:`learning_rate`.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
-            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
+            :obj:`warmup_ratio`.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
