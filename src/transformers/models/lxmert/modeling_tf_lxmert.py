@@ -753,9 +753,10 @@ class TFLxmertMainLayer(tf.keras.layers.Layer):
                 tf.expand_dims(inputs["visual_attention_mask"], axis=1), axis=1
             )
 
-            
             extended_visual_attention_mask = tf.cast(extended_visual_attention_mask, dtype=embedding_output.dtype)
-            extended_visual_attention_mask = tf.multiply(tf.subtract(one_cst, extended_visual_attention_mask), ten_thousand_cst)
+            extended_visual_attention_mask = tf.multiply(
+                tf.subtract(one_cst, extended_visual_attention_mask), ten_thousand_cst
+            )
         else:
             extended_visual_attention_mask = None
 
