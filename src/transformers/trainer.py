@@ -1370,7 +1370,7 @@ class Trainer:
             split (:obj:`str`):
                 Mode/split name: one of ``train``, ``eval``, ``test``, ``all``
             metrics (:obj:`Dict[str, float]`):
-                The metrics returned from train/evaluate/predictmetrics: metrics dict
+                The metrics returned from train/evaluate/predict
         """
         path = os.path.join(self.args.output_dir, f"{split}_results.json")
         with open(path, "w") as f:
