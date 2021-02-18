@@ -1031,8 +1031,8 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
                     input_lengths,
                     target_lengths,
                     blank=self.config.pad_token_id,
-                    reduction="mean",
-                    zero_infinity=False,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
                 )
 
         if not return_dict:

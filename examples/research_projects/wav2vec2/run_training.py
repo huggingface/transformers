@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import datasets
 import numpy as np
 import torch
+import torch.nn as nn
+from packaging import version
 
 import soundfile as sf
 from jiwer import wer
 from transformers import PreTrainedTokenizer, Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Tokenizer
+
+from .file_utils import is_apex_available
+
+
+if is_apex_available():
+    from apex import amp
+
+
+if version.parse(torch.__version__) >= version.parse("1.6"):
+    _is_native_amp_available = True
+    from torch.cuda.amp import autocast
 
 
 model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base")
@@ -125,6 +138,59 @@ def compute_metrics(pred):
     return {"wer": wer_score}
 
 
+class CTCTrainer(Trainer):
+    def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
+        """
+        Perform a training step on a batch of inputs.
+
+        Subclass and override to inject custom behavior.
+
+        Args:
+            model (:obj:`nn.Module`):
+                The model to train.
+            inputs (:obj:`Dict[str, Union[torch.Tensor, Any]]`):
+                The inputs and targets of the model.
+
+                The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
+                argument :obj:`labels`. Check your model's documentation for all accepted arguments.
+
+        Return:
+            :obj:`torch.Tensor`: The tensor with training loss on this batch.
+        """
+
+        model.train()
+        inputs = self._prepare_inputs(inputs)
+
+        if self.use_amp:
+            with autocast():
+                loss = self.compute_loss(model, inputs)
+        else:
+            loss = self.compute_loss(model, inputs)
+
+        if self.args.n_gpu > 1:
+            if model.config.ctc_loss_reduction == "mean":
+                loss = loss.mean()
+            elif model.config.ctc_loss_reduction == "sum":
+                loss = loss.sum() / (inputs["labels"] >= 0).sum()
+            else:
+                raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
+
+        if self.args.gradient_accumulation_steps > 1:
+            loss = loss / self.args.gradient_accumulation_steps
+
+        if self.use_amp:
+            self.scaler.scale(loss).backward()
+        elif self.use_apex:
+            with amp.scale_loss(loss, self.optimizer) as scaled_loss:
+                scaled_loss.backward()
+        elif self.deepspeed:
+            self.deepspeed.backward(loss)
+        else:
+            loss.backward()
+
+        return loss.detach()
+
+
 training_args = TrainingArguments(
     output_dir="./results",
     num_train_epochs=40,
@@ -143,7 +209,7 @@ training_args = TrainingArguments(
     fp16=True,
 )
 
-trainer = Trainer(
+trainer = CTCTrainer(
     model=model,
     data_collator=data_collator,
     args=training_args,

@@ -143,6 +143,8 @@ class Wav2Vec2Config(PretrainedConfig):
         mask_channel_length=10,
         mask_channel_selection="static",
         mask_channel_other=0.0,
+        ctc_loss_reduction="sum",
+        ctc_zero_infinity="False",
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -197,3 +199,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.mask_channel_length = mask_channel_length
         self.mask_channel_selection = mask_channel_selection
         self.mask_channel_other = mask_channel_other
+
+        # ctc loss
+        self.ctc_loss_reduction = ctc_loss_reduction
+        self.ctc_zero_infinity = ctc_zero_infinity
