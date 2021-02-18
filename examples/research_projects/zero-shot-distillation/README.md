@@ -148,3 +148,8 @@ drastic the speedup will be, since the zero-shot teacher's complexity scales lin
 Since we secretly have access to ground truth labels for AG's news, we can evaluate the accuracy of each model. The
 original zero-shot model `roberta-large-mnli` gets an accuracy of 70.2% on the held-out test set. After training a
 student on the unlabeled training set, the distilled model gets a similar score of 70.7%.
+
+Lastly, you can share the distilled model with the community and/or use it with our inference API by [uploading it
+to the 🤗 Hub](https://huggingface.co/transformers/model_sharing.html). We've uploaded the distilled model from this
+example at
+[joeddav/distilbert-base-uncased-agnews-student](https://huggingface.co/joeddav/distilbert-base-uncased-agnews-student).
