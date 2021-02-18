@@ -155,7 +155,7 @@ class TrainingArguments:
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
@@ -163,6 +163,8 @@ class TrainingArguments:
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
             other choices will force the requested backend.
+        fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use full 16-bit precision evaluation instead of 32-bit.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -353,7 +355,7 @@ class TrainingArguments:
 
     fp16: bool = field(
         default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA Apex) instead of 32-bit"},
+        metadata={"help": "Whether to use 16-bit (mixed) precision instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
@@ -367,6 +369,10 @@ class TrainingArguments:
     fp16_backend: str = field(
         default="auto",
         metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
+    )
+    fp16_full_eval: bool = field(
+        default=False,
+        metadata={"help": "Whether to use full 16-bit precision evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
@@ -488,7 +494,7 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
-        if is_torch_available() and self.device.type != "cuda" and self.fp16:
+        if is_torch_available() and self.device.type != "cuda" and (self.fp16 or self.fp16_full_eval):
             raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
         if self.report_to is None:
             logger.info(

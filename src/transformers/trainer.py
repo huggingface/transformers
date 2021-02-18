@@ -218,6 +218,8 @@ class Trainer:
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
           to :obj:`False` if model parallel or deepspeed is used, or if the default
           ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
+        - **is_in_train** -- Whether or not a model is currently running ``train`` (e.g. when ``evaluate`` is called
+          while in ``train``)
 
     """
 
@@ -243,6 +245,7 @@ class Trainer:
         set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
+        self.is_in_train = False
 
         # memory metrics - must set up as early as possible
         self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
@@ -273,7 +276,7 @@ class Trainer:
 
         # one place to sort out whether to place the model on device or not
         self.place_model_on_device = args.place_model_on_device
-        if self.is_model_parallel or (args.deepspeed and args.do_train):
+        if self.is_model_parallel or (args.deepspeed and args.do_train) or (args.fp16_full_eval and not args.do_train):
             self.place_model_on_device = False
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
@@ -713,6 +716,10 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True):
+        # already initialized its own DDP and AMP
+        if self.deepspeed:
+            return model
+
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
@@ -731,8 +738,6 @@ class Trainer:
             model = ShardedDDP(model, self.optimizer)
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        elif self.deepspeed:
-            pass  # already initialized its own DDP earlier
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
                 find_unused_parameters = self.args.ddp_find_unused_parameters
@@ -772,6 +777,8 @@ class Trainer:
 
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
+
+        self.is_in_train = True
 
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
@@ -1088,6 +1095,12 @@ class Trainer:
             self.lr_scheduler = None
             self.model_wrapped = self.model
             gc.collect()  # force memory release
+            # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
+            self.place_model_on_device = self.args.place_model_on_device
+            if self.is_model_parallel:
+                self.place_model_on_device = False
+
+        self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
 
@@ -1688,6 +1701,11 @@ class Trainer:
             logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
         model = self._wrap_model(self.model, training=False)
+
+        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
+        # ``train`` is running, half it first and then put on device
+        if not self.is_in_train and self.args.fp16_full_eval:
+            model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
