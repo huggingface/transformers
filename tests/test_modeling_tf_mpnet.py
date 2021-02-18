@@ -232,10 +232,6 @@ class TFMPNetModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_mpnet_for_token_classification(*config_and_inputs)
 
-    def test_xla_mode(self):
-        # TODO JP: Make MPNet XLA compliant
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["microsoft/mpnet-base"]:
