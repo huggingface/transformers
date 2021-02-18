@@ -248,7 +248,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
-    test_head_masking = False
     test_onnx = False
 
     def setUp(self):
@@ -427,7 +426,6 @@ class TFT5EncoderOnlyModelTester:
 class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
-    test_head_masking = False
     test_onnx = False
 
     def setUp(self):

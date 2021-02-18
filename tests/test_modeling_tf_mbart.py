@@ -214,18 +214,6 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
-    def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make MBart float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make MBart XLA compliant
-        pass
-
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -288,6 +276,10 @@ class TFMBartModelTest(TFModelTesterMixin, unittest.TestCase):
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                     self.assertTrue(models_equal)
+
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
