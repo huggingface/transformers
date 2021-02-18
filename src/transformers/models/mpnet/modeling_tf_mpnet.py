@@ -412,18 +412,18 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         n = -relative_position
 
         num_buckets //= 2
-        ret += tf.dtypes.cast(tf.math.less(n, 0), tf.int32) * num_buckets
+        ret += tf.cast(tf.math.less(n, 0), dtype=relative_position.dtype) * num_buckets
         n = tf.math.abs(n)
 
         # now n is in the range [0, inf)
         max_exact = num_buckets // 2
         is_small = tf.math.less(n, max_exact)
 
-        val_if_large = max_exact + tf.dtypes.cast(
-            tf.math.log(tf.dtypes.cast(n, tf.float32) / max_exact)
+        val_if_large = max_exact + tf.cast(
+            tf.math.log(n / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact),
-            tf.int32,
+            dtype=relative_position.dtype,
         )
 
         val_if_large = tf.math.minimum(val_if_large, num_buckets - 1)
