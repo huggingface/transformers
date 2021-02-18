@@ -72,7 +72,7 @@ class Wav2Vec2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         conv_dim (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(512, 512, 512, 512, 512, 512, 512)`):
-            A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
+            A tuple of integers defining the number of input and output features of each 1D convolutional layer in the
             feature extractor. The length of `conv_dim` defines the number of 1D convolutional layers.
         conv_stride (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature extractor. The length
@@ -92,6 +92,31 @@ class Wav2Vec2Config(PretrainedConfig):
             Whether do apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
             True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
             False`` corresponds to applying layer norm after the attention layer.
+        freeze_feat_extract_train (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to freeze the weights of the feature extractor when training.
+        apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
+            `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
+            <https://arxiv.org/abs/1904.08779>`__.
+        mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
+            Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
+            masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature vectors will be
+            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+        mask_time_length (:obj:`int`, `optional`, defaults to 10):
+            Length of vector span along the time axis.
+        mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
+            Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
+            be masked. Approximately ``mask_time_prob * hidden_size // mask_time_length`` feature vectors will be
+            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+        mask_feature_length (:obj:`int`, `optional`, defaults to 10):
+            Length of vector span along the feature axis.
+        ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
+            Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
+            instance of :class:`~transformers.Wav2Vec2ForCTC`.
+        ctc_zero_infinity (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
+            mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
+            instance of :class:`~transformers.Wav2Vec2ForCTC`.
 
     Example::
 
@@ -137,14 +162,10 @@ class Wav2Vec2Config(PretrainedConfig):
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
-        mask_time_selection="static",
-        mask_time_other=0.0,
-        mask_channel_prob=0.008,
-        mask_channel_length=10,
-        mask_channel_selection="static",
-        mask_channel_other=0.0,
+        mask_feature_prob=0.008,
+        mask_feature_length=10,
         ctc_loss_reduction="sum",
-        ctc_zero_infinity="False",
+        ctc_zero_infinity=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -193,12 +214,8 @@ class Wav2Vec2Config(PretrainedConfig):
         self.apply_spec_augment = apply_spec_augment
         self.mask_time_prob = mask_time_prob
         self.mask_time_length = mask_time_length
-        self.mask_time_selection = mask_time_selection
-        self.mask_time_other = mask_time_other
-        self.mask_channel_prob = mask_channel_prob
-        self.mask_channel_length = mask_channel_length
-        self.mask_channel_selection = mask_channel_selection
-        self.mask_channel_other = mask_channel_other
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
 
         # ctc loss
         self.ctc_loss_reduction = ctc_loss_reduction

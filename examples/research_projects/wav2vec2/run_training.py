@@ -44,7 +44,9 @@ val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
 def encode_labels(tokenizer, text):
     batch_tokens = []
     for text_str in text:
-        batch_tokens.append(list(text_str.strip().replace(" ", tokenizer.word_delimiter_token) + "|"))
+        batch_tokens.append(
+            list(text_str.strip().replace(" ", tokenizer.word_delimiter_token) + tokenizer.word_delimiter_token)
+        )
 
     batch_ids = []
     for tokens in batch_tokens:

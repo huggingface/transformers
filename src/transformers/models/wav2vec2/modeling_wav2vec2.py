@@ -44,13 +44,11 @@ WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def compute_mask_indices(
+def _compute_mask_indices(
     shape: Tuple[int, int],
     padding_mask: Optional[torch.Tensor],
     mask_prob: float,
     mask_length: int,
-    mask_type: str = "static",
-    mask_other: float = 0.0,
     min_masks: int = 0,
 ) -> np.ndarray:
     """
@@ -63,12 +61,13 @@ def compute_mask_indices(
         mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
             number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
-        mask_type: how to compute mask lengths
-            static = fixed size uniform = sample from uniform distribution [mask_other, mask_length*2] normal = sample
-            from normal distribution with mean mask_length and stdev mask_other. mask is min 1 element poisson = sample
-            from possion distribution with lambda = mask length
+        mask_length: size of the mask
         min_masks: minimum number of masked spans
+
+    Adapted from `fairseq's data_utils.py
+    <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
+
     bsz, all_sz = shape
     mask = np.full((bsz, all_sz), False)
 
@@ -95,18 +94,7 @@ def compute_mask_indices(
             sz = all_sz
             num_mask = all_num_mask
 
-        if mask_type == "static":
-            lengths = np.full(num_mask, mask_length)
-        elif mask_type == "uniform":
-            lengths = np.random.randint(mask_other, mask_length * 2 + 1, size=num_mask)
-        elif mask_type == "normal":
-            lengths = np.random.normal(mask_length, mask_other, size=num_mask)
-            lengths = [max(1, int(round(x))) for x in lengths]
-        elif mask_type == "poisson":
-            lengths = np.random.poisson(mask_length, size=num_mask)
-            lengths = [int(round(x)) for x in lengths]
-        else:
-            raise Exception("unknown mask selection " + mask_type)
+        lengths = np.full(num_mask, mask_length)
 
         if sum(lengths) == 0:
             lengths[0] = min(mask_length, sz - 1)
@@ -116,9 +104,7 @@ def compute_mask_indices(
             min_len = sz - num_mask - 1
 
         mask_idc = np.random.choice(sz - min_len, num_mask, replace=False)
-
         mask_idc = np.asarray([mask_idc[j] + offset for j in range(len(mask_idc)) for offset in range(lengths[j])])
-
         mask_idcs.append(np.unique(mask_idc[mask_idc < sz]))
 
     min_len = min([len(m) for m in mask_idcs])
@@ -818,27 +804,27 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
         if self.config.apply_spec_augment and self.training:
             batch_size, sequence_length, hidden_size = hidden_states.size()
 
+            # apply SpecAugment along time axis
             if self.config.mask_time_prob > 0:
-                mask_time_indices = compute_mask_indices(
+                mask_time_indices = _compute_mask_indices(
                     (batch_size, sequence_length),
                     attention_mask,
                     self.config.mask_time_prob,
                     self.config.mask_time_length,
-                    self.config.mask_time_selection,
                     min_masks=2,
                 )
                 hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
 
-            if self.config.mask_channel_prob > 0:
-                mask_channel_indices = compute_mask_indices(
+            # apply SpecAugment along feature axis
+            if self.config.mask_feature_prob > 0:
+                mask_feature_indices = _compute_mask_indices(
                     (batch_size, hidden_size),
                     None,
-                    self.config.mask_channel_prob,
-                    self.config.mask_channel_length,
-                    self.config.mask_channel_selection,
+                    self.config.mask_feature_prob,
+                    self.config.mask_feature_length,
                 )
-                mask_channel_indices = torch.from_numpy(mask_channel_indices).to(hidden_states.device)
-                hidden_states[mask_channel_indices[:, None].expand(-1, sequence_length, -1)] = 0
+                mask_feature_indices = torch.from_numpy(mask_feature_indices).to(hidden_states.device)
+                hidden_states[mask_feature_indices[:, None].expand(-1, sequence_length, -1)] = 0
 
         encoder_outputs = self.encoder(
             hidden_states,
@@ -962,8 +948,11 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         labels=None,
     ):
         r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            TODO(PVP): Fill out when adding training
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_length)`, `optional`):
+            Labels for connectionist temporal classification. Note that ``target_length`` has to be smaller or equal to
+            the sequence length of the output logits. Indices are selected in ``[-100, 0, ..., config.vocab_size -
+            1]``. All labels set to ``-100`` are ignored (masked), the loss is only computed for labels in ``[0, ...,
+            config.vocab_size - 1]``.
 
         Returns:
 
@@ -990,6 +979,12 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> predicted_ids = torch.argmax(logits, dim=-1)
             >>> transcription = tokenizer.decode(predicted_ids[0])
+
+            >>> # compute loss
+            >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
+            >>> tokens = list(target_transcription.replace(" ", tokenizer.word_delimiter_token) + tokenizer.word_delimiter_token)
+            >>> labels = torch.tensor([tokenizer.convert_tokens_to_ids(tokens)])
+            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
