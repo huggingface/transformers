@@ -324,7 +324,7 @@ class TFTransfoEmbeddings(tf.keras.layers.Layer):
         self.vocab_size = vocab_size
         self.emb_size = emb_size
         self.init_std = init_std
-    
+
     def build(self, input_shape):
         self.weight = self.add_weight(
             shape=(self.vocab_size, self.emb_size),
@@ -333,7 +333,7 @@ class TFTransfoEmbeddings(tf.keras.layers.Layer):
         )
 
         super().build(input_shape)
-    
+
     def call(self, inputs):
         return tf.gather(self.weight, inputs)
 
@@ -372,7 +372,6 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                     )
                 )
 
-
     def build(self, input_shape):
         for i in range(len(self.cutoffs)):
             d_emb_i = self.d_embed // (self.div_val ** i)
@@ -384,7 +383,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                     name="emb_projs_._{}".format(i),
                 )
             )
-        
+
         super().build(input_shape)
 
     def call(self, inp):
