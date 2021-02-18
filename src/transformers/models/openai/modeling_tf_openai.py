@@ -913,7 +913,6 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
 
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
-        logits_shape = shape_list(logits)
         in_logits = None
         if self.config.pad_token_id is None:
             sequence_lengths = -1
