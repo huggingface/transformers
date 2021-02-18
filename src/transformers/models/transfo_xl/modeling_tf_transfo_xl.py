@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import tensorflow as tf
-from tensorflow.python.ops.gen_array_ops import scatter_nd
 
 from ...file_utils import (
     ModelOutput,
