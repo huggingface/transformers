@@ -324,7 +324,7 @@ def main():
 
     # Padding to max length is necessary for TPUs
     if is_torch_tpu_available and data_args.pad_to_max_length is False:
-        logger.warn("TPU requires `pad_to_max_length` = True. Value will be set automatically")
+        logger.warn("TPU requires `pad_to_max_length` to be True. Value will be changed automatically")
         data_args.pad_to_max_length = True
 
     if data_args.line_by_line:
@@ -344,6 +344,7 @@ def main():
                 return_special_tokens_mask=True,
             )
 
+        # Mapping is done on the fly to avoid storing the entire mapped dataset on the disk
         tokenized_datasets = datasets.with_transform(
             tokenize_function
         )
@@ -377,7 +378,6 @@ def main():
             return result
 
         # The mapping is done on-the-fly to avoid storing the entire mapped data on the disk
-
         tokenized_datasets = tokenized_datasets.with_transform(
             group_texts
         )
