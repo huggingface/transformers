@@ -236,6 +236,15 @@ def is_torch_available():
     return _torch_available
 
 
+def is_torch_cuda_available():
+    if is_torch_available():
+        import torch
+
+        return torch.cuda.is_available()
+    else:
+        return False
+
+
 def is_tf_available():
     return _tf_available
 

@@ -17,15 +17,24 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import gc
+import inspect
 import os
 import random
 import re
 import time
+import tracemalloc
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
 
-from .file_utils import is_sagemaker_distributed_available, is_tf_available, is_torch_available, is_torch_tpu_available
+from .file_utils import (
+    is_sagemaker_distributed_available,
+    is_tf_available,
+    is_torch_available,
+    is_torch_cuda_available,
+    is_torch_tpu_available,
+)
 from .tokenization_utils_base import ExplicitEnum
 
 
@@ -234,3 +243,175 @@ class SchedulerType(ExplicitEnum):
     POLYNOMIAL = "polynomial"
     CONSTANT = "constant"
     CONSTANT_WITH_WARMUP = "constant_with_warmup"
+
+
+class TrainerMemoryTracker:
+    """
+    A helper class that tracks cpu and gpu memory.
+
+    When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
+
+    Example ::
+
+        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self._memory_tracker.start()
+        code ...
+        metrics = {"train_runtime": 10.5}
+        self._memory_tracker.stop_and_update_metrics(metrics)
+
+    At the moment gpu tracking is only for pytorch, but can be extended to support tensorflow.
+
+    Understanding the reports:
+
+    - ``*_alloc_delta`` - is the difference in the used/allocated memory counter between the end and the start of the
+      stage - it can be negative if a function released more memory than it allocated.
+
+    - ``*_peaked_delta`` - is any extra memory that was consumed and then freed - relative to the current allocated
+      memory counter - it is never negative.
+
+    So when you look at the metrics of any stage you add up ``alloc_delta`` + ``peaked_delta`` and you know how much
+    memory was needed to complete that stage.
+
+    The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
+    main process does the bulk of work, but it could be not quite so if model parallel is used and then other gpus may
+    use a different amount of gpu RAM. Perhaps in the future this tracker will evolve to measure those too.
+
+    Note that this tracker doesn't account for memory allocations outside of :class:`~transformers.Trainer`'s
+    ``__init__``, ``train``, ``evaluate`` and ``predict`` calls.
+
+    Because ``evaluation`` calls may happen during ``train``, we can't handle nested invocations because
+    ``torch.cuda.max_memory_allocated`` is a single counter, so if it gets reset by a nested eval call, ``train``'s
+    tracker will report incorrect info. If this `pytorch issue <https://github.com/pytorch/pytorch/issues/16266>`__
+    gets resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer
+    level of ``train``, ``evaluate`` and ``predict`` methods. Which means that if ``eval`` is called during ``train``,
+    it's the latter that will account for its memory usage and that of the former.
+
+    This also means that if any other tool that is used along the :class:`~transformers.Trainer` calls
+    ``torch.cuda.reset_peak_memory_stats``, the gpu peak memory stats could be invalid. And the
+    :class:`~transformers.Trainer` will disrupt the normal behavior of any such tools that rely on calling
+    ``torch.cuda.reset_peak_memory_stats`` themselves.
+
+    """
+
+    # map trainer methods to metrics prefix
+    stages = {
+        "__init__": "init",
+        "train": "train",
+        "evaluate": "eval",
+        "predict": "test",
+    }
+
+    def __init__(self, skip_memory_metrics=False):
+        if is_torch_cuda_available():
+            import torch
+
+            self.torch = torch
+            self.gpu = {}
+        else:
+            self.torch = None
+
+        self.cur_stage = None
+        self.cpu = {}
+        self.init_reported = False
+        self.skip_memory_metrics = skip_memory_metrics
+
+    def derive_stage(self):
+        """ derives the stage/caller name automatically """
+        caller = inspect.currentframe().f_back.f_back.f_code.co_name
+        if caller in self.stages:
+            return self.stages[caller]
+        else:
+            raise ValueError(
+                f"was called from {caller}, but only expect to be called from one of {self.stages.keys()}"
+            )
+
+    def start(self):
+        """ start tracking for the caller's stage """
+        if self.skip_memory_metrics:
+            return
+
+        stage = self.derive_stage()
+        # deal with nested calls of eval during train - simply ignore those
+        if self.cur_stage is not None and self.cur_stage != stage:
+            return
+
+        self.cur_stage = stage
+
+        if self.torch is not None:
+            self.torch.cuda.reset_peak_memory_stats()
+            self.torch.cuda.empty_cache()
+
+        gc.collect()
+
+        # gpu
+        if self.torch is not None:
+            self.gpu[self.cur_stage] = {}
+            self.gpu[self.cur_stage]["alloc"] = self.torch.cuda.memory_allocated()
+            self.gpu[self.cur_stage]["peaked"] = 0
+
+        # cpu
+        self.cpu[self.cur_stage] = {}
+        tracemalloc.start()
+
+    def stop(self, stage):
+        """ stop tracking for the passed stage """
+
+        # deal with nested calls of eval during train - simply ignore those
+        if self.cur_stage is not None and self.cur_stage != stage:
+            return
+
+        if self.torch is not None:
+            self.torch.cuda.empty_cache()
+
+        gc.collect()
+
+        # gpu
+        if self.torch is not None:
+            mem_cur = self.torch.cuda.memory_allocated()
+            # this is the difference between the start and the end allocated memory
+            self.gpu[self.cur_stage]["alloc"] = mem_cur - self.gpu[self.cur_stage]["alloc"]  # can be negative
+            # this is the difference if any between the start and the peak
+            self.gpu[self.cur_stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
+
+        # cpu
+        cpu_mem_used_delta, cpu_mem_used_peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()  # reset accounting
+        self.cpu[self.cur_stage]["alloc"] = cpu_mem_used_delta  # can be negative
+        self.cpu[self.cur_stage]["peaked"] = max(0, cpu_mem_used_peak - cpu_mem_used_delta)
+
+        # reset - cycle finished
+        self.cur_stage = None
+
+    def update_metrics(self, stage, metrics):
+        """ stop tracking for the passed stage """
+        if self.skip_memory_metrics:
+            return
+
+        # deal with nested calls of eval during train - simply ignore those
+        if self.cur_stage is not None and self.cur_stage != stage:
+            return
+
+        # since we don't have a way to return init metrics, we push them into the first of train/val/predict
+        stages = [stage]
+        if not self.init_reported:
+            stages.insert(0, "init")
+            self.init_reported = True
+
+        for stage in stages:
+            for t in ["alloc", "peaked"]:
+                if stage in self.cpu and t in self.cpu[stage]:
+                    metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
+                if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
+                    metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
+
+    def stop_and_update_metrics(self, metrics=None):
+        """ combine stop + update in one call for simpler code """
+        if self.skip_memory_metrics:
+            return
+
+        stage = self.derive_stage()
+        self.stop(stage)
+
+        # init doesn't have metrics to update so we just save that data for later stages to retrieve
+        if metrics is not None:
+            self.update_metrics(stage, metrics)

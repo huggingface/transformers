@@ -252,6 +252,9 @@ class TrainingArguments:
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+            Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
+
     """
 
     output_dir: Optional[str] = field(
@@ -450,6 +453,9 @@ class TrainingArguments:
     )
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
+    )
+    skip_memory_metrics: bool = field(
+        default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
