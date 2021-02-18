@@ -1,5 +1,7 @@
 # Zero-shot classifier distillation
 
+Author: @joeddav 
+
 This script provides a way to improve the speed and memory performance of a zero-shot classifier by training a more
 efficient student model from the zero-shot teacher's predictions over an unlabeled dataset.
 
