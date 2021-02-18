@@ -246,6 +246,22 @@ class SchedulerType(ExplicitEnum):
 
 
 class TrainerMemoryTracker:
+    """
+    A helper class that tracks cpu and gpu memory.
+
+    When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
+
+    Example ::
+
+        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self._memory_tracker.start()
+        code ...
+        metrics = {"train_runtime": 10.5}
+        self._memory_tracker.stop_n_update_metrics(metrics)
+
+    At the moment gpu tracking is only for pytorch, but can be extended to support tensorflow.
+    """
+
     # map trainer methods to metrics prefix
     stages = {
         "__init__": "init",
@@ -268,14 +284,7 @@ class TrainerMemoryTracker:
         self.init_reported = False
         self.skip_memory_metrics = skip_memory_metrics
 
-    # notes: since eval calls may be intermixed with train calls, we can't handle nested invocations
-    # because torch.cuda.max_memory_allocated is a single counter, so if it gets reset by a nested
-    # eval call, train will report incorrect info. One day pytorch will fix this issue:
-    # https://github.com/pytorch/pytorch/issues/16266
-    # and then it will be possible to be re-entrant
-    # for now only track the outer level train / evaluation / predict functions
-
-    def get_stage(self):
+    def derive_stage(self):
         """ derives the stage/caller name automatically """
         caller = inspect.currentframe().f_back.f_back.f_code.co_name
         if caller in self.stages:
@@ -285,11 +294,19 @@ class TrainerMemoryTracker:
                 f"was called from {caller}, but only expect to be called from one of {self.stages.keys()}"
             )
 
+    # notes: since eval calls may be intermixed with train calls, we can't handle nested invocations
+    # because torch.cuda.max_memory_allocated is a single counter, so if it gets reset by a nested
+    # eval call, train will report incorrect info. One day pytorch will fix this issue:
+    # https://github.com/pytorch/pytorch/issues/16266
+    # and then it will be possible to be re-entrant
+    # for now only track the outer level train / evaluation / predict functions
+
     def start(self):
+        """ start tracking for the caller's stage """
         if self.skip_memory_metrics:
             return
 
-        stage = self.get_stage()
+        stage = self.derive_stage()
         # deal with nested calls of eval during train - simply ignore those
         if self.cur_stage is not None and self.cur_stage != stage:
             return
@@ -312,18 +329,8 @@ class TrainerMemoryTracker:
         self.cpu[self.cur_stage] = {}
         tracemalloc.start()
 
-    def stop_n_update_metrics(self, metrics=None):
-        if self.skip_memory_metrics:
-            return
-
-        stage = self.get_stage()
-        self.stop(stage)
-
-        # init doesn't have metrics to update so we just save that data for later stages
-        if metrics is not None:
-            self.update_metrics(stage, metrics)
-
     def stop(self, stage):
+        """ stop tracking for the passed stage """
 
         # deal with nested calls of eval during train - simply ignore those
         if self.cur_stage is not None and self.cur_stage != stage:
@@ -352,6 +359,7 @@ class TrainerMemoryTracker:
         self.cur_stage = None
 
     def update_metrics(self, stage, metrics):
+        """ stop tracking for the passed stage """
         if self.skip_memory_metrics:
             return
 
@@ -371,3 +379,15 @@ class TrainerMemoryTracker:
                     metrics[f"{stage}_mem_cpu_{t}_delta"] = self.cpu[stage][t]
                 if self.torch is not None and stage in self.gpu and t in self.gpu[stage]:
                     metrics[f"{stage}_mem_gpu_{t}_delta"] = self.gpu[stage][t]
+
+    def stop_n_update_metrics(self, metrics=None):
+        """ combine stop + update in one call for simpler code """
+        if self.skip_memory_metrics:
+            return
+
+        stage = self.derive_stage()
+        self.stop(stage)
+
+        # init doesn't have metrics to update so we just save that data for later stages to retrieve
+        if metrics is not None:
+            self.update_metrics(stage, metrics)
