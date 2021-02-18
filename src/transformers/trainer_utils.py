@@ -18,6 +18,7 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 
 import copy
 import gc
+import inspect
 import os
 import random
 import re
@@ -245,6 +246,14 @@ class SchedulerType(ExplicitEnum):
 
 
 class TrainerMemoryTracker:
+    # map trainer methods to metrics prefix
+    stages = {
+        "__init__": "init",
+        "train": "train",
+        "evaluate": "eval",
+        "predict": "test",
+    }
+
     def __init__(self, skip_memory_metrics=False):
         if is_torch_cuda_available():
             import torch
@@ -266,10 +275,21 @@ class TrainerMemoryTracker:
     # and then it will be possible to be re-entrant
     # for now only track the outer level train / evaluation / predict functions
 
-    def start(self, stage):
+    def get_stage(self):
+        """ derives the stage/caller name automatically """
+        caller = inspect.currentframe().f_back.f_back.f_code.co_name
+        if caller in self.stages:
+            return self.stages[caller]
+        else:
+            raise ValueError(
+                f"was called from {caller}, but only expect to be called from one of {self.stages.keys()}"
+            )
+
+    def start(self):
         if self.skip_memory_metrics:
             return
 
+        stage = self.get_stage()
         # deal with nested calls of eval during train - simply ignore those
         if self.cur_stage is not None and self.cur_stage != stage:
             return
@@ -292,9 +312,18 @@ class TrainerMemoryTracker:
         self.cpu[self.cur_stage] = {}
         tracemalloc.start()
 
-    def stop(self, stage):
+    def stop_n_update_metrics(self, metrics=None):
         if self.skip_memory_metrics:
             return
+
+        stage = self.get_stage()
+        self.stop(stage)
+
+        # init doesn't have metrics to update so we just save that data for later stages
+        if metrics is not None:
+            self.update_metrics(stage, metrics)
+
+    def stop(self, stage):
 
         # deal with nested calls of eval during train - simply ignore those
         if self.cur_stage is not None and self.cur_stage != stage:
