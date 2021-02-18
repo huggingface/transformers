@@ -61,6 +61,8 @@ and will run automatically if multiple GPUs are available.
 
 ### Example: Topic classification
 
+> A full colab demo notebook of this example can be found [here](https://colab.research.google.com/drive/1mjBjd0cR8G57ZpsnFCS3ngGyo5nCa9ya?usp=sharing).
+
 Let's say we're interested in classifying news articles into one of four topic categories: "the world", "sports",
 "business", or "science/tech". We have an unlabeled dataset, [AG's News](https://huggingface.co/datasets/ag_news),
 which corresponds to this problem (in reality AG's News is annotated, but we will pretend it is not for the sake of
