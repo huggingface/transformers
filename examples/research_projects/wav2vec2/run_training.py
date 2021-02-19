@@ -29,7 +29,7 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     from torch.cuda.amp import autocast
 
 
-model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-lv60")
+model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-lv60", gradient_checkpointing=True)
 tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 train_dataset = datasets.load_dataset("librispeech_asr", "clean", split="train.100")
@@ -201,10 +201,10 @@ class CTCTrainer(Trainer):
 training_args = TrainingArguments(
     output_dir="./results",
     num_train_epochs=40,
-    per_device_train_batch_size=2,
-    per_device_eval_batch_size=4,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
     evaluation_strategy="steps",
-    gradient_accumulation_steps=16,
+    gradient_accumulation_steps=2,
     save_total_limit=3,
     save_steps=500,
     eval_steps=100,

@@ -472,7 +472,12 @@ class Wav2Vec2EncoderLayer(nn.Module):
         hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
-        return hidden_states, attn_weights
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
@@ -499,7 +504,12 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         hidden_states = attn_residual + hidden_states
         hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
 
-        return hidden_states, attn_weights
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class Wav2Vec2Encoder(nn.Module):
