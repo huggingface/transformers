@@ -259,6 +259,7 @@ class TFModelTesterMixin:
             "Assert",
             "AssignVariableOp",
             "EmptyTensorList",
+            "PartitionedCall",
             "ReadVariableOp",
             "ResourceGather",
             "TruncatedNormal",

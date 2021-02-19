@@ -18,6 +18,7 @@
 import random
 from typing import Dict, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -39,6 +40,7 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
+    TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
@@ -61,21 +63,17 @@ LARGE_NEGATIVE = -1e8
 
 # Copied from transformers.models.bart.modeling_tf_bart.shift_tokens_right
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    shifted_input_ids = tf.roll(input_ids, 1, axis=-1)
-    start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), decoder_start_token_id)
-    shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, 1:]], -1)
+    shifted_input_ids = tf.roll(input=input_ids, shift=1, axis=-1)
+    start_tokens = tf.fill(dims=(shape_list(shifted_input_ids)[0], 1), value=decoder_start_token_id)
+    shifted_input_ids = tf.concat(values=[start_tokens, shifted_input_ids[:, 1:]], axis=-1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+        shifted_input_ids == -100, tf.fill(dims=shape_list(shifted_input_ids), value=pad_token_id), shifted_input_ids
     )
 
     if tf.executing_eagerly():
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
-
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
+        tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0))
 
     return shifted_input_ids
 
@@ -86,15 +84,15 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
+    mask = tf.ones(shape=(tgt_len, tgt_len)) * LARGE_NEGATIVE
+    mask_cond = tf.range(start=0, limit=shape_list(mask)[-1])
 
     mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
 
     if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
+        mask = tf.concat(values=[tf.zeros(shape=(tgt_len, past_key_values_length)), mask], axis=-1)
 
-    return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
+    return tf.tile(input=mask[None, None, :, :], multiples=(bsz, 1, 1, 1))
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
@@ -106,7 +104,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
-    expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
+    expanded_mask = tf.tile(input=mask[:, None, None, :], multiples=(1, 1, tgt_len, 1))
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
@@ -146,19 +144,23 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=dropout)
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="out_proj")
 
-    def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
-        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
+    def transpose_for_scores(self, tensor: tf.Tensor, seq_length: int, batch_size: int):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, seq_length, self.num_heads, self.head_dim))
+
+        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
+        return tf.transpose(tensor, perm=(0, 2, 1, 3))
 
     def call(
         self,
@@ -167,17 +169,17 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
-        training=False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        batch_size, tgt_len, embed_dim = shape_list(hidden_states)
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(inputs=hidden_states) * self.scaling
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
@@ -185,18 +187,18 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self.transpose_for_scores(self.k_proj(inputs=key_value_states), -1, batch_size)
+            value_states = self.transpose_for_scores(self.v_proj(inputs=key_value_states), -1, batch_size)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = tf.concat([past_key_value[0], key_states], axis=2)
-            value_states = tf.concat([past_key_value[1], value_states], axis=2)
+            key_states = self.transpose_for_scores(self.k_proj(inputs=hidden_states), -1, batch_size)
+            value_states = self.transpose_for_scores(self.v_proj(inputs=hidden_states), -1, batch_size)
+            key_states = tf.concat(values=[past_key_value[0], key_states], axis=2)
+            value_states = tf.concat(values=[past_key_value[1], value_states], axis=2)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.transpose_for_scores(self.k_proj(inputs=hidden_states), -1, batch_size)
+            value_states = self.transpose_for_scores(self.v_proj(inputs=hidden_states), -1, batch_size)
 
         if self.is_decoder:
             # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
@@ -208,10 +210,12 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = tf.reshape(self._shape(query_states, tgt_len, bsz), proj_shape)
-        key_states = tf.reshape(key_states, proj_shape)
-        value_states = tf.reshape(value_states, proj_shape)
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        query_states = tf.reshape(
+            tensor=self.transpose_for_scores(query_states, tgt_len, batch_size), shape=proj_shape
+        )
+        key_states = tf.reshape(tensor=key_states, shape=proj_shape)
+        value_states = tf.reshape(tensor=value_states, shape=proj_shape)
 
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
@@ -221,8 +225,8 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                [batch_size * self.num_heads, tgt_len, src_len],
+                message=f"Attention weights should be of size {(batch_size * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
             )
 
         if attention_mask is not None:
@@ -231,15 +235,17 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
                     shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    [batch_size, 1, tgt_len, src_len],
+                    message=f"Attention mask should be of size {(batch_size, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
                 )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = (
+                tf.reshape(tensor=attn_weights, shape=(batch_size, self.num_heads, tgt_len, src_len)) + attention_mask
+            )
+            attn_weights = tf.reshape(tensor=attn_weights, shape=(batch_size * self.num_heads, tgt_len, src_len))
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = tf.nn.softmax(logits=attn_weights, axis=-1)
 
         if layer_head_mask is not None:
             # The tf.debugging asserts are not compliant with XLA then they
@@ -251,12 +257,12 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
                     message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
                 )
 
-            attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
-                attn_weights, (bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = tf.reshape(tensor=layer_head_mask, shape=(1, -1, 1, 1)) * tf.reshape(
+                tensor=attn_weights, shape=(batch_size, self.num_heads, tgt_len, src_len)
             )
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = tf.reshape(attn_weights, (batch_size * self.num_heads, tgt_len, src_len))
 
-        attn_probs = self.dropout(attn_weights, training=training)
+        attn_probs = self.dropout(inputs=attn_weights, training=training)
         attn_output = tf.matmul(attn_probs, value_states)
 
         # The tf.debugging asserts are not compliant with XLA then they
@@ -264,17 +270,17 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                [batch_size * self.num_heads, tgt_len, self.head_dim],
+                message=f"`attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
             )
 
         attn_output = tf.transpose(
-            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
+            tf.reshape(tensor=attn_output, shape=(batch_size, self.num_heads, tgt_len, self.head_dim)),
+            perm=(0, 2, 1, 3),
         )
-        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
-
-        attn_output = self.out_proj(attn_output)
-        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+        attn_output = tf.reshape(tensor=attn_output, shape=(batch_size, tgt_len, embed_dim))
+        attn_output = self.out_proj(inputs=attn_output)
+        attn_weights = tf.reshape(tensor=attn_weights, shape=(batch_size, self.num_heads, tgt_len, src_len))
 
         return attn_output, attn_weights, past_key_value
 
@@ -283,19 +289,22 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
 class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BlenderbotSmallConfig, **kwargs):
         super().__init__(**kwargs)
+
         self.embed_dim = config.d_model
         self.self_attn = TFBlenderbotSmallAttention(
             self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout, name="self_attn"
         )
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
-        self.fc1 = tf.keras.layers.Dense(config.encoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
+        self.activation_dropout = tf.keras.layers.Dropout(rate=config.activation_dropout)
+        self.fc1 = tf.keras.layers.Dense(units=config.encoder_ffn_dim, name="fc1")
+        self.fc2 = tf.keras.layers.Dense(units=self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
-    def call(self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training=False):
+    def call(
+        self, hidden_states: tf.Tensor, attention_mask: tf.Tensor, layer_head_mask: tf.Tensor, training: bool = False
+    ) -> Tuple[tf.Tensor, tf.Tensor]:
         """
         Args:
             hidden_states (:obj:`tf.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -318,17 +327,17 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
                 message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
             )
 
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = self.self_attn_layer_norm(inputs=hidden_states)
 
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = self.activation_dropout(hidden_states, training=training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
+        hidden_states = self.activation_fn(self.fc1(inputs=hidden_states))
+        hidden_states = self.activation_dropout(inputs=hidden_states, training=training)
+        hidden_states = self.fc2(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = self.final_layer_norm(inputs=hidden_states)
 
         return hidden_states, self_attn_weights
 
@@ -337,6 +346,7 @@ class TFBlenderbotSmallEncoderLayer(tf.keras.layers.Layer):
 class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
     def __init__(self, config: BlenderbotSmallConfig, **kwargs):
         super().__init__(**kwargs)
+
         self.embed_dim = config.d_model
         self.self_attn = TFBlenderbotSmallAttention(
             embed_dim=self.embed_dim,
@@ -345,33 +355,33 @@ class TFBlenderbotSmallDecoderLayer(tf.keras.layers.Layer):
             name="self_attn",
             is_decoder=True,
         )
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
         self.activation_fn = get_tf_activation(config.activation_function)
-        self.activation_dropout = tf.keras.layers.Dropout(config.activation_dropout)
+        self.activation_dropout = tf.keras.layers.Dropout(rate=config.activation_dropout)
 
         self.self_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="self_attn_layer_norm")
         self.encoder_attn = TFBlenderbotSmallAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
+            embed_dim=self.embed_dim,
+            num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             name="encoder_attn",
             is_decoder=True,
         )
         self.encoder_attn_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="encoder_attn_layer_norm")
-        self.fc1 = tf.keras.layers.Dense(config.decoder_ffn_dim, name="fc1")
-        self.fc2 = tf.keras.layers.Dense(self.embed_dim, name="fc2")
+        self.fc1 = tf.keras.layers.Dense(units=config.decoder_ffn_dim, name="fc1")
+        self.fc2 = tf.keras.layers.Dense(units=self.embed_dim, name="fc2")
         self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
 
     def call(
         self,
-        hidden_states,
+        hidden_states: tf.Tensor,
         attention_mask: Optional[tf.Tensor] = None,
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
         encoder_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
-        training=False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
         """
         Args:
@@ -1419,13 +1429,12 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
-        decoder_input_ids,
-        past,
-        attention_mask,
-        head_mask=None,
-        use_cache=None,
-        **kwargs,
-    ) -> Dict:
+        decoder_input_ids: TFModelInputType,
+        past: Tuple[Tuple[tf.Tensor]],
+        attention_mask: Union[np.ndarray, tf.Tensor],
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+    ) -> Dict[str, tf.Tensor]:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
@@ -1463,7 +1472,10 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
 
     @staticmethod
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(
+        past: Tuple[Tuple[tf.Tensor]],
+        beam_idx: tf.Tensor,
+    ) -> Tuple[tf.Tensor]:
         if len(past) == 1:
             return past
 

@@ -16,8 +16,9 @@
 
 
 import random
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -39,6 +40,7 @@ from ...modeling_tf_outputs import (
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
+    TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
@@ -84,15 +86,15 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     Make causal mask used for bi-directional self-attention.
     """
     bsz, tgt_len = input_ids_shape
-    mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
-    mask_cond = tf.range(shape_list(mask)[-1])
+    mask = tf.ones(shape=(tgt_len, tgt_len)) * LARGE_NEGATIVE
+    mask_cond = tf.range(start=0, limit=shape_list(mask)[-1])
 
     mask = tf.where(mask_cond < tf.reshape(mask_cond + 1, (shape_list(mask)[-1], 1)), 0.0, mask)
 
     if past_key_values_length > 0:
-        mask = tf.concat([tf.zeros((tgt_len, past_key_values_length)), mask], axis=-1)
+        mask = tf.concat(values=[tf.zeros(shape=(tgt_len, past_key_values_length)), mask], axis=-1)
 
-    return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
+    return tf.tile(input=mask[None, None, :, :], multiples=(bsz, 1, 1, 1))
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
@@ -104,7 +106,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
-    expanded_mask = tf.tile(mask[:, None, None, :], (1, 1, tgt_len, 1))
+    expanded_mask = tf.tile(input=mask[:, None, None, :], multiples=(1, 1, tgt_len, 1))
 
     return (one_cst - expanded_mask) * LARGE_NEGATIVE
 
@@ -120,13 +122,17 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
         # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = 2
+
         super().__init__(num_embeddings + self.offset, embedding_dim, **kwargs)
 
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
+    def call(self, input_shape: List[int], past_key_values_length: Optional[int] = 0):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
+        seq_len = input_shape[1]
 
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
+        positions = tf.range(
+            start=past_key_values_length, limit=seq_len + past_key_values_length, delta=1, name="range"
+        )
+
         return super().call(positions + self.offset)
 
 
@@ -147,19 +153,23 @@ class TFMBartAttention(tf.keras.layers.Layer):
         self.embed_dim = embed_dim
 
         self.num_heads = num_heads
-        self.dropout = tf.keras.layers.Dropout(dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=dropout)
         self.head_dim = embed_dim // num_heads
         assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
-        self.q_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="q_proj")
-        self.v_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="v_proj")
-        self.out_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="out_proj")
+        self.k_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="k_proj")
+        self.q_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="q_proj")
+        self.v_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="v_proj")
+        self.out_proj = tf.keras.layers.Dense(units=embed_dim, use_bias=bias, name="out_proj")
 
-    def _shape(self, tensor: tf.Tensor, seq_len: int, bsz: int):
-        return tf.transpose(tf.reshape(tensor, (bsz, seq_len, self.num_heads, self.head_dim)), (0, 2, 1, 3))
+    def transpose_for_scores(self, tensor: tf.Tensor, seq_length: int, batch_size: int):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, seq_length, self.num_heads, self.head_dim))
+
+        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
+        return tf.transpose(tensor, perm=(0, 2, 1, 3))
 
     def call(
         self,
@@ -168,17 +178,17 @@ class TFMBartAttention(tf.keras.layers.Layer):
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
-        training=False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
         is_cross_attention = key_value_states is not None
-        bsz, tgt_len, embed_dim = shape_list(hidden_states)
+        batch_size, tgt_len, embed_dim = shape_list(hidden_states)
 
         # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
+        query_states = self.q_proj(inputs=hidden_states) * self.scaling
         # get key, value proj
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
@@ -186,18 +196,18 @@ class TFMBartAttention(tf.keras.layers.Layer):
             value_states = past_key_value[1]
         elif is_cross_attention:
             # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
-            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+            key_states = self.transpose_for_scores(self.k_proj(inputs=key_value_states), -1, batch_size)
+            value_states = self.transpose_for_scores(self.v_proj(inputs=key_value_states), -1, batch_size)
         elif past_key_value is not None:
             # reuse k, v, self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
-            key_states = tf.concat([past_key_value[0], key_states], axis=2)
-            value_states = tf.concat([past_key_value[1], value_states], axis=2)
+            key_states = self.transpose_for_scores(self.k_proj(inputs=hidden_states), -1, batch_size)
+            value_states = self.transpose_for_scores(self.v_proj(inputs=hidden_states), -1, batch_size)
+            key_states = tf.concat(values=[past_key_value[0], key_states], axis=2)
+            value_states = tf.concat(values=[past_key_value[1], value_states], axis=2)
         else:
             # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
-            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = self.transpose_for_scores(self.k_proj(inputs=hidden_states), -1, batch_size)
+            value_states = self.transpose_for_scores(self.v_proj(inputs=hidden_states), -1, batch_size)
 
         if self.is_decoder:
             # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
@@ -209,10 +219,12 @@ class TFMBartAttention(tf.keras.layers.Layer):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_states, value_states)
 
-        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
-        query_states = tf.reshape(self._shape(query_states, tgt_len, bsz), proj_shape)
-        key_states = tf.reshape(key_states, proj_shape)
-        value_states = tf.reshape(value_states, proj_shape)
+        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
+        query_states = tf.reshape(
+            tensor=self.transpose_for_scores(query_states, tgt_len, batch_size), shape=proj_shape
+        )
+        key_states = tf.reshape(tensor=key_states, shape=proj_shape)
+        value_states = tf.reshape(tensor=value_states, shape=proj_shape)
 
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
@@ -222,8 +234,8 @@ class TFMBartAttention(tf.keras.layers.Layer):
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                [batch_size * self.num_heads, tgt_len, src_len],
+                message=f"Attention weights should be of size {(batch_size * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
             )
 
         if attention_mask is not None:
@@ -232,15 +244,17 @@ class TFMBartAttention(tf.keras.layers.Layer):
             if tf.executing_eagerly():
                 tf.debugging.assert_equal(
                     shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    [batch_size, 1, tgt_len, src_len],
+                    message=f"Attention mask should be of size {(batch_size, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
                 )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
-            attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = (
+                tf.reshape(tensor=attn_weights, shape=(batch_size, self.num_heads, tgt_len, src_len)) + attention_mask
+            )
+            attn_weights = tf.reshape(tensor=attn_weights, shape=(batch_size * self.num_heads, tgt_len, src_len))
 
-        attn_weights = tf.nn.softmax(attn_weights, axis=-1)
+        attn_weights = tf.nn.softmax(logits=attn_weights, axis=-1)
 
         if layer_head_mask is not None:
             # The tf.debugging asserts are not compliant with XLA then they
@@ -252,12 +266,12 @@ class TFMBartAttention(tf.keras.layers.Layer):
                     message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
                 )
 
-            attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
-                attn_weights, (bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = tf.reshape(tensor=layer_head_mask, shape=(1, -1, 1, 1)) * tf.reshape(
+                tensor=attn_weights, shape=(batch_size, self.num_heads, tgt_len, src_len)
             )
-            attn_weights = tf.reshape(attn_weights, (bsz * self.num_heads, tgt_len, src_len))
+            attn_weights = tf.reshape(attn_weights, (batch_size * self.num_heads, tgt_len, src_len))
 
-        attn_probs = self.dropout(attn_weights, training=training)
+        attn_probs = self.dropout(inputs=attn_weights, training=training)
         attn_output = tf.matmul(attn_probs, value_states)
 
         # The tf.debugging asserts are not compliant with XLA then they
@@ -265,17 +279,17 @@ class TFMBartAttention(tf.keras.layers.Layer):
         if tf.executing_eagerly():
             tf.debugging.assert_equal(
                 shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                [batch_size * self.num_heads, tgt_len, self.head_dim],
+                message=f"`attn_output` should be of size {(batch_size, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
             )
 
         attn_output = tf.transpose(
-            tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
+            tf.reshape(tensor=attn_output, shape=(batch_size, self.num_heads, tgt_len, self.head_dim)),
+            perm=(0, 2, 1, 3),
         )
-        attn_output = tf.reshape(attn_output, (bsz, tgt_len, embed_dim))
-
-        attn_output = self.out_proj(attn_output)
-        attn_weights: tf.Tensor = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len))
+        attn_output = tf.reshape(tensor=attn_output, shape=(batch_size, tgt_len, embed_dim))
+        attn_output = self.out_proj(inputs=attn_output)
+        attn_weights = tf.reshape(tensor=attn_weights, shape=(batch_size, self.num_heads, tgt_len, src_len))
 
         return attn_output, attn_weights, past_key_value
 
@@ -1432,13 +1446,12 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
-        decoder_input_ids,
-        past,
-        attention_mask,
-        head_mask=None,
-        use_cache=None,
-        **kwargs,
-    ) -> Dict:
+        decoder_input_ids: TFModelInputType,
+        past: Tuple[Tuple[tf.Tensor]],
+        attention_mask: Union[np.ndarray, tf.Tensor],
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        use_cache: Optional[bool] = None,
+    ) -> Dict[str, tf.Tensor]:
         assert past is not None and len(past) in {1, 2}, f"past has to be an iterable of length 1,2 got {past}"
         if len(past) == 1:
             assert isinstance(past[0], tf.Tensor), f"`past[0]` has to be of type `tf.Tensor`, but is {type(past[0])}"
@@ -1476,7 +1489,10 @@ class TFMBartForConditionalGeneration(TFMBartPreTrainedModel, TFCausalLanguageMo
 
     @staticmethod
     # Copied from transformers.models.bart.modeling_tf_bart.TFBartForConditionalGeneration._reorder_cache
-    def _reorder_cache(past, beam_idx):
+    def _reorder_cache(
+        past: Tuple[Tuple[tf.Tensor]],
+        beam_idx: tf.Tensor,
+    ) -> Tuple[tf.Tensor]:
         if len(past) == 1:
             return past
 
