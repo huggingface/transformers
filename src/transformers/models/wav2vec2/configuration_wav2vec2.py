@@ -117,6 +117,8 @@ class Wav2Vec2Config(PretrainedConfig):
             Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
             mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
             instance of :class:`~transformers.Wav2Vec2ForCTC`.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -166,6 +168,7 @@ class Wav2Vec2Config(PretrainedConfig):
         mask_feature_length=10,
         ctc_loss_reduction="sum",
         ctc_zero_infinity=False,
+        gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -197,6 +200,7 @@ class Wav2Vec2Config(PretrainedConfig):
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
         self.freeze_feat_extract_train = freeze_feat_extract_train
+        self.gradient_checkpointing = gradient_checkpointing
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
