@@ -29,8 +29,8 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     from torch.cuda.amp import autocast
 
 
-model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base")
-tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base")
+model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-lv60")
+tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 train_dataset = datasets.load_dataset("librispeech_asr", "clean", split="train.100")
 val_dataset = datasets.load_dataset("librispeech_asr", "clean", split="validation")
@@ -128,7 +128,7 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
-data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, return_attention_mask=False, padding=True)
+data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, return_attention_mask=True, padding=True)
 
 
 def compute_metrics(pred):
@@ -175,9 +175,9 @@ class CTCTrainer(Trainer):
             loss = self.compute_loss(model, inputs)
 
         if self.args.n_gpu > 1:
-            if model.config.ctc_loss_reduction == "mean":
+            if model.module.config.ctc_loss_reduction == "mean":
                 loss = loss.mean()
-            elif model.config.ctc_loss_reduction == "sum":
+            elif model.module.config.ctc_loss_reduction == "sum":
                 loss = loss.sum() / (inputs["labels"] >= 0).sum()
             else:
                 raise ValueError(f"{model.config.ctc_loss_reduction} is not valid. Choose one of ['mean', 'sum']")
@@ -201,10 +201,10 @@ class CTCTrainer(Trainer):
 training_args = TrainingArguments(
     output_dir="./results",
     num_train_epochs=40,
-    per_device_train_batch_size=8,
-    per_device_eval_batch_size=16,
+    per_device_train_batch_size=2,
+    per_device_eval_batch_size=4,
     evaluation_strategy="steps",
-    gradient_accumulation_steps=4,
+    gradient_accumulation_steps=16,
     save_total_limit=3,
     save_steps=500,
     eval_steps=100,
