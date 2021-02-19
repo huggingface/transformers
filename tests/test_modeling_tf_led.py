@@ -370,25 +370,8 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make LED XLA compliant
         pass
 
-    def test_saved_model_with_attentions_output(self):
-        # Temporarily disable this test in order to find
-        # how to better handle it without timing out the CI
-        pass
-
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # Temporarily disable this test in order to find
-        # how to better handle it without timing out the CI
-        pass
-
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    @slow
-    def test_saved_model_creation_extended(self):
-        # Temporarily disable this test in order to find
-        # how to better handle it without timing out the CI
         pass
 
 

@@ -93,6 +93,7 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
+    TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
@@ -217,6 +218,8 @@ class Trainer:
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
           to :obj:`False` if model parallel or deepspeed is used, or if the default
           ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
+        - **is_in_train** -- Whether or not a model is currently running ``train`` (e.g. when ``evaluate`` is called
+          while in ``train``)
 
     """
 
@@ -242,6 +245,11 @@ class Trainer:
         set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
+        self.is_in_train = False
+
+        # memory metrics - must set up as early as possible
+        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self._memory_tracker.start()
 
         # force device and distributed setup init explicitly
         args._setup_devices
@@ -268,7 +276,7 @@ class Trainer:
 
         # one place to sort out whether to place the model on device or not
         self.place_model_on_device = args.place_model_on_device
-        if self.is_model_parallel or (args.deepspeed and args.do_train):
+        if self.is_model_parallel or (args.deepspeed and args.do_train) or (args.fp16_full_eval and not args.do_train):
             self.place_model_on_device = False
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
@@ -393,6 +401,9 @@ class Trainer:
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+        # very last
+        self._memory_tracker.stop_and_update_metrics()
 
     def add_callback(self, callback):
         """
@@ -615,10 +626,16 @@ class Trainer:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         if self.lr_scheduler is None:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
                 self.optimizer,
-                num_warmup_steps=self.args.warmup_steps,
+                num_warmup_steps=warmup_steps,
                 num_training_steps=num_training_steps,
             )
 
@@ -698,6 +715,10 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True):
+        # already initialized its own DDP and AMP
+        if self.deepspeed:
+            return model
+
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
@@ -716,8 +737,6 @@ class Trainer:
             model = ShardedDDP(model, self.optimizer)
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        elif self.deepspeed:
-            pass  # already initialized its own DDP earlier
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
                 find_unused_parameters = self.args.ddp_find_unused_parameters
@@ -754,6 +773,12 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
+        self.is_in_train = True
+
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
             warnings.warn(
@@ -1069,6 +1094,14 @@ class Trainer:
             self.lr_scheduler = None
             self.model_wrapped = self.model
             gc.collect()  # force memory release
+            # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
+            self.place_model_on_device = self.args.place_model_on_device
+            if self.is_model_parallel:
+                self.place_model_on_device = False
+
+        self.is_in_train = False
+
+        self._memory_tracker.stop_and_update_metrics(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1298,6 +1331,29 @@ class Trainer:
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+
+    def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+        """
+        Reformat Trainer metrics values to a human-readable format
+
+        Args:
+            metrics (:obj:`Dict[str, float]`):
+                The metrics returned from train/evaluate/predict
+
+        Returns:
+            metrics (:obj:`Dict[str, float]`): The reformatted metrics
+        """
+
+        metrics_copy = metrics.copy()
+        for k, v in metrics_copy.items():
+            if "_mem_" in k:
+                metrics_copy[k] = f"{ v >> 20 }MB"
+            elif k == "total_flos":
+                metrics_copy[k] = f"{ int(v) >> 30 }GF"
+            elif type(metrics_copy[k]) == float:
+                metrics_copy[k] = round(v, 4)
+
+        return metrics_copy
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
@@ -1538,6 +1594,9 @@ class Trainer:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
@@ -1563,6 +1622,9 @@ class Trainer:
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
+
         return output.metrics
 
     def predict(
@@ -1598,6 +1660,9 @@ class Trainer:
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
 
@@ -1608,6 +1673,9 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
+
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
+
         return output
 
     def prediction_loop(
@@ -1635,6 +1703,11 @@ class Trainer:
             logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
         model = self._wrap_model(self.model, training=False)
+
+        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
+        # ``train`` is running, half it first and then put on device
+        if not self.is_in_train and self.args.fp16_full_eval:
+            model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
