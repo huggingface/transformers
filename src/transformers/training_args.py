@@ -25,7 +25,7 @@ from .file_utils import (
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, SchedulerType
+from .trainer_utils import EvaluationStrategy, LoggingStrategy, SchedulerType
 from .utils import logging
 
 
@@ -139,10 +139,17 @@ class TrainingArguments:
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
+        logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.LoggingStrategy`, `optional`, defaults to :obj:`"steps"`):
+            The logging strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No logging is done during training.
+                * :obj:`"epoch"`: Logging is done at the end of each epoch.
+                * :obj:`"steps"`: Logging is done every :obj:`logging_steps`.
+
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of update steps between two logs.
+            Number of update steps between two logs if :obj:`logging_strategy="steps"`.
         save_steps (:obj:`int`, `optional`, defaults to 500):
             Number of updates steps before two checkpoint saves.
         save_total_limit (:obj:`int`, `optional`):
@@ -339,6 +346,10 @@ class TrainingArguments:
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
+    logging_strategy: LoggingStrategy = field(
+        default="steps",
+        metadata={"help": "The logging strategy to use."},
+    )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
@@ -482,6 +493,7 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
+        self.logging_strategy = LoggingStrategy(self.logging_strategy)
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
             self.do_eval = True
