@@ -109,12 +109,6 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        if padding_idx is not None:
-            warnings.warn(
-                f"padding_idx should not be provided for {self.__class__.__name__}. "
-                "An exception will be raised in future versions of transformers."
-            )
-
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = 2
