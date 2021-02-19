@@ -782,7 +782,7 @@ class DebertaPreTrainedModel(PreTrainedModel):
             and ("classifier.weight" in state_dict)
             and self_state["classifier.weight"].size() != state_dict["classifier.weight"].size()
         ):
-            logger.warning("Ignore mismatched classifer head.")
+            logger.warning(f"The checkpoint classifier head has a shape {state_dict["classifier.weight"].size()} and this model classifer head has a shape {self_state["classifier.weight"].size()}. Ignoring the checkpoint weights. You should train your model on new data.")
             del state_dict["classifier.weight"]
             if "classifier.bias" in state_dict:
                 del state_dict["classifier.bias"]
