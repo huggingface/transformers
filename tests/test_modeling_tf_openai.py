@@ -246,14 +246,6 @@ class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_openai_gpt_for_sequence_classification(*config_and_inputs)
 
-    def test_mixed_precision(self):
-        # TODO JP: Make OpenAIGPT float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make OpenAIGPT XLA compliant
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
