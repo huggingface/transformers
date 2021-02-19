@@ -10,7 +10,7 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-DeBERTa
+DeBERTa-v2
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
@@ -38,61 +38,81 @@ the training data performs consistently better on a wide range of NLP tasks, ach
 pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
 
 
+The following information is visible directly on the [original implementation
+repository](https://github.com/microsoft/DeBERTa). DeBERTa v2 is the second version of the DeBERTa model. It includes
+the 1.5B model used for the SuperGLUE single-model submission and achieving 89.9, versus human baseline 89.8. You can
+find more details about this submission in the authors'
+[blog](https://www.microsoft.com/en-us/research/blog/microsoft-deberta-surpasses-human-performance-on-the-superglue-benchmark/)
+
+New in v2:
+
+- **Vocabulary** In v2 the tokenizer is changed to use a new vocabulary of size 128K built from the training data.
+  Instead of a GPT2-based tokenizer, the tokenizer is now
+  [sentencepiece-based](https://github.com/google/sentencepiece) tokenizer.
+- **nGiE(nGram Induced Input Encoding)** The DeBERTa-v2 model uses an additional convolution layer aside with the first
+  transformer layer to better learn the local dependency of input tokens.
+- **Sharing position projection matrix with content projection matrix in attention layer** Based on previous
+  experiments, this can save parameters without affecting the performance.
+- **Apply bucket to encode relative postions** The DeBERTa-v2 model uses log bucket to encode relative positions
+  similar to T5.
+- **900M model & 1.5B model** Two additional model sizes are available: 900M and 1.5B, which significantly improves the
+  performance of downstream tasks.
+
 The original code can be found `here <https://github.com/microsoft/DeBERTa>`__.
 
 
-DebertaConfig
+DebertaV2Config
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaConfig
+.. autoclass:: transformers.DebertaV2Config
     :members:
 
 
-DebertaTokenizer
+DebertaV2Tokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaTokenizer
+.. autoclass:: transformers.DebertaV2Tokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-DebertaModel
+DebertaV2Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaModel
+.. autoclass:: transformers.DebertaV2Model
     :members: forward
 
 
-DebertaPreTrainedModel
+DebertaV2PreTrainedModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaPreTrainedModel
-    :members:
-
-
-DebertaForMaskedLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.DebertaForMaskedLM
+.. autoclass:: transformers.DebertaV2PreTrainedModel
     :members: forward
 
 
-DebertaForSequenceClassification
+DebertaV2ForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaForSequenceClassification
+.. autoclass:: transformers.DebertaV2ForMaskedLM
     :members: forward
 
 
-DebertaForTokenClassification
+DebertaV2ForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaForTokenClassification
+.. autoclass:: transformers.DebertaV2ForSequenceClassification
     :members: forward
 
 
-DebertaForQuestionAnswering
+DebertaV2ForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.DebertaForQuestionAnswering
+.. autoclass:: transformers.DebertaV2ForTokenClassification
+    :members: forward
+
+
+DebertaV2ForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DebertaV2ForQuestionAnswering
     :members: forward
