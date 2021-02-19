@@ -250,6 +250,7 @@ jobs:
           RUN_SLOW: yes
         run: |
           source .env/bin/activate
+          pip install -r examples/_tests_requirements.txt
           python -m pytest -n 1 --dist=loadfile -s --make-reports=tests_torch_examples_multi_gpu examples
 
       - name: Failure short reports

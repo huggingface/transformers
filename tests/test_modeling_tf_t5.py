@@ -237,7 +237,6 @@ class TFT5ModelTester:
             "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
-            "use_cache": False,
         }
         return config, inputs_dict
 
@@ -248,7 +247,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
-    test_head_masking = False
     test_onnx = False
 
     def setUp(self):
@@ -305,14 +303,6 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make T5 float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make T5 XLA compliant
         pass
 
     @slow
@@ -427,7 +417,6 @@ class TFT5EncoderOnlyModelTester:
 class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
-    test_head_masking = False
     test_onnx = False
 
     def setUp(self):
@@ -443,14 +432,6 @@ class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
 
     # is not able to be part of a pipeline
     def test_train_pipeline_custom_model(self):
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make T5 float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make T5 XLA compliant
         pass
 
 
