@@ -42,7 +42,9 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         expected_src_tokens = [0, 57, 3018, 70307, 91, 2]
 
-        batch = self.tokenizer(src_text, max_length=len(expected_src_tokens), padding=True, return_tensors="pt")
+        batch = self.tokenizer(
+            src_text, max_length=len(expected_src_tokens), padding=True, truncation=True, return_tensors="pt"
+        )
         self.assertIsInstance(batch, BatchEncoding)
 
         self.assertEqual((2, 6), batch.input_ids.shape)

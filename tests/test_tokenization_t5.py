@@ -181,9 +181,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ]
         with tokenizer.as_target_tokenizer():
             targets = tokenizer(
-                tgt_text, max_target_length=32, padding="max_length", truncatation=True, return_tensors=FRAMEWORK
+                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
             )
-        self.assertEqual(32, targets["labels"].shape[1])
+        self.assertEqual(32, targets["input_ids"].shape[1])
 
     def test_outputs_not_longer_than_maxlen(self):
         tokenizer = self.t5_base_tokenizer
