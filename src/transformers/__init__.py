@@ -157,6 +157,7 @@ _import_structure = {
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
+    "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config", "DebertaV2Tokenizer"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -513,6 +514,17 @@ if is_torch_available():
             "DebertaPreTrainedModel",
             "DebertaForTokenClassification",
             "DebertaForQuestionAnswering",
+        ]
+    )
+    _import_structure["models.deberta_v2"].extend(
+        [
+            "DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DebertaV2ForSequenceClassification",
+            "DebertaV2Model",
+            "DebertaV2ForMaskedLM",
+            "DebertaV2PreTrainedModel",
+            "DebertaV2ForTokenClassification",
+            "DebertaV2ForQuestionAnswering",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -1287,6 +1299,7 @@ if TYPE_CHECKING:
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
+    from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config, DebertaV2Tokenizer
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1603,6 +1616,15 @@ if TYPE_CHECKING:
             DebertaForTokenClassification,
             DebertaModel,
             DebertaPreTrainedModel,
+        )
+        from .models.deberta_v2 import (
+            DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DebertaV2ForMaskedLM,
+            DebertaV2ForQuestionAnswering,
+            DebertaV2ForSequenceClassification,
+            DebertaV2ForTokenClassification,
+            DebertaV2Model,
+            DebertaV2PreTrainedModel,
         )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

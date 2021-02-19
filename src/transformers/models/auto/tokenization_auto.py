@@ -66,6 +66,7 @@ from .configuration_auto import (
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
+    DebertaV2Config,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -108,6 +109,7 @@ if is_sentencepiece_available():
     from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
+    from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
     from ..mt5 import MT5Tokenizer
@@ -122,6 +124,7 @@ else:
     BarthezTokenizer = None
     BertGenerationTokenizer = None
     CamembertTokenizer = None
+    DebertaV2Tokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
     MT5Tokenizer = None
@@ -233,6 +236,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
         (DebertaConfig, (DebertaTokenizer, None)),
+        (DebertaV2Config, (DebertaV2Tokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
