@@ -360,7 +360,9 @@ class DebertaEncoder(nn.Module):
                 self.max_relative_positions = config.max_position_embeddings
             self.rel_embeddings = nn.Embedding(self.max_relative_positions * 2, config.hidden_size)
 
-        self.rel_embeddings_weights = self.rel_embeddings.weight if self.relative_attention else None
+    def get_rel_embedding(self):
+        rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
+        return rel_embeddings
 
     def get_attention_mask(self, attention_mask):
         if attention_mask.dim() <= 2:
@@ -398,7 +400,7 @@ class DebertaEncoder(nn.Module):
             next_kv = hidden_states[0]
         else:
             next_kv = hidden_states
-        rel_embeddings = self.rel_embeddings_weights
+        rel_embeddings = self.get_rel_embedding()
         for i, layer_module in enumerate(self.layer):
 
             if output_hidden_states:
@@ -944,7 +946,7 @@ class DebertaModel(DebertaPreTrainedModel):
             hidden_states = encoded_layers[-2]
             layers = [self.encoder.layer[-1] for _ in range(self.z_steps)]
             query_states = encoded_layers[-1]
-            rel_embeddings = self.encoder.rel_embeddings_weights
+            rel_embeddings = self.encoder.get_rel_embedding()
             attention_mask = self.encoder.get_attention_mask(attention_mask)
             rel_pos = self.encoder.get_rel_pos(embedding_output)
             for layer in layers[1:]:

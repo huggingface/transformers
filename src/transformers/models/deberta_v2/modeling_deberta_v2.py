@@ -400,9 +400,6 @@ class DebertaV2Encoder(nn.Module):
             self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps, elementwise_affine=True)
 
         self.conv = ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
-        self.rel_embeddings_weights = self.rel_embeddings.weight if self.relative_attention else None
-        if self.rel_embeddings_weights is not None and ("layer_norm" in self.norm_rel_ebd):
-            self.rel_embeddings_weights = nn.Parameter(self.LayerNorm(self.rel_embeddings_weights))
 
     def get_rel_embedding(self):
         rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
