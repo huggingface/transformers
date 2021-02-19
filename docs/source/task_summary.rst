@@ -167,9 +167,8 @@ Extractive Question Answering
 
 Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
 question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune a
-model on a SQuAD task, you may leverage the `run_squad.py
-<https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_squad.py>`__ and
-`run_tf_squad.py
+model on a SQuAD task, you may leverage the `run_qa.py
+<https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_qa.py>`__ and `run_tf_squad.py
 <https://github.com/huggingface/transformers/tree/master/examples/question-answering/run_tf_squad.py>`__ scripts.
 
 
@@ -327,7 +326,9 @@ Masked language modeling is the task of masking tokens in a sequence with a mask
 fill that mask with an appropriate token. This allows the model to attend to both the right context (tokens on the
 right of the mask) and the left context (tokens on the left of the mask). Such a training creates a strong basis for
 downstream tasks requiring bi-directional context, such as SQuAD (question answering, see `Lewis, Lui, Goyal et al.
-<https://arxiv.org/abs/1910.13461>`__, part 4.2).
+<https://arxiv.org/abs/1910.13461>`__, part 4.2). If you would like to fine-tune a model on a masked language modeling
+task, you may leverage the `run_mlm.py
+<https://github.com/huggingface/transformers/tree/master/examples/language-modeling/run_mlm.py>`__ script.
 
 Here is an example of using pipelines to replace a mask from a sequence:
 
@@ -435,7 +436,8 @@ Causal Language Modeling
 
 Causal language modeling is the task of predicting the token following a sequence of tokens. In this situation, the
 model only attends to the left context (tokens on the left of the mask). Such a training is particularly interesting
-for generation tasks.
+for generation tasks. If you would like to fine-tune a model on a causal language modeling task, you may leverage the
+`run_clm.py <https://github.com/huggingface/transformers/tree/master/examples/language-modeling/run_clm.py>`__ script.
 
 Usually, the next token is predicted by sampling from the logits of the last hidden state the model produces from the
 input sequence.
@@ -603,11 +605,7 @@ Named Entity Recognition (NER) is the task of classifying tokens according to a 
 as a person, an organisation or a location. An example of a named entity recognition dataset is the CoNLL-2003 dataset,
 which is entirely based on that task. If you would like to fine-tune a model on an NER task, you may leverage the
 `run_ner.py <https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_ner.py>`__
-(PyTorch), `run_pl_ner.py
-<https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_pl_ner.py>`__ (leveraging
-pytorch-lightning) or the `run_tf_ner.py
-<https://github.com/huggingface/transformers/tree/master/examples/token-classification/run_tf_ner.py>`__ (TensorFlow)
-scripts.
+script.
 
 Here is an example of using pipelines to do named entity recognition, specifically, trying to identify tokens as
 belonging to one of 9 classes:
@@ -745,7 +743,9 @@ token. The following array should be the output:
 Summarization
 -----------------------------------------------------------------------------------------------------------------------
 
-Summarization is the task of summarizing a document or an article into a shorter text.
+Summarization is the task of summarizing a document or an article into a shorter text. If you would like to fine-tune a
+model on a summarization task, you may leverage the `run_seq2seq.py
+<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_seq2seq.py>`__ script.
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
 created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
@@ -823,7 +823,9 @@ CNN / Daily Mail), it yields very good results.
 Translation
 -----------------------------------------------------------------------------------------------------------------------
 
-Translation is the task of translating a text from one language to another.
+Translation is the task of translating a text from one language to another. If you would like to fine-tune a model on a
+translation task, you may leverage the `run_seq2seq.py
+<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_seq2seq.py>`__ script.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
