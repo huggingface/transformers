@@ -217,37 +217,6 @@ class StableDropout(torch.nn.Module):
             return self.drop_prob
 
 
-def MaskedLayerNorm(layerNorm, input, mask=None):
-    """
-    Masked LayerNorm which will apply mask over the output of LayerNorm to avoid inaccurate updates to the LayerNorm
-    module.
-
-    Args:
-        layernorm (:obj:`~DeBERTa.deberta.LayerNorm`): LayerNorm module or function
-        input (:obj:`torch.tensor`): The input tensor
-        mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicates the
-            output of that element will be ignored, i.e. set to `0`
-
-    Example::
-
-      # Create a tensor b x n x d
-      x = torch.randn([1,10,100])
-      m = torch.tensor([[1,1,1,0,0,0,0,0,0,0]], dtype=torch.int)
-      LayerNorm = DeBERTa.deberta.LayerNorm(100)
-      y = MaskedLayerNorm(LayerNorm, x, m)
-
-    """
-    output = layerNorm(input).to(input)
-    if mask is None:
-        return output
-    if mask.dim() != input.dim():
-        if mask.dim() == 4:
-            mask = mask.squeeze(1).squeeze(1)
-        mask = mask.unsqueeze(2)
-    mask = mask.to(output.dtype)
-    return output * mask
-
-
 # Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaLayerNorm->LayerNorm
 class DebertaV2SelfOutput(nn.Module):
     def __init__(self, config):
@@ -385,7 +354,20 @@ class ConvLayer(nn.Module):
         rmask = (1 - input_mask).bool()
         out.masked_fill_(rmask.unsqueeze(-1).expand(out.size()), 0)
         out = ACT2FN[self.conv_act](self.dropout(out))
-        output_states = MaskedLayerNorm(self.LayerNorm, residual_states + out, input_mask)
+
+        layer_norm_input = residual_states + out
+        output = self.LayerNorm(layer_norm_input).to(layer_norm_input)
+
+        if input_mask is None:
+            output_states = output
+        else:
+            if input_mask.dim() != layer_norm_input.dim():
+                if input_mask.dim() == 4:
+                    input_mask = input_mask.squeeze(1).squeeze(1)
+                input_mask = input_mask.unsqueeze(2)
+
+            input_mask = input_mask.to(output.dtype)
+            output_states = output * input_mask
 
         return output_states
 
@@ -417,11 +399,10 @@ class DebertaV2Encoder(nn.Module):
         if "layer_norm" in self.norm_rel_ebd:
             self.LayerNorm = LayerNorm(config.hidden_size, config.layer_norm_eps, elementwise_affine=True)
 
-        kernel_size = getattr(config, "conv_kernel_size", 0)
-        self.with_conv = False
-        if kernel_size > 0:
-            self.with_conv = True
-            self.conv = ConvLayer(config)
+        self.conv = ConvLayer(config) if getattr(config, "conv_kernel_size", 0) > 0 else None
+        self.rel_embeddings_weights = self.rel_embeddings.weight if self.relative_attention else None
+        if self.rel_embeddings_weights is not None and ("layer_norm" in self.norm_rel_ebd):
+            self.rel_embeddings_weights = nn.Parameter(self.LayerNorm(self.rel_embeddings_weights))
 
     def get_rel_embedding(self):
         rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
@@ -488,7 +469,7 @@ class DebertaV2Encoder(nn.Module):
             if output_attentions:
                 output_states, att_m = output_states
 
-            if i == 0 and self.with_conv:
+            if i == 0 and self.conv is not None:
                 output_states = self.conv(hidden_states, output_states, input_mask)
 
             if query_states is not None:
@@ -586,7 +567,7 @@ class DisentangledSelfAttention(torch.nn.Module):
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
         self.num_attention_heads = config.num_attention_heads
-        _attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        _attention_head_size = config.hidden_size // config.num_attention_heads
         self.attention_head_size = getattr(config, "attention_head_size", _attention_head_size)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
         self.query_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
@@ -689,9 +670,9 @@ class DisentangledSelfAttention(torch.nn.Module):
             -1, self.num_attention_heads, attention_scores.size(-2), attention_scores.size(-1)
         )
 
-        # bxhxlxd
-        _attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
-        attention_probs = self.dropout(_attention_probs)
+        # bsz x height x length x dimension
+        attention_probs = XSoftmax.apply(attention_scores, attention_mask, -1)
+        attention_probs = self.dropout(attention_probs)
         context_layer = torch.bmm(
             attention_probs.view(-1, attention_probs.size(-2), attention_probs.size(-1)), value_layer
         )
@@ -717,7 +698,7 @@ class DisentangledSelfAttention(torch.nn.Module):
             relative_pos = relative_pos.unsqueeze(0).unsqueeze(0)
         elif relative_pos.dim() == 3:
             relative_pos = relative_pos.unsqueeze(1)
-        # bxhxqxk
+        # bsz x height x query x key
         elif relative_pos.dim() != 4:
             raise ValueError(f"Relative postion ids must be of dim 2 or 3 or 4. {relative_pos.dim()}")
 
@@ -916,13 +897,20 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _pre_load_hook(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Removes the classifier if it doesn't have the correct number of labels.
+        """
         self_state = self.state_dict()
         if (
             ("classifier.weight" in self_state)
             and ("classifier.weight" in state_dict)
             and self_state["classifier.weight"].size() != state_dict["classifier.weight"].size()
         ):
-            logger.warning("Ignore mismatched classifer head.")
+            logger.warning(
+                f"The checkpoint classifier head has a shape {state_dict['classifier.weight'].size()} and this model "
+                f"classifier head has a shape {self_state['classifier.weight'].size()}. Ignoring the checkpoint "
+                f"weights. You should train your model on new data."
+            )
             del state_dict["classifier.weight"]
             if "classifier.bias" in state_dict:
                 del state_dict["classifier.bias"]

@@ -360,9 +360,7 @@ class DebertaEncoder(nn.Module):
                 self.max_relative_positions = config.max_position_embeddings
             self.rel_embeddings = nn.Embedding(self.max_relative_positions * 2, config.hidden_size)
 
-    def get_rel_embedding(self):
-        rel_embeddings = self.rel_embeddings.weight if self.relative_attention else None
-        return rel_embeddings
+        self.rel_embeddings_weights = self.rel_embeddings.weight if self.relative_attention else None
 
     def get_attention_mask(self, attention_mask):
         if attention_mask.dim() <= 2:
@@ -400,7 +398,7 @@ class DebertaEncoder(nn.Module):
             next_kv = hidden_states[0]
         else:
             next_kv = hidden_states
-        rel_embeddings = self.get_rel_embedding()
+        rel_embeddings = self.rel_embeddings_weights
         for i, layer_module in enumerate(self.layer):
 
             if output_hidden_states:
@@ -776,13 +774,20 @@ class DebertaPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _pre_load_hook(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
+        """
+        Removes the classifier if it doesn't have the correct number of labels.
+        """
         self_state = self.state_dict()
         if (
             ("classifier.weight" in self_state)
             and ("classifier.weight" in state_dict)
             and self_state["classifier.weight"].size() != state_dict["classifier.weight"].size()
         ):
-            logger.warning(f"The checkpoint classifier head has a shape {state_dict["classifier.weight"].size()} and this model classifer head has a shape {self_state["classifier.weight"].size()}. Ignoring the checkpoint weights. You should train your model on new data.")
+            logger.warning(
+                f"The checkpoint classifier head has a shape {state_dict['classifier.weight'].size()} and this model "
+                f"classifier head has a shape {self_state['classifier.weight'].size()}. Ignoring the checkpoint "
+                f"weights. You should train your model on new data."
+            )
             del state_dict["classifier.weight"]
             if "classifier.bias" in state_dict:
                 del state_dict["classifier.bias"]
@@ -939,7 +944,7 @@ class DebertaModel(DebertaPreTrainedModel):
             hidden_states = encoded_layers[-2]
             layers = [self.encoder.layer[-1] for _ in range(self.z_steps)]
             query_states = encoded_layers[-1]
-            rel_embeddings = self.encoder.get_rel_embedding()
+            rel_embeddings = self.encoder.rel_embeddings_weights
             attention_mask = self.encoder.get_attention_mask(attention_mask)
             rel_pos = self.encoder.get_rel_pos(embedding_output)
             for layer in layers[1:]:
