@@ -839,7 +839,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
             credit: https://stackoverflow.com/questions/58464790/is-there-an-equivalent-function-of-pytorch-named-index-select-in-tensorflow
             """
-            shape = input_.get_shape().as_list()
+            shape = shape_list(input_)
             if dim == -1:
                 dim = len(shape) - 1
             shape[dim] = 1
