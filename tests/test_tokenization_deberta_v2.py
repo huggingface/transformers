@@ -77,25 +77,10 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokenizer.convert_tokens_to_ids(tokens), [13, 1, 4398, 25, 21, 1289])
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
+        # fmt: off
         self.assertListEqual(
             tokens,
-            [
-                "▁",
-                "[UNK]",
-                "▁was",
-                "▁born",
-                "▁in",
-                "▁9",
-                "2000",
-                ",",
-                "▁and",
-                "▁this",
-                "▁is",
-                "▁fal",
-                "s",
-                "[UNK]",
-                ".",
-            ],
+            ["▁", "[UNK]", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "[UNK]", "."],
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(ids, [13, 1, 23, 386, 19, 561, 3050, 15, 17, 48, 25, 8256, 18, 1, 9])
@@ -103,24 +88,9 @@ class DebertaV2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
-            [
-                "▁",
-                "<unk>",
-                "▁was",
-                "▁born",
-                "▁in",
-                "▁9",
-                "2000",
-                ",",
-                "▁and",
-                "▁this",
-                "▁is",
-                "▁fal",
-                "s",
-                "<unk>",
-                ".",
-            ],
+            ["▁", "<unk>", "▁was", "▁born", "▁in", "▁9", "2000", ",", "▁and", "▁this", "▁is", "▁fal", "s", "<unk>", "."],
         )
+        # fmt: on
 
     def test_sequence_builders(self):
         tokenizer = DebertaV2Tokenizer(SAMPLE_VOCAB)

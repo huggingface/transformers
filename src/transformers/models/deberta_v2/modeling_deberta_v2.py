@@ -223,9 +223,10 @@ def MaskedLayerNorm(layerNorm, input, mask=None):
     module.
 
     Args:
-      layernorm (:obj:`~DeBERTa.deberta.LayerNorm`): LayerNorm module or function
-      input (:obj:`torch.tensor`): The input tensor
-      mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicate the output of that element will be ignored, i.e. set to `0`
+        layernorm (:obj:`~DeBERTa.deberta.LayerNorm`): LayerNorm module or function
+        input (:obj:`torch.tensor`): The input tensor
+        mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicates the
+            output of that element will be ignored, i.e. set to `0`
 
     Example::
 
