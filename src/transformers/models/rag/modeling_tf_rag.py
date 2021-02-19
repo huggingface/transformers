@@ -629,7 +629,7 @@ class TFRagModel(TFRagPreTrainedModel):
 
                 retriever_outputs = self.retriever(
                     input_ids,
-                    question_encoder_last_hidden_state.numpy(),  # NEED_HELP : not work in GRAPH mode, tf.make_ndarray doesn't work as well
+                    question_encoder_last_hidden_state.numpy(),
                     prefix=self.generator.config.prefix,
                     n_docs=n_docs,
                     return_tensors="tf",
