@@ -31,7 +31,11 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         if: steps.cache.outputs.cache-hit != 'true'
@@ -125,7 +129,12 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
+
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         if: steps.cache.outputs.cache-hit != 'true'
@@ -204,7 +213,11 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         if: steps.cache.outputs.cache-hit != 'true'
@@ -299,7 +312,11 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         if: steps.cache.outputs.cache-hit != 'true'

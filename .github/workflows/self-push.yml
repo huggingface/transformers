@@ -27,7 +27,11 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -77,14 +81,14 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_gpu_failures_short.txt
-        
+
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: run_all_tests_torch_gpu_test_reports
           path: reports
-                  
+
 
   run_tests_tf_gpu:
     runs-on: [self-hosted, gpu, single-gpu]
@@ -95,9 +99,14 @@ jobs:
           which python
           python --version
           pip --version
+
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -146,7 +155,7 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_gpu_failures_short.txt
-        
+
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
@@ -166,7 +175,11 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -205,7 +218,7 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_multi_gpu_failures_short.txt          
+        run: cat reports/tests_torch_multi_gpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -226,7 +239,11 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: pkill -f tests; pkill -f examples
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -272,4 +289,3 @@ jobs:
         with:
           name: run_all_tests_tf_multi_gpu_test_reports
           path: reports
-          
