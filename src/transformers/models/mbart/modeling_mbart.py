@@ -118,7 +118,7 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
         # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim, padding_idx=padding_idx)
+        super().__init__(num_embeddings + self.offset, embedding_dim)
         self.weight.data[: self.offset].fill_(0)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):

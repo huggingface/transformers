@@ -113,7 +113,7 @@ class LEDLearnedPositionalEmbedding(nn.Embedding):
     """
 
     def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+        super().__init__(num_embeddings, embedding_dim)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
