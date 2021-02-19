@@ -131,7 +131,7 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
         else:
             hidden_sizes = shape_list(hidden)
             out = []
-            loss = tf.zeros(hidden_sizes[:2], dtype=tf.float32)
+            loss = tf.zeros(hidden_sizes[:2])
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
                 if target is not None:
@@ -168,7 +168,7 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
                         cur_logprob = self._gather_logprob(cur_tail_logprob, cur_target)
                         cur_logprob += cur_head_logprob[:, self.cutoff_ends[1] + i - 1]
                 if target is not None:
-                    loss += tf.scatter_nd(mask_idx, -cur_logprob, tf.cast(shape_list(loss), dtype=tf.int64))
+                    loss += tf.scatter_nd(mask_idx, -cur_logprob, shape_list(loss))
             out = tf.concat(out, axis=-1)
 
         if target is not None:
