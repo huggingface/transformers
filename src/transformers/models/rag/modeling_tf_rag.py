@@ -649,11 +649,11 @@ class TFRagModel(TFRagPreTrainedModel):
                 # compute doc_scores
                 doc_scores = tf.squeeze(
                     tf.matmul(
-                        tf.expand_dims(question_encoder_last_hidden_state, axis=[1]),
+                        tf.expand_dims(question_encoder_last_hidden_state, axis=1),
                         retrieved_doc_embeds,
                         transpose_b=True,
                     ),
-                    axis=[1],
+                    axis=1,
                 )
 
             else:
@@ -941,7 +941,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             >>> question_hidden_states = model.question_encoder(input_ids)[0]
             >>> # 2. Retrieve
             >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
-            >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=[1]), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=[1])
+            >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=1), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=1)
             >>> # 3. Forward to generator
             >>> outputs = model(inputs=None, context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
 
@@ -1186,9 +1186,9 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
             # compute doc_scores
             doc_scores = tf.matmul(
-                tf.expand_dims(question_hidden_states, axis=[1]), retrieved_doc_embeds, transpose_b=True
+                tf.expand_dims(question_hidden_states, axis=1), retrieved_doc_embeds, transpose_b=True
             )
-            doc_scores = tf.squeeze(doc_scores, axis=[1])
+            doc_scores = tf.squeeze(doc_scores, axis=1)
 
         assert (
             context_input_ids.shape[0] % n_docs
@@ -1489,7 +1489,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             >>> question_hidden_states = model.question_encoder(input_ids)[0]
             >>> # 2. Retrieve
             >>> docs_dict = retriever(input_ids.numpy(), question_hidden_states.numpy(), return_tensors="tf")
-            >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=[1]), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=[1])
+            >>> doc_scores = tf.squeeze(tf.matmul(tf.expand_dims(question_hidden_states, axis=1), docs_dict["retrieved_doc_embeds"], transpose_b=True), axis=1)
             >>> # 3. Forward to generator
             >>> outputs = model(inputs=None, context_input_ids=docs_dict["context_input_ids"], context_attention_mask=docs_dict["context_attention_mask"], doc_scores=doc_scores, decoder_input_ids=input_dict["labels"])
 
