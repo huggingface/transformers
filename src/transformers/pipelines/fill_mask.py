@@ -190,14 +190,24 @@ class FillMaskPipeline(Pipeline):
                     tokens[masked_index] = predictions_all[mask_iter].tolist()[element_index]
                     tokens_collated.append(predictions_all[mask_iter].tolist()[element_index])
                 tokens = tokens[np.where(tokens != self.tokenizer.pad_token_id)]
-                result.append(
-                    {
-                        "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
-                        "score": value_combinatorial[0],
-                        "tokens": tokens_collated,
-                        "tokens_strs": [self.tokenizer.decode(token) for token in tokens_collated],
-                    }
-                )
+                if len(tokens_collated) == 1:
+                    result.append(
+                        {
+                            "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
+                            "score": value_combinatorial[0],
+                            "token": tokens_collated[0],
+                            "token_str": self.tokenizer.decode(tokens_collated[0])
+                        }
+                    )
+                else:
+                    result.append(
+                        {
+                            "sequence": self.tokenizer.decode(tokens, skip_special_tokens=True),
+                            "score": value_combinatorial[0],
+                            "tokens": tokens_collated,
+                            "tokens_strs": [self.tokenizer.decode(token) for token in tokens_collated],
+                        }
+                    )
 
             # Append
             results += [result]
