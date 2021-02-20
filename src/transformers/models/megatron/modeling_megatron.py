@@ -14,14 +14,14 @@
 # limitations under the License.
 """ PyTorch Megatron model. """
 
-import math
 import copy
+import math
 import random
-from typing import Optional, Tuple, Any
+from typing import Any, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch import nn, Tensor
+from torch import Tensor, nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
@@ -31,13 +31,11 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions
-)
+from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_megatron import MegatronConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -80,9 +78,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-        mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -472,10 +468,9 @@ MEGATRON_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.MegatronConfig`):
-            Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 MEGATRON_INPUTS_DOCSTRING = r"""
@@ -501,7 +496,7 @@ MEGATRON_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the heas is **masked**.
-            
+
         past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
@@ -611,19 +606,19 @@ class MegatronDecoder(MegatronPreTrainedModel):
         return combined_attention_mask
 
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            encoder_head_mask=None,
-            past_key_values=None,
-            inputs_embeds=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        encoder_head_mask=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         Args:
@@ -712,8 +707,9 @@ class MegatronDecoder(MegatronPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds,
-                                                              past_key_values_length)
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -753,7 +749,8 @@ class MegatronDecoder(MegatronPreTrainedModel):
 
                 if use_cache:
                     logger.warn(
-                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`...")
+                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                    )
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -822,7 +819,6 @@ class MegatronDecoder(MegatronPreTrainedModel):
     MEGATRON_START_DOCSTRING,
 )
 class MegatronModel(MegatronPreTrainedModel):
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -847,16 +843,16 @@ class MegatronModel(MegatronPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            head_mask=None,
-            past_key_values=None,
-            inputs_embeds=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -885,8 +881,7 @@ class MegatronModel(MegatronPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The Megatron model with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
+    The Megatron model with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     MEGATRON_START_DOCSTRING,
 )
@@ -898,6 +893,7 @@ class MegatronForCausalLM(MegatronPreTrainedModel):
     _keys_to_ignore_on_save = [
         "model.decoder.embed_positions.weight",
     ]
+
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)

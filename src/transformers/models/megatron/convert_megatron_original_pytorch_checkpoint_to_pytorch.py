@@ -16,27 +16,20 @@
 
 
 import argparse
-import os
 import glob
+import os
 from pathlib import Path
 
 import fairseq
 import torch
-from packaging import version
-from fairseq.models.transformer_lm import TransformerLanguageModel
-from fairseq.dataclass.utils import (
-    convert_namespace_to_omegaconf,
-    overwrite_args_by_name,
-)
 from fairseq import tasks
 from fairseq.data.encoders.gpt2_bpe import get_encoder
 from fairseq.data.encoders.gpt2_bpe_utils import Encoder
+from fairseq.dataclass.utils import convert_namespace_to_omegaconf, overwrite_args_by_name
+from fairseq.models.transformer_lm import TransformerLanguageModel
+from packaging import version
 
-from transformers import (
-    MegatronConfig,
-    MegatronForCausalLM,
-    MegatronTokenizer,
-)
+from transformers import MegatronConfig, MegatronForCausalLM, MegatronTokenizer
 from transformers.utils import logging
 
 
@@ -61,37 +54,37 @@ def load_fairseq_checkpoint(checkpoint_path):
     state_shards = [torch.load(p, map_location="cpu") for p in shard_paths]
 
     # the model config is copied across shards, so we can use any one of them
-    output_state = {'args': state_shards[0]['args']}
-    print(output_state['args'])
+    output_state = {"args": state_shards[0]["args"]}
+    print(output_state["args"])
     output_model = {}
 
     # group model parameters by key
-    model_shards = {k: [st['model'][k] for st in state_shards] for k in state_shards[0]['model'].keys()}
+    model_shards = {k: [st["model"][k] for st in state_shards] for k in state_shards[0]["model"].keys()}
 
     for k, params in model_shards.items():
-        if '.version' in k:
+        if ".version" in k:
             continue
-        elif '_float_tensor' in k:
+        elif "_float_tensor" in k:
             # embed_positions are copied across shards
             output_model[k] = params[0]
-        elif 'out_proj.weight' in k or 'fc2.weight' in k:
+        elif "out_proj.weight" in k or "fc2.weight" in k:
             # row parallel weights
             output_model[k] = torch.cat(params, dim=1)
-        elif 'out_proj.bias' in k or 'fc2.bias' in k:
+        elif "out_proj.bias" in k or "fc2.bias" in k:
             # biases are copied across shards
             output_model[k] = params[0]
-        elif '_proj' in k or 'fc1' in k:
+        elif "_proj" in k or "fc1" in k:
             # column parallel weights
             output_model[k] = torch.cat(params, dim=0)
-        elif '_norm' in k:
+        elif "_norm" in k:
             # norms are copied across shards
             output_model[k] = params[0]
-        elif 'embed_tokens' in k:
+        elif "embed_tokens" in k:
             output_model[k] = torch.cat(params, dim=0)
         else:
             raise ValueError(f"We don't know how to merge the parameter {k}")
 
-    output_state['model'] = output_model
+    output_state["model"] = output_model
     return output_state
 
 
@@ -124,8 +117,7 @@ def fairseq_tokenize(text, tokenizer, task):
 @torch.no_grad()
 def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
     """
-    Convert tokenizer files.
-    Copy/paste/tweak model's weights to our BART structure.
+    Convert tokenizer files. Copy/paste/tweak model's weights to our BART structure.
     """
     Path(pytorch_dump_path).mkdir(exist_ok=True)
     encoder_path = os.path.join(checkpoint_path, "encoder.json")
@@ -166,15 +158,13 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
         bos_token_id=0,
         eos_token_id=2,
         tie_word_embeddings=True,
-        scale_embedding=not fs_cfg.model.no_scale_embedding
+        scale_embedding=not fs_cfg.model.no_scale_embedding,
     )
     logger.info("Initializing the 🤗 Megatron model")
     model = MegatronForCausalLM(config).eval()
     logger.info("Loading fairseq's state disct into Megatron")
     missing, extra = model.load_state_dict(state_dict, strict=False)
-    unexpected_missing = [
-        k for k in missing if k != "decoder.embed_positions.weight"
-    ]
+    unexpected_missing = [k for k in missing if k != "decoder.embed_positions.weight"]
     assert unexpected_missing == [], f"Missing key(s) in state_dict: {unexpected_missing}"
     assert extra == [], f"Extra keys in the original state_dict: {extra}"
 
@@ -190,11 +180,7 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument(
-        "--fairseq_path", type=str, help="Path to the unpacked fairseq Megatron model checkpoint."
-    )
-    parser.add_argument(
-        "--pytorch_dump_path", default=None, type=str, help="Path to the output PyTorch model."
-    )
+    parser.add_argument("--fairseq_path", type=str, help="Path to the unpacked fairseq Megatron model checkpoint.")
+    parser.add_argument("--pytorch_dump_path", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
     convert_fairseq_checkpoint(args.fairseq_path, args.pytorch_dump_path)

@@ -44,5 +44,6 @@ class MegatronTokenizer(BartTokenizer):
     Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
     parameters.
     """
+
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

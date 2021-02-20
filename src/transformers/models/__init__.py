@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    megatron,
     albert,
     auto,
     bart,
@@ -48,6 +47,7 @@ from . import (
     lxmert,
     marian,
     mbart,
+    megatron,
     mmbt,
     mobilebert,
     mpnet,

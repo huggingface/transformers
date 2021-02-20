@@ -33,17 +33,14 @@ if is_torch_available():
 
     from transformers import (
         MegatronConfig,
+        MegatronForCausalLM,
         MegatronForConditionalGeneration,
         MegatronForQuestionAnswering,
-        MegatronForCausalLM,
         MegatronForSequenceClassification,
         MegatronModel,
         MegatronTokenizer,
     )
-    from transformers.models.megatron.modeling_megatron import (
-        MegatronDecoder,
-        MegatronEncoder,
-    )
+    from transformers.models.megatron.modeling_megatron import MegatronDecoder, MegatronEncoder
 
 
 def prepare_megatron_inputs_dict(
@@ -156,7 +153,9 @@ class MegatronModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -204,7 +203,12 @@ class MegatronModelTester:
 @require_torch
 class MegatronModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MegatronModel, MegatronForConditionalGeneration, MegatronForSequenceClassification, MegatronForQuestionAnswering)
+        (
+            MegatronModel,
+            MegatronForConditionalGeneration,
+            MegatronForSequenceClassification,
+            MegatronForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -313,10 +317,10 @@ TOLERANCE = 1e-4
 class MegatronModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return MegatronTokenizer.from_pretrained('megatron-11b')
+        return MegatronTokenizer.from_pretrained("megatron-11b")
 
     def test_inference_no_head(self):
-        model = MegatronModel.from_pretrained('megatron-11b').to(torch_device)
+        model = MegatronModel.from_pretrained("megatron-11b").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
         inputs_dict = prepare_megatron_inputs_dict(model.config, input_ids, decoder_input_ids)
@@ -331,7 +335,7 @@ class MegatronModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = MegatronForConditionalGeneration.from_pretrained('megatron-11b').to(torch_device)
+        model = MegatronForConditionalGeneration.from_pretrained("megatron-11b").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -348,8 +352,8 @@ class MegatronModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = MegatronForConditionalGeneration.from_pretrained('megatron-11b').to(torch_device)
-        tok = MegatronTokenizer.from_pretrained('megatron-11b')
+        hf = MegatronForConditionalGeneration.from_pretrained("megatron-11b").to(torch_device)
+        tok = MegatronTokenizer.from_pretrained("megatron-11b")
 
         batch_input = [
             # string 1,

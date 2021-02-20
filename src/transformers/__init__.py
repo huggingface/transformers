@@ -1432,7 +1432,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.megatron import MegatronTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1450,6 +1449,7 @@ if TYPE_CHECKING:
         from .models.longformer import LongformerTokenizerFast
         from .models.lxmert import LxmertTokenizerFast
         from .models.mbart import MBart50TokenizerFast, MBartTokenizerFast
+        from .models.megatron import MegatronTokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
@@ -1471,15 +1471,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.megatron import (
-            MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MegatronForConditionalGeneration,
-            MegatronForCausalLM,
-            MegatronForQuestionAnswering,
-            MegatronForSequenceClassification,
-            MegatronModel,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1756,6 +1747,14 @@ if TYPE_CHECKING:
             MBartForQuestionAnswering,
             MBartForSequenceClassification,
             MBartModel,
+        )
+        from .models.megatron import (
+            MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegatronForCausalLM,
+            MegatronForConditionalGeneration,
+            MegatronForQuestionAnswering,
+            MegatronForSequenceClassification,
+            MegatronModel,
         )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (
