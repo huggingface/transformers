@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
+from ....file_utils import (
     _BaseLazyModule,
     is_flax_available,
     is_tf_available,
@@ -113,9 +113,6 @@ if TYPE_CHECKING:
             TFBertModel,
             TFBertPreTrainedModel,
         )
-
-    if is_flax_available():
-        from .modeling_flax_bert import FlaxBertForMaskedLM, FlaxBertModel
 
 else:
     import importlib

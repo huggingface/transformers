@@ -160,13 +160,13 @@ class BertPerformerConfig(PretrainedConfig):
         # Prepare Performer Attention Config
         if isinstance(performer_attention_config, dict):
             performer_attention_config["attention_dropout"] = attention_probs_dropout_prob
-            performer_attention_config["d_model"] = num_hidden_layers
+            performer_attention_config["d_model"] = hidden_size
             performer_attention_config["num_heads"] = num_attention_heads
             self.performer_attention_config = {**performer_attention_config, **locals()["kwargs"]} # Apply any remaining kwargs directly
 
         else:
             performer_attention_config.attention_dropout = attention_probs_dropout_prob
-            performer_attention_config.d_model = num_hidden_layers
+            performer_attention_config.d_model = hidden_size
             performer_attention_config.num_heads = num_attention_heads
             performer_attention_config.__dict__.update(kwargs)  # Apply any remaining kwargs directly
 
