@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,19 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert BART checkpoint."""
+"""Convert fairseq Megaytron checkpoint."""
 
 
 import argparse
 import os
 import glob
-import json
 from pathlib import Path
 
 import fairseq
 import torch
 from packaging import version
-from torch import nn
 from fairseq.models.transformer_lm import TransformerLanguageModel
 from fairseq.dataclass.utils import (
     convert_namespace_to_omegaconf,
@@ -49,10 +47,7 @@ if version.parse(fairseq.__version__) < version.parse("0.9.0"):
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
-SAMPLE_TEXT = " Hello world! cécé herlolip"
-
-FS_ENCODER_URL = "https://dl.fbaipublicfiles.com/fairseq/gpt2_bpe/encoder.json"
-FS_BPE_URL = "https://dl.fbaipublicfiles.com/fairseq/gpt2_bpe/vocab.bpe"
+SAMPLE_TEXT = " Hello world! 💁 (╯°□°）╯︵ ┻━┻)"
 
 
 def load_fairseq_checkpoint(checkpoint_path):
@@ -101,22 +96,17 @@ def load_fairseq_checkpoint(checkpoint_path):
 
 
 def load_fairseq_model(checkpoint_path):
+    logger.info("Converting fairseq's model_parallel checkpoint into a single model...")
     state = load_fairseq_checkpoint(checkpoint_path)
     cfg = convert_namespace_to_omegaconf(state["args"])
     # specify the path to `dict.txt` which is needed for embeddings initialization
     overwrite_args_by_name(cfg, {"task": {"data": checkpoint_path}})
     task = tasks.setup_task(cfg.task)
+    logger.info("Initializing faiseq model from state dict...")
     model = TransformerLanguageModel.build_model(cfg.model, task).eval()
     model.load_state_dict(state["model"])
     model.upgrade_state_dict(model.state_dict())
     return cfg, model, task
-
-
-def make_linear_from_emb(emb):
-    vocab_size, emb_size = emb.weight.shape
-    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data
-    return lin_layer
 
 
 def fairseq_tokenize(text, tokenizer, task):
@@ -141,19 +131,20 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
     encoder_path = os.path.join(checkpoint_path, "encoder.json")
     bpe_path = os.path.join(checkpoint_path, "vocab.bpe")
 
+    logger.info("Loading the fairseq model...")
     fs_cfg, fs_model, fs_task = load_fairseq_model(checkpoint_path)
     fs_tokenizer: Encoder = get_encoder(encoder_path, bpe_path)
 
-    tokens = fairseq_tokenize(SAMPLE_TEXT, fs_tokenizer, fs_task)
-    tokens = tokens.unsqueeze(0)
+    fs_tokens = fairseq_tokenize(SAMPLE_TEXT, fs_tokenizer, fs_task)
+    fs_tokens = fs_tokens.unsqueeze(0)
 
     tokenizer = MegatronTokenizer.from_pretrained("megatron-11b")
-    tokens2 = tokenizer.encode(SAMPLE_TEXT, return_tensors="pt").unsqueeze(0)
-    assert torch.eq(tokens, tokens2).all()
+    hf_tokens = tokenizer.encode(SAMPLE_TEXT, return_tensors="pt").unsqueeze(0)
+    assert torch.eq(fs_tokens, hf_tokens).all()
 
     state_dict = fs_model.state_dict()
     state_dict.pop("decoder.version", None)
-    # megatron uses fixed sinusoidal embeddings, this is a dummy tensor
+    # megatron uses fixed sinusoidal embeddings, this is just a dummy tensor
     state_dict.pop("decoder.embed_positions._float_tensor", None)
     # equivalent to lm_head with tied embeddings
     state_dict.pop("decoder.output_projection.weight", None)
@@ -161,13 +152,9 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
     config = MegatronConfig(
         vocab_size=51200,
         max_position_embeddings=fs_cfg.model.max_target_positions,
-        encoder_layers=None,
-        encoder_ffn_dim=None,
-        encoder_attention_heads=None,
         decoder_layers=fs_cfg.model.decoder_layers,
         decoder_ffn_dim=fs_cfg.model.decoder_ffn_embed_dim,
         decoder_attention_heads=fs_cfg.model.decoder_attention_heads,
-        encoder_layerdrop=0.,
         decoder_layerdrop=fs_cfg.model.decoder_layerdrop,
         is_decoder=True,
         activation_function=fs_cfg.model.activation_fn,
@@ -181,16 +168,18 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
         tie_word_embeddings=True,
         scale_embedding=not fs_cfg.model.no_scale_embedding
     )
+    logger.info("Initializing the 🤗 Megatron model")
     model = MegatronForCausalLM(config).eval()
-    missing, extra = model.model.load_state_dict(state_dict, strict=False)
+    logger.info("Loading fairseq's state disct into Megatron")
+    missing, extra = model.load_state_dict(state_dict, strict=False)
     unexpected_missing = [
         k for k in missing if k != "decoder.embed_positions.weight"
     ]
     assert unexpected_missing == [], f"Missing key(s) in state_dict: {unexpected_missing}"
     assert extra == [], f"Extra keys in the original state_dict: {extra}"
 
-    fairseq_outputs = fs_model.extract_features(tokens, encoder_out=None)[0]
-    new_model_outputs = model.model(tokens)[0]
+    fairseq_outputs = fs_model.extract_features(fs_tokens, encoder_out=None)[0]
+    new_model_outputs = model(hf_tokens, output_hidden_states=True).hidden_states[-1]
 
     # Check results
     assert fairseq_outputs.shape == new_model_outputs.shape
@@ -202,7 +191,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--fairseq_path", type=str, help="bart.large, bart.large.cnn or a path to a model.pt on local filesystem."
+        "--fairseq_path", type=str, help="Path to the unpacked fairseq Megatron model checkpoint."
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, help="Path to the output PyTorch model."
