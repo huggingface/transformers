@@ -131,7 +131,7 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
     fs_tokens = fs_tokens.unsqueeze(0)
 
     tokenizer = MegatronTokenizer.from_pretrained("megatron-11b")
-    hf_tokens = tokenizer.encode(SAMPLE_TEXT, return_tensors="pt").unsqueeze(0)
+    hf_tokens = tokenizer.encode(SAMPLE_TEXT, return_tensors="pt")
     assert torch.eq(fs_tokens, hf_tokens).all()
 
     state_dict = fs_model.state_dict()
@@ -163,13 +163,13 @@ def convert_fairseq_checkpoint(checkpoint_path, pytorch_dump_path):
     logger.info("Initializing the 🤗 Megatron model")
     model = MegatronForCausalLM(config).eval()
     logger.info("Loading fairseq's state disct into Megatron")
-    missing, extra = model.load_state_dict(state_dict, strict=False)
+    missing, extra = model.model.load_state_dict(state_dict, strict=False)
     unexpected_missing = [k for k in missing if k != "decoder.embed_positions.weight"]
     assert unexpected_missing == [], f"Missing key(s) in state_dict: {unexpected_missing}"
     assert extra == [], f"Extra keys in the original state_dict: {extra}"
 
     fairseq_outputs = fs_model.extract_features(fs_tokens, encoder_out=None)[0]
-    new_model_outputs = model(hf_tokens, output_hidden_states=True).hidden_states[-1]
+    new_model_outputs = model.model(hf_tokens)[0]
 
     # Check results
     assert fairseq_outputs.shape == new_model_outputs.shape

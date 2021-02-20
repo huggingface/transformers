@@ -159,8 +159,6 @@ from ..mbart.modeling_mbart import (
 # Add modeling imports here
 from ..megatron.modeling_megatron import (
     MegatronForCausalLM,
-    MegatronForConditionalGeneration,
-    MegatronForQuestionAnswering,
     MegatronForSequenceClassification,
     MegatronModel,
 )
@@ -393,7 +391,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-        (MegatronConfig, MegatronForConditionalGeneration),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
@@ -492,7 +489,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-        (MegatronConfig, MegatronForConditionalGeneration),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
@@ -547,7 +543,6 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-        (MegatronConfig, MegatronForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),

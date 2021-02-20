@@ -373,8 +373,6 @@ if is_torch_available():
         [
             "MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST",
             "MegatronForCausalLM",
-            "MegatronForConditionalGeneration",
-            "MegatronForQuestionAnswering",
             "MegatronForSequenceClassification",
             "MegatronModel",
         ]
@@ -1751,8 +1749,6 @@ if TYPE_CHECKING:
         from .models.megatron import (
             MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronForCausalLM,
-            MegatronForConditionalGeneration,
-            MegatronForQuestionAnswering,
             MegatronForSequenceClassification,
             MegatronModel,
         )

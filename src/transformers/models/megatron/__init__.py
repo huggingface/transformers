@@ -32,6 +32,7 @@ if is_torch_available():
     _import_structure["modeling_megatron"] = [
         "MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MegatronForCausalLM",
+        "MegatronForSequenceClassification",
         "MegatronModel",
         "MegatronPreTrainedModel",
     ]
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
         from .modeling_megatron import (
             MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronForCausalLM,
+            MegatronForSequenceClassification,
             MegatronModel,
             MegatronPreTrainedModel,
         )

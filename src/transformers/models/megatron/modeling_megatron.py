@@ -31,7 +31,11 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
+    SequenceClassifierOutputWithPast
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_megatron import MegatronConfig
@@ -429,9 +433,40 @@ class MegatronDecoderLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->Megatron
+class MegatronClassificationHead(nn.Module):
+    """Head for sentence-level classification tasks."""
+
+    def __init__(
+        self,
+        input_dim: int,
+        inner_dim: int,
+        num_classes: int,
+        pooler_dropout: float,
+    ):
+        super().__init__()
+        self.dense = nn.Linear(input_dim, inner_dim)
+        self.dropout = nn.Dropout(p=pooler_dropout)
+        self.out_proj = nn.Linear(inner_dim, num_classes)
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = torch.tanh(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.out_proj(hidden_states)
+        return hidden_states
+
+
 class MegatronPreTrainedModel(PreTrainedModel):
     config_class = MegatronConfig
     base_model_prefix = "model"
+    _keys_to_ignore_on_load_missing = [
+        "model.decoder.embed_positions.weight",
+    ]
+    _keys_to_ignore_on_save = [
+        "model.decoder.embed_positions.weight",
+    ]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -881,19 +916,114 @@ class MegatronModel(MegatronPreTrainedModel):
 
 @add_start_docstrings(
     """
+    Megatron model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    tasks.
+    """,
+    MEGATRON_START_DOCSTRING,
+)
+class MegatronForSequenceClassification(MegatronPreTrainedModel):
+    def __init__(self, config: MegatronConfig, **kwargs):
+        super().__init__(config, **kwargs)
+        self.model = MegatronModel(config)
+        self.classification_head = MegatronClassificationHead(
+            config.d_model,
+            config.d_model,
+            config.num_labels,
+            config.classifier_dropout,
+        )
+        self.model._init_weights(self.classification_head.dense)
+        self.model._init_weights(self.classification_head.out_proj)
+
+    @add_start_docstrings_to_model_forward(MEGATRON_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint="anton-l/megatron-11b",
+        output_type=SequenceClassifierOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    # Copied from transformers.models.bart.modeling_bart.BartForSequenceClassification.forward
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        decoder_input_ids=None,
+        decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
+        encoder_outputs=None,
+        inputs_embeds=None,
+        decoder_inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if labels is not None:
+            use_cache = False
+
+        if input_ids is None and inputs_embeds is not None:
+            raise NotImplementedError(
+                f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
+            )
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        hidden_states = outputs[0]  # last hidden state
+
+        eos_mask = input_ids.eq(self.config.eos_token_id)
+
+        if len(torch.unique(eos_mask.sum(1))) > 1:
+            raise ValueError("All examples must have the same number of <eos> tokens.")
+        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
+            :, -1, :
+        ]
+        logits = self.classification_head(sentence_representation)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.decoder_hidden_states,
+            attentions=outputs.decoder_attentions,
+        )
+
+
+@add_start_docstrings(
+    """
     The Megatron model with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     MEGATRON_START_DOCSTRING,
 )
 class MegatronForCausalLM(MegatronPreTrainedModel):
-    base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        "model.decoder.embed_positions.weight",
-    ]
-    _keys_to_ignore_on_save = [
-        "model.decoder.embed_positions.weight",
-    ]
-
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
