@@ -39,6 +39,14 @@ if is_torch_available():
         IBertEmbeddings,
         create_position_ids_from_input_ids,
     )
+    from transformers.models.ibert.modeling_ibert import (
+        QuantEmbedding,
+        QuantAct,
+        QuantLinear,
+        IntGELU,
+        IntSoftmax,
+        IntLayerNorm,
+    )
 
 
 class IBertModelTester:
@@ -186,6 +194,7 @@ class IBertModelTester:
         return config, inputs_dict
 
 
+'''
 @require_torch
 class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
@@ -210,11 +219,6 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def setUp(self):
         self.model_tester = IBertModelTester(self)
         self.config_tester = ConfigTester(self, config_class=IBertConfig, hidden_size=37)
-
-    '''
-    def test_feed_forward_chunking(self):
-        pass
-    '''
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -292,11 +296,113 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+'''
 
+
+@require_torch
+class IBertModelIntegrationTest(unittest.TestCase):
+    def test_quant_embedding(self):
+        weight_bit = 8
+        embedding = QuantEmbedding(2, 4, quant_mode=True, weight_bit=weight_bit)
+        embedding_weight = torch.tensor([[-1., -2., -3., -4.], [5., 6., 7., 8.,]])
+        embedding.weight = torch.nn.Parameter(embedding_weight)
+
+        expected_scaling_factor = embedding_weight.abs().max() / (2 ** (weight_bit -1) - 1)
+        x, x_scaling_factor = embedding(torch.tensor(0))
+        y, y_scaling_factor = embedding(torch.tensor(1))
+
+        # scaling factor should follow the symmetric quantization rule
+        self.assertEqual(x_scaling_factor, expected_scaling_factor)
+        self.assertTrue(torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4))
+        self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+
+        # quantization error should not exceed the scaling factor
+        self.assertTrue(torch.allclose(x, embedding_weight[0], atol=expected_scaling_factor))
+        self.assertTrue(torch.allclose(y, embedding_weight[1], atol=expected_scaling_factor))
+
+    def test_quant_linear(self):
+        def _test(per_channel):
+            linear_q = QuantLinear(2, 4, quant_mode=True, per_channel=per_channel, weight_bit=weight_bit)
+            linear_dq = QuantLinear(2, 4, quant_mode=False, per_channel=per_channel, weight_bit=weight_bit)
+            linear_weight = torch.tensor([[-1., 2., 3., -4.], [5., -6., -7., 8.,]]).T
+            linear_q.weight = torch.nn.Parameter(linear_weight)
+            linear_dq.weight = torch.nn.Parameter(linear_weight)
+
+            q, q_scaling_factor = linear_q(x, x_scaling_factor)
+            q_int = q / q_scaling_factor
+            dq, dq_scaling_factor = linear_dq(x, x_scaling_factor)
+
+            if per_channel:
+                q_max = linear_weight.abs().max(dim=1).values
+            else:
+                q_max = linear_weight.abs().max()
+            expected_scaling_factor = q_max / (2 ** (weight_bit -1) - 1)
+
+            # scaling factor should follow the symmetric quantization rule
+            self.assertTrue(torch.allclose(linear_q.fc_scaling_factor, expected_scaling_factor, atol=1e-4))
+
+            # output of the normal linear layer and the quantized linear layer should be similar
+            self.assertTrue(torch.allclose(q, dq, atol=0.5))
+
+            # output of the quantized linear layer should be integer
+            self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
+
+        weight_bit = 8
+        x = torch.tensor([[2., -5.], [-3., 4.]])
+        x_scaling_factor = torch.tensor([1.])
+        _test(True)
+        _test(False)
+
+    def test_quant_gelu(self):
+        gelu_q = IntGELU(quant_mode=True)
+        gelu_dq = torch.nn.GELU()
+
+        x_int = torch.range(-10000, 10000, 1)
+        x_scaling_factor = torch.tensor(0.001)
+        x = x_int * x_scaling_factor
+
+        q, q_scaling_factor = gelu_q(x, x_scaling_factor)
+        q_int = q / q_scaling_factor
+        dq = gelu_dq(x)
+
+        # output of the normal GELU annd the quantized GELU should be similar
+        self.assertTrue(torch.allclose(q, dq, atol=0.5))
+
+        # output of the quantized GELU layer should be integer
+        self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
+
+    def test_quant_softmax(self):
+        output_bit = 8
+        softmax_q = IntSoftmax(output_bit, quant_mode=True)
+        softmax_dq = torch.nn.Softmax()
+
+        #x_int = torch.range(-10000, 10000, 1)
+        def _test(array):
+            x_int = torch.tensor(array)
+            x_scaling_factor = torch.tensor(0.1)
+            x = x_int * x_scaling_factor
+
+            q, q_scaling_factor = softmax_q(x, x_scaling_factor)
+            q_int = q / q_scaling_factor
+            dq = softmax_dq(x)
+
+            # output of the normal Softmax annd the quantized Softmax should be similar
+            self.assertTrue(torch.allclose(q, dq, atol=0.5))
+
+            # output of the quantized GELU layer should be integer
+            self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
+
+            # Output of the quantize Softmax should not exceed the output_bit
+            self.assertTrue(q.abs().max() < 2 ** output_bit)
+
+        array = [[i + j for j in range(10)] for i in range(-10, 10)]
+        _test(array)
+        array = [[i + j for j in range(50)] for i in range(-10, 10)] 
+        _test(array)
+        array = [[i + 100 * j for j in range(2)] for i in range(-10, 10)] 
+        _test(array)
 
 '''
-@require_torch
-class RobertaModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
         model = RobertaForMaskedLM.from_pretrained("roberta-base")
