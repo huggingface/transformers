@@ -19,15 +19,13 @@ from ..bart.tokenization_bart import BartTokenizer
 
 logger = logging.get_logger(__name__)
 
+# vocab and merges same as roberta
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/vocab.json",
+        "megatron-11b": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
     },
     "merges_file": {
-        "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/tokenizer.json",
+        "megatron-11b": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
     },
 }
 
@@ -46,6 +44,5 @@ class MegatronTokenizer(BartTokenizer):
     Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
     parameters.
     """
-
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

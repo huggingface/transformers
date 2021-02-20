@@ -1283,7 +1283,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.megatron import MEGATRON_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronConfig, MegatronTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1336,6 +1335,7 @@ if TYPE_CHECKING:
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
     from .models.marian import MarianConfig
     from .models.mbart import MBartConfig
+    from .models.megatron import MEGATRON_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronConfig, MegatronTokenizer
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer

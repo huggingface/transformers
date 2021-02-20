@@ -14,44 +14,35 @@
 # limitations under the License.
 """ PyTorch Megatron model. """
 
-
 import math
 import copy
 import random
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Any
 
 import torch
 import torch.nn.functional as F
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
     add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    Seq2SeqLMOutput,
-    Seq2SeqModelOutput,
-    Seq2SeqQuestionAnsweringModelOutput,
-    Seq2SeqSequenceClassifierOutput,
     CausalLMOutputWithCrossAttentions
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_megatron import MegatronConfig
 
-
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MegatronConfig"
 _TOKENIZER_FOR_DOC = "MegatronTokenizer"
-
 
 MEGATRON_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "megatron-11b",
@@ -90,7 +81,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
 
 
 def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
+        mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
 ):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -105,24 +96,84 @@ def _expand_mask(
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-class MegatronLearnedPositionalEmbedding(nn.Embedding):
+# Copied from transformers.models.fsmt.modeling_fsmt.SinusoidalPositionalEmbedding
+class SinusoidalPositionalEmbedding(nn.Embedding):
     """
-    This module learns positional embeddings up to a fixed maximum size. 
+    This module produces sinusoidal positional embeddings of any length.
+
+    We don't want to save the weight of this embedding since it's not trained (deterministic) and it can be huge.
+
+    Padding symbols are ignored.
+
+    These embeddings get automatically extended in forward if more positions is needed.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
-        assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+    def __init__(self, num_positions, embedding_dim, padding_idx):
+        self.make_weight(num_positions, embedding_dim, padding_idx)
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
+    def make_weight(self, num_positions, embedding_dim, padding_idx):
+        weight = self.get_embedding(num_positions, embedding_dim, padding_idx)
+        if not hasattr(self, "weight"):
+            # in ___init__
+            super().__init__(num_positions, embedding_dim, padding_idx, _weight=weight)
+        else:
+            # in forward
+            weight = weight.to(self.weight.device)
+            self.weight = nn.Parameter(weight)
+        self.weight.detach_()
+        self.weight.requires_grad = False
+
+    @staticmethod
+    def get_embedding(num_embeddings, embedding_dim, padding_idx):
+        """
+        Build sinusoidal embeddings.
+
+        This matches the implementation in tensor2tensor, but differs slightly from the description in Section 3.5 of
+        "Attention Is All You Need".
+        """
+        half_dim = embedding_dim // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        if embedding_dim % 2 == 1:
+            # zero pad
+            emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
+        if padding_idx is not None:
+            emb[padding_idx, :] = 0
+        return emb
+
+    @staticmethod
+    def make_positions(tensor, padding_idx: int):
+        """
+        Replace non-padding symbols with their position numbers.
+
+        Position numbers begin at padding_idx+1. Padding symbols are ignored.
+        """
+        # The series of casts and type-conversions here are carefully
+        # balanced to both work with ONNX export and XLA. In particular XLA
+        # prefers ints, cumsum defaults to output longs, and ONNX doesn't know
+        # how to handle the dtype kwarg in cumsum.
+        mask = tensor.ne(padding_idx).int()
+        return (torch.cumsum(mask, dim=1).type_as(mask) * mask).long() + padding_idx
+
+    def forward(
+        self,
+        input,
+        incremental_state: Optional[Any] = None,
+        timestep: Optional[Tensor] = None,
+    ):
+        """Input is expected to be of size [bsz x seqlen]."""
+        bsz, seq_len = input.shape[:2]
+        max_pos = self.padding_idx + 1 + seq_len
+        if max_pos > self.weight.size(0):
+            # expand embeddings if needed
+            self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
+        positions = self.make_positions(input, self.padding_idx)
         return super().forward(positions)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Megatron
 class MegatronAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -265,72 +316,6 @@ class MegatronAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class MegatronEncoderLayer(nn.Module):
-    def __init__(self, config: MegatronConfig):
-        super().__init__()
-        self.embed_dim = config.d_model
-        self.self_attn = MegatronAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
-            dropout=config.attention_dropout,
-        )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
-    ):
-        """
-        Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-        """
-        residual = hidden_states
-        hidden_states, attn_weights, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
-            output_attentions=output_attentions,
-        )
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
 class MegatronDecoderLayer(nn.Module):
     def __init__(self, config: MegatronConfig):
         super().__init__()
@@ -347,13 +332,14 @@ class MegatronDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = MegatronAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
-        )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        # TODO: remove
+        # self.encoder_attn = MegatronAttention(
+        #     self.embed_dim,
+        #     config.decoder_attention_heads,
+        #     dropout=config.attention_dropout,
+        #     is_decoder=True,
+        # )
+        # self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -388,6 +374,7 @@ class MegatronDecoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
@@ -402,39 +389,38 @@ class MegatronDecoderLayer(nn.Module):
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
         cross_attn_weights = None
-        if encoder_hidden_states is not None:
-            residual = hidden_states
-
-            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
-                hidden_states=hidden_states,
-                key_value_states=encoder_hidden_states,
-                attention_mask=encoder_attention_mask,
-                layer_head_mask=encoder_layer_head_mask,
-                past_key_value=cross_attn_past_key_value,
-                output_attentions=output_attentions,
-            )
-            hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-            hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
-
-            # add cross-attn to positions 3,4 of present_key_value tuple
-            present_key_value = present_key_value + cross_attn_present_key_value
+        # if encoder_hidden_states is not None:
+        #     residual = hidden_states
+        #     hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        #
+        #     # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
+        #     cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+        #     hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+        #         hidden_states=hidden_states,
+        #         key_value_states=encoder_hidden_states,
+        #         attention_mask=encoder_attention_mask,
+        #         layer_head_mask=layer_head_mask,
+        #         past_key_value=cross_attn_past_key_value,
+        #         output_attentions=output_attentions,
+        #     )
+        #     hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        #     hidden_states = residual + hidden_states
+        #
+        #     # add cross-attn to positions 3,4 of present_key_value tuple
+        #     present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -447,30 +433,6 @@ class MegatronDecoderLayer(nn.Module):
         return outputs
 
 
-class MegatronClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(
-        self,
-        input_dim: int,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
-    ):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
-
-
 class MegatronPreTrainedModel(PreTrainedModel):
     config_class = MegatronConfig
     base_model_prefix = "model"
@@ -481,6 +443,8 @@ class MegatronPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, SinusoidalPositionalEmbedding):
+            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
@@ -514,22 +478,6 @@ MEGATRON_START_DOCSTRING = r"""
             weights.
 """
 
-MEGATRON_GENERATION_EXAMPLE = r"""
-    Summarization example::
-
-        >>> from transformers import MegatronTokenizer, MegatronForConditionalGeneration, MegatronConfig
-
-        >>> model = MegatronForConditionalGeneration.from_pretrained('megatron-11b')
-        >>> tokenizer = MegatronTokenizer.from_pretrained('megatron-11b')
-
-        >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
-
-        >>> # Generate Summary
-        >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
-"""
-
 MEGATRON_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
@@ -548,33 +496,12 @@ MEGATRON_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             `What are attention masks? <../glossary.html#attention-mask>`__
-        decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the :obj:`input_ids` to the right, following the paper.
-        decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
-
-            If you want to change padding behavior, you should read :func:`modeling_megatron._prepare_decoder_inputs` and
-            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
-            information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
-
-        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
-            Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
-            :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
-            `optional`) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
+            - 0 indicates the heas is **masked**.
+            
         past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up decoding.
 
@@ -585,14 +512,6 @@ MEGATRON_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
-            have to be input (see :obj:`past_key_values`). This is useful if you want more control over how to convert
-            :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
-
-            If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
-            takes the value of :obj:`inputs_embeds`.
         use_cache (:obj:`bool`, `optional`):
             If set to :obj:`True`, :obj:`past_key_values` key value states are returned and can be used to speed up
             decoding (see :obj:`past_key_values`).
@@ -605,7 +524,6 @@ MEGATRON_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
-
 
 MEGATRON_STANDALONE_INPUTS_DOCSTRING = r"""
     Args:
@@ -636,173 +554,6 @@ MEGATRON_STANDALONE_INPUTS_DOCSTRING = r"""
 """
 
 
-class MegatronEncoder(MegatronPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`MegatronEncoderLayer`.
-
-    Args:
-        config: MegatronConfig
-        embed_tokens (torch.nn.Embedding): output embedding
-    """
-
-    def __init__(self, config: MegatronConfig, embed_tokens: Optional[nn.Embedding] = None):
-        super().__init__(config)
-
-        self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
-
-        embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-        self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
-
-        self.embed_positions = MegatronLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-            self.padding_idx,
-        )
-        self.layers = nn.ModuleList([MegatronEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(embed_dim)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.MegatronTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        embed_pos = self.embed_positions(input_shape)
-
-        hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
-            dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                layer_outputs = (None, None)
-            else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        attention_mask,
-                        (head_mask[idx] if head_mask is not None else None),
-                    )
-                else:
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
-                    )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
 class MegatronDecoder(MegatronPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`MegatronDecoderLayer`
@@ -824,14 +575,14 @@ class MegatronDecoder(MegatronPreTrainedModel):
             self.embed_tokens = embed_tokens
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        embed_dim = self.embed_tokens.embedding_dim
 
-        self.embed_positions = MegatronLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            self.padding_idx,
+        self.embed_positions = SinusoidalPositionalEmbedding(
+            config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
         self.layers = nn.ModuleList([MegatronDecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.d_model)
+        # TODO: remove
+        # self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
         self.init_weights()
 
@@ -860,19 +611,19 @@ class MegatronDecoder(MegatronPreTrainedModel):
         return combined_attention_mask
 
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        encoder_head_mask=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            head_mask=None,
+            encoder_head_mask=None,
+            past_key_values=None,
+            inputs_embeds=None,
+            use_cache=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         r"""
         Args:
@@ -961,7 +712,8 @@ class MegatronDecoder(MegatronPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds,
+                                                              past_key_values_length)
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -969,10 +721,9 @@ class MegatronDecoder(MegatronPreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
@@ -1001,7 +752,8 @@ class MegatronDecoder(MegatronPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn("`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`...")
+                    logger.warn(
+                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`...")
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -1070,27 +822,19 @@ class MegatronDecoder(MegatronPreTrainedModel):
     MEGATRON_START_DOCSTRING,
 )
 class MegatronModel(MegatronPreTrainedModel):
-    def __init__(self, config: MegatronConfig):
+
+    def __init__(self, config):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
-
-        self.encoder = MegatronEncoder(config, self.shared)
-        self.decoder = MegatronDecoder(config, self.shared)
+        self.decoder = MegatronDecoder(config)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.decoder.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.shared = value
-        self.encoder.embed_tokens = self.shared
-        self.decoder.embed_tokens = self.shared
-
-    def get_encoder(self):
-        return self.encoder
+        self.decoder.embed_tokens = value
 
     def get_decoder(self):
         return self.decoder
@@ -1099,25 +843,20 @@ class MegatronModel(MegatronPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="megatron-11b",
-        output_type=Seq2SeqModelOutput,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+            self,
+            input_ids=None,
+            attention_mask=None,
+            head_mask=None,
+            past_key_values=None,
+            inputs_embeds=None,
+            use_cache=None,
+            output_attentions=None,
+            output_hidden_states=None,
+            return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1126,460 +865,45 @@ class MegatronModel(MegatronPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if encoder_outputs is None:
-            encoder_outputs = self.encoder(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                head_mask=head_mask,
-                inputs_embeds=inputs_embeds,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs[0],
-                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
-                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
-            )
-
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            encoder_head_mask=head_mask,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            encoder_hidden_states=None,
+            encoder_attention_mask=None,
+            head_mask=head_mask,
+            encoder_head_mask=None,
             past_key_values=past_key_values,
-            inputs_embeds=decoder_inputs_embeds,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
-
-        return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-        )
+        return decoder_outputs
 
 
 @add_start_docstrings(
-    "The Megatron Model with a language modeling head. Can be used for summarization.", MEGATRON_START_DOCSTRING
+    """
+    The Megatron model with a language modeling head on top (linear layer with weights tied to the input
+    embeddings).
+    """,
+    MEGATRON_START_DOCSTRING,
 )
-class MegatronForConditionalGeneration(MegatronPreTrainedModel):
+class MegatronForCausalLM(MegatronPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
+        "model.decoder.embed_positions.weight",
     ]
-
-    def __init__(self, config: MegatronConfig):
-        super().__init__(config)
-        self.model = MegatronModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
-        self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
-
-        self.init_weights()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        self._resize_final_logits_bias(new_num_tokens)
-        return new_embeddings
-
-    def _resize_final_logits_bias(self, new_num_tokens: int) -> None:
-        old_num_tokens = self.final_logits_bias.shape[-1]
-        if new_num_tokens <= old_num_tokens:
-            new_bias = self.final_logits_bias[:, :new_num_tokens]
-        else:
-            extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
-            new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    @add_start_docstrings_to_model_forward(MEGATRON_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
-    @add_end_docstrings(MEGATRON_GENERATION_EXAMPLE)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        encoder_outputs=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss. Indices should either be in ``[0, ...,
-            config.vocab_size]`` or -100 (see ``input_ids`` docstring). Tokens with indices set to ``-100`` are ignored
-            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
-
-        Returns:
-
-        Conditional generation example::
-
-            >>> from transformers import MegatronTokenizer, MegatronForConditionalGeneration
-            >>> tokenizer = MegatronTokenizer.from_pretrained('megatron-11b')
-            >>> TXT = "My friends are <mask> but they eat too many carbs."
-
-            >>> model = MegatronForConditionalGeneration.from_pretrained('megatron-11b')
-            >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
-            >>> logits = model(input_ids).logits
-
-            >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
-            >>> probs = logits[0, masked_index].softmax(dim=0)
-            >>> values, predictions = probs.topk(5)
-
-            >>> tokenizer.decode(predictions).split()
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if labels is not None:
-            if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
-
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            encoder_outputs=encoder_outputs,
-            decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        lm_logits = self.lm_head(outputs[0]) + self.final_logits_bias
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (lm_logits,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
-        return Seq2SeqLMOutput(
-            loss=masked_lm_loss,
-            logits=lm_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past=None,
-        attention_mask=None,
-        head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs
-    ):
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            decoder_input_ids = decoder_input_ids[:, -1:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
-    @staticmethod
-    def _reorder_cache(past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
-        return reordered_past
-
-
-@add_start_docstrings(
-    """
-    Megatron model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
-    tasks.
-    """,
-    MEGATRON_START_DOCSTRING,
-)
-class MegatronForSequenceClassification(MegatronPreTrainedModel):
-    def __init__(self, config: MegatronConfig, **kwargs):
-        super().__init__(config, **kwargs)
-        self.model = MegatronModel(config)
-        self.classification_head = MegatronClassificationHead(
-            config.d_model,
-            config.d_model,
-            config.num_labels,
-            config.classifier_dropout,
-        )
-        self.model._init_weights(self.classification_head.dense)
-        self.model._init_weights(self.classification_head.out_proj)
-
-    @add_start_docstrings_to_model_forward(MEGATRON_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-11b",
-        output_type=Seq2SeqSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if labels is not None:
-            use_cache = False
-
-        if input_ids is None and inputs_embeds is not None:
-            raise NotImplementedError(
-                f"Passing input embeddings is currently not supported for {self.__class__.__name__}"
-            )
-
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        hidden_states = outputs[0]  # last hidden state
-
-        eos_mask = input_ids.eq(self.config.eos_token_id)
-
-        if len(torch.unique(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
-        logits = self.classification_head(sentence_representation)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return Seq2SeqSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-
-@add_start_docstrings(
-    """
-    Megatron Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
-    """,
-    MEGATRON_START_DOCSTRING,
-)
-class MegatronForQuestionAnswering(MegatronPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        config.num_labels = 2
-        self.num_labels = config.num_labels
-
-        self.model = MegatronModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.model._init_weights(self.qa_outputs)
-
-    @add_start_docstrings_to_model_forward(MEGATRON_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-11b",
-        output_type=Seq2SeqQuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        decoder_input_ids=None,
-        decoder_attention_mask=None,
-        encoder_outputs=None,
-        start_positions=None,
-        end_positions=None,
-        inputs_embeds=None,
-        decoder_inputs_embeds=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
-            are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if start_positions is not None and end_positions is not None:
-            use_cache = False
-
-        outputs = self.model(
-            input_ids,
-            attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
-            decoder_attention_mask=decoder_attention_mask,
-            encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions.clamp_(0, ignored_index)
-            end_positions.clamp_(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-            ) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
-        return Seq2SeqQuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            past_key_values=outputs.past_key_values,
-            decoder_hidden_states=outputs.decoder_hidden_states,
-            decoder_attentions=outputs.decoder_attentions,
-            cross_attentions=outputs.cross_attentions,
-            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-            encoder_hidden_states=outputs.encoder_hidden_states,
-            encoder_attentions=outputs.encoder_attentions,
-        )
-
-class MegatronDecoderWrapper(MegatronPreTrainedModel):
-    """
-    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
-    used in combination with the :class:`~transformers.EncoderDecoderModel` framework.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.decoder = MegatronDecoder(config)
-
-    def forward(self, *args, **kwargs):
-        return self.decoder(*args, **kwargs)
-
-
-class MegatronForCausalLM(MegatronPreTrainedModel):
+    _keys_to_ignore_on_save = [
+        "model.decoder.embed_positions.weight",
+    ]
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
         config.is_decoder = True
         config.is_encoder_decoder = False
-        self.model = MegatronDecoderWrapper(config)
+        self.model = MegatronModel(config)
 
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
@@ -1690,8 +1014,8 @@ class MegatronForCausalLM(MegatronPreTrainedModel):
 
             >>> from transformers import MegatronTokenizer, MegatronForCausalLM
 
-            >>> tokenizer = MegatronTokenizer.from_pretrained('facebook/bart-large')
-            >>> model = MegatronForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+            >>> tokenizer = MegatronTokenizer.from_pretrained('megatron-11b')
+            >>> model = MegatronForCausalLM.from_pretrained('megatron-11b', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
