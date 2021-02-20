@@ -336,12 +336,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
             x = torch.tensor(
                 [
                     [-1.0, -2.0, -3.0, -4.0],
-                    [
-                        5.0,
-                        6.0,
-                        7.0,
-                        8.0,
-                    ],
+                    [5.0, 6.0, 7.0, 8.0],
                 ]
             )
             x_scaling_factor = torch.tensor(1.0)
@@ -369,12 +364,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
                 torch.tensor(
                     [
                         [-1.0, -2.0, -3.0, -4.0],
-                        [
-                            5.0,
-                            6.0,
-                            7.0,
-                            8.0,
-                        ],
+                        [5.0, 6.0, 7.0, 8.0],
                     ]
                 )
                 * 2
@@ -407,12 +397,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
                 torch.tensor(
                     [
                         [-1.0, -2.0, -3.0, -4.0],
-                        [
-                            5.0,
-                            6.0,
-                            7.0,
-                            8.0,
-                        ],
+                        [5.0, 6.0, 7.0, 8.0],
                     ]
                 )
                 * 3
@@ -448,12 +433,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
             linear_weight = torch.tensor(
                 [
                     [-1.0, 2.0, 3.0, -4.0],
-                    [
-                        5.0,
-                        -6.0,
-                        -7.0,
-                        8.0,
-                    ],
+                    [5.0, -6.0, -7.0, 8.0],
                 ]
             ).T
             linear_q.weight = torch.nn.Parameter(linear_weight)
