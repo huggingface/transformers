@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 MEGATRON_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/config.json",
+    "megatron-11b": "https://huggingface.co/anton-l/megatron-11b/resolve/main/config.json",
     # See all Megatron models at https://huggingface.co/models?filter=megatron
 }
 

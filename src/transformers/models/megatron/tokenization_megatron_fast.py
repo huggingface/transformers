@@ -20,15 +20,13 @@ from .tokenization_megatron import MegatronTokenizer
 
 logger = logging.get_logger(__name__)
 
+# vocab and merges same as roberta
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/vocab.json",
+        "megatron-11b": "https://huggingface.co/roberta-large/resolve/main/vocab.json",
     },
     "merges_file": {
-        "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/merges.txt",
-    },
-    "tokenizer_file": {
-        "megatron-11b": "https://huggingface.co/megatron-11b/resolve/main/tokenizer.json",
+        "megatron-11b": "https://huggingface.co/roberta-large/resolve/main/merges.txt",
     },
 }
 
