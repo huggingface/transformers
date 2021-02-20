@@ -28,24 +28,22 @@ if is_torch_available():
     import torch
 
     from transformers.models.ibert.modeling_ibert import (
+        IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         IBertConfig,
+        IBertEmbeddings,
         IBertForMaskedLM,
         IBertForMultipleChoice,
         IBertForQuestionAnswering,
         IBertForSequenceClassification,
         IBertForTokenClassification,
         IBertModel,
-        IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        IBertEmbeddings,
-        create_position_ids_from_input_ids,
-    )
-    from transformers.models.ibert.modeling_ibert import (
-        QuantEmbedding,
-        QuantAct,
-        QuantLinear,
         IntGELU,
-        IntSoftmax,
         IntLayerNorm,
+        IntSoftmax,
+        QuantAct,
+        QuantEmbedding,
+        QuantLinear,
+        create_position_ids_from_input_ids,
     )
 
 
@@ -108,7 +106,7 @@ class IBertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            quant_mode=True, #TODO add False as well
+            quant_mode=True,  # TODO add False as well
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -304,15 +302,25 @@ class IBertModelIntegrationTest(unittest.TestCase):
     def test_quant_embedding(self):
         weight_bit = 8
         embedding = QuantEmbedding(2, 4, quant_mode=True, weight_bit=weight_bit)
-        embedding_weight = torch.tensor([[-1., -2., -3., -4.], [5., 6., 7., 8.,]])
+        embedding_weight = torch.tensor(
+            [
+                [-1.0, -2.0, -3.0, -4.0],
+                [
+                    5.0,
+                    6.0,
+                    7.0,
+                    8.0,
+                ],
+            ]
+        )
         embedding.weight = torch.nn.Parameter(embedding_weight)
 
-        expected_scaling_factor = embedding_weight.abs().max() / (2 ** (weight_bit -1) - 1)
+        expected_scaling_factor = embedding_weight.abs().max() / (2 ** (weight_bit - 1) - 1)
         x, x_scaling_factor = embedding(torch.tensor(0))
         y, y_scaling_factor = embedding(torch.tensor(1))
 
         # scaling factor should follow the symmetric quantization rule
-        self.assertEqual(x_scaling_factor, expected_scaling_factor)
+        self.assertTrue(torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4))
         self.assertTrue(torch.allclose(x_scaling_factor, expected_scaling_factor, atol=1e-4))
         self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
 
@@ -320,11 +328,134 @@ class IBertModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(x, embedding_weight[0], atol=expected_scaling_factor))
         self.assertTrue(torch.allclose(y, embedding_weight[1], atol=expected_scaling_factor))
 
+    def test_quant_act(self):
+        def _test_range():
+            act = QuantAct(activation_bit, act_range_momentum, quant_mode=True)
+
+            # First pass
+            x = torch.tensor(
+                [
+                    [-1.0, -2.0, -3.0, -4.0],
+                    [
+                        5.0,
+                        6.0,
+                        7.0,
+                        8.0,
+                    ],
+                ]
+            )
+            x_scaling_factor = torch.tensor(1.0)
+            y, y_scaling_factor = act(x, x_scaling_factor)
+            y_int = y / y_scaling_factor
+
+            # After the first pass, x_min and x_max should be initialized with x.min() and x.max()
+            expected_x_min, expected_x_max = x.min(), x.max()
+            self.assertTrue(torch.allclose(act.x_min, expected_x_min, atol=1e-4))
+            self.assertTrue(torch.allclose(act.x_max, expected_x_max, atol=1e-4))
+
+            # scaling factor should follow the symmetric quantization rule
+            expected_range = torch.max(expected_x_min.abs(), expected_x_max.abs())
+            expected_scaling_factor = expected_range / (2 ** (activation_bit - 1) - 1)
+            self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+
+            # quantization error should not exceed the scaling factor
+            self.assertTrue(torch.allclose(x, y, atol=expected_scaling_factor))
+
+            # output should be integer
+            self.assertTrue(torch.allclose(y_int, y_int.round(), atol=1e-4))
+
+            # Second Pass
+            x = (
+                torch.tensor(
+                    [
+                        [-1.0, -2.0, -3.0, -4.0],
+                        [
+                            5.0,
+                            6.0,
+                            7.0,
+                            8.0,
+                        ],
+                    ]
+                )
+                * 2
+            )
+            x_scaling_factor = torch.tensor(1.0)
+            y, y_scaling_factor = act(x, x_scaling_factor)
+            y_int = y / y_scaling_factor
+
+            # From the second pass, x_min and x_max should be updated with moving average
+            expected_x_min = expected_x_min * act_range_momentum + x.min() * (1 - act_range_momentum)
+            expected_x_max = expected_x_max * act_range_momentum + x.max() * (1 - act_range_momentum)
+            self.assertTrue(torch.allclose(act.x_min, expected_x_min, atol=1e-4))
+            self.assertTrue(torch.allclose(act.x_max, expected_x_max, atol=1e-4))
+
+            # scaling factor should follow the symmetric quantization rule
+            expected_range = torch.max(expected_x_min.abs(), expected_x_max.abs())
+            expected_scaling_factor = expected_range / (2 ** (activation_bit - 1) - 1)
+            self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+
+            # quantization error should not exceed the scaling factor
+            x = x.clamp(min=-expected_range, max=expected_range)
+            self.assertTrue(torch.allclose(x, y, atol=expected_scaling_factor))
+
+            # output should be integer
+            self.assertTrue(torch.allclose(y_int, y_int.round(), atol=1e-4))
+
+            # Third pass, with eval()
+            act.eval()
+            x = (
+                torch.tensor(
+                    [
+                        [-1.0, -2.0, -3.0, -4.0],
+                        [
+                            5.0,
+                            6.0,
+                            7.0,
+                            8.0,
+                        ],
+                    ]
+                )
+                * 3
+            )
+
+            # In eval mode, min/max and scaling factor must be fixed
+            self.assertTrue(torch.allclose(act.x_min, expected_x_min, atol=1e-4))
+            self.assertTrue(torch.allclose(act.x_max, expected_x_max, atol=1e-4))
+            self.assertTrue(torch.allclose(y_scaling_factor, expected_scaling_factor, atol=1e-4))
+
+        def _test_identity():
+            # test if identity and identity_scaling_factor are given
+            # should add the input values
+            act = QuantAct(activation_bit, act_range_momentum, quant_mode=True)
+            x = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]])
+            y = torch.tensor([[6.0, -7.0, 1.0, -2.0], [3.0, -4.0, -8.0, 5.0]])
+            x_scaling_factor = torch.tensor(1.0)
+            y_scaling_factor = torch.tensor(0.5)
+            z, z_scaling_factor = act(x, x_scaling_factor, y, y_scaling_factor)
+            z_int = z / z_scaling_factor
+            self.assertTrue(torch.allclose(x + y, z, atol=0.1))
+            self.assertTrue(torch.allclose(z_int, z_int.round(), atol=1e-4))
+
+        activation_bit = 8
+        act_range_momentum = 0.95
+        _test_range()
+        _test_identity()
+
     def test_quant_linear(self):
         def _test(per_channel):
             linear_q = QuantLinear(2, 4, quant_mode=True, per_channel=per_channel, weight_bit=weight_bit)
             linear_dq = QuantLinear(2, 4, quant_mode=False, per_channel=per_channel, weight_bit=weight_bit)
-            linear_weight = torch.tensor([[-1., 2., 3., -4.], [5., -6., -7., 8.,]]).T
+            linear_weight = torch.tensor(
+                [
+                    [-1.0, 2.0, 3.0, -4.0],
+                    [
+                        5.0,
+                        -6.0,
+                        -7.0,
+                        8.0,
+                    ],
+                ]
+            ).T
             linear_q.weight = torch.nn.Parameter(linear_weight)
             linear_dq.weight = torch.nn.Parameter(linear_weight)
 
@@ -336,7 +467,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
                 q_max = linear_weight.abs().max(dim=1).values
             else:
                 q_max = linear_weight.abs().max()
-            expected_scaling_factor = q_max / (2 ** (weight_bit -1) - 1)
+            expected_scaling_factor = q_max / (2 ** (weight_bit - 1) - 1)
 
             # scaling factor should follow the symmetric quantization rule
             self.assertTrue(torch.allclose(linear_q.fc_scaling_factor, expected_scaling_factor, atol=1e-4))
@@ -348,12 +479,12 @@ class IBertModelIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
 
         weight_bit = 8
-        x = torch.tensor([[2., -5.], [-3., 4.]])
-        x_scaling_factor = torch.tensor([1.])
+        x = torch.tensor([[2.0, -5.0], [-3.0, 4.0]])
+        x_scaling_factor = torch.tensor([1.0])
         _test(True)
         _test(False)
 
-    def test_quant_gelu(self):
+    def test_int_gelu(self):
         gelu_q = IntGELU(quant_mode=True)
         gelu_dq = torch.nn.GELU()
 
@@ -365,18 +496,18 @@ class IBertModelIntegrationTest(unittest.TestCase):
         q_int = q / q_scaling_factor
         dq = gelu_dq(x)
 
-        # output of the normal GELU annd the quantized GELU should be similar
+        # output of the normal GELU and the quantized GELU should be similar
         self.assertTrue(torch.allclose(q, dq, atol=0.5))
 
         # output of the quantized GELU layer should be integer
         self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
 
-    def test_quant_softmax(self):
+    def test_int_softmax(self):
         output_bit = 8
         softmax_q = IntSoftmax(output_bit, quant_mode=True)
         softmax_dq = torch.nn.Softmax()
 
-        #x_int = torch.range(-10000, 10000, 1)
+        # x_int = torch.range(-10000, 10000, 1)
         def _test(array):
             x_int = torch.tensor(array)
             x_scaling_factor = torch.tensor(0.1)
@@ -386,7 +517,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
             q_int = q / q_scaling_factor
             dq = softmax_dq(x)
 
-            # output of the normal Softmax annd the quantized Softmax should be similar
+            # output of the normal Softmax and the quantized Softmax should be similar
             self.assertTrue(torch.allclose(q, dq, atol=0.5))
 
             # output of the quantized GELU layer should be integer
@@ -397,61 +528,34 @@ class IBertModelIntegrationTest(unittest.TestCase):
 
         array = [[i + j for j in range(10)] for i in range(-10, 10)]
         _test(array)
-        array = [[i + j for j in range(50)] for i in range(-10, 10)] 
+        array = [[i + j for j in range(50)] for i in range(-10, 10)]
         _test(array)
-        array = [[i + 100 * j for j in range(2)] for i in range(-10, 10)] 
+        array = [[i + 100 * j for j in range(2)] for i in range(-10, 10)]
         _test(array)
 
-'''
-    @slow
-    def test_inference_masked_lm(self):
-        model = RobertaForMaskedLM.from_pretrained("roberta-base")
+    def test_int_layernorm(self):
+        output_bit = 8
 
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 11, 50265))
-        self.assertEqual(output.shape, expected_shape)
-        # compare the actual values for a slice.
-        expected_slice = torch.tensor(
-            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
-        )
+        # some random matrix
+        array = [[[i * j * j + j for j in range(5, 15)]] for i in range(-10, 10)]
+        x_int = torch.tensor(array)
+        x_scaling_factor = torch.tensor(0.1)
+        x = x_int * x_scaling_factor
 
-        # roberta = torch.hub.load('pytorch/fairseq', 'roberta.base')
-        # roberta.eval()
-        # expected_slice = roberta.model.forward(input_ids)[0][:, :3, :3].detach()
+        ln_q = IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit)
+        ln_dq = torch.nn.LayerNorm(x.shape[1:], 1e-5)
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        ln_q.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        ln_q.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
 
-    @slow
-    def test_inference_no_head(self):
-        model = RobertaModel.from_pretrained("roberta-base")
+        q, q_scaling_factor = ln_q(x, x_scaling_factor)
+        q_int = q / q_scaling_factor
+        dq = ln_dq(x)
 
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        # compare the actual values for a slice.
-        expected_slice = torch.tensor(
-            [[[-0.0231, 0.0782, 0.0074], [-0.1854, 0.0540, -0.0175], [0.0548, 0.0799, 0.1687]]]
-        )
+        # output of the normal LN and the quantized LN should be similar
+        self.assertTrue(torch.allclose(q, dq, atol=0.5))
 
-        # roberta = torch.hub.load('pytorch/fairseq', 'roberta.base')
-        # roberta.eval()
-        # expected_slice = roberta.extract_features(input_ids)[:, :3, :3].detach()
-
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_classification_head(self):
-        model = RobertaForSequenceClassification.from_pretrained("roberta-large-mnli")
-
-        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
-        expected_shape = torch.Size((1, 3))
-        self.assertEqual(output.shape, expected_shape)
-        expected_tensor = torch.tensor([[-0.9469, 0.3913, 0.5118]])
-
-        # roberta = torch.hub.load('pytorch/fairseq', 'roberta.large.mnli')
-        # roberta.eval()
-        # expected_tensor = roberta.predict("mnli", input_ids, return_logits=True).detach()
-
-        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
-'''
+        # output of the quantized GELU layer should be integer
+        self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
