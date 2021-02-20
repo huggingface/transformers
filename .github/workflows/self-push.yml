@@ -31,7 +31,7 @@ jobs:
       - run: nvidia-smi
 
       - name: Kill any run-away pytest processes
-        run: pkill -f tests; pkill -f examples
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -106,7 +106,7 @@ jobs:
       - run: nvidia-smi
 
       - name: Kill any run-away pytest processes
-        run: pkill -f tests; pkill -f examples
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -179,7 +179,7 @@ jobs:
       - run: nvidia-smi
 
       - name: Kill any run-away pytest processes
-        run: pkill -f tests; pkill -f examples
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
@@ -243,7 +243,7 @@ jobs:
       - run: nvidia-smi
 
       - name: Kill any run-away pytest processes
-        run: pkill -f tests; pkill -f examples
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
