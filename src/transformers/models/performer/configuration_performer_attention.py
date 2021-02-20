@@ -7,8 +7,7 @@ PerformerKernel = Enum('PerformerKernel', ['cosh', 'exp', 'elu', 'relu'])
 OrthogonalFeatureAlgorithm = Enum('OrthogonalFeatureAlgorithm', ['auto', 'kacs', 'qr'])
 
 
-@dataclass
-class PerformerAttentionConfig:
+class PerformerAttentionConfig():
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.PerformerAttention` module.
     It is used to define the behavior of a Performer/FAVOR+ attention module when it is initialized.
@@ -78,37 +77,60 @@ class PerformerAttentionConfig:
             Number of attention heads.
     """
 
-    attention_dropout: float = 0.1
-    kernel_type: Union[str, Callable, PerformerKernel] = PerformerKernel.exp
+    def __init__(
+        self,
+        attention_dropout = 0.1,
+        kernel_type = PerformerKernel.exp,
+        causal = False,
+        use_recurrent_decoding = False,
+        kernel_epsilon = 1e-4,
+        normalize_output = True,
+        normalization_stabilizer: float = 1e-6,
+        use_linear_layers = True,
+        linear_layer_names = ('q_linear', 'k_linear', 'v_linear', 'out_linear'),
+        num_random_features = None,
+        use_thick_features = False,
+        regularize_feature_norms = True,
+        use_orthogonal_features = True,
+        orthogonal_feature_algorithm = OrthogonalFeatureAlgorithm.auto,
+        feature_redraw_interval = 100,
+        redraw_stochastically = False,
+        redraw_verbose = False,
+        d_model = None,
+        num_heads = None,
+        **kwargs
+    ):
 
-    causal: bool = False
-    use_recurrent_decoding: bool = False
+        self.attention_dropout = attention_dropout
+        self.kernel_type: Union[str, Callable, PerformerKernel] = PerformerKernel.exp
 
-    kernel_epsilon: float = 1e-4
-    normalize_output: bool = True
-    normalization_stabilizer: float = 1e-6
+        self.causal = causal
+        self.use_recurrent_decoding = use_recurrent_decoding
 
-    # The linear_layer_names parameter is needed to allow the PerformerAttention object to imitate the naming
-    # convention of arbitrary attention modules, and therefore load weights from pretrained models. It can either have
-    # 3 or 4 elements; if it has 3, then no output linear layer is used.
-    use_linear_layers: bool = True
-    linear_layer_names: Sequence[str] = ('q_linear', 'k_linear', 'v_linear', 'out_linear')
+        self.kernel_epsilon = kernel_epsilon
+        self.normalize_output = kernel_epsilon
+        self.normalization_stabilizer = normalization_stabilizer
 
-    num_random_features: Optional[int] = None
-    use_thick_features: bool = False
-    regularize_feature_norms: bool = True
+        # The linear_layer_names parameter is needed to allow the PerformerAttention object to imitate the naming
+        # convention of arbitrary attention modules, and therefore load weights from pretrained models. It can either have
+        # 3 or 4 elements; if it has 3, then no output linear layer is used.
+        self.use_linear_layers = use_linear_layers
+        self.linear_layer_names = linear_layer_names
 
-    use_orthogonal_features: bool = True
-    orthogonal_feature_algorithm: Union[str, OrthogonalFeatureAlgorithm] = OrthogonalFeatureAlgorithm.auto
+        self.num_random_features = num_random_features
+        self.use_thick_features = use_thick_features
+        self.regularize_feature_norms = regularize_feature_norms
 
-    feature_redraw_interval: Optional[int] = 100
-    redraw_stochastically: bool = False
-    redraw_verbose: bool = False
+        self.use_orthogonal_features = use_orthogonal_features
+        self.orthogonal_feature_algorithm = orthogonal_feature_algorithm
+        self.feature_redraw_interval = feature_redraw_interval
+        self.redraw_stochastically = redraw_stochastically
+        self.redraw_verbose = redraw_verbose
 
-    # Optional here so the user doesn't have to set redundant parameters, but must be set by model before config is
-    # passed to PerformerAttention.__init__()
-    d_model: Optional[int] = None
-    num_heads: Optional[int] = None
+        # Optional here so the user doesn't have to set redundant parameters, but must be set by model before config is
+        # passed to PerformerAttention.__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
 
     # Make enums JSON serializable
     def to_dict(self):

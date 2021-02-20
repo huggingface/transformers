@@ -230,7 +230,7 @@ class TransformerBlock(nn.Module):
         super().__init__()
 
         assert config.dim % config.n_heads == 0
-        self.attention = PerformerAttention(config.performer_attention_config, name="attention")
+        self.attention = PerformerAttention(config.performer_attention_config, linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'))
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)

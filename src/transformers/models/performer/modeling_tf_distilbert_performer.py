@@ -295,7 +295,7 @@ class TFTransformerBlock(tf.keras.layers.Layer):
             config.dim % config.n_heads == 0
         ), f"Hidden size {config.dim} not dividable by number of heads {config.n_heads}"
 
-        self.attention = TFPerformerAttention(config.performer_attention_config, name="attention")
+        self.attention = TFPerformerAttention(config.performer_attention_config, linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'), name="attention")
         self.sa_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="sa_layer_norm")
 
         self.ffn = TFFFN(config, name="ffn")

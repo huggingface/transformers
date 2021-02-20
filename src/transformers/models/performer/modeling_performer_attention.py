@@ -325,7 +325,7 @@ class PerformerAttention(nn.Module):
         # Add an attention head dimension
         output_tensor.unsqueeze_(1)
         new_shape = list(output_tensor.shape)
-        new_shape[0] = batch_size  # This is redundant if use_thick_features == True, but not otherwise
+        new_shape[0] = batch  # This is redundant if use_thick_features == True, but not otherwise
         new_shape[1] = self.num_heads
         output_tensor = output_tensor.expand(*new_shape).transpose(-2, -1)
 
