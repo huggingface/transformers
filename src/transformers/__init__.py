@@ -1313,8 +1313,7 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PegasusConfig
-    from .models.performer.bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
-    from .models.performer.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
+    from .models.performer import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig, DistilBertPerformerConfig
     from .models.phobert import PhobertTokenizer
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
@@ -1748,7 +1747,7 @@ if TYPE_CHECKING:
             load_tf_weights_in_openai_gpt,
         )
         from .models.pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
-        from .models.performer.bert import (
+        from .models.performer import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BertPerformerForMaskedLM,
             BertPerformerForMultipleChoice,
@@ -1758,7 +1757,7 @@ if TYPE_CHECKING:
             BertPerformerModel,
             BertPerformerPreTrainedModel,
         )
-        from .models.performer.distilbert import (
+        from .models.performer import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DistilBertPerformerForMaskedLM,
             DistilBertPerformerForMultipleChoice,
@@ -2110,7 +2109,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTPreTrainedModel,
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
-        from .models.performer.bert import (
+        from .models.performer import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertPerformerForMaskedLM,
             TFBertPerformerForMultipleChoice,
@@ -2121,7 +2120,7 @@ if TYPE_CHECKING:
             TFBertPerformerModel,
             TFBertPerformerPreTrainedModel,
         )
-        from .models.performer.distilbert import (
+        from .models.performer import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertPerformerForMaskedLM,
             TFDistilBertPerformerForMultipleChoice,
