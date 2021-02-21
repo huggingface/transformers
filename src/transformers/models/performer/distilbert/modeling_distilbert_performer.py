@@ -26,14 +26,14 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from ...activations import gelu
-from ...file_utils import (
+from ....activations import gelu
+from ....file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
+from ....modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -41,15 +41,15 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
+from ....modeling_utils import (
     PreTrainedModel,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...utils import logging
+from ....utils import logging
 from .configuration_distilbert_performer import DistilBertPerformerConfig
-from .modeling_performer_attention import PerformerAttention
+from ..modeling_performer_attention import PerformerAttention
 
 
 logger = logging.get_logger(__name__)

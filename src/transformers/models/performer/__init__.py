@@ -21,16 +21,8 @@ from typing import TYPE_CHECKING
 from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 
-_import_structure = {
-    "configuration_distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig"],
-    "tokenization_distilbert": ["DistilBertTokenizer"],
-}
-
-if is_tokenizers_available():
-    _import_structure["tokenization_distilbert_fast"] = ["DistilBertTokenizerFast"]
-
 if is_torch_available():
-    _import_structure["modeling_distilbert"] = [
+    _import_structure["modeling_distilbert_performer"] = [
         "DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DistilBertPerformerForMaskedLM",
         "DistilBertPerformerForMultipleChoice",
@@ -41,8 +33,19 @@ if is_torch_available():
         "DistilBertPerformerPreTrainedModel",
     ]
 
+    _import_structure["modeling_bert_performer"] = [
+        "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "BertPerformerForMaskedLM",
+        "BertPerformerForMultipleChoice",
+        "BertPerformerForQuestionAnswering",
+        "BertPerformerForSequenceClassification",
+        "BertPerformerForTokenClassification",
+        "BertPerformerModel",
+        "BertPerformerPreTrainedModel",
+    ]
+
 if is_tf_available():
-    _import_structure["modeling_tf_distilbert"] = [
+    _import_structure["modeling_tf_distilbert_performer"] = [
         "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDistilBertPerformerForMaskedLM",
         "TFDistilBertPerformerForMultipleChoice",
@@ -54,16 +57,32 @@ if is_tf_available():
         "TFDistilBertPerformerPreTrainedModel",
     ]
 
+    _import_structure["modeling_tf_bert_performer"] = [
+        "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFBertPerformerForMaskedLM",
+        "TFBertPerformerForMultipleChoice",
+        "TFBertPerformerForQuestionAnswering",
+        "TFBertPerformerForSequenceClassification",
+        "TFBertPerformerForTokenClassification",
+        "TFBertPerformerMainLayer",
+        "TFBertPerformerModel",
+        "TFBertPerformerPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
-    from .configuration_distilbert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
+    from distilbert.configuration_distilbert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
+    from bert.configuration_bert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
+
     from ..distilbert.tokenization_distilbert import DistilBertTokenizer
+    from ..bert.tokenization_bert import BertTokenizer
 
     if is_tokenizers_available():
         from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
+        from ..bert.tokenization_bert_fast import BertTokenizerFast
 
     if is_torch_available():
-        from .modeling_distilbert import (
+        from distilbert.modeling_distilbert_performer import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DistilBertPerformerForMaskedLM,
             DistilBertPerformerForMultipleChoice,
@@ -73,9 +92,19 @@ if TYPE_CHECKING:
             DistilBertPerformerModel,
             DistilBertPerformerPreTrainedModel,
         )
+        from bert.modeling_distilbert_performer import (
+            BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BertPerformerForMaskedLM,
+            BertPerformerForMultipleChoice,
+            BertPerformerForQuestionAnswering,
+            BertPerformerForSequenceClassification,
+            BertPerformerForTokenClassification,
+            BertPerformerModel,
+            BertPerformerPreTrainedModel,
+        )
 
     if is_tf_available():
-        from .modeling_tf_distilbert import (
+        from distilbert.modeling_tf_distilbert_performer import (
             TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDistilBertPerformerForMaskedLM,
             TFDistilBertPerformerForMultipleChoice,
@@ -85,6 +114,17 @@ if TYPE_CHECKING:
             TFDistilBertPerformerMainLayer,
             TFDistilBertPerformerModel,
             TFDistilBertPerformerPreTrainedModel,
+        )
+        from bert.modeling_tf_bert_performer import (
+            TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFBertPerformerForMaskedLM,
+            TFBertPerformerForMultipleChoice,
+            TFBertPerformerForQuestionAnswering,
+            TFBertPerformerForSequenceClassification,
+            TFBertPerformerForTokenClassification,
+            TFBertPerformerMainLayer,
+            TFBertPerformerModel,
+            TFBertPerformerPreTrainedModel,
         )
 
 else:

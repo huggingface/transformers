@@ -14,9 +14,9 @@
 # limitations under the License.
 """ DistilBERTPerformer model configuration """
 
-from ...configuration_utils import PretrainedConfig
-from .configuration_performer_attention import PerformerAttentionConfig
-from ...utils import logging
+from ....configuration_utils import PretrainedConfig
+from ..configuration_performer_attention import PerformerAttentionConfig
+from ....utils import logging
 
 
 logger = logging.get_logger(__name__)
