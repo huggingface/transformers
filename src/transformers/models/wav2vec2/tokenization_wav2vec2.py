@@ -255,15 +255,16 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+    def convert_tokens_to_string(self, tokens: List[str], group_tokens: bool = True) -> str:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
         # group same tokens into non-repeating tokens in CTC style decoding
-        grouped_tokens = [token_group[0] for token_group in groupby(tokens)]
+        if group_tokens:
+            tokens = [token_group[0] for token_group in groupby(tokens)]
 
         # filter self.pad_token which is used as CTC-blank token
-        filtered_tokens = list(filter(lambda token: token != self.pad_token, grouped_tokens))
+        filtered_tokens = list(filter(lambda token: token != self.pad_token, tokens))
 
         # replace delimiter token
         string = "".join([" " if token == self.word_delimiter_token else token for token in filtered_tokens]).strip()
@@ -277,6 +278,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         token_ids: List[int],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
+        group_tokens: bool = True,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -291,7 +293,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
                 continue
             result.append(token)
 
-        text = self.convert_tokens_to_string(result)
+        text = self.convert_tokens_to_string(result, group_tokens=group_tokens)
 
         if clean_up_tokenization_spaces:
             clean_text = self.clean_up_tokenization(text)
