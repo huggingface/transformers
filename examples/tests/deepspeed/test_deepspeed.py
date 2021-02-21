@@ -78,7 +78,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
                 trainer.train()
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
-    def test_grad_acum(self):
+    def test_gradient_accumulation(self):
 
         # this test measures that we get identical weights and similar loss with:
         # 1. per_device_train_batch_size=8, gradient_accumulation_steps=1
@@ -96,7 +96,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
         a = b = 0.0
 
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer_baseline = get_regression_trainer(
+            no_grad_accum_trainer = get_regression_trainer(
                 a=a,
                 b=b,
                 local_rank=0,
@@ -105,15 +105,15 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
                 per_device_train_batch_size=8,
                 gradient_accumulation_steps=1,
             )
-            baseline_result = trainer_baseline.train()
-            baseline_loss = baseline_result.training_loss
-            baseline_a = trainer_baseline.model.a.item()
-            baseline_b = trainer_baseline.model.b.item()
+            no_grad_accum_result = no_grad_accum_trainer.train()
+            no_grad_accum_loss = no_grad_accum_result.training_loss
+            no_grad_accum_a = no_grad_accum_trainer.model.a.item()
+            no_grad_accum_b = no_grad_accum_trainer.model.b.item()
             # make sure the optimizer kicked in - if it hasn't changed from the original value of a then make train_len bigger
-            self.assertNotEqual(baseline_a, a)
+            self.assertNotEqual(no_grad_accum_a, a)
 
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer_deepspeed = get_regression_trainer(
+            yes_grad_accum_trainer = get_regression_trainer(
                 a=a,
                 b=b,
                 local_rank=0,
@@ -122,18 +122,18 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
                 per_device_train_batch_size=4,
                 gradient_accumulation_steps=2,
             )
-            deepspeed_result = trainer_deepspeed.train()
-            deepspeed_loss = deepspeed_result.training_loss
-            deepspeed_a = trainer_deepspeed.model.a.item()
-            deepspeed_b = trainer_deepspeed.model.b.item()
-            self.assertNotEqual(deepspeed_a, a)
+            yes_grad_accum_result = yes_grad_accum_trainer.train()
+            yes_grad_accum_loss = yes_grad_accum_result.training_loss
+            yes_grad_accum_a = yes_grad_accum_trainer.model.a.item()
+            yes_grad_accum_b = yes_grad_accum_trainer.model.b.item()
+            self.assertNotEqual(yes_grad_accum_a, a)
 
         # training with half the batch size but accumulation steps as 2 should give the same weights
-        self.assertEqual(baseline_a, deepspeed_a)
-        self.assertEqual(baseline_b, deepspeed_b)
+        self.assertEqual(no_grad_accum_a, yes_grad_accum_a)
+        self.assertEqual(no_grad_accum_b, yes_grad_accum_b)
 
         # see the note above how to get identical loss on a small bs
-        self.assertAlmostEqual(baseline_loss, deepspeed_loss, places=5)
+        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
 
 
 @slow
