@@ -688,6 +688,26 @@ if is_torch_available():
     _import_structure["models.pegasus"].extend(
         ["PegasusForConditionalGeneration", "PegasusModel", "PegasusForCausalLM"]
     )
+    _import_structure["models.performer"].extend(
+        [
+            "DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DistilBertPerformerForMaskedLM",
+            "DistilBertPerformerForMultipleChoice",
+            "DistilBertPerformerForQuestionAnswering",
+            "DistilBertPerformerForSequenceClassification",
+            "DistilBertPerformerForTokenClassification",
+            "DistilBertPerformerModel",
+            "DistilBertPerformerPreTrainedModel",
+            "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BertPerformerForMaskedLM",
+            "BertPerformerForMultipleChoice",
+            "BertPerformerForQuestionAnswering",
+            "BertPerformerForSequenceClassification",
+            "BertPerformerForTokenClassification",
+            "BertPerformerModel",
+            "BertPerformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST",
