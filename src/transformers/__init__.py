@@ -185,6 +185,7 @@ _import_structure = {
     "models.mt5": ["MT5Config"],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.pegasus": ["PegasusConfig"],
+    "models.performer": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig", "BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertPerformerConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.prophetnet": ["PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "ProphetNetConfig", "ProphetNetTokenizer"],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
