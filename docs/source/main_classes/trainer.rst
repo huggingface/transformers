@@ -838,7 +838,7 @@ While normally DeepSpeed gets gradient accumulation configured with:
 .. code-block:: json
 
     {
-        ""gradient_accumulation_steps": 3,
+        "gradient_accumulation_steps": 3,
     }
 
 in this case, to enable gradient accumulation, pass the command line `--gradient_accumulation_steps` argument as normal
