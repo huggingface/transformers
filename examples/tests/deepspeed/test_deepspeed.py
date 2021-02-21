@@ -107,10 +107,10 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
             )
             baseline_result = trainer_baseline.train()
             baseline_loss = baseline_result.training_loss
-            baseline_a = trainer_baseline.model.a
-            baseline_b = trainer_baseline.model.b
+            baseline_a = trainer_baseline.model.a.item()
+            baseline_b = trainer_baseline.model.b.item()
             # make sure the optimizer kicked in - if it hasn't changed from the original value of a then make train_len bigger
-            self.assertNotEqual(baseline_a.item(), a)
+            self.assertNotEqual(baseline_a, a)
 
         with mockenv_context(**self.dist_env_1_gpu):
             trainer_deepspeed = get_regression_trainer(
@@ -124,13 +124,13 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
             )
             deepspeed_result = trainer_deepspeed.train()
             deepspeed_loss = deepspeed_result.training_loss
-            deepspeed_a = trainer_deepspeed.model.a
-            deepspeed_b = trainer_deepspeed.model.b
+            deepspeed_a = trainer_deepspeed.model.a.item()
+            deepspeed_b = trainer_deepspeed.model.b.item()
             self.assertNotEqual(deepspeed_a, a)
 
         # training with half the batch size but accumulation steps as 2 should give the same weights
-        self.assertEqual(baseline_a.item(), deepspeed_a.item())
-        self.assertEqual(baseline_b.item(), deepspeed_b.item())
+        self.assertEqual(baseline_a, deepspeed_a)
+        self.assertEqual(baseline_b, deepspeed_b)
 
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(baseline_loss, deepspeed_loss, places=5)
