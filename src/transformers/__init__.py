@@ -1105,6 +1105,28 @@ if is_tf_available():
         ]
     )
     _import_structure["models.pegasus"].extend(["TFPegasusForConditionalGeneration", "TFPegasusModel"])
+    _import_structure["models.performer"].extend(
+        [
+            "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFBertPerformerForMaskedLM",
+            "TFBertPerformerForMultipleChoice",
+            "TFBertForQuestionAnswering",
+            "TFBertPerformerForSequenceClassification",
+            "TFBertPerformerForTokenClassification",
+            "TFBertPerformerMainLayer",
+            "TFBertPerformerModel",
+            "TFBertPerformerPreTrainedModel",
+            "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFDistilBertPerformerForMaskedLM",
+            "TFDistilBertPerformerForMultipleChoice",
+            "TFDistilBertForQuestionAnswering",
+            "TFDistilBertPerformerForSequenceClassification",
+            "TFDistilBertPerformerForTokenClassification",
+            "TFDistilBertPerformerMainLayer",
+            "TFDistilBertPerformerModel",
+            "TFDistilBertPerformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
