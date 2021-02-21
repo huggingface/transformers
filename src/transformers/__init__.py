@@ -1286,7 +1286,6 @@ if TYPE_CHECKING:
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
-    from .models.performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPRConfig,
@@ -1314,6 +1313,8 @@ if TYPE_CHECKING:
     from .models.mt5 import MT5Config
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.pegasus import PegasusConfig
+    from .models.performer.bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
+    from .models.performer.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
     from .models.phobert import PhobertTokenizer
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
@@ -1613,16 +1614,6 @@ if TYPE_CHECKING:
             DistilBertModel,
             DistilBertPreTrainedModel,
         )
-        from .models.performer import (
-            DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DistilBertPerformerForMaskedLM,
-            DistilBertPerformerForMultipleChoice,
-            DistilBertPerformerForQuestionAnswering,
-            DistilBertPerformerForSequenceClassification,
-            DistilBertPerformerForTokenClassification,
-            DistilBertPerformerModel,
-            DistilBertPerformerPreTrainedModel,
-        )
         from .models.dpr import (
             DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -1757,6 +1748,26 @@ if TYPE_CHECKING:
             load_tf_weights_in_openai_gpt,
         )
         from .models.pegasus import PegasusForCausalLM, PegasusForConditionalGeneration, PegasusModel
+        from .models.performer.bert import (
+            BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BertPerformerForMaskedLM,
+            BertPerformerForMultipleChoice,
+            BertPerformerForQuestionAnswering,
+            BertPerformerForSequenceClassification,
+            BertPerformerForTokenClassification,
+            BertPerformerModel,
+            BertPerformerPreTrainedModel,
+        )
+        from .models.performer.distilbert import (
+            DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DistilBertPerformerForMaskedLM,
+            DistilBertPerformerForMultipleChoice,
+            DistilBertPerformerForQuestionAnswering,
+            DistilBertPerformerForSequenceClassification,
+            DistilBertPerformerForTokenClassification,
+            DistilBertPerformerModel,
+            DistilBertPerformerPreTrainedModel,
+        )
         from .models.prophetnet import (
             PROPHETNET_PRETRAINED_MODEL_ARCHIVE_LIST,
             ProphetNetDecoder,
@@ -1992,18 +2003,6 @@ if TYPE_CHECKING:
             TFDistilBertModel,
             TFDistilBertPreTrainedModel,
         )
-        from .models.performer import (
-            TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFDistilBertPerformerForMaskedLM,
-            TFDistilBertPerformerForMultipleChoice,
-            TFDistilBertPerformerForQuestionAnswering,
-            TFDistilBertPerformerForSequenceClassification,
-            TFDistilBertPerformerForTokenClassification,
-            TFDistilBertPerformerMainLayer,
-            TFDistilBertPerformerModel,
-            TFDistilBertPerformerPreTrainedModel,
-        )
-
         from .models.dpr import (
             TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2111,6 +2110,28 @@ if TYPE_CHECKING:
             TFOpenAIGPTPreTrainedModel,
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
+        from .models.performer.bert import (
+            TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFBertPerformerForMaskedLM,
+            TFBertPerformerForMultipleChoice,
+            TFBertPerformerForQuestionAnswering,
+            TFBertPerformerForSequenceClassification,
+            TFBertPerformerForTokenClassification,
+            TFBertPerformerMainLayer,
+            TFBertPerformerModel,
+            TFBertPerformerPreTrainedModel,
+        )
+        from .models.performer.distilbert import (
+            TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFDistilBertPerformerForMaskedLM,
+            TFDistilBertPerformerForMultipleChoice,
+            TFDistilBertPerformerForQuestionAnswering,
+            TFDistilBertPerformerForSequenceClassification,
+            TFDistilBertPerformerForTokenClassification,
+            TFDistilBertPerformerMainLayer,
+            TFDistilBertPerformerModel,
+            TFDistilBertPerformerPreTrainedModel,
+        )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,

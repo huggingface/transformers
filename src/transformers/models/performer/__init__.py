@@ -21,16 +21,13 @@ from typing import TYPE_CHECKING
 from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
 _import_structure = {
-    "configuration_distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig"],
-    "tokenization_distilbert": ["DistilBertTokenizer"],
-    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertPerformerConfig"],
-    "tokenization_bert": ["BertTokenizer"],
-
+    "distilbert.configuration_distilbert_performer": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig"],
+    "bert.configuration_bert_performer": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertPerformerConfig"],
 }
 
 
 if is_torch_available():
-    _import_structure["modeling_distilbert_performer"] = [
+    _import_structure["distilbert.modeling_distilbert_performer"] = [
         "DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DistilBertPerformerForMaskedLM",
         "DistilBertPerformerForMultipleChoice",
@@ -41,7 +38,7 @@ if is_torch_available():
         "DistilBertPerformerPreTrainedModel",
     ]
 
-    _import_structure["modeling_bert_performer"] = [
+    _import_structure["bert.modeling_bert_performer"] = [
         "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BertPerformerForMaskedLM",
         "BertPerformerForMultipleChoice",
@@ -53,7 +50,7 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_distilbert_performer"] = [
+    _import_structure["distilbert.modeling_tf_distilbert_performer"] = [
         "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDistilBertPerformerForMaskedLM",
         "TFDistilBertPerformerForMultipleChoice",
@@ -65,7 +62,7 @@ if is_tf_available():
         "TFDistilBertPerformerPreTrainedModel",
     ]
 
-    _import_structure["modeling_tf_bert_performer"] = [
+    _import_structure["bert.modeling_tf_bert_performer"] = [
         "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFBertPerformerForMaskedLM",
         "TFBertPerformerForMultipleChoice",
@@ -81,13 +78,6 @@ if is_tf_available():
 if TYPE_CHECKING:
     from distilbert.configuration_distilbert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
     from bert.configuration_bert_performer import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
-
-    from ..distilbert.tokenization_distilbert import DistilBertTokenizer
-    from ..bert.tokenization_bert import BertTokenizer
-
-    if is_tokenizers_available():
-        from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
-        from ..bert.tokenization_bert_fast import BertTokenizerFast
 
     if is_torch_available():
         from distilbert.modeling_distilbert_performer import (
