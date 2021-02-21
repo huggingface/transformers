@@ -324,10 +324,12 @@ class TFBertAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
-            hidden_states=input_tensor,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
+            input_tensor,
+            input_tensor,
+            input_tensor,
+            attention_mask,
+            head_mask,
+            output_attentions,
             training=training,
         )
         attention_output = self.dense_output(
