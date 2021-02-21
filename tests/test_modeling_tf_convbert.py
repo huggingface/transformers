@@ -392,7 +392,7 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFConvBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFConvBertModel.from_pretrained("YituTech/conv-bert-base")
+        model = TFConvBertModel.from_pretrained("/home/abhishek/convbert_models/convbert_base")
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
@@ -404,9 +404,9 @@ class TFConvBertModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant(
             [
                 [
-                    [-0.10334751, -0.37152207, -0.2682219],
-                    [0.20078957, -0.3918426, -0.78811496],
-                    [0.08000169, -0.509474, -0.59314483],
+                    [-0.03475493, -0.4686034, -0.30638832],
+                    [0.22637248, -0.26988646, -0.7423424],
+                    [0.10324868, -0.45013508, -0.58280784],
                 ]
             ]
         )
