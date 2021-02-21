@@ -14,8 +14,10 @@
 
 import unittest
 
+import numpy as np
+
 from transformers import RobertaConfig, is_flax_available
-from transformers.testing_utils import require_flax
+from transformers.testing_utils import require_flax, slow
 
 from .test_modeling_flax_common import FlaxModelTesterMixin, ids_tensor, random_attention_mask
 
@@ -109,3 +111,10 @@ class FlaxRobertaModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlaxRobertaModelTester(self)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_class_name in self.all_model_classes:
+            model = model_class_name.from_pretrained("roberta-base")
+            outputs = model(np.ones((1, 1)))
+            self.assertIsNotNone(outputs)

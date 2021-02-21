@@ -35,6 +35,11 @@ class DataCollatorForPermutationLanguageModeling:
         requires_pytorch(self)
 
 
+class DataCollatorForSeq2Seq:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DataCollatorForSOP:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -303,6 +308,9 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
+
+
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
@@ -393,6 +401,15 @@ class AutoModelForSequenceClassification:
         requires_pytorch(self)
 
 
+class AutoModelForTableQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class AutoModelForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -412,6 +429,11 @@ class AutoModelWithLMHead:
 
 
 BART_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BartForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class BartForConditionalGeneration:
@@ -579,7 +601,47 @@ def load_tf_weights_in_bert_generation(*args, **kwargs):
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class BlenderbotForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class BlenderbotForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BlenderbotModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+BLENDERBOT_SMALL_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BlenderbotSmallForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BlenderbotSmallForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BlenderbotSmallModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -650,6 +712,81 @@ class CamembertModel:
         requires_pytorch(self)
 
 
+CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ConvBertForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertLayer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ConvBertPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def load_tf_weights_in_convbert(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_convbert)
+
+
 CTRL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -692,7 +829,34 @@ class CTRLPreTrainedModel:
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class DebertaForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DebertaForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -711,6 +875,63 @@ class DebertaModel:
 
 
 class DebertaPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DebertaV2ForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2ForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2ForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2PreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -1140,6 +1361,15 @@ class LayoutLMForMaskedLM:
         requires_pytorch(self)
 
 
+class LayoutLMForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class LayoutLMForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1150,6 +1380,45 @@ class LayoutLMForTokenClassification:
 
 
 class LayoutLMModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+LED_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class LEDForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LEDForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LEDForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class LEDModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -1267,6 +1536,20 @@ class LxmertXLayer:
         requires_pytorch(self)
 
 
+class MarianForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MarianModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MarianMTModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -1276,7 +1559,39 @@ class MarianMTModel:
         requires_pytorch(self)
 
 
+class MBartForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MBartForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MBartModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -1539,7 +1854,21 @@ def load_tf_weights_in_openai_gpt(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_openai_gpt)
 
 
+class PegasusForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class PegasusForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class PegasusModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -1867,6 +2196,45 @@ def load_tf_weights_in_t5(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_t5)
 
 
+TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TapasForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TapasForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TapasForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class TapasModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1913,6 +2281,41 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_transfo_xl)
+
+
+WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Wav2Vec2ForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Wav2Vec2ForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Wav2Vec2Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Wav2Vec2PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -2201,6 +2604,10 @@ def get_polynomial_decay_schedule_with_warmup(*args, **kwargs):
     requires_pytorch(get_polynomial_decay_schedule_with_warmup)
 
 
+def get_scheduler(*args, **kwargs):
+    requires_pytorch(get_scheduler)
+
+
 class Trainer:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -2208,3 +2615,8 @@ class Trainer:
 
 def torch_distributed_zero_first(*args, **kwargs):
     requires_pytorch(torch_distributed_zero_first)
+
+
+class Seq2SeqTrainer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)

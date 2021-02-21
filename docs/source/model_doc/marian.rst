@@ -33,7 +33,6 @@ Implementation Notes
 - The modeling code is the same as :class:`~transformers.BartForConditionalGeneration` with a few minor modifications:
 
     - static (sinusoid) positional embeddings (:obj:`MarianConfig.static_position_embeddings=True`)
-    - a new final_logits_bias (:obj:`MarianConfig.add_bias_logits=True`)
     - no layernorm_embedding (:obj:`MarianConfig.normalize_embedding=False`)
     - the model starts generating with :obj:`pad_token_id` (which has 0 as a token_embedding) as the prefix (Bart uses
       :obj:`<s/>`),
@@ -56,12 +55,10 @@ Examples
 
 - Since Marian models are smaller than many other translation models available in the library, they can be useful for
   fine-tuning experiments and integration tests.
-- `Fine-tune on TPU
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/builtin_trainer/train_distil_marian_enro_tpu.sh>`__
 - `Fine-tune on GPU
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/builtin_trainer/train_distil_marian_enro.sh>`__
+  <https://github.com/huggingface/transformers/blob/master/examples/research_projects/seq2seq-distillation/train_distil_marian_enro_teacher.sh>`__
 - `Fine-tune on GPU with pytorch-lightning
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/distil_marian_no_teacher.sh>`__
+  <https://github.com/huggingface/transformers/blob/master/examples/research_projects/seq2seq-distillation/train_distil_marian_no_teacher.sh>`__
 
 Multilingual Models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -182,13 +179,36 @@ MarianTokenizer
     :members: prepare_seq2seq_batch
 
 
+MarianModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MarianModel
+    :members: forward
+
+
 MarianMTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.MarianMTModel
+    :members: forward
+
+
+MarianForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.MarianForCausalLM
+    :members: forward
+
+
+TFMarianModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFMarianModel
+    :members: call
 
 
 TFMarianMTModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFMarianMTModel
+    :members: call

@@ -328,11 +328,18 @@ for more information.
 
 ### Develop on Windows
 
+On windows, you need to configure git to transform Windows `CRLF` line endings to Linux `LF` line endings:
+
+`git config core.autocrlf input`
+
 One way one can run the make command on Window is to pass by MSYS2:
 
 1. [Download MSYS2](https://www.msys2.org/), we assume to have it installed in C:\msys64
 2. Open the command line C:\msys64\msys2.exe (it should be available from the start menu)
 3. Run in the shell: `pacman -Syu` and install make with `pacman -S make`
+4. Add `C:\msys64\usr\bin` to your PATH environment variable.
+
+You can now use `make` from any terminal (Powershell, cmd.exe, etc) 🎉
 
 ### Syncing forked master with upstream (HuggingFace) master
 

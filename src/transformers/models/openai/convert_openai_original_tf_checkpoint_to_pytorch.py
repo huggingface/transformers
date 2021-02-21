@@ -19,7 +19,8 @@ import argparse
 
 import torch
 
-from transformers import CONFIG_NAME, WEIGHTS_NAME, OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
+from transformers import OpenAIGPTConfig, OpenAIGPTModel, load_tf_weights_in_openai_gpt
+from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
 

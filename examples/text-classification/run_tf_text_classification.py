@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 # Copyright 2020 The HuggingFace Team. All rights reserved.
 #
@@ -64,7 +65,7 @@ def get_tfds(
     label_name = features_name.pop(label_column_id)
     label_list = list(set(ds[list(files.keys())[0]][label_name]))
     label2id = {label: i for i, label in enumerate(label_list)}
-    input_names = ["input_ids"] + tokenizer.model_input_names
+    input_names = tokenizer.model_input_names
     transformed_ds = {}
 
     if len(features_name) == 1:

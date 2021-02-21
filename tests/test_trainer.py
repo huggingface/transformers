@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import dataclasses
+import gc
 import os
 import tempfile
 import unittest
@@ -29,6 +30,8 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
     slow,
 )
 from transformers.utils.hp_naming import TrialShortNamer
@@ -53,6 +56,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
+    from transformers.trainer import _model_unwrap
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -144,7 +148,7 @@ if is_torch_available():
             self.double_output = double_output
             self.config = None
 
-        def forward(self, input_x=None, labels=None, **kwargs):
+        def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
@@ -158,7 +162,7 @@ if is_torch_available():
             self.b = torch.nn.Parameter(torch.tensor(b).float())
             self.config = None
 
-        def forward(self, input_x=None, labels=None, **kwargs):
+        def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             result = {"output": y}
             if labels is not None:
@@ -175,7 +179,7 @@ if is_torch_available():
             self.b = torch.nn.Parameter(torch.tensor(config.b).float())
             self.double_output = config.double_output
 
-        def forward(self, input_x=None, labels=None, **kwargs):
+        def forward(self, input_x, labels=None, **kwargs):
             y = input_x * self.a + self.b
             if labels is None:
                 return (y, y) if self.double_output else (y,)
@@ -264,6 +268,21 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         metrics = trainer.evaluate()
         self.assertEqual(metrics[metric], best_value)
+
+    def check_trainer_state_are_the_same(self, trainer_state, trainer_state1):
+        # We'll pop things so operate on copies.
+        state = trainer_state.copy()
+        state1 = trainer_state1.copy()
+        # Log history main contain different logs for the time metrics (after resuming a training).
+        log_history = state.pop("log_history", None)
+        log_history1 = state1.pop("log_history", None)
+        self.assertEqual(state, state1)
+        for log, log1 in zip(log_history, log_history1):
+            _ = log.pop("train_runtime", None)
+            _ = log1.pop("train_runtime", None)
+            _ = log.pop("train_samples_per_second", None)
+            _ = log1.pop("train_samples_per_second", None)
+            self.assertEqual(log, log1)
 
     def test_trainer_works_with_dict(self):
         # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
@@ -357,6 +376,24 @@ class TrainerIntegrationTest(unittest.TestCase):
         # Check passing a new dataset for evaluation works
         new_eval_dataset = RegressionDataset(length=128)
         self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
+
+    @require_torch_multi_gpu
+    def test_data_is_not_parallelized_when_model_is_parallel(self):
+        model = RegressionModel()
+        # Make the Trainer believe it's a parallelized model
+        model.is_parallelizable = True
+        model.model_parallel = True
+        args = TrainingArguments("./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16)
+        trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
+        # Check the Trainer was fooled
+        self.assertTrue(trainer.is_model_parallel)
+        self.assertEqual(trainer.args.n_gpu, 1)
+
+        # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
+        self.assertEqual(trainer.get_train_dataloader().batch_size, 16)
+        self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
+        self.assertEqual(trainer.get_eval_dataloader().batch_size, 16)
+        self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
     def test_evaluate(self):
         trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
@@ -465,7 +502,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         self.check_trained_model(trainer.model)
 
         # Can return tensors.
-        train_dataset.set_format(type="torch")
+        train_dataset.set_format(type="torch", dtype=torch.float32)
         model = RegressionModel()
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
@@ -543,30 +580,28 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
 
             # Now check with a later checkpoint that it also works when we span over one epoch
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -580,33 +615,31 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
             # Reinitialize trainer and load model
-            model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            model.load_state_dict(state_dict)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
 
             # Now check with a later checkpoint that it also works when we span over one epoch
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            model = RegressionModel()
-            state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME))
-            model.load_state_dict(state_dict)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            trainer = get_regression_trainer(
+                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     def test_resume_training_with_gradient_accumulation(self):
         if torch.cuda.device_count() > 2:
@@ -629,16 +662,22 @@ class TrainerIntegrationTest(unittest.TestCase):
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
-            # Reinitialize trainer and load model
-            model = RegressionPreTrainedModel.from_pretrained(checkpoint)
-            trainer = Trainer(model, trainer.args, train_dataset=trainer.train_dataset)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                gradient_accumulation_steps=2,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
+            )
 
-            trainer.train(model_path=checkpoint)
+            trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
-            self.assertEqual(state, state1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     def test_load_best_model_at_end(self):
         total = int(self.n_epochs * 64 / self.batch_size)
@@ -798,47 +837,138 @@ class TrainerIntegrationTest(unittest.TestCase):
 
     def test_early_stopping_callback(self):
         # early stopping stops training before num_training_epochs
-        trainer = get_regression_trainer(
-            num_train_epochs=20,
-            gradient_accumulation_steps=1,
-            per_device_train_batch_size=16,
-            load_best_model_at_end=True,
-            evaluation_strategy=EvaluationStrategy.EPOCH,
-            compute_metrics=AlmostAccuracy(),
-            metric_for_best_model="accuracy",
-        )
-        trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
-        train_output = trainer.train()
-        self.assertLess(train_output.global_step, 20 * 64 / 16)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                load_best_model_at_end=True,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
+            train_output = trainer.train()
+            self.assertLess(train_output.global_step, 20 * 64 / 16)
 
         # Invalid inputs to trainer with early stopping callback result in assertion error
-        trainer = get_regression_trainer(
-            num_train_epochs=20,
-            gradient_accumulation_steps=1,
-            per_device_train_batch_size=16,
-            evaluation_strategy=EvaluationStrategy.EPOCH,
-            compute_metrics=AlmostAccuracy(),
-            metric_for_best_model="accuracy",
-        )
-        trainer.add_callback(EarlyStoppingCallback(1))
-        self.assertEqual(trainer.state.global_step, 0)
-        try:
-            trainer.train()
-        except AssertionError:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                evaluation_strategy=EvaluationStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1))
             self.assertEqual(trainer.state.global_step, 0)
+            try:
+                trainer.train()
+            except AssertionError:
+                self.assertEqual(trainer.state.global_step, 0)
 
     def test_flos_extraction(self):
         trainer = get_regression_trainer(learning_rate=0.1)
 
         def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, trainer._actual_model(wrapped_model_to_check))
-            self.assertGreaterEqual(getattr(trainer._actual_model(wrapped_model_to_check).config, "total_flos", 0), 0)
+            self.assertEqual(trainer.model, _model_unwrap(wrapped_model_to_check))
+            self.assertGreaterEqual(getattr(_model_unwrap(wrapped_model_to_check).config, "total_flos", 0), 0)
 
         # with plain model
         assert_flos_extraction(trainer, trainer.model)
 
         # with enforced DataParallel
         assert_flos_extraction(trainer, torch.nn.DataParallel(trainer.model))
+
+        trainer.train()
+        self.assertTrue(isinstance(trainer.state.total_flos, float))
+
+    def check_mem_metrics(self, trainer, check_func):
+        metrics = trainer.train().metrics
+        check_func("init_mem_cpu_alloc_delta", metrics)
+        check_func("train_mem_cpu_alloc_delta", metrics)
+        if torch.cuda.device_count() > 0:
+            check_func("init_mem_gpu_alloc_delta", metrics)
+            check_func("train_mem_gpu_alloc_delta", metrics)
+
+        metrics = trainer.evaluate()
+        check_func("eval_mem_cpu_alloc_delta", metrics)
+        if torch.cuda.device_count() > 0:
+            check_func("eval_mem_gpu_alloc_delta", metrics)
+
+        metrics = trainer.predict(RegressionDataset()).metrics
+        check_func("test_mem_cpu_alloc_delta", metrics)
+        if torch.cuda.device_count() > 0:
+            check_func("test_mem_gpu_alloc_delta", metrics)
+
+    def test_mem_metrics(self):
+
+        # with mem metrics enabled
+        trainer = get_regression_trainer()
+        self.check_mem_metrics(trainer, self.assertIn)
+
+        # with mem metrics disabled
+        trainer = get_regression_trainer(skip_memory_metrics=True)
+        self.check_mem_metrics(trainer, self.assertNotIn)
+
+    @require_torch_gpu
+    def test_fp16_full_eval(self):
+
+        # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
+        # it's using pretty large safety margins, but small enough to detect broken functionality.
+        debug = 0
+
+        bs = 8
+        # make the params somewhat big so that there will be enough RAM consumed to be able to
+        # measure things. We should get about 64KB for a+b in fp32
+        a = torch.ones(1000, bs) + 0.001
+        b = torch.ones(1000, bs) - 0.001
+
+        # 1. with mem metrics enabled
+        trainer = get_regression_trainer(a=a, b=b, eval_len=16)
+        metrics = trainer.evaluate()
+        del trainer
+        gc.collect()
+
+        fp32_init = metrics["init_mem_gpu_alloc_delta"]
+        fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
+
+        if debug:
+            print(f"fp32_init {fp32_init}")
+            print(f"fp32_eval {fp32_eval}")
+
+        # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
+        # perfect world: fp32_init == 64<<10
+        self.assertGreater(fp32_init, 59_000)
+        # after eval should be no extra memory allocated - with a small margin (other than the peak
+        # memory consumption for the forward calculation that gets recovered)
+        # perfect world: fp32_eval == close to zero
+        self.assertLess(fp32_eval, 5_000)
+
+        # 2. with mem metrics disabled
+        trainer = get_regression_trainer(a=a, b=b, eval_len=16, fp16_full_eval=True)
+        metrics = trainer.evaluate()
+        fp16_init = metrics["init_mem_gpu_alloc_delta"]
+        fp16_eval = metrics["eval_mem_gpu_alloc_delta"]
+
+        if debug:
+            print(f"fp16_init {fp16_init}")
+            print(f"fp16_eval {fp16_eval}")
+
+        # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
+        # perfect world: fp16_init == close to zero
+        self.assertLess(fp16_init, 5_000)
+        # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
+        # perfect world: fp32_init == 32<<10
+        self.assertGreater(fp16_eval, 27_000)
+
+        # 3. relative comparison fp32 vs full fp16
+        # should be about half of fp16_init
+        # perfect world: fp32_init/2 == fp16_eval
+        self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
 
 @require_torch

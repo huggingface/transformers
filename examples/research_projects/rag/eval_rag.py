@@ -96,7 +96,7 @@ def evaluate_batch_retrieval(args, rag_model, questions):
     )["input_ids"].to(args.device)
 
     question_enc_outputs = rag_model.rag.question_encoder(retriever_input_ids)
-    question_enc_pool_output = question_enc_outputs.pooler_output
+    question_enc_pool_output = question_enc_outputs[0]
 
     result = rag_model.retriever(
         retriever_input_ids,
@@ -130,8 +130,6 @@ def evaluate_batch_e2e(args, rag_model, questions):
             early_stopping=False,
             num_return_sequences=1,
             bad_words_ids=[[0, 0]],  # BART likes to repeat BOS tokens, dont allow it to generate more than one
-            clean_up_tokenization=True,
-            print_docs=args.print_docs,
         )
         answers = rag_model.retriever.generator_tokenizer.batch_decode(outputs, skip_special_tokens=True)
 

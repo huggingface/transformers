@@ -43,13 +43,10 @@ Implementation Notes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Blenderbot uses a standard `seq2seq model transformer <https://arxiv.org/pdf/1706.03762.pdf>`__ based architecture.
-- It inherits completely from :class:`~transformers.BartForConditionalGeneration`
-- Even though blenderbot is one model, it uses two tokenizers :class:`~transformers.BlenderbotSmallTokenizer` for 90M
-  checkpoint and :class:`~transformers.BlenderbotTokenizer` for all other checkpoints.
-- :class:`~transformers.BlenderbotSmallTokenizer` will always return :class:`~transformers.BlenderbotSmallTokenizer`,
-  regardless of checkpoint. To use the 3B parameter checkpoint, you must call
-  :class:`~transformers.BlenderbotTokenizer` directly.
 - Available checkpoints can be found in the `model hub <https://huggingface.co/models?search=blenderbot>`__.
+- This is the `default` Blenderbot model class. However, some smaller checkpoints, such as
+  ``facebook/blenderbot_small_90M``, have a different architecture and consequently should be used with
+  `BlenderbotSmall <https://huggingface.co/transformers/master/model_doc/blenderbot_small.html>`__.
 
 
 Usage
@@ -59,26 +56,15 @@ Here is an example of model usage:
 
 .. code-block::
 
-        >>> from transformers import BlenderbotSmallTokenizer, BlenderbotForConditionalGeneration
-        >>> mname = 'facebook/blenderbot-90M'
+        >>> from transformers import BlenderbotTokenizer, BlenderbotForConditionalGeneration
+        >>> mname = 'facebook/blenderbot-400M-distill'
         >>> model = BlenderbotForConditionalGeneration.from_pretrained(mname)
-        >>> tokenizer = BlenderbotSmallTokenizer.from_pretrained(mname)
+        >>> tokenizer = BlenderbotTokenizer.from_pretrained(mname)
         >>> UTTERANCE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([UTTERANCE], return_tensors='pt')
         >>> reply_ids = model.generate(**inputs)
-        >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in reply_ids])
-
-
-Here is how you can check out config values:
-
-.. code-block::
-
-
-        >>> from transformers import BlenderbotConfig
-        >>> config_90 = BlenderbotConfig.from_pretrained("facebook/blenderbot-90M")
-        >>> config_90.to_diff_dict()  # show interesting Values.
-        >>> configuration_3B = BlenderbotConfig("facebook/blenderbot-3B")
-        >>> configuration_3B.to_diff_dict()
+        >>> print(tokenizer.batch_decode(reply_ids))
+        ["<s> That's unfortunate. Are they trying to lose weight or are they just trying to be healthier?</s>"]
 
 
 BlenderbotConfig
@@ -93,11 +79,14 @@ BlenderbotTokenizer
 .. autoclass:: transformers.BlenderbotTokenizer
     :members: build_inputs_with_special_tokens
 
-BlenderbotSmallTokenizer
+
+BlenderbotModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BlenderbotSmallTokenizer
-    :members:
+See :obj:`transformers.BartModel` for arguments to `forward` and `generate`
+
+.. autoclass:: transformers.BlenderbotModel
+    :members: forward
 
 
 BlenderbotForConditionalGeneration
@@ -106,13 +95,25 @@ BlenderbotForConditionalGeneration
 See :obj:`transformers.BartForConditionalGeneration` for arguments to `forward` and `generate`
 
 .. autoclass:: transformers.BlenderbotForConditionalGeneration
-    :members:
+    :members: forward
+
+
+BlenderbotForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BlenderbotForCausalLM
+    :members: forward
+
+
+TFBlenderbotModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFBlenderbotModel
+    :members: call
 
 
 TFBlenderbotForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-See :obj:`transformers.TFBartForConditionalGeneration` for arguments to `forward` and `generate`
-
 .. autoclass:: transformers.TFBlenderbotForConditionalGeneration
-    :members:
+    :members: call

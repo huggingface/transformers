@@ -86,6 +86,36 @@ def find_pruneable_heads_and_indices(
     return heads, index
 
 
+def get_parameter_device(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    try:
+        return next(parameter.parameters()).device
+    except StopIteration:
+        # For nn.DataParallel compatibility in PyTorch 1.5
+
+        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+            return tuples
+
+        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+        first_tuple = next(gen)
+        return first_tuple[1].device
+
+
+def get_parameter_dtype(parameter: Union[nn.Module, GenerationMixin, "ModuleUtilsMixin"]):
+    try:
+        return next(parameter.parameters()).dtype
+    except StopIteration:
+        # For nn.DataParallel compatibility in PyTorch 1.5
+
+        def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
+            tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
+            return tuples
+
+        gen = parameter._named_members(get_members_fn=find_tensor_attributes)
+        first_tuple = next(gen)
+        return first_tuple[1].dtype
+
+
 class ModuleUtilsMixin:
     """
     A few utilities for :obj:`torch.nn.Modules`, to be used as a mixin.
@@ -145,36 +175,14 @@ class ModuleUtilsMixin:
         :obj:`torch.device`: The device on which the module is (assuming that all the module parameters are on the same
         device).
         """
-        try:
-            return next(self.parameters()).device
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5
-
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].device
+        return get_parameter_device(self)
 
     @property
     def dtype(self) -> dtype:
         """
         :obj:`torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
         """
-        try:
-            return next(self.parameters()).dtype
-        except StopIteration:
-            # For nn.DataParallel compatibility in PyTorch 1.5
-
-            def find_tensor_attributes(module: nn.Module) -> List[Tuple[str, Tensor]]:
-                tuples = [(k, v) for k, v in module.__dict__.items() if torch.is_tensor(v)]
-                return tuples
-
-            gen = self._named_members(get_members_fn=find_tensor_attributes)
-            first_tuple = next(gen)
-            return first_tuple[1].dtype
+        return get_parameter_dtype(self)
 
     def invert_attention_mask(self, encoder_attention_mask: Tensor) -> Tensor:
         """
@@ -404,6 +412,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         - **base_model_prefix** (:obj:`str`) -- A string indicating the attribute associated to the base model in
           derived classes of the same architecture adding modules on top of the base model.
+        - **is_parallelizable** (:obj:`bool`) -- A flag indicating whether this model supports model parallelization.
     """
     config_class = None
     base_model_prefix = ""
@@ -416,6 +425,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     # a list of of tensor names to ignore when saving the model (useful for keys that aren't
     # trained, but which are deterministic)
     _keys_to_ignore_on_save = None
+
+    is_parallelizable = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -886,6 +897,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 Whether ot not to also return a dictionary containing missing keys, unexpected keys and error messages.
             local_files_only(:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to only look at local files (i.e., do not try to download the model).
+            use_auth_token (:obj:`str` or `bool`, `optional`):
+                The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+                generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
             revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
@@ -907,6 +921,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                       ``kwargs`` that corresponds to a configuration attribute will be used to override said attribute
                       with the supplied ``kwargs`` value. Remaining keys that do not correspond to any configuration
                       attribute will be passed to the underlying model's ``__init__`` function.
+
+        .. note::
+
+            Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
         Examples::
 
@@ -931,6 +949,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         proxies = kwargs.pop("proxies", None)
         output_loading_info = kwargs.pop("output_loading_info", False)
         local_files_only = kwargs.pop("local_files_only", False)
+        use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
@@ -946,6 +965,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 resume_download=resume_download,
                 proxies=proxies,
                 local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
                 revision=revision,
                 **kwargs,
             )
@@ -998,6 +1018,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     proxies=proxies,
                     resume_download=resume_download,
                     local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
                 )
             except EnvironmentError as err:
                 logger.error(err)
@@ -1225,7 +1246,7 @@ class PoolerStartLogits(nn.Module):
         x = self.dense(hidden_states).squeeze(-1)
 
         if p_mask is not None:
-            if next(self.parameters()).dtype == torch.float16:
+            if get_parameter_dtype(self) == torch.float16:
                 x = x * (1 - p_mask) - 65500 * p_mask
             else:
                 x = x * (1 - p_mask) - 1e30 * p_mask
@@ -1292,7 +1313,7 @@ class PoolerEndLogits(nn.Module):
         x = self.dense_1(x).squeeze(-1)
 
         if p_mask is not None:
-            if next(self.parameters()).dtype == torch.float16:
+            if get_parameter_dtype(self) == torch.float16:
                 x = x * (1 - p_mask) - 65500 * p_mask
             else:
                 x = x * (1 - p_mask) - 1e30 * p_mask

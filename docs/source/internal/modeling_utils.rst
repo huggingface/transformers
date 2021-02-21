@@ -91,8 +91,6 @@ TensorFlow loss functions
 TensorFlow Helper Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autofunction:: transformers.modeling_tf_utils.cast_bool_to_primitive
-
 .. autofunction:: transformers.modeling_tf_utils.get_initializer
 
 .. autofunction:: transformers.modeling_tf_utils.keras_serializable
