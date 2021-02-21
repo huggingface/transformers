@@ -20,6 +20,14 @@ from typing import TYPE_CHECKING
 
 from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
 
+_import_structure = {
+    "configuration_distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig"],
+    "tokenization_distilbert": ["DistilBertTokenizer"],
+    "configuration_bert": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertPerformerConfig"],
+    "tokenization_bert": ["BertTokenizer"],
+
+}
+
 
 if is_torch_available():
     _import_structure["modeling_distilbert_performer"] = [
@@ -72,7 +80,7 @@ if is_tf_available():
 
 if TYPE_CHECKING:
     from distilbert.configuration_distilbert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertPerformerConfig
-    from bert.configuration_bert_performer import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
+    from bert.configuration_bert_performer import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertPerformerConfig
 
     from ..distilbert.tokenization_distilbert import DistilBertTokenizer
     from ..bert.tokenization_bert import BertTokenizer
@@ -92,7 +100,7 @@ if TYPE_CHECKING:
             DistilBertPerformerModel,
             DistilBertPerformerPreTrainedModel,
         )
-        from bert.modeling_distilbert_performer import (
+        from bert.modeling_bert_performer import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BertPerformerForMaskedLM,
             BertPerformerForMultipleChoice,
