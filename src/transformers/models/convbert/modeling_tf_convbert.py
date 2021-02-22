@@ -21,7 +21,6 @@ from typing import Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.ops.gen_array_ops import shape
 
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
@@ -255,7 +254,7 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         conv_out_layer = tf.pad(tensor=conv_out_layer, paddings=paddings, mode="CONSTANT")
 
         unfold_conv_out_layer = tf.stack(
-            value=[
+            values=[
                 tf.slice(
                     input_=conv_out_layer,
                     begin=[0, i, 0],
