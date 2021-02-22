@@ -375,7 +375,7 @@ class TFConvBertIntermediate(tf.keras.layers.Layer):
                 config.intermediate_size,
                 num_groups=config.num_groups,
                 kernel_initializer=get_initializer(config.initializer_range),
-                name="dense",
+                name="gdense",
             )
 
         if isinstance(config.hidden_act, str):
@@ -404,7 +404,7 @@ class TFConvBertOutput(tf.keras.layers.Layer):
                 config.hidden_size,
                 num_groups=config.num_groups,
                 kernel_initializer=get_initializer(config.initializer_range),
-                name="dense",
+                name="gdense",
             )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
