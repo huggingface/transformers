@@ -110,7 +110,7 @@ class IBertEmbeddings(nn.Module):
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
         self.LayerNorm = IntLayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode
+            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant
         )
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -236,7 +236,7 @@ class IBertSelfAttention(nn.Module):
             self.position_embedding_type == "absolute"
         ), "I-BERT only supports 'absolute' for `config.position_embedding_type`"
 
-        self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode)
+        self.softmax = IntSoftmax(self.act_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -297,7 +297,7 @@ class IBertSelfAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
-        if self.quant_mode:
+        if attention_probs_scaling_factor is not None:
             context_layer_scaling_factor = attention_probs_scaling_factor * value_layer_scaling_factor
         else:
             context_layer_scaling_factor = None
@@ -342,7 +342,7 @@ class IBertSelfOutput(nn.Module):
         )
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = IntLayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode
+            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant
         )
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -430,7 +430,7 @@ class IBertIntermediate(nn.Module):
             per_channel=True,
         )
         assert config.hidden_act == "gelu", "I-BERT only supports 'gelu' for `config.hidden_act`"
-        self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode)
+        self.intermediate_act_fn = IntGELU(quant_mode=self.quant_mode, force_dequant=config.force_dequant)
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
 
     def forward(self, hidden_states, hidden_states_scaling_factor):
@@ -467,7 +467,7 @@ class IBertOutput(nn.Module):
         )
         self.ln_input_act = QuantAct(self.ln_input_bit, quant_mode=self.quant_mode)
         self.LayerNorm = IntLayerNorm(
-            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode
+            config.hidden_size, eps=config.layer_norm_eps, output_bit=self.ln_output_bit, quant_mode=self.quant_mode, force_dequant=config.force_dequant
         )
         self.output_activation = QuantAct(self.act_bit, quant_mode=self.quant_mode)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
