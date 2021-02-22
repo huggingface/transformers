@@ -18,7 +18,6 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
-import json
 import logging
 import os
 import re
@@ -53,11 +52,6 @@ with FileLock(".lock") as lock:
 
 
 logger = logging.getLogger(__name__)
-
-
-def save_json(content, path, indent=4, **json_dump_kwargs):
-    with open(path, "w") as f:
-        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 @dataclass
@@ -596,13 +590,8 @@ def main():
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
         if trainer.is_world_process_zero():
-            metrics_formatted = trainer.metrics_format(metrics)
-            logger.info("***** train metrics *****")
-            k_width = max(len(str(x)) for x in metrics_formatted.keys())
-            v_width = max(len(str(x)) for x in metrics_formatted.values())
-            for key in sorted(metrics_formatted.keys()):
-                logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-            save_json(metrics, os.path.join(training_args.output_dir, "train_results.json"))
+            trainer.log_metrics("train", metrics)
+            trainer.save_metrics("train", metrics)
             all_metrics.update(metrics)
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
@@ -620,13 +609,8 @@ def main():
         metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
         if trainer.is_world_process_zero():
-            metrics_formatted = trainer.metrics_format(metrics)
-            logger.info("***** val metrics *****")
-            k_width = max(len(str(x)) for x in metrics_formatted.keys())
-            v_width = max(len(str(x)) for x in metrics_formatted.values())
-            for key in sorted(metrics_formatted.keys()):
-                logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-            save_json(metrics, os.path.join(training_args.output_dir, "eval_results.json"))
+            trainer.log_metrics("eval", metrics)
+            trainer.save_metrics("eval", metrics)
             all_metrics.update(metrics)
 
     if training_args.do_predict:
@@ -643,13 +627,8 @@ def main():
         metrics["test_samples"] = min(max_test_samples, len(test_dataset))
 
         if trainer.is_world_process_zero():
-            metrics_formatted = trainer.metrics_format(metrics)
-            logger.info("***** test metrics *****")
-            k_width = max(len(str(x)) for x in metrics_formatted.keys())
-            v_width = max(len(str(x)) for x in metrics_formatted.values())
-            for key in sorted(metrics_formatted.keys()):
-                logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-            save_json(metrics, os.path.join(training_args.output_dir, "test_results.json"))
+            trainer.log_metrics("test", metrics)
+            trainer.save_metrics("test", metrics)
             all_metrics.update(metrics)
 
             if training_args.predict_with_generate:
@@ -662,7 +641,7 @@ def main():
                     writer.write("\n".join(test_preds))
 
     if trainer.is_world_process_zero():
-        save_json(all_metrics, os.path.join(training_args.output_dir, "all_results.json"))
+        trainer.save_metrics("all", metrics)
 
     return results
 
