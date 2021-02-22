@@ -718,7 +718,7 @@ class Trainer:
     def _wrap_model(self, model, training=True):
         # already initialized its own DDP and AMP
         if self.deepspeed:
-            return model
+            return self.deepspeed
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
@@ -996,6 +996,10 @@ class Trainer:
                     tr_loss += self.training_step(model, inputs)
                 self._total_flos += float(self.floating_point_ops(inputs))
 
+                # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
+                if self.deepspeed:
+                    self.deepspeed.step()
+
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= self.args.gradient_accumulation_steps
@@ -1021,7 +1025,7 @@ class Trainer:
 
                     # Optimizer step
                     if self.deepspeed:
-                        self.deepspeed.step()
+                        pass  # called outside the loop
                     elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
                     elif self.use_amp:
@@ -1030,7 +1034,9 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    self.lr_scheduler.step()
+                    if not self.deepspeed:
+                        self.lr_scheduler.step()
+
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
@@ -1388,7 +1394,6 @@ class Trainer:
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
-
         model.train()
         inputs = self._prepare_inputs(inputs)
 
@@ -1401,7 +1406,8 @@ class Trainer:
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        if self.args.gradient_accumulation_steps > 1:
+        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.args.gradient_accumulation_steps
 
         if self.use_amp:
@@ -1410,7 +1416,8 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.deepspeed:
-            self.deepspeed.backward(loss)
+            # loss gets scaled under gradient_accumulation_steps in deepspeed
+            loss = self.deepspeed.backward(loss)
         else:
             loss.backward()
 
