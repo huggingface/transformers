@@ -830,6 +830,28 @@ Here is an example of the ``amp`` configuration:
     }
 
 
+Gradient Accumulation
+=======================================================================================================================
+
+While normally DeepSpeed gets gradient accumulation configured with:
+
+.. code-block:: json
+
+    {
+        "gradient_accumulation_steps": 3,
+    }
+
+in this case, to enable gradient accumulation, pass the command line `--gradient_accumulation_steps` argument as normal
+and it will get injected into the DeepSpeed configuration.
+
+If you try to add it directly to the configuration file, you will receive an error from the Trainer - this is because
+this setting is needed by the Trainer too, and so this approach ensures that there is a single way of setting this
+value and thus avoid potential subtle errors.
+
+
+
+
+
 
 Gradient Clipping
 =======================================================================================================================

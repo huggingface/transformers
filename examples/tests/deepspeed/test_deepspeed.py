@@ -23,12 +23,17 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
-    mockenv,
+    mockenv_context,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
 )
 from transformers.trainer_utils import set_seed
+
+
+bindir = os.path.abspath(os.path.dirname(__file__))
+sys.path.append(f"{bindir}/../../../tests")
+from test_trainer import get_regression_trainer  # noqa
 
 
 set_seed(42)
@@ -51,31 +56,95 @@ def require_deepspeed(test_case):
         return test_case
 
 
+@require_deepspeed
+@require_torch_gpu
+class TrainerIntegrationDeepSpeed(TestCasePlus):
+    """ This class is for testing directly via get_regression_trainer """
+
+    def setUp(self):
+        super().setUp()
+        self.dist_env_1_gpu = dict(
+            MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
+        )
+        self.ds_config_file = f"{self.test_file_dir_str}/ds_config.json"
+
+    def test_fake_notebook_no_launcher(self):
+
+        # this setup emulates a notebook where a launcher needs to be emulated by hand
+
+        with CaptureStd() as cs:
+            with mockenv_context(**self.dist_env_1_gpu):
+                trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file)
+                trainer.train()
+        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+
+    def test_gradient_accumulation(self):
+
+        # this test measures that we get identical weights and similar loss with:
+        # 1. per_device_train_batch_size=8, gradient_accumulation_steps=1
+        # 2. per_device_train_batch_size=4, gradient_accumulation_steps=2
+        # since the 2nd should produce the effective batch of 1st, with the same results
+        #
+        # I can get an identical loss for a small train_len=32, plus the power of the initial
+        # dynamic loss scale value set to:
+        #   "fp16.initial_scale_power": 1
+        # plus having the same WarmupLR's warmup_min_lr == warmup_max_lr in the config file
+        # but for some reason going to train_len=64 the weights, weights start to mismatch with this setup.
+        # the culprit seems to be `initial_scale_power` - putting it back to its default 32 keeps the weights identical
+
+        train_len = 64
+        a = b = 0.0
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            no_grad_accum_trainer = get_regression_trainer(
+                a=a,
+                b=b,
+                local_rank=0,
+                train_len=train_len,
+                deepspeed=self.ds_config_file,
+                per_device_train_batch_size=8,
+                gradient_accumulation_steps=1,
+            )
+            no_grad_accum_result = no_grad_accum_trainer.train()
+            no_grad_accum_loss = no_grad_accum_result.training_loss
+            no_grad_accum_a = no_grad_accum_trainer.model.a.item()
+            no_grad_accum_b = no_grad_accum_trainer.model.b.item()
+            # make sure the optimizer kicked in - if it hasn't changed from the original value of a then make train_len bigger
+            self.assertNotEqual(no_grad_accum_a, a)
+
+        with mockenv_context(**self.dist_env_1_gpu):
+            yes_grad_accum_trainer = get_regression_trainer(
+                a=a,
+                b=b,
+                local_rank=0,
+                train_len=train_len,
+                deepspeed=self.ds_config_file,
+                per_device_train_batch_size=4,
+                gradient_accumulation_steps=2,
+            )
+            yes_grad_accum_result = yes_grad_accum_trainer.train()
+            yes_grad_accum_loss = yes_grad_accum_result.training_loss
+            yes_grad_accum_a = yes_grad_accum_trainer.model.a.item()
+            yes_grad_accum_b = yes_grad_accum_trainer.model.b.item()
+            self.assertNotEqual(yes_grad_accum_a, a)
+
+        # training with half the batch size but accumulation steps as 2 should give the same weights
+        self.assertEqual(no_grad_accum_a, yes_grad_accum_a)
+        self.assertEqual(no_grad_accum_b, yes_grad_accum_b)
+
+        # see the note above how to get identical loss on a small bs
+        self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
+
+
 @slow
 @require_deepspeed
 @require_torch_gpu
 class TestDeepSpeed(TestCasePlus):
-
-    # this setup emulates a notebook where a launcher needs to be emulated by hand
-    @mockenv(MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1")
-    def test_fake_notebook_no_launcher(self):
-        sys.path.append(self.tests_dir_str)
-        from test_trainer import get_regression_trainer
-
-        del sys.path[-1]  # restore
-        ds_config_file = f"{self.test_file_dir_str}/ds_config.json"
-        with CaptureStd() as cs:
-            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_file)
-            trainer.train()
-        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+    """ This class is for testing via an external script """
 
     @require_torch_multi_gpu
     def test_basic_distributed(self):
         self.run_quick(distributed=True)
-
-    @require_torch_multi_gpu
-    def test_grad_acum(self):
-        self.run_quick(distributed=True, extra_args_str="--gradient_accumulation_steps 2")
 
     def test_do_eval_no_train(self):
         # we should not fail if train is skipped
