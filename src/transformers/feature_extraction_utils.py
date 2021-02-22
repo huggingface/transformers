@@ -44,7 +44,7 @@ class PreTrainedFeatureExtractor:
         # stored in a json config
         self.sampling_rate = kwargs.get("sampling_rate", None)
         self.pad_vector = kwargs.get("pad_vector", None)
-        self.vector_size = kwargs.get("vector_size", None)
+        self.feature_dim = kwargs.get("feature_dim", None)  # this will be 1 for Wav2Vec2, but 768 for Speech2TextTransformers
 
     def pad(self, feature: BatchFeature):
         """
