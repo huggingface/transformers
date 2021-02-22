@@ -47,7 +47,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         pass
 
 
-class Wav2Vec2SpeechProcessor:
+class Wav2Vec2Processor:
     def __init__(self, feature_extractor, tokenizer):
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
