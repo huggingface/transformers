@@ -403,10 +403,18 @@ def main():
             text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
         else:
             text_column = data_args.text_column
+            if text_column not in column_names:
+                raise ValueError(
+                    f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
+                )
         if data_args.summary_column is None:
             summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
         else:
             summary_column = data_args.summary_column
+            if summary_column not in column_names:
+                raise ValueError(
+                    f"--summary_column' value '{data_args.summary_column}' needs to be one of: {', '.join(column_names)}"
+                )
     else:
         # Get the language codes for input/target.
         lang_search = re.match("translation_([a-z]+)_to_([a-z]+)", data_args.task)
