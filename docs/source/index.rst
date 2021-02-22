@@ -114,12 +114,12 @@ and conversion utilities for the following models:
 11. :doc:`CTRL <model_doc/ctrl>` (from Salesforce) released with the paper `CTRL: A Conditional Transformer Language
     Model for Controllable Generation <https://arxiv.org/abs/1909.05858>`__ by Nitish Shirish Keskar*, Bryan McCann*,
     Lav R. Varshney, Caiming Xiong and Richard Socher.
-12. :doc:`DeBERTa <model_doc/deberta>` (from Microsoft Research) released with the paper `DeBERTa: Decoding-enhanced
-    BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`__ by Pengcheng He, Xiaodong Liu, Jianfeng Gao,
-    Weizhu Chen.
-13. :doc:`DeBERTa-v2 <model_doc/deberta_v2>` (from Microsoft Research) released with the paper `DeBERTa:
-    Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`__ by Pengcheng He, Xiaodong
-    Liu, Jianfeng Gao, Weizhu Chen.
+12. :doc:`DeBERTa <model_doc/deberta>` (from Microsoft) released with the paper `DeBERTa: Decoding-enhanced BERT with
+    Disentangled Attention <https://arxiv.org/abs/2006.03654>`__ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu
+    Chen.
+13. `DeBERTa-v2 <https://huggingface.co/transformers/master/model_doc/deberta_v2.html>`__ (from Microsoft) released
+    with the paper `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`__
+    by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen.
 14. :doc:`DialoGPT <model_doc/dialogpt>` (from Microsoft Research) released with the paper `DialoGPT: Large-Scale
     Generative Pre-training for Conversational Response Generation <https://arxiv.org/abs/1911.00536>`__ by Yizhe
     Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
