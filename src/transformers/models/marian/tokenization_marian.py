@@ -88,7 +88,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
         >>> inputs["labels"] = labels["input_ids"]
         # keys  [input_ids, attention_mask, labels].
-        # model(**batch) should work
+        >>> outputs = model(**inputs) should work
     """
 
     vocab_files_names = vocab_files_names
