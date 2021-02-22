@@ -174,6 +174,7 @@ _import_structure = {
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.herbert": ["HerbertTokenizer"],
+    "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig", "IBertTokenizer"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
@@ -603,6 +604,20 @@ if is_torch_available():
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
+        ]
+    )
+    _import_structure["models.ibert"].extend(
+        [
+            "IBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "IBertForMaskedLM",
+            "IBertForMultipleChoice",
+            "IBertForQuestionAnswering",
+            "IBertForSequenceClassification",
+            "IBertForTokenClassification",
+            "IBertLayer",
+            "IBertModel",
+            "IBertPreTrainedModel",
+            "load_tf_weights_in_ibert",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -1316,6 +1331,7 @@ if TYPE_CHECKING:
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.herbert import HerbertTokenizer
+    from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig, IBertTokenizer
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -1691,6 +1707,15 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
+        )
+        from .models.ibert import (
+            IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IBertForMaskedLM,
+            IBertForMultipleChoice,
+            IBertForQuestionAnswering,
+            IBertForSequenceClassification,
+            IBertForTokenClassification,
+            IBertModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,

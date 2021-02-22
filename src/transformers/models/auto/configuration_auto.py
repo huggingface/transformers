@@ -125,6 +125,7 @@ CONFIG_MAPPING = OrderedDict(
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
         ("retribert", RetriBertConfig),
+        ("ibert", IBertConfig),
         ("mt5", MT5Config),
         ("t5", T5Config),
         ("mobilebert", MobileBertConfig),
@@ -164,7 +165,6 @@ CONFIG_MAPPING = OrderedDict(
         ("layoutlm", LayoutLMConfig),
         ("rag", RagConfig),
         ("tapas", TapasConfig),
-        ("ibert", IBertConfig),
     ]
 )
 
@@ -176,6 +176,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),
         ("retribert", "RetriBERT"),
+        ("ibert", "I-BERT"),
         ("t5", "T5"),
         ("mobilebert", "MobileBERT"),
         ("distilbert", "DistilBERT"),
@@ -215,7 +216,6 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mt5", "mT5"),
         ("mpnet", "MPNet"),
         ("tapas", "TAPAS"),
-        ("ibert", "I-BERT"),
     ]
 )
 

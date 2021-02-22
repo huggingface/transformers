@@ -22,22 +22,24 @@ from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
 
-    from transformers.models.ibert.modeling_ibert import (
+    from transformers import (
         IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         IBertConfig,
-        IBertEmbeddings,
         IBertForMaskedLM,
         IBertForMultipleChoice,
         IBertForQuestionAnswering,
         IBertForSequenceClassification,
         IBertForTokenClassification,
         IBertModel,
+    )
+    from transformers.models.ibert.modeling_ibert import (
+        IBertEmbeddings,
         IntGELU,
         IntLayerNorm,
         IntSoftmax,
@@ -251,7 +253,7 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in IBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = IBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
