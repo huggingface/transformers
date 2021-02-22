@@ -188,6 +188,7 @@ class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
     test_missing_keys = False
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFDPRModelTester(self)

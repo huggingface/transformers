@@ -192,7 +192,6 @@ class IBertModelTester:
         return config, inputs_dict
 
 
-'''
 @require_torch
 class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
@@ -294,7 +293,6 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
-'''
 
 
 @require_torch

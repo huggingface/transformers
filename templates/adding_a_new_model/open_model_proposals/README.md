@@ -1,3 +1,3 @@
 Currently the following model proposals are available:
 
-- [BigBird (Google)](./ADD_BIG_BIRD.md)
+- <s>[BigBird (Google)](./ADD_BIG_BIRD.md)</s>

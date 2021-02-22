@@ -14,11 +14,20 @@
 
 import json
 import os
+import sys
 import unittest
 
 from transformers.integrations import is_deepspeed_available
-from transformers.testing_utils import TestCasePlus, execute_subprocess_async, require_torch_multi_gpu
-from transformers.trainer_callback import TrainerState
+from transformers.testing_utils import (
+    CaptureStd,
+    TestCasePlus,
+    execute_subprocess_async,
+    get_gpu_count,
+    mockenv,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    slow,
+)
 from transformers.trainer_utils import set_seed
 
 
@@ -42,37 +51,59 @@ def require_deepspeed(test_case):
         return test_case
 
 
+@slow
 @require_deepspeed
+@require_torch_gpu
 class TestDeepSpeed(TestCasePlus):
 
-    # XXX: need to do better validation beyond just that the run was successful
-    def run_quick(self, distributed=None, extra_args_str=None, remove_args_str=None):
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, extra_args_str, remove_args_str)
-        logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
-        eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
-        first_step_stats = eval_metrics[0]
-        assert "eval_bleu" in first_step_stats
+    # this setup emulates a notebook where a launcher needs to be emulated by hand
+    @mockenv(MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1")
+    def test_fake_notebook_no_launcher(self):
+        sys.path.append(self.tests_dir_str)
+        from test_trainer import get_regression_trainer
 
-    def run_quick_no_train(self, distributed=None, extra_args_str=None):
-        remove_args_str = "--do_train"
-        output_dir = self.run_trainer(1, "12", MBART_TINY, 1, distributed, extra_args_str, remove_args_str)
-        val_metrics = load_json(os.path.join(output_dir, "val_results.json"))
-        assert "val_bleu" in val_metrics
-        test_metrics = load_json(os.path.join(output_dir, "test_results.json"))
-        assert "test_bleu" in test_metrics
+        del sys.path[-1]  # restore
+        ds_config_file = f"{self.test_file_dir_str}/ds_config.json"
+        with CaptureStd() as cs:
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_file)
+            trainer.train()
+        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
     @require_torch_multi_gpu
-    def test_basic(self):
-        self.run_quick()
+    def test_basic_distributed(self):
+        self.run_quick(distributed=True)
 
     @require_torch_multi_gpu
     def test_grad_acum(self):
-        self.run_quick(extra_args_str="--gradient_accumulation_steps 2")
+        self.run_quick(distributed=True, extra_args_str="--gradient_accumulation_steps 2")
 
-    @require_torch_multi_gpu
-    def test_no_train(self):
+    def test_do_eval_no_train(self):
         # we should not fail if train is skipped
-        self.run_quick_no_train()
+        output_dir = self.run_trainer(
+            eval_steps=1,
+            max_len=12,
+            model_name=MBART_TINY,
+            num_train_epochs=1,
+            distributed=False,
+            extra_args_str="--do_eval",
+            remove_args_str="--do_train",
+        )
+        val_metrics = load_json(os.path.join(output_dir, "eval_results.json"))
+        assert "eval_bleu" in val_metrics
+
+    # XXX: need to do better validation beyond just that the run was successful
+    def run_quick(self, distributed=True, extra_args_str=None, remove_args_str=None):
+        output_dir = self.run_trainer(
+            eval_steps=1,
+            max_len=12,
+            model_name=MBART_TINY,
+            num_train_epochs=1,
+            distributed=distributed,
+            extra_args_str=extra_args_str,
+            remove_args_str=remove_args_str,
+        )
+        train_metrics = load_json(os.path.join(output_dir, "train_results.json"))
+        assert "train_runtime" in train_metrics
 
     def run_trainer(
         self,
@@ -80,43 +111,38 @@ class TestDeepSpeed(TestCasePlus):
         max_len: str,
         model_name: str,
         num_train_epochs: int,
-        distributed: bool = False,
+        distributed: bool = True,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
-        data_dir = self.examples_dir / "seq2seq/test_data/wmt_en_ro"
+        data_dir = self.examples_dir / "test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
         args = f"""
             --model_name_or_path {model_name}
-            --data_dir {data_dir}
+            --train_file {data_dir}/train.json
+            --validation_file {data_dir}/val.json
             --output_dir {output_dir}
             --overwrite_output_dir
-            --n_train 8
-            --n_val 8
+            --max_train_samples 8
+            --max_val_samples 8
             --max_source_length {max_len}
             --max_target_length {max_len}
             --val_max_target_length {max_len}
             --do_train
-            --do_eval
-            --do_predict
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 4
-            --per_device_eval_batch_size 4
             --learning_rate 3e-3
             --warmup_steps 8
-            --evaluation_strategy steps
             --predict_with_generate
             --logging_steps 0
             --save_steps {str(eval_steps)}
-            --eval_steps {str(eval_steps)}
             --group_by_length
             --label_smoothing_factor 0.1
             --adafactor
             --task translation
-            --tgt_lang ro_RO
-            --src_lang en_XX
+            --target_lang ro_RO
+            --source_lang en_XX
         """.split()
-        # --eval_beams  2
 
         if extra_args_str is not None:
             args.extend(extra_args_str.split())
@@ -126,12 +152,13 @@ class TestDeepSpeed(TestCasePlus):
             args = [x for x in args if x not in remove_args]
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config.json".split()
-        distributed_args = f"""
-            {self.test_file_dir}/../../seq2seq/finetune_trainer.py
-        """.split()
-        cmd = ["deepspeed"] + distributed_args + args + ds_args
+        script = [f"{self.examples_dir_str}/seq2seq/run_seq2seq.py"]
+        num_gpus = get_gpu_count() if distributed else 1
+        launcher = f"deepspeed --num_gpus {num_gpus}".split()
+
+        cmd = launcher + script + args + ds_args
         # keep for quick debug
-        # print(" ".join(cmd)); die
+        # print(" ".join([f"PYTHONPATH={self.src_dir_str}"] +cmd)); die
         execute_subprocess_async(cmd, env=self.get_env())
 
         return output_dir

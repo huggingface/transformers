@@ -25,7 +25,7 @@ from .file_utils import (
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, SchedulerType
+from .trainer_utils import EvaluationStrategy, LoggingStrategy, SchedulerType
 from .utils import logging
 
 
@@ -131,15 +131,25 @@ class TrainingArguments:
         lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
             The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
             values.
+        warmup_ratio (:obj:`float`, `optional`, defaults to 0.0):
+            Ratio of total training steps used for a linear warmup from 0 to :obj:`learning_rate`.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
-            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
+            :obj:`warmup_ratio`.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
+        logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.LoggingStrategy`, `optional`, defaults to :obj:`"steps"`):
+            The logging strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No logging is done during training.
+                * :obj:`"epoch"`: Logging is done at the end of each epoch.
+                * :obj:`"steps"`: Logging is done every :obj:`logging_steps`.
+
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of update steps between two logs.
+            Number of update steps between two logs if :obj:`logging_strategy="steps"`.
         save_steps (:obj:`int`, `optional`, defaults to 500):
             Number of updates steps before two checkpoint saves.
         save_total_limit (:obj:`int`, `optional`):
@@ -152,7 +162,7 @@ class TrainingArguments:
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
@@ -160,6 +170,9 @@ class TrainingArguments:
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
             other choices will force the requested backend.
+        fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use full 16-bit precision evaluation instead of 32-bit. This will be faster and save memory but
+            can harm metric values.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -239,15 +252,19 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
-        report_to (:obj:`List[str]`, `optional`, defaults to the list of integrations platforms installed):
+        report_to (:obj:`str` or :obj:`List[str]`, `optional`, defaults to :obj:`"all"`):
             The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
-            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`.
+            :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`. Use :obj:`"all"` to report to
+            all integrations installed, :obj:`"none"` for no integrations.
         ddp_find_unused_parameters (:obj:`bool`, `optional`):
             When using distributed training, the value of the flag :obj:`find_unused_parameters` passed to
             :obj:`DistributedDataParallel`. Will default to :obj:`False` if gradient checkpointing is used, :obj:`True`
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+            Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
+
     """
 
     output_dir: Optional[str] = field(
@@ -323,9 +340,16 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
+    warmup_ratio: float = field(
+        default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
+    )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
+    logging_strategy: LoggingStrategy = field(
+        default="steps",
+        metadata={"help": "The logging strategy to use."},
+    )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
@@ -343,7 +367,7 @@ class TrainingArguments:
 
     fp16: bool = field(
         default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA Apex) instead of 32-bit"},
+        metadata={"help": "Whether to use 16-bit (mixed) precision instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
@@ -357,6 +381,10 @@ class TrainingArguments:
     fp16_backend: str = field(
         default="auto",
         metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
+    )
+    fp16_full_eval: bool = field(
+        default=False,
+        metadata={"help": "Whether to use full 16-bit precision evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
@@ -444,6 +472,9 @@ class TrainingArguments:
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
+    skip_memory_metrics: bool = field(
+        default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
@@ -462,6 +493,7 @@ class TrainingArguments:
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
         self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
+        self.logging_strategy = LoggingStrategy(self.logging_strategy)
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
         if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
             self.do_eval = True
@@ -475,13 +507,33 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
-        if is_torch_available() and self.device.type != "cuda" and self.fp16:
-            raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if is_torch_available() and self.device.type != "cuda" and (self.fp16 or self.fp16_full_eval):
+            raise ValueError(
+                "Mixed precision training with AMP or APEX (`--fp16`) and FP16 evaluation can only be used on CUDA devices."
+            )
         if self.report_to is None:
+            logger.info(
+                "The default value for the training argument `--report_to` will change in v5 (from all installed "
+                "integrations to none). In v5, you will need to use `--report_to all` to get the same behavior as "
+                "now. You should start updating your code and make this info disappear :-)."
+            )
+            self.report_to = "all"
+        if self.report_to == "all" or self.report_to == ["all"]:
             # Import at runtime to avoid a circular import.
             from .integrations import get_available_reporting_integrations
 
             self.report_to = get_available_reporting_integrations()
+        elif self.report_to == "none" or self.report_to == ["none"]:
+            self.report_to = []
+        elif not isinstance(self.report_to, list):
+            self.report_to = [self.report_to]
+
+        if self.warmup_ratio < 0 or self.warmup_ratio > 1:
+            raise ValueError("warmup_ratio must lie in range [0,1]")
+        elif self.warmup_ratio > 0 and self.warmup_steps > 0:
+            logger.info(
+                "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio during training"
+            )
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -549,6 +601,12 @@ class TrainingArguments:
             import deepspeed
 
             deepspeed.init_distributed()
+
+            # workaround for setups like notebooks where the launcher can't be used,
+            # but deepspeed requires a dist env.
+            # env LOCAL_RANK could be set manually by the user, or via init_distributed if mpi4py is installed
+            self.local_rank = int(os.environ.get("LOCAL_RANK", "-1"))
+
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.local_rank == -1:
@@ -618,6 +676,13 @@ class TrainingArguments:
             return ParallelMode.NOT_DISTRIBUTED
         else:
             return ParallelMode.NOT_PARALLEL
+
+    @property
+    def place_model_on_device(self):
+        """
+        Can be subclassed and overridden for some specific integrations.
+        """
+        return True
 
     def to_dict(self):
         """

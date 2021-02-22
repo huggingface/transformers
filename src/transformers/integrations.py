@@ -56,6 +56,10 @@ from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  #
 def is_wandb_available():
     # any value of WANDB_DISABLED disables wandb
     if os.getenv("WANDB_DISABLED", "").upper() in ENV_VARS_TRUE_VALUES:
+        logger.warn(
+            "Using the `WAND_DISABLED` environment variable is deprecated and will be removed in v5. Use the "
+            "--report_to flag to control the integrations used for logging result (for instance --report_to none)."
+        )
         return False
     return importlib.util.find_spec("wandb") is not None
 
@@ -525,7 +529,7 @@ class WandbCallback(TrainerCallback):
         Setup the optional Weights & Biases (`wandb`) integration.
 
         One can subclass and override this method to customize the setup if needed. Find more information `here
-        <https://docs.wandb.com/huggingface>`__. You can also override the following environment variables:
+        <https://docs.wandb.ai/integrations/huggingface>`__. You can also override the following environment variables:
 
         Environment:
             WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):

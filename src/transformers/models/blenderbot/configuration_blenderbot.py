@@ -84,6 +84,9 @@ class BlenderbotConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
+        forced_eos_token_id (:obj:`int`, `optional`, defaults to 2):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached. Usually set to
+            :obj:`eos_token_id`.
 
     Example::
 
@@ -129,6 +132,7 @@ class BlenderbotConfig(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         encoder_no_repeat_ngram_size=3,
+        forced_eos_token_id=2,
         **kwargs
     ):
         super().__init__(
@@ -138,6 +142,7 @@ class BlenderbotConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
+            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
 

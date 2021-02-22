@@ -883,6 +883,63 @@ class DebertaPreTrainedModel:
         requires_pytorch(self)
 
 
+DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DebertaV2ForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2ForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2ForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2ForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DebertaV2PreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2227,6 +2284,11 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Wav2Vec2ForCTC:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 class Wav2Vec2ForMaskedLM:

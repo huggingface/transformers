@@ -17,6 +17,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
+import gc
 import inspect
 import math
 import os
@@ -92,6 +93,7 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
+    TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
@@ -213,6 +215,12 @@ class Trainer:
           inner model hasn't been wrapped, then ``self.model_wrapped`` is the same as ``self.model``.
         - **is_model_parallel** -- Whether or not a model has been switched to a model parallel mode (different from
           data parallelism, this means some of the model layers are split on different GPUs).
+        - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
+          to :obj:`False` if model parallel or deepspeed is used, or if the default
+          ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
+        - **is_in_train** -- Whether or not a model is currently running ``train`` (e.g. when ``evaluate`` is called
+          while in ``train``)
+
     """
 
     def __init__(
@@ -237,6 +245,14 @@ class Trainer:
         set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
+        self.is_in_train = False
+
+        # memory metrics - must set up as early as possible
+        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self._memory_tracker.start()
+
+        # force device and distributed setup init explicitly
+        args._setup_devices
 
         if model is None:
             if model_init is not None:
@@ -258,6 +274,11 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+        # one place to sort out whether to place the model on device or not
+        self.place_model_on_device = args.place_model_on_device
+        if self.is_model_parallel or (args.deepspeed and args.do_train) or (args.fp16_full_eval and not args.do_train):
+            self.place_model_on_device = False
+
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
         self.data_collator = data_collator if data_collator is not None else default_collator
         self.train_dataset = train_dataset
@@ -266,8 +287,9 @@ class Trainer:
 
         # postpone switching model to cuda when:
         # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway
-        if not (self.is_model_parallel or args.deepspeed):
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        #    and we only use deepspeed for training at the moment
+        if self.place_model_on_device:
             model = model.to(args.device)
 
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
@@ -314,6 +336,7 @@ class Trainer:
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
+        self._signature_columns = None
         if is_datasets_available():
             if isinstance(train_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.train_dataset, description="training")
@@ -379,6 +402,9 @@ class Trainer:
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
 
+        # very last
+        self._memory_tracker.stop_and_update_metrics()
+
     def add_callback(self, callback):
         """
         Add a callback to the current list of :class:`~transformer.TrainerCallback`.
@@ -420,18 +446,22 @@ class Trainer:
     def _remove_unused_columns(self, dataset: "datasets.Dataset", description: Optional[str] = None):
         if not self.args.remove_unused_columns:
             return
-        # Inspect model forward signature to keep only the arguments it accepts.
-        signature = inspect.signature(self.model.forward)
-        signature_columns = list(signature.parameters.keys())
-        # Labels may be named label or label_ids, the default data collator handles that.
-        signature_columns += ["label", "label_ids"]
-        columns = [k for k in signature_columns if k in dataset.column_names]
-        ignored_columns = list(set(dataset.column_names) - set(signature_columns))
-        dset_description = "" if description is None else f"in the {description} set "
-        logger.info(
-            f"The following columns {dset_description}don't have a corresponding argument in `{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
-        )
-        dataset.set_format(type=dataset.format["type"], columns=columns)
+        if self._signature_columns is None:
+            # Inspect model forward signature to keep only the arguments it accepts.
+            signature = inspect.signature(self.model.forward)
+            self._signature_columns = list(signature.parameters.keys())
+            # Labels may be named label or label_ids, the default data collator handles that.
+            self._signature_columns += ["label", "label_ids"]
+        columns = [k for k in self._signature_columns if k in dataset.column_names]
+        ignored_columns = list(set(dataset.column_names) - set(self._signature_columns))
+        if len(ignored_columns) > 0:
+            dset_description = "" if description is None else f"in the {description} set "
+            logger.info(
+                f"The following columns {dset_description} don't have a corresponding argument in "
+                f"`{self.model.__class__.__name__}.forward` and have been ignored: {', '.join(ignored_columns)}."
+            )
+
+        dataset.set_format(type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"])
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
         if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
@@ -596,10 +626,16 @@ class Trainer:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         if self.lr_scheduler is None:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
                 self.optimizer,
-                num_warmup_steps=self.args.warmup_steps,
+                num_warmup_steps=warmup_steps,
                 num_training_steps=num_training_steps,
             )
 
@@ -679,6 +715,47 @@ class Trainer:
 
         return model
 
+    def _wrap_model(self, model, training=True):
+        # already initialized its own DDP and AMP
+        if self.deepspeed:
+            return model
+
+        # Mixed precision training with apex (torch < 1.6)
+        if self.use_apex and training:
+            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
+
+        # Multi-gpu training (should be after apex fp16 initialization)
+        if self.args.n_gpu > 1:
+            model = torch.nn.DataParallel(model)
+
+        # Note: in torch.distributed mode, there's no point in wrapping the model
+        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        if not training:
+            return model
+
+        # Distributed training (should be after apex fp16 initialization)
+        if self.sharded_dpp:
+            model = ShardedDDP(model, self.optimizer)
+        elif is_sagemaker_distributed_available():
+            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
+        elif self.args.local_rank != -1:
+            if self.args.ddp_find_unused_parameters is not None:
+                find_unused_parameters = self.args.ddp_find_unused_parameters
+            elif isinstance(model, PreTrainedModel):
+                # find_unused_parameters breaks checkpointing as per
+                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
+                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
+            else:
+                find_unused_parameters = True
+            model = torch.nn.parallel.DistributedDataParallel(
+                model,
+                device_ids=[self.args.local_rank],
+                output_device=self.args.local_rank,
+                find_unused_parameters=find_unused_parameters,
+            )
+
+        return model
+
     def train(
         self,
         resume_from_checkpoint: Optional[str] = None,
@@ -697,6 +774,12 @@ class Trainer:
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
+        self.is_in_train = True
+
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
             warnings.warn(
@@ -731,7 +814,7 @@ class Trainer:
 
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
-            if not self.is_model_parallel:
+            if self.place_model_on_device:
                 self.model = self.model.to(self.args.device)
             self.model_wrapped = self.model
 
@@ -778,38 +861,7 @@ class Trainer:
         # Check if saved optimizer or scheduler states exist
         self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
-        model = self.model_wrapped
-
-        # Mixed precision training with apex (torch < 1.6)
-        if self.use_apex:
-            model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
-
-        # Multi-gpu training (should be after apex fp16 initialization)
-        if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
-
-        # Distributed training (should be after apex fp16 initialization)
-        if self.sharded_dpp:
-            model = ShardedDDP(model, self.optimizer)
-        elif is_sagemaker_distributed_available():
-            model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        elif self.deepspeed:
-            pass  # already initialized its own DDP earlier
-        elif self.args.local_rank != -1:
-            if self.args.ddp_find_unused_parameters is not None:
-                find_unused_parameters = self.args.ddp_find_unused_parameters
-            elif isinstance(model, PreTrainedModel):
-                # find_unused_parameters breaks checkpointing as per
-                # https://github.com/huggingface/transformers/pull/4659#issuecomment-643356021
-                find_unused_parameters = not getattr(model.config, "gradient_checkpointing", False)
-            else:
-                find_unused_parameters = True
-            model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[self.args.local_rank],
-                output_device=self.args.local_rank,
-                find_unused_parameters=find_unused_parameters,
-            )
+        model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -817,7 +869,7 @@ class Trainer:
 
         # important: at this point:
         # self.model         is the Transformers Model
-        # self.model_wrapped is DDP(Transformers Model), DDP(Deepspeed(Transformers Model)), etc.
+        # self.model_wrapped is DDP(Transformers Model), Deepspeed(Transformers Model), etc.
 
         # Train!
         if is_torch_tpu_available():
@@ -942,7 +994,7 @@ class Trainer:
                         tr_loss += self.training_step(model, inputs)
                 else:
                     tr_loss += self.training_step(model, inputs)
-                self._total_flos += self.floating_point_ops(inputs)
+                self._total_flos += float(self.floating_point_ops(inputs))
 
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
@@ -1015,7 +1067,7 @@ class Trainer:
             )
             if isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(self.state.best_model_checkpoint)
-                if not self.is_model_parallel:
+                if self.place_model_on_device:
                     self.model = self.model.to(self.args.device)
             else:
                 state_dict = torch.load(os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME))
@@ -1035,6 +1087,22 @@ class Trainer:
         self.control = self.callback_handler.on_train_end(self.args, self.state, self.control)
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
+
+        if self.deepspeed:
+            # free up any memory that might be useful for eval
+            self.deepspeed = None
+            self.optimizer = None
+            self.lr_scheduler = None
+            self.model_wrapped = self.model
+            gc.collect()  # force memory release
+            # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
+            self.place_model_on_device = self.args.place_model_on_device
+            if self.is_model_parallel:
+                self.place_model_on_device = False
+
+        self.is_in_train = False
+
+        self._memory_tracker.stop_and_update_metrics(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1264,6 +1332,29 @@ class Trainer:
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
+
+    def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+        """
+        Reformat Trainer metrics values to a human-readable format
+
+        Args:
+            metrics (:obj:`Dict[str, float]`):
+                The metrics returned from train/evaluate/predict
+
+        Returns:
+            metrics (:obj:`Dict[str, float]`): The reformatted metrics
+        """
+
+        metrics_copy = metrics.copy()
+        for k, v in metrics_copy.items():
+            if "_mem_" in k:
+                metrics_copy[k] = f"{ v >> 20 }MB"
+            elif k == "total_flos":
+                metrics_copy[k] = f"{ int(v) >> 30 }GF"
+            elif type(metrics_copy[k]) == float:
+                metrics_copy[k] = round(v, 4)
+
+        return metrics_copy
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
@@ -1501,6 +1592,9 @@ class Trainer:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
@@ -1526,6 +1620,9 @@ class Trainer:
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
+
         return output.metrics
 
     def predict(
@@ -1561,6 +1658,9 @@ class Trainer:
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
 
@@ -1571,6 +1671,9 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
+
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
+
         return output
 
     def prediction_loop(
@@ -1593,21 +1696,16 @@ class Trainer:
         )
 
         if self.args.deepspeed and not self.args.do_train:
-            # In the future we probably can run deepspeed for inference too, but this will require
-            # some thinking about how to best run it - since while it works DeepSpeed wasn't
-            # designed for inference
+            # no harm, but flagging to the user that deepspeed config is ignored for eval
+            # flagging only for when --do_train wasn't passed as only then it's redundant
+            logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
-            # since we have to postpone model.to() till training for DeepSpeed, if there was no
-            # training, we must put the model on the right device
-            self.model = self.model.to(self.args.device)
+        model = self._wrap_model(self.model, training=False)
 
-        model = self.model
-
-        # multi-gpu eval
-        if self.args.n_gpu > 1:
-            model = torch.nn.DataParallel(model)
-        # Note: in torch.distributed mode, there's no point in wrapping the model
-        # inside a DistributedDataParallel as we'll be under `no_grad` anyways.
+        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
+        # ``train`` is running, half it first and then put on device
+        if not self.is_in_train and self.args.fp16_full_eval:
+            model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
