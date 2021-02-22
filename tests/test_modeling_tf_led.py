@@ -362,10 +362,6 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
 
-    def test_mixed_precision(self):
-        # TODO JP: Make LED float16 compliant
-        pass
-
     def test_xla_mode(self):
         # TODO JP: Make LED XLA compliant
         pass
