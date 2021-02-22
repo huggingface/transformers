@@ -664,7 +664,6 @@ class IBertPreTrainedModel(PreTrainedModel):
         raise NotImplementedError("`resize_token_embeddings` is not supported for I-BERT.")
 
 
-
 IBERT_START_DOCSTRING = r"""
 
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic

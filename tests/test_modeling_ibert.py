@@ -309,7 +309,7 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
 
     # Override
     def test_feed_forward_chunking(self):
-        pass # I-BERT does not support chunking
+        pass  # I-BERT does not support chunking
 
     # Override
     def test_inputs_embeds(self):
@@ -348,17 +348,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
     def test_quant_embedding(self):
         weight_bit = 8
         embedding = QuantEmbedding(2, 4, quant_mode=True, weight_bit=weight_bit)
-        embedding_weight = torch.tensor(
-            [
-                [-1.0, -2.0, -3.0, -4.0],
-                [
-                    5.0,
-                    6.0,
-                    7.0,
-                    8.0,
-                ],
-            ]
-        )
+        embedding_weight = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]])
         embedding.weight = torch.nn.Parameter(embedding_weight)
 
         expected_scaling_factor = embedding_weight.abs().max() / (2 ** (weight_bit - 1) - 1)
@@ -379,12 +369,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
             act = QuantAct(activation_bit, act_range_momentum, quant_mode=True)
 
             # First pass
-            x = torch.tensor(
-                [
-                    [-1.0, -2.0, -3.0, -4.0],
-                    [5.0, 6.0, 7.0, 8.0],
-                ]
-            )
+            x = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]])
             x_scaling_factor = torch.tensor(1.0)
             y, y_scaling_factor = act(x, x_scaling_factor)
             y_int = y / y_scaling_factor
@@ -406,15 +391,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
             self.assertTrue(torch.allclose(y_int, y_int.round(), atol=1e-4))
 
             # Second Pass
-            x = (
-                torch.tensor(
-                    [
-                        [-1.0, -2.0, -3.0, -4.0],
-                        [5.0, 6.0, 7.0, 8.0],
-                    ]
-                )
-                * 2
-            )
+            x = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]]) * 2
             x_scaling_factor = torch.tensor(1.0)
             y, y_scaling_factor = act(x, x_scaling_factor)
             y_int = y / y_scaling_factor
@@ -439,15 +416,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
 
             # Third pass, with eval()
             act.eval()
-            x = (
-                torch.tensor(
-                    [
-                        [-1.0, -2.0, -3.0, -4.0],
-                        [5.0, 6.0, 7.0, 8.0],
-                    ]
-                )
-                * 3
-            )
+            x = torch.tensor([[-1.0, -2.0, -3.0, -4.0], [5.0, 6.0, 7.0, 8.0]]) * 3
 
             # In eval mode, min/max and scaling factor must be fixed
             self.assertTrue(torch.allclose(act.x_min, expected_x_min, atol=1e-4))
@@ -476,12 +445,7 @@ class IBertModelIntegrationTest(unittest.TestCase):
         def _test(per_channel):
             linear_q = QuantLinear(2, 4, quant_mode=True, per_channel=per_channel, weight_bit=weight_bit)
             linear_dq = QuantLinear(2, 4, quant_mode=False, per_channel=per_channel, weight_bit=weight_bit)
-            linear_weight = torch.tensor(
-                [
-                    [-1.0, 2.0, 3.0, -4.0],
-                    [5.0, -6.0, -7.0, 8.0],
-                ]
-            ).T
+            linear_weight = torch.tensor([[-1.0, 2.0, 3.0, -4.0], [5.0, -6.0, -7.0, 8.0]]).T
             linear_q.weight = torch.nn.Parameter(linear_weight)
             linear_dq.weight = torch.nn.Parameter(linear_weight)
 
