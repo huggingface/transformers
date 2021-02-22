@@ -112,7 +112,7 @@ class BlenderbotLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__(num_embeddings, embedding_dim)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):

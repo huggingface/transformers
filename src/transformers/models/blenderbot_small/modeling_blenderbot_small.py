@@ -82,7 +82,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     mask = torch.full((tgt_len, tgt_len), float("-inf"))
     mask_cond = torch.arange(mask.size(-1))
     mask.masked_fill_(mask_cond < (mask_cond + 1).view(mask.size(-1), 1), 0)
-    mask = mask.to(dtype)
+    mask = mask.to(dtype)``
 
     if past_key_values_length > 0:
         mask = torch.cat([torch.zeros(tgt_len, past_key_values_length, dtype=dtype), mask], dim=-1)
@@ -110,7 +110,7 @@ class BlenderbotSmallLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_embeddings: int, embedding_dim: int):
         super().__init__(num_embeddings, embedding_dim)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
