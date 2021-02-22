@@ -37,9 +37,9 @@ class MT5Model(T5Model):
         >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
         >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
         >>> summary = "Weiter Verhandlung in Syrien."
-        >>> inputs = tokenizer([article], return_tensors="pt")
+        >>> inputs = tokenizer(article, return_tensors="pt")
         >>> with tokenizer.as_target_tokenizer():
-        ...     labels = tokenizer([summary], return_tensors="pt")
+        ...     labels = tokenizer(summary, return_tensors="pt")
 
         >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
         >>> hidden_states = outputs.last_hidden_state
@@ -69,9 +69,9 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
         >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
         >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
         >>> summary = "Weiter Verhandlung in Syrien."
-        >>> inputs = tokenizer([article], return_tensors="pt")
+        >>> inputs = tokenizer(article, return_tensors="pt")
         >>> with tokenizer.as_target_tokenizer():
-        ...     labels = tokenizer([summary], return_tensors="pt")
+        ...     labels = tokenizer(summary, return_tensors="pt")
 
         >>> outputs = model(**inputs,labels=labels["input_ids"])
         >>> loss = outputs.loss

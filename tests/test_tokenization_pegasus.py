@@ -95,4 +95,4 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         assert batch.input_ids.shape == (2, 1024)
         assert batch.attention_mask.shape == (2, 1024)
         assert targets["input_ids"].shape == (2, 5)
-        assert len(batch) == 2  # input_ids, attention_mask. Other things make by BartModel
+        assert len(batch) == 2  # input_ids, attention_mask.
