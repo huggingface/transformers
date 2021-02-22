@@ -233,7 +233,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
         model checkpoints.
 
         Params:
-            question_encoder_pretrained_model_name_or_path (:obj: `str`, `optional`, defaults to `None`):
+            question_encoder_pretrained_model_name_or_path (:obj: `str`, `optional`):
                 Information necessary to initiate the question encoder. Can be either:
 
                     - A string with the `shortcut name` of a pretrained model to load from cache or download, e.g.,
