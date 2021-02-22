@@ -3303,6 +3303,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
             Otherwise, input_ids, attention_mask will be the only keys.
         """
+        warnings.warn(
+            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
+            "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
+            "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
+            "details",
+            FutureWarning,
+        )
         # mBART-specific kwargs that should be ignored by other models.
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)
