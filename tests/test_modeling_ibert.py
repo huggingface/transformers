@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import copy
 import unittest
 
 from transformers import is_torch_available
@@ -198,6 +199,7 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
+    test_resize_embeddings = False
     is_encoder_decoder = False
 
     all_model_classes = (
@@ -293,6 +295,52 @@ class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         position_ids = embeddings.create_position_ids_from_inputs_embeds(inputs_embeds)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
+
+    # Override
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), QuantEmbedding)
+            model.set_input_embeddings(torch.nn.Embedding(10, 10))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+
+    # Override
+    def test_feed_forward_chunking(self):
+        pass # I-BERT does not support chunking
+
+    # Override
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            wte = model.get_input_embeddings()
+            if not self.is_encoder_decoder:
+                embed, embed_scaling_factor = wte(input_ids)
+                inputs["inputs_embeds"] = embed
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
 
 
 @require_torch

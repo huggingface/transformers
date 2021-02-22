@@ -137,6 +137,8 @@ class IBertEmbeddings(nn.Module):
 
         if inputs_embeds is None:
             inputs_embeds, inputs_embeds_scaling_factor = self.word_embeddings(input_ids)
+        else:
+            inputs_embeds_scaling_factor = None
         token_type_embeddings, token_type_embeddings_scaling_factor = self.token_type_embeddings(token_type_ids)
 
         embeddings, embeddings_scaling_factor = self.embeddings_act1(
@@ -497,7 +499,8 @@ class IBertLayer(nn.Module):
 
         self.seq_len_dim = 1
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        assert self.chunk_size_feed_forward == 0, "I-BERT only support `config.chunk_size_feed_forward` == 0"
+        if self.chunk_size_feed_forward != 0:
+            raise NotImplementedError("I-BERT only support `config.chunk_size_feed_forward` == 0")
 
         self.attention = IBertAttention(config)
         self.intermediate = IBertIntermediate(config)
@@ -656,6 +659,10 @@ class IBertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, (QuantLinear, nn.Linear)) and module.bias is not None:
             module.bias.data.zero_()
+
+    def resize_token_embeddings(self, new_num_tokens=None):
+        raise NotImplementedError("`resize_token_embeddings` is not supported for I-BERT.")
+
 
 
 IBERT_START_DOCSTRING = r"""
