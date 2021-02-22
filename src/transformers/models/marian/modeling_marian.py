@@ -522,13 +522,14 @@ MARIAN_GENERATION_EXAMPLE = r"""
             >>> src = 'fr'  # source language
             >>> trg = 'en'  # target language
             >>> sample_text = "où est l'arrêt de bus ?"
-            >>> mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+            >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
-            >>> model = MarianMTModel.from_pretrained(mname)
-            >>> tok = MarianTokenizer.from_pretrained(mname)
-            >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="pt")  # don't need tgt_text for inference
+            >>> model = MarianMTModel.from_pretrained(model_name)
+            >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+            >>> batch = tokenizer([sample_text], return_tensors="pt")
             >>> gen = model.generate(**batch)
-            >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
+            >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
+            "Where is the bus stop ?"
 """
 
 MARIAN_INPUTS_DOCSTRING = r"""
