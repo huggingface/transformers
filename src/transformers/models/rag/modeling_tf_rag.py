@@ -365,7 +365,7 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
 RAG_START_DOCSTRING = r"""
 
-    RAG is a seq2seq model which encapsulates two core components: a question encoder and a generator. During a forward
+    RAG is a sequence-to-sequence model which encapsulates two core components: a question encoder and a generator. During a forward
     pass, we encode the input with the question encoder and pass it to the retriever to extract relevant context
     documents. The documents are then prepended to the input. Such contextualized inputs is passed to the generator.
 
