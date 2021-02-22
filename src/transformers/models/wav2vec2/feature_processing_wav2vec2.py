@@ -16,6 +16,7 @@
 Speech processor class for Wav2Vec2
 """
 
+
 # NOTE inheritance from feature extractor
 class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
     def __init__(self, **kwargs):
@@ -52,21 +53,16 @@ class Wav2Vec2SpeechProcessor:
         self.tokenizer = tokenizer
         self.current_processor = self.feature_extractor
 
-    def save_pretrained(self, save_directory):
-        if os.path.isfile(save_directory):
-            raise ValueError("Provided path ({}) should be a directory, not a file".format(save_directory))
-        os.makedirs(save_directory, exist_ok=True)
-        feature_extractor_path = os.path.join(save_directory, "feature_extractor")
-        tokenizer_path = os.path.join(save_directory, "tokenizer")
-        self.feature_extractor.save_pretrained(feature_extractor_path)
-        self.tokenizer.save_pretrained(tokenizer_path)
+    def save_pretrained(self, pretrained_model_name_or_path):
+        self.feature_extractor.save_pretrained(pretrained_model_name_or_path)
+        self.tokenizer.save_pretrained(pretrained_model_name_or_path)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            os.path.join(pretrained_model_name_or_path, "feature_extractor")
-        )
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained(os.path.join(pretrained_model_name_or_path, "tokenizer"))
+        # will look for a `feature_extractor_config.json` file
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path)
+        # will look for the tokenizer files
+        tokenizer = Wav2Vec2Tokenizer.from_pretrained(pretrained_model_name_or_path)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
