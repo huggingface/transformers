@@ -16,10 +16,9 @@ I-BERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The BERT model was proposed in `BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding
-<https://arxiv.org/abs/1810.04805>`__ by Jacob Devlin, Ming-Wei Chang, Kenton Lee and Kristina Toutanova. It's a
-bidirectional transformer pretrained using a combination of masked language modeling objective and next sentence
-prediction on a large corpus comprising the Toronto Book Corpus and Wikipedia.
+The I-BERT model was proposed in `I-BERT: Integer-only BERT Quantization <https://arxiv.org/abs/2006.10220>`__ by
+Sehoon Kim, Amir Gholami, Zhewei Yao, Michael W. Mahoney and Kurt Keutzer. It's a quantized version of RoBERTa running
+inference up to four times faster.
 
 The abstract from the paper is the following:
 
@@ -37,11 +36,8 @@ the full-precision baseline. Furthermore, our preliminary implementation of I-BE
 INT8 inference on a T4 GPU system as compared to FP32 inference. The framework has been developed in PyTorch and has
 been open-sourced.*
 
-Tips:
 
--
-
-The original code can be found `here <https://github.com>`__.
+The original code can be found `here <https://github.com/kssteven418/I-BERT> `__.
 
 IBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
