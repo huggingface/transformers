@@ -22,9 +22,6 @@ _import_structure = {
     "tokenization_character_bert": ["CharacterBertTokenizer"],
 }
 
-#if is_tokenizers_available():
-#    _import_structure["tokenization_character_bert_fast"] = ["CharacterBertTokenizerFast"]
-
 if is_torch_available():
     _import_structure["modeling_character_bert"] = [
         "CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -46,9 +43,6 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_character_bert import CHARACTER_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CharacterBertConfig
     from .tokenization_character_bert import CharacterBertTokenizer
-
-    #if is_tokenizers_available():
-    #    from .tokenization_character_bert_fast import CharacterBertTokenizerFast
 
     if is_torch_available():
         from .modeling_character_bert import (
