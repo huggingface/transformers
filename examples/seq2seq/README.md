@@ -176,7 +176,7 @@ python examples/seq2seq/run_seq2seq.py \
     --predict_with_generate \
     --max_train_samples 500 \
     --max_val_samples 500
-    ```
+ ```
 
 Note, that depending on the used model additional language-specific command-line arguments are sometimes required. Specifically:
 
