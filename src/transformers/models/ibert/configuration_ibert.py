@@ -95,7 +95,7 @@ class IBertConfig(PretrainedConfig):
         eos_token_id=2,
         position_embedding_type="absolute",
         quant_mode=False,
-        force_dequant='none',
+        force_dequant="none",
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)

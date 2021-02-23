@@ -492,6 +492,33 @@ class IBertModelIntegrationTest(unittest.TestCase):
         # output of the quantized GELU layer should be integer
         self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
 
+    def test_force_dequant_gelu(self):
+        x_int = torch.range(-10000, 10000, 1)
+        x_scaling_factor = torch.tensor(0.001)
+        x = x_int * x_scaling_factor
+
+        gelu_dq = IntGELU(quant_mode=False)
+        gelu_fdqs_dict = {
+            True: [
+                IntGELU(quant_mode=True, force_dequant="nonlinear"),
+                IntGELU(quant_mode=True, force_dequant="gelu"),
+            ],
+            False: [
+                IntGELU(quant_mode=True, force_dequant="none"),
+                IntGELU(quant_mode=True, force_dequant="softmax"),
+                IntGELU(quant_mode=True, force_dequant="layernorm"),
+            ],
+        }
+
+        dq, dq_scaling_factor = gelu_dq(x, x_scaling_factor)
+        for label, gelu_fdqs in gelu_fdqs_dict.items():
+            for gelu_fdq in gelu_fdqs:
+                q, q_scaling_factor = gelu_fdq(x, x_scaling_factor)
+                if label:
+                    self.assertTrue(torch.allclose(q, dq, atol=1e-4))
+                else:
+                    self.assertFalse(torch.allclose(q, dq, atol=1e-4))
+
     def test_int_softmax(self):
         output_bit = 8
         softmax_q = IntSoftmax(output_bit, quant_mode=True)
@@ -523,6 +550,35 @@ class IBertModelIntegrationTest(unittest.TestCase):
         array = [[i + 100 * j for j in range(2)] for i in range(-10, 10)]
         _test(array)
 
+    def test_force_dequant_softmax(self):
+        output_bit = 8
+        array = [[i + j for j in range(10)] for i in range(-10, 10)]
+        x_int = torch.tensor(array)
+        x_scaling_factor = torch.tensor(0.1)
+        x = x_int * x_scaling_factor
+
+        softmax_dq = IntSoftmax(output_bit, quant_mode=False)
+        softmax_fdqs_dict = {
+            True: [
+                IntSoftmax(output_bit, quant_mode=True, force_dequant="nonlinear"),
+                IntSoftmax(output_bit, quant_mode=True, force_dequant="softmax"),
+            ],
+            False: [
+                IntSoftmax(output_bit, quant_mode=True, force_dequant="none"),
+                IntSoftmax(output_bit, quant_mode=True, force_dequant="gelu"),
+                IntSoftmax(output_bit, quant_mode=True, force_dequant="layernorm"),
+            ],
+        }
+
+        dq, dq_scaling_factor = softmax_dq(x, x_scaling_factor)
+        for label, softmax_fdqs in softmax_fdqs_dict.items():
+            for softmax_fdq in softmax_fdqs:
+                q, q_scaling_factor = softmax_fdq(x, x_scaling_factor)
+                if label:
+                    self.assertTrue(torch.allclose(q, dq, atol=1e-4))
+                else:
+                    self.assertFalse(torch.allclose(q, dq, atol=1e-4))
+
     def test_int_layernorm(self):
         output_bit = 8
 
@@ -549,3 +605,36 @@ class IBertModelIntegrationTest(unittest.TestCase):
 
         # output of the quantized GELU layer should be integer
         self.assertTrue(torch.allclose(q_int, q_int.round(), atol=1e-4))
+
+    def test_force_dequant_layernorm(self):
+        output_bit = 8
+        array = [[[i * j * j + j for j in range(5, 15)]] for i in range(-10, 10)]
+        x_int = torch.tensor(array)
+        x_scaling_factor = torch.tensor(0.1)
+        x = x_int * x_scaling_factor
+
+        ln_dq = IntLayerNorm(x.shape[1:], 1e-5, quant_mode=False, output_bit=output_bit)
+        ln_fdqs_dict = {
+            True: [
+                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="nonlinear"),
+                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="layernorm"),
+            ],
+            False: [
+                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="none"),
+                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="gelu"),
+                IntLayerNorm(x.shape[1:], 1e-5, quant_mode=True, output_bit=output_bit, force_dequant="softmax"),
+            ],
+        }
+
+        ln_dq.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        ln_dq.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
+        dq, dq_scaling_factor = ln_dq(x, x_scaling_factor)
+        for label, ln_fdqs in ln_fdqs_dict.items():
+            for ln_fdq in ln_fdqs:
+                ln_fdq.weight = torch.nn.Parameter(torch.ones(x.shape[1:]))
+                ln_fdq.bias = torch.nn.Parameter(torch.ones(x.shape[1:]))
+                q, q_scaling_factor = ln_fdq(x, x_scaling_factor)
+                if label:
+                    self.assertTrue(torch.allclose(q, dq, atol=1e-4))
+                else:
+                    self.assertFalse(torch.allclose(q, dq, atol=1e-4))
