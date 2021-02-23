@@ -25,7 +25,7 @@ from .file_utils import (
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, LoggingStrategy, SchedulerType
+from .trainer_utils import EvaluationStrategy, LoggingStrategy, SchedulerType, ShardedDDPType
 from .utils import logging
 
 
@@ -236,9 +236,24 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        sharded_ddp (:obj:`bool`, :obj:`str` or :class:`~transformers.trainer_utils.ShardedDDPType`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
+
+            Can take up to six values:
+
+            - :obj:`"no"`: for no sharded DataParallelism (default behavior)
+            - :obj:`"simple"`: to use first instance of sharded DDP released by fairscale (:obj:`ShardedDDP`) similar
+              to ZeRO-2.
+            - :obj:`"zero_2"`: to use the second instance of sharded DPP released by fairscale (:obj:`FullyShardedDDP`)
+              in Zero-2 mode (with :obj:`reshard_after_forward=False`).
+            - :obj:`"zero_2_offload"`: to use add ZeRO-offload to ZeRO-2.
+            - :obj:`"zero_3"`: to use the second instance of sharded DPP released by fairscale (:obj:`FullyShardedDDP`)
+              in Zero-3 mode (with :obj:`reshard_after_forward=True`).
+            - :obj:`"zero_3_offload"`: to use add ZeRO-offload to ZeRO-3.
+
+            If a bool is passed, it will be converted to :obj:`"no"` for :obj:`False` and :obj:`"simple"` for
+            :obj:`True`.
         deepspeed (:obj:`str`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
             evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
@@ -443,8 +458,8 @@ class TrainingArguments:
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
     )
-    sharded_ddp: bool = field(
-        default=False,
+    sharded_ddp: ShardedDDPType = field(
+        default="no",
         metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
     deepspeed: Optional[str] = field(
@@ -534,6 +549,10 @@ class TrainingArguments:
             logger.info(
                 "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio during training"
             )
+
+        if isinstance(self.sharded_ddp, bool):
+            self.sharded_ddp = "simple" if self.sharded_ddp else "no"
+        self.sharded_ddp = ShardedDDPType(self.sharded_ddp)
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -662,7 +681,7 @@ class TrainingArguments:
 
         - :obj:`ParallelMode.NOT_PARALLEL`: no parallelism (CPU or one GPU).
         - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`torch.nn.DataParallel`).
-        - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each ahving its own process (uses
+        - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each having its own process (uses
           :obj:`torch.nn.DistributedDataParallel`).
         - :obj:`ParallelMode.TPU`: several TPU cores.
         """

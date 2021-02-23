@@ -421,3 +421,12 @@ class TrainerMemoryTracker:
         # init doesn't have metrics to update so we just save that data for later stages to retrieve
         if metrics is not None:
             self.update_metrics(stage, metrics)
+
+
+class ShardedDDPType(ExplicitEnum):
+    NO = "no"
+    SIMPLE = "simple"
+    ZERO_2 = "zero2"
+    ZERO_2_OFFLOAD = "zero2_offload"
+    ZERO_3 = "zero3"
+    ZERO_3_OFFLOAD = "zero3_offload"

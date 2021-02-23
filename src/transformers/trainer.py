@@ -94,6 +94,7 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
+    ShardedDDPType,
     TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
@@ -132,9 +133,15 @@ if is_torch_tpu_available():
     import torch_xla.distributed.parallel_loader as pl
 
 if is_fairscale_available():
+    import fairscale
     from fairscale.nn.data_parallel import ShardedDataParallel as ShardedDDP
     from fairscale.optim import OSS
     from fairscale.optim.grad_scaler import ShardedGradScaler
+
+    if version.parse(fairscale.__version__) >= version.parse("0.3"):
+        from fairscale.nn.data_parallel import FullyShardedDataParallel as FullyShardedDDP
+    else:
+        FullyShardedDDP = None
 
 if is_sagemaker_distributed_available():
     import smdistributed.dataparallel.torch.distributed as dist
@@ -347,16 +354,21 @@ class Trainer:
 
         # Setup Sharded DDP training
         self.sharded_dpp = False
-        if args.sharded_ddp:
+        if args.sharded_ddp != ShardedDDPType.NO:
             if args.deepspeed:
                 raise ValueError(
-                    "Using --sharded_ddp together with --deepspeed is not possible, deactivate one of those flags."
+                    "Using --sharded_ddp xxx together with --deepspeed is not possible, deactivate one of those flags."
                 )
 
             if args.local_rank == -1:
                 raise ValueError("Using sharded DDP only works in distributed training.")
             elif not is_fairscale_available():
                 raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
+            elif args.sharded_ddp != ShardedDDPType.SIMPLE and FullyShardedDDP is None:
+                raise ImportError(
+                    "Sharded DDP in a mode other than simple training requires fairscale version >= 0.3, found "
+                    f"{fairscale.__version__}. Upgrade your fairscale library: `pip install --upgrade fairscale`."
+                )
             else:
                 self.sharded_dpp = True
 
@@ -618,7 +630,7 @@ class Trainer:
                     "eps": self.args.adam_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
-            if self.sharded_dpp:
+            if self.args.sharded_ddp == ShardedDDPType.SIMPLE:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,
                     optim=optimizer_cls,
@@ -737,7 +749,18 @@ class Trainer:
 
         # Distributed training (should be after apex fp16 initialization)
         if self.sharded_dpp:
-            model = ShardedDDP(model, self.optimizer)
+            # Sharded DDP!
+            if self.args.sharded_ddp == ShardedDDPType.SIMPLE:
+                model = ShardedDDP(model, self.optimizer)
+            else:
+                mixed_precision = self.args.fp16
+                cpu_offload = self.args.sharded_ddp in [ShardedDDPType.ZERO_2_OFFLOAD, ShardedDDPType.ZERO_3_OFFLOAD]
+                zero_3 = self.args.sharded_ddp in [ShardedDDPType.ZERO_3, ShardedDDPType.ZERO_3_OFFLOAD]
+                # Breaking the self.model convention but I see no way around it for now.
+                self.model = FullyShardedDDP(
+                    model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload
+                )
+
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
@@ -854,6 +877,7 @@ class Trainer:
             num_train_epochs = 1
             num_update_steps_per_epoch = max_steps
 
+        delay_optimizer_creation = self.args.sharded_ddp not in [ShardedDDPType.NO, ShardedDDPType.SIMPLE]
         if self.args.deepspeed:
             model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
             self.model = model.module
@@ -861,7 +885,7 @@ class Trainer:
             self.deepspeed = model  # DeepSpeedEngine object
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
-        else:
+        elif not delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         self.state = TrainerState()
@@ -875,6 +899,9 @@ class Trainer:
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
             self.model_wrapped = model
+
+        if delay_optimizer_creation:
+            self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # important: at this point:
         # self.model         is the Transformers Model
@@ -1025,6 +1052,9 @@ class Trainer:
                         if hasattr(self.optimizer, "clip_grad_norm"):
                             # Some optimizers (like the sharded optimizer) have a specific way to do gradient clipping
                             self.optimizer.clip_grad_norm(self.args.max_grad_norm)
+                        elif hasattr(model, "clip_grad_norm_"):
+                            # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
+                            model.clip_grad_norm(self.args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
                             torch.nn.utils.clip_grad_norm_(
@@ -1151,8 +1181,8 @@ class Trainer:
 
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
-        # want to save.
-        assert _model_unwrap(model) is self.model, "internal model should be a reference to self.model"
+        # want to save except FullyShardedDDP.
+        # assert _model_unwrap(model) is self.model, "internal model should be a reference to self.model"
 
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
@@ -1176,7 +1206,7 @@ class Trainer:
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
-        if self.sharded_dpp:
+        if self.args.sharded_ddp == ShardedDDPType.SIMPLE:
             self.optimizer.consolidate_state_dict()
 
         if is_torch_tpu_available():
@@ -1537,7 +1567,11 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
-            logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+            if isinstance(_model_unwrap(self.model), PreTrainedModel):
+                if xm.is_master_ordinal():
+                    _model_unwrap(self.model).config.save_pretrained(save_directory)
+            else:
+                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
             state_dict = self.model.state_dict()
             xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
@@ -1552,7 +1586,10 @@ class Trainer:
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
-            logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+            if isinstance(_model_unwrap(self.model), PreTrainedModel):
+                _model_unwrap(self.model).config.save_pretrained(save_directory)
+            else:
+                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
             state_dict = self.model.state_dict()
             torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:

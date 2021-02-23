@@ -89,13 +89,13 @@ class TestTrainerExt(TestCasePlus):
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_ddp_sharded_ddp(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp")
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp simple")
 
     # test --sharded_ddp w/ --fp16
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_ddp_sharded_ddp_fp16(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp --fp16")
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp simple --fp16")
 
     @require_apex
     def test_run_seq2seq_apex(self):
