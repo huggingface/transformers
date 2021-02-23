@@ -1,6 +1,6 @@
 # coding=utf-8
 # Copyright Hicham EL BOUKKOURI, Olivier FERRET, Thomas LAVERGNE, Hiroshi NOJI,
-# Pierre ZWEIGENBAUM, Junichi TSUJII and The HuggingFace Inc. team.
+# Pierre ZWEIGENBAUM, Junichi TSUJII, The HuggingFace Inc. and AllenNLP teams.
 # All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -70,7 +70,7 @@ CHARACTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all CharacterBERT models at https://huggingface.co/models?filter=character_bert
 ]
 
-
+# Copied from transformers.models.bert.modeling_bert.load_tf_weights_in_bert with bert->character_bert
 def load_tf_weights_in_character_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -143,10 +143,6 @@ def load_tf_weights_in_character_bert(model, config, tf_checkpoint_path):
         logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
     return model
-
-
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
 
 
 class Highway(torch.nn.Module):
@@ -416,6 +412,7 @@ class CharacterBertEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->CharacterBert
 class CharacterBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -541,6 +538,7 @@ class CharacterBertSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->CharacterBert
 class CharacterBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -555,6 +553,7 @@ class CharacterBertSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->CharacterBert
 class CharacterBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -604,6 +603,7 @@ class CharacterBertAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->CharacterBert
 class CharacterBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -619,6 +619,7 @@ class CharacterBertIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->CharacterBert
 class CharacterBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -633,6 +634,7 @@ class CharacterBertOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->CharacterBert
 class CharacterBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -716,6 +718,7 @@ class CharacterBertLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->CharacterBert
 class CharacterBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -813,6 +816,7 @@ class CharacterBertEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->CharacterBert
 class CharacterBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -828,6 +832,7 @@ class CharacterBertPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->CharacterBert
 class CharacterBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -865,6 +870,7 @@ class CharacterBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->CharacterBert
 class CharacterBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -875,6 +881,7 @@ class CharacterBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->CharacterBert
 class CharacterBertOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -885,6 +892,7 @@ class CharacterBertOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->CharacterBert
 class CharacterBertPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -922,6 +930,7 @@ class CharacterBertPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
+# Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput with Bert->CharacterBert
 class CharacterBertForPreTrainingOutput(ModelOutput):
     """
     Output type of :class:`~transformers.CharacterBertForPreTraining`.
@@ -969,21 +978,21 @@ CHARACTER_BERT_START_DOCSTRING = r"""
 CHARACTER_BERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
-            Indices of input sequence tokens in the vocabulary.
+            Indices of input sequence tokens.
 
             Indices can be obtained using :class:`transformers.CharacterBertTokenizer`.
             See :func:`transformers.PreTrainedTokenizer.encode` and
             :func:`transformers.PreTrainedTokenizer.__call__` for details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
+        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{1}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
             
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
+        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{1}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
             
@@ -991,7 +1000,7 @@ CHARACTER_BERT_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a `sentence B` token.
             
             `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
+        position_ids (:obj:`torch.LongTensor` of shape :obj:`{1}`, `optional`):
             Indices of positions of each input sequence tokens in the position embeddings.
             Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
@@ -1062,7 +1071,10 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1216,7 +1228,10 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @replace_return_docstrings(output_type=CharacterBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1324,7 +1339,10 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1472,7 +1490,10 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1564,7 +1585,10 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1664,7 +1688,10 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1745,7 +1772,10 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1835,7 +1865,10 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1922,7 +1955,10 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(CHARACTER_BERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(
+        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+            "(batch_size, sequence_length, maximum_token_length)",
+            "(batch_size, sequence_length")))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
