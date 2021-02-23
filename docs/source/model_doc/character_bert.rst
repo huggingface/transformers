@@ -24,7 +24,10 @@ The abstract from the paper is the following:
 
 Tips:
 
-If you are working in the medical domain, use the medical version of CharacterBERT.
+- CharacterBert is a token-level model that considers each token as a sequence of characters. Therefore, the input shape is (batch dimension, tokens dimension, characters dimension) instead of (batch dimension, tokens dimension).
+- Because the model looks at the characters of each input token, it can be more robust to noise/misspellings than BERT. 
+- Because CharacterBert does not rely on a vocabulary of wordpieces, the same model can be seamlessly re-used in different domains or languages (But keep in mind that it was pre-trained on English texts).
+- If you are working in the medical domain, make sure you use the version of CharacterBERT that is pre-trained on medical corpora.
 
 CharacterBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -38,15 +41,14 @@ CharacterBertTokenizer
 
 .. autoclass:: transformers.CharacterBertTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+        create_token_type_ids_from_sequences
 
 
-CharacterBertTokenizerFast
+CharacterBert specific outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.CharacterBertTokenizerFast
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
+.. autoclass:: transformers.models.character_bert.modeling_character_bert.CharacterBertForPreTrainingOutput
+    :members:
 
 
 CharacterBertModel
@@ -56,10 +58,17 @@ CharacterBertModel
     :members: forward
 
 
-CharacterBertForCausalLM
+CharacterBertForPreTraining
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.CharacterBertForCausalLM
+.. autoclass:: transformers.CharacterBertForPreTraining
+    :members: forward
+
+
+CharacterBertModelLMHeadModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.CharacterBertLMHeadModel
     :members: forward
 
 
@@ -67,6 +76,13 @@ CharacterBertForMaskedLM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.CharacterBertForMaskedLM
+    :members: forward
+
+
+CharacterBertForNextSentencePrediction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.CharacterBertForNextSentencePrediction
     :members: forward
 
 
