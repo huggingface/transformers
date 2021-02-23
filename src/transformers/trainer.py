@@ -1944,9 +1944,9 @@ class Trainer:
 
     def _get_learning_rate(self):
         if self.deepspeed:
-            # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps
-            # may not run for the first few dozens steps while loss is overflowing, so
-            # `get_last_lr` will fail if called during that warm up stage, so handle it cleanly here:
+            # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
+            # not run for the first few dozen steps while loss scale is too large, and thus during
+            # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
             try:
                 last_lr = self.lr_scheduler.get_last_lr()[0]
             except AssertionError as e:
