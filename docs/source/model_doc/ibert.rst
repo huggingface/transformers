@@ -37,7 +37,7 @@ INT8 inference on a T4 GPU system as compared to FP32 inference. The framework h
 been open-sourced.*
 
 
-The original code can be found `here <https://github.com/kssteven418/I-BERT> `__.
+The original code can be found `here <https://github.com/kssteven418/I-BERT>`__.
 
 IBertConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
