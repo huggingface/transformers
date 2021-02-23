@@ -107,7 +107,11 @@ class CharacterBertConfig(PretrainedConfig):
         **kwargs
     ):
         super().__init__(
-            **kwargs
+            type_vocab_size=type_vocab_size,
+            layer_norm_eps=layer_norm_eps,
+            use_cache=use_cache,
+            tie_word_embeddings=False,  # can't tie wordpiece embeddings in CharacterBERT
+            **kwargs,
         )
 
         self.vocab_size=vocab_size
@@ -121,7 +125,3 @@ class CharacterBertConfig(PretrainedConfig):
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        self.tie_word_embeddings = False  # can't tie word embs in CharacterBERT
