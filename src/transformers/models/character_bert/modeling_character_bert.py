@@ -1072,9 +1072,9 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1229,9 +1229,9 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=CharacterBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1340,9 +1340,9 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1491,9 +1491,9 @@ class CharacterBertForMaskedLM(CharacterBertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1586,9 +1586,9 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=NextSentencePredictorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1689,9 +1689,9 @@ class CharacterBertForSequenceClassification(CharacterBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1773,9 +1773,9 @@ class CharacterBertForMultipleChoice(CharacterBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1866,9 +1866,9 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
@@ -1956,9 +1956,9 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(
-        CHARACTER_BERT_INPUTS_DOCSTRING.format((
+        CHARACTER_BERT_INPUTS_DOCSTRING.format(
             "(batch_size, sequence_length, maximum_token_length)",
-            "(batch_size, sequence_length")))
+            "(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="helboukkouri/character-bert",
