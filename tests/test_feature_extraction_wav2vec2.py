@@ -14,12 +14,12 @@
 # limitations under the License.
 
 
+import random
 import unittest
 
-from .test_feature_extraction_common import FeatureExtractionMixin
-
 from transformers import Wav2Vec2FeatureExtractor
-import random
+
+from .test_feature_extraction_common import FeatureExtractionMixin
 
 
 global_rng = random.Random()
@@ -40,7 +40,6 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
-
     def __init__(
         self,
         parent,
@@ -51,7 +50,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         padding_value=0.0,
         sampling_rate=16000,
         return_attention_mask=True,
-        do_normalize=True
+        do_normalize=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -74,7 +73,9 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         }
 
     def prepare_inputs_for_common(self):
-        speech_inputs = [floats_list((1, x))[0] for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)]
+        speech_inputs = [
+            floats_list((1, x))[0] for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+        ]
         return speech_inputs
 
 

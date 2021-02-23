@@ -91,60 +91,96 @@ class FeatureExtractionMixin:
 
         processed_features = BatchFeature({input_name: speech_inputs})
 
-        input_1 = feat_extract.pad(processed_features)[input_name]
+        pad_diff = self.feat_extract_tester.seq_length_diff
+        pad_max_length = self.feat_extract_tester.max_seq_length + pad_diff
+        pad_min_length = self.feat_extract_tester.min_seq_length
+        batch_size = self.feat_extract_tester.batch_size
+
+        # test padding for List[int] + numpy
+        input_1 = feat_extract.pad(processed_features, padding=False)[input_name]
         input_2 = feat_extract.pad(processed_features, padding="longest")[input_name]
-        input_3 = feat_extract.pad(processed_features, padding="max_length", max_length=self.feat_extract_tester.max_seq_length)
+        input_3 = feat_extract.pad(processed_features, padding="max_length", max_length=len(speech_inputs[-1]))[
+            input_name
+        ]
+        input_4 = feat_extract.pad(processed_features, padding="longest", return_tensors="np")[input_name]
+
+        # max_length parameter has to be provided when setting `padding="max_length"`
+        with self.assertRaises(ValueError):
+            feat_extract.pad(processed_features, padding="max_length")[input_name]
+
+        input_5 = feat_extract.pad(
+            processed_features, padding="max_length", max_length=pad_max_length, return_tensors="np"
+        )[input_name]
 
         self.assertFalse(_input_have_equal_length(input_1))
         self.assertTrue(_input_have_equal_length(input_2))
         self.assertTrue(_input_have_equal_length(input_3))
         self.assertTrue(_input_are_equal(input_2, input_3))
-        self.assertTrue(len(input_1[0]) == self.feat_extract_tester.min_seq_length)
-        self.assertTrue(len(input_1[1]) == self.feat_extract_tester.min_seq_length + self.feat_extract_tester.seq_length_diff)
+        self.assertTrue(len(input_1[0]) == pad_min_length)
+        self.assertTrue(len(input_1[1]) == pad_min_length + pad_diff)
+        self.assertTrue(input_4.shape == (batch_size, len(input_3[0])))
+        self.assertTrue(input_5.shape == (batch_size, pad_max_length))
 
-        input_4 = feat_extract.pad(processed_features, padding="max_length")[input_name]
-        input_5 = feat_extract.pad(processed_features, padding="max_length", max_length=self.feat_extract_tester.max_seq_length + self.feat_extract_tester.seq_length_diff)[input_name]
-
-        self.assertTrue(_input_are_equal(input_1, input_4))
-        self.assertTrue(input_5.shape, (self.feat_extract_tester.batch_size, self.feat_extract_tester.max_seq_length + self.feat_extract_tester.seq_length_diff))
-
+        # test padding for `pad_to_multiple_of` for List[int] + numpy
         input_6 = feat_extract.pad(processed_features, pad_to_multiple_of=10)[input_name]
         input_7 = feat_extract.pad(processed_features, padding="longest", pad_to_multiple_of=10)[input_name]
         input_8 = feat_extract.pad(
-            processed_features, padding="max_length", pad_to_multiple_of=10, max_length=self.feat_extract_tester.max_seq_length + self.feat_extract_tester.seq_length_diff
+            processed_features, padding="max_length", pad_to_multiple_of=10, max_length=pad_max_length
+        )[input_name]
+        input_9 = feat_extract.pad(
+            processed_features,
+            padding="max_length",
+            pad_to_multiple_of=10,
+            max_length=pad_max_length,
+            return_tensors="np",
         )[input_name]
 
-        self.assertTrue(_input_are_equal(input_1, input_6))
-        self.assertTrue(input_7.shape, (3, 1500))
-        self.assertTrue(input_8.shape, (3, 2500))
+        self.assertTrue(all(len(x) % 10 == 0 for x in input_6))
+        self.assertTrue(_input_are_equal(input_6, input_7))
 
-        return
+        expected_mult_pad_length = pad_max_length if pad_max_length % 10 == 0 else (pad_max_length // 10 + 1) * 10
+        self.assertTrue(all(len(x) == expected_mult_pad_length for x in input_8))
+        self.assertTrue(input_9.shape, (batch_size, expected_mult_pad_length))
 
-        # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_2[0])[self.feat_extract_tester.min_seq_length:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_2[1])[self.feat_extract_tester.min_seq_length + self.feat_extract_tester.seq_length_diff:])) < 1e-3)
-        # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_5[0])[self.feat_extract_tester.min_seq_length:])) < 1e-3)
-        # padding should be 0.0
-        self.assertTrue(abs(sum(np.asarray(input_7[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_7[1])[1000:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_7[2])[1200:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_8[0])[800:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_8[1])[1000:])) < 1e-3)
-        self.assertTrue(abs(sum(np.asarray(input_8[2])[1200:])) < 1e-3)
+        # Check padding value is correct
+        padding_vector_sum = (np.ones(self.feat_extract_tester.feature_dim) * feat_extract.padding_value).sum()
+        self.assertTrue(
+            abs(np.asarray(input_2[0])[pad_min_length:].sum() - padding_vector_sum * (pad_max_length - pad_min_length))
+            < 1e-3
+        )
+        self.assertTrue(
+            abs(
+                np.asarray(input_2[1])[pad_min_length + pad_diff :].sum()
+                - padding_vector_sum * (pad_max_length - pad_min_length - pad_diff)
+            )
+            < 1e-3
+        )
+        self.assertTrue(
+            abs(
+                np.asarray(input_2[2])[pad_min_length + 2 * pad_diff :].sum()
+                - padding_vector_sum * (pad_max_length - pad_min_length - 2 * pad_diff)
+            )
+            < 1e-3
+        )
+        self.assertTrue(
+            abs(input_5[0, pad_min_length:].sum() - padding_vector_sum * (pad_max_length - pad_min_length)) < 1e-3
+        )
+        self.assertTrue(
+            abs(input_9[0, pad_min_length:].sum() - padding_vector_sum * (expected_mult_pad_length - pad_min_length))
+            < 1e-3
+        )
 
-#    def test_attention_mask(self):
-#        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
-#
-        # default case -> no attention_mask is returned
-#        feat_extract = self.get_feat_extract()
-#        processed = feat_extract(speech_inputs)
-#        self.assertNotIn("attention_mask", processed)
-#
-        # wav2vec2-lv60 -> return attention_mask
-#        feat_extract = self.get_feat_extract(return_attention_mask=True)
-#        processed = feat_extract(speech_inputs, padding="longest")
-#
-#        self.assertIn("attention_mask", processed)
-#        self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape))
-#        self.assertListEqual(processed.attention_mask.sum(-1).tolist(), [800, 1000, 1200])
+    def test_attention_mask(self):
+        feat_dict = self.feat_extract_dict
+        feat_dict["return_attention_mask"] = True
+        feat_extract = self.feat_extract_class(**feat_dict)
+        speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
+        input_lenghts = [len(x) for x in speech_inputs]
+        input_name = feat_extract.model_input_names[0]
+
+        processed = BatchFeature({input_name: speech_inputs})
+
+        processed = feat_extract.pad(processed, padding="longest", return_tensors="np")
+        self.assertIn("attention_mask", processed)
+        self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape))
+        self.assertListEqual(processed.attention_mask.sum(-1).tolist(), input_lenghts)

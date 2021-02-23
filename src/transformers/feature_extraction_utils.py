@@ -15,12 +15,12 @@
 """
  Feature extraction classes for python tokenizers.
 """
+import copy
 import json
 import os
-import copy
-from enum import Enum
 from collections import UserDict
-from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
+from enum import Enum
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -28,10 +28,10 @@ from .file_utils import (
     FEATURE_EXTRACTOR_NAME,
     cached_path,
     hf_bucket_url,
+    is_flax_available,
     is_remote_url,
     is_tf_available,
     is_torch_available,
-    is_flax_available,
     torch_required,
 )
 from .utils import logging
@@ -329,6 +329,8 @@ class PreTrainedFeatureExtractor:
                 f"It is strongly recommended to instantiate {self.__class__} with a set sampling_rate."
                 f"Failing to do so can result in silent errors that might be hard to debug."
             )
+
+        self.padding_side = kwargs.pop("padding_side", "right")
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -676,7 +678,6 @@ class PreTrainedFeatureExtractor:
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        import ipdb; ipdb.set_trace()
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
             processed_features = {
                 key: [example[key] for example in processed_features] for key in processed_features[0].keys()
@@ -816,27 +817,11 @@ class PreTrainedFeatureExtractor:
             if self.padding_side == "right":
                 if return_attention_mask:
                     processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
-                if "token_type_ids" in processed_features:
-                    processed_features["token_type_ids"] = (
-                        processed_features["token_type_ids"] + [self.pad_token_type_id] * difference
-                    )
-                if "special_tokens_mask" in processed_features:
-                    processed_features["special_tokens_mask"] = (
-                        processed_features["special_tokens_mask"] + [1] * difference
-                    )
-                processed_features[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
+                processed_features[self.model_input_names[0]] = required_input + [self.padding_value] * difference
             elif self.padding_side == "left":
                 if return_attention_mask:
                     processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
-                if "token_type_ids" in processed_features:
-                    processed_features["token_type_ids"] = [self.pad_token_type_id] * difference + processed_features[
-                        "token_type_ids"
-                    ]
-                if "special_tokens_mask" in processed_features:
-                    processed_features["special_tokens_mask"] = [1] * difference + processed_features[
-                        "special_tokens_mask"
-                    ]
-                processed_features[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
+                processed_features[self.model_input_names[0]] = [self.padding_value] * difference + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in processed_features:
@@ -882,33 +867,33 @@ class PreTrainedFeatureExtractor:
                 raise ValueError("...")
             elif truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
                 raise ValueError("...")
-#                if self.model_max_length > LARGE_INTEGER:
-#                    if verbose:
-#                        if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
-#                            logger.warning(
-#                                "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
-#                                "Default to no padding."
-#                            )
-#                        self.deprecation_warnings["Asking-to-pad-to-max_length"] = True
-#                    padding_strategy = PaddingStrategy.DO_NOT_PAD
-#                else:
-#                    max_length = self.model_max_length
+        #                if self.model_max_length > LARGE_INTEGER:
+        #                    if verbose:
+        #                        if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
+        #                            logger.warning(
+        #                                "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
+        #                                "Default to no padding."
+        #                            )
+        #                        self.deprecation_warnings["Asking-to-pad-to-max_length"] = True
+        #                    padding_strategy = PaddingStrategy.DO_NOT_PAD
+        #                else:
+        #                    max_length = self.model_max_length
 
-#            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
-#                if self.model_max_length > LARGE_INTEGER:
-#                    if verbose:
-#                        if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
-#                            logger.warning(
-#                                "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
-#                                "Default to no truncation."
-#                            )
-#                        self.deprecation_warnings["Asking-to-truncate-to-max_length"] = True
-#                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
-#                else:
-#                    max_length = self.model_max_length
+        #            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
+        #                if self.model_max_length > LARGE_INTEGER:
+        #                    if verbose:
+        #                        if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
+        #                            logger.warning(
+        #                                "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
+        #                                "Default to no truncation."
+        #                            )
+        #                        self.deprecation_warnings["Asking-to-truncate-to-max_length"] = True
+        #                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+        #                else:
+        #                    max_length = self.model_max_length
 
         # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and not self.padding_value:
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
             raise ValueError(
                 "Asking to pad but the tokenizer does not have a padding token. "
                 "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
