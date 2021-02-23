@@ -17,8 +17,10 @@
 """
 import json
 import os
+import copy
+from enum import Enum
 from collections import UserDict
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, TYPE_CHECKING
 
 import numpy as np
 
@@ -29,19 +31,285 @@ from .file_utils import (
     is_remote_url,
     is_tf_available,
     is_torch_available,
+    is_flax_available,
+    torch_required,
 )
-from .tokenization_utils_base import PaddingStrategy, TensorType, _is_tensorflow, _is_torch, to_py_obj
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BatchFeature(UserDict):
-    """"""
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
 
-    def __init__(self, data):
+
+def _is_numpy(x):
+    return isinstance(x, np.ndarray)
+
+
+def _is_torch(x):
+    import torch
+
+    return isinstance(x, torch.Tensor)
+
+
+def _is_torch_device(x):
+    import torch
+
+    return isinstance(x, torch.device)
+
+
+def _is_tensorflow(x):
+    import tensorflow as tf
+
+    return isinstance(x, tf.Tensor)
+
+
+def _is_jax(x):
+    import jax.numpy as jnp  # noqa: F811
+
+    return isinstance(x, jnp.ndarray)
+
+
+def to_py_obj(obj):
+    """
+    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
+    """
+    if isinstance(obj, (dict, BatchFeature)):
+        return {k: to_py_obj(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [to_py_obj(o) for o in obj]
+    elif is_tf_available() and _is_tensorflow(obj):
+        return obj.numpy().tolist()
+    elif is_torch_available() and _is_torch(obj):
+        return obj.detach().cpu().tolist()
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    else:
+        return obj
+
+
+class ExplicitEnum(Enum):
+    """
+    Enum with more explicit error message for missing values.
+    """
+
+    @classmethod
+    def _missing_(cls, value):
+        raise ValueError(
+            "%r is not a valid %s, please select one of %s"
+            % (value, cls.__name__, str(list(cls._value2member_map_.keys())))
+        )
+
+
+class TensorType(ExplicitEnum):
+    """
+    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    tab-completion in an IDE.
+    """
+
+    PYTORCH = "pt"
+    TENSORFLOW = "tf"
+    NUMPY = "np"
+    JAX = "jax"
+
+
+class PaddingStrategy(ExplicitEnum):
+    """
+    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for tab-completion
+    in an IDE.
+    """
+
+    LONGEST = "longest"
+    MAX_LENGTH = "max_length"
+    DO_NOT_PAD = "do_not_pad"
+
+
+class TruncationStrategy(ExplicitEnum):
+    """
+    Possible values for the ``truncation`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
+    tab-completion in an IDE.
+    """
+
+    ONLY_FIRST = "only_first"
+    ONLY_SECOND = "only_second"
+    LONGEST_FIRST = "longest_first"
+    DO_NOT_TRUNCATE = "do_not_truncate"
+
+
+class BatchFeature(UserDict):
+    """
+    Holds the output of the :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.encode_plus` and
+    :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizerBase.batch_encode` methods (tokens,
+    attention_masks, etc).
+
+    This class is derived from a python dictionary and can be used as a dictionary. In addition, this class exposes
+    utility methods to map from word/character space to token space.
+
+    Args:
+        data (:obj:`dict`):
+            Dictionary of lists/arrays/tensors returned by the encode/batch_encode methods ('input_ids',
+            'attention_mask', etc.).
+        encoding (:obj:`tokenizers.Encoding` or :obj:`Sequence[tokenizers.Encoding]`, `optional`):
+            If the tokenizer is a fast tokenizer which outputs additional information like mapping from word/character
+            space to token space the :obj:`tokenizers.Encoding` instance or list of instance (for batches) hold this
+            information.
+        tensor_type (:obj:`Union[None, str, TensorType]`, `optional`):
+            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            initialization.
+        prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to add a batch axis when converting to tensors (see :obj:`tensor_type` above).
+        n_sequences (:obj:`Optional[int]`, `optional`):
+            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
+            initialization.
+    """
+
+    def __init__(
+        self,
+        data: Optional[Dict[str, Any]] = None,
+        tensor_type: Union[None, str, TensorType] = None,
+        prepend_batch_axis: bool = False,
+    ):
         super().__init__(data)
+        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+
+    def __getitem__(self, item: Union[int, str]) -> Union[Any]:
+        """
+        If the key is a string, returns the value of the dict associated to :obj:`key` ('input_ids', 'attention_mask',
+        etc.).
+
+        If the key is an integer, get the :obj:`tokenizers.Encoding` for batch item with index :obj:`key`.
+        """
+        if isinstance(item, str):
+            return self.data[item]
+        else:
+            raise KeyError(
+                "Indexing with integers (to access backend Encoding for a given batch index) "
+                "is not available when using Python based tokenizers"
+            )
+
+    def __getattr__(self, item: str):
+        try:
+            return self.data[item]
+        except KeyError:
+            raise AttributeError
+
+    def __getstate__(self):
+        return {"data": self.data}
+
+    def __setstate__(self, state):
+        if "data" in state:
+            self.data = state["data"]
+
+    def keys(self):
+        return self.data.keys()
+
+    def values(self):
+        return self.data.values()
+
+    def items(self):
+        return self.data.items()
+
+    # After this point:
+    # Extended properties and methods only available for fast (Rust-based) tokenizers
+    # provided by HuggingFace tokenizers library.
+
+    def convert_to_tensors(
+        self, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
+    ):
+        """
+        Convert the inner content to tensors.
+
+        Args:
+            tensor_type (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+                The type of tensors to use. If :obj:`str`, should be one of the values of the enum
+                :class:`~transformers.tokenization_utils_base.TensorType`. If :obj:`None`, no modification is done.
+            prepend_batch_axis (:obj:`int`, `optional`, defaults to :obj:`False`):
+                Whether or not to add the batch dimension during the conversion.
+        """
+        if tensor_type is None:
+            return self
+
+        # Convert to TensorType
+        if not isinstance(tensor_type, TensorType):
+            tensor_type = TensorType(tensor_type)
+
+        # Get a function reference for the correct framework
+        if tensor_type == TensorType.TENSORFLOW:
+            if not is_tf_available():
+                raise ImportError(
+                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
+                )
+            import tensorflow as tf
+
+            as_tensor = tf.constant
+            is_tensor = tf.is_tensor
+        elif tensor_type == TensorType.PYTORCH:
+            if not is_torch_available():
+                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+            import torch
+
+            as_tensor = torch.tensor
+            is_tensor = torch.is_tensor
+        elif tensor_type == TensorType.JAX:
+            if not is_flax_available():
+                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+            import jax.numpy as jnp  # noqa: F811
+
+            as_tensor = jnp.array
+            is_tensor = _is_jax
+        else:
+            as_tensor = np.asarray
+            is_tensor = _is_numpy
+
+        # Do the tensor conversion in batch
+        for key, value in self.items():
+            try:
+                if prepend_batch_axis:
+                    value = [value]
+
+                if not is_tensor(value):
+                    tensor = as_tensor(value)
+
+                    self[key] = tensor
+            except:  # noqa E722
+                if key == "overflowing_tokens":
+                    raise ValueError(
+                        "Unable to create tensor returning overflowing tokens of different lengths. "
+                        "Please see if a fast version of this tokenizer is available to have this feature available."
+                    )
+                raise ValueError(
+                    "Unable to create tensor, you should probably activate truncation and/or padding "
+                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
+                )
+
+        return self
+
+    @torch_required
+    def to(self, device: Union[str, "torch.device"]) -> "BatchFeature":
+        """
+        Send all values to device by calling :obj:`v.to(device)` (PyTorch only).
+
+        Args:
+            device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
+
+        Returns:
+            :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
+            modification.
+        """
+
+        # This check catches things like APEX blindly calling "to" on all inputs to a module
+        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
+        # into a HalfTensor
+        if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
+            self.data = {k: v.to(device=device) for k, v in self.data.items()}
+        else:
+            logger.warning(
+                f"Attempting to cast a BatchEncoding to another type, {str(device)}. This is not supported."
+            )
+        return self
 
 
 class PreTrainedFeatureExtractor:
@@ -62,7 +330,13 @@ class PreTrainedFeatureExtractor:
                 f"Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        self.return_attention_mask = kwargs.pop("return_attention_mask", True)
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                raise err
 
     @classmethod
     def from_pretrained(
@@ -157,7 +431,7 @@ class PreTrainedFeatureExtractor:
         # If we save using the predefined names, we can load using `from_pretrained`
         output_feature_extractor_file = os.path.join(save_directory, FEATURE_EXTRACTOR_NAME)
 
-        self.to_json_file(output_feature_extractor_file, use_diff=True)
+        self.to_json_file(output_feature_extractor_file)
         logger.info(f"Configuration saved in {output_feature_extractor_file}")
 
     @classmethod
@@ -278,6 +552,17 @@ class PreTrainedFeatureExtractor:
         else:
             return feature_extractor
 
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serializes this instance to a Python dictionary.
+
+        Returns:
+            :obj:`Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
+        """
+        output = copy.deepcopy(self.__dict__)
+
+        return output
+
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "PreTrainedFeatureExtractor":
         """
@@ -391,6 +676,7 @@ class PreTrainedFeatureExtractor:
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
+        import ipdb; ipdb.set_trace()
         if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
             processed_features = {
                 key: [example[key] for example in processed_features] for key in processed_features[0].keys()
@@ -557,3 +843,89 @@ class PreTrainedFeatureExtractor:
             processed_features["attention_mask"] = [1] * len(required_input)
 
         return processed_features
+
+    def _get_padding_truncation_strategies(
+        self, padding=False, truncation=False, max_length=None, pad_to_multiple_of=None, verbose=True, **kwargs
+    ):
+        """
+        Find the correct padding/truncation strategy with backward compatibility for old arguments (truncation_strategy
+        and pad_to_max_length) and behaviors.
+        """
+
+        # Get padding strategy
+        if padding is not False:
+            if padding is True:
+                padding_strategy = PaddingStrategy.LONGEST  # Default to pad to the longest sequence in the batch
+            elif not isinstance(padding, PaddingStrategy):
+                padding_strategy = PaddingStrategy(padding)
+            elif isinstance(padding, PaddingStrategy):
+                padding_strategy = padding
+        else:
+            padding_strategy = PaddingStrategy.DO_NOT_PAD
+
+        # Get truncation strategy
+        if truncation is not False:
+            if truncation is True:
+                truncation_strategy = (
+                    TruncationStrategy.LONGEST_FIRST
+                )  # Default to truncate the longest sequences in pairs of inputs
+            elif not isinstance(truncation, TruncationStrategy):
+                truncation_strategy = TruncationStrategy(truncation)
+            elif isinstance(truncation, TruncationStrategy):
+                truncation_strategy = truncation
+        else:
+            truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+
+        # Set max length if needed
+        if max_length is None:
+            if padding_strategy == PaddingStrategy.MAX_LENGTH:
+                raise ValueError("...")
+            elif truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
+                raise ValueError("...")
+#                if self.model_max_length > LARGE_INTEGER:
+#                    if verbose:
+#                        if not self.deprecation_warnings.get("Asking-to-pad-to-max_length", False):
+#                            logger.warning(
+#                                "Asking to pad to max_length but no maximum length is provided and the model has no predefined maximum length. "
+#                                "Default to no padding."
+#                            )
+#                        self.deprecation_warnings["Asking-to-pad-to-max_length"] = True
+#                    padding_strategy = PaddingStrategy.DO_NOT_PAD
+#                else:
+#                    max_length = self.model_max_length
+
+#            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE:
+#                if self.model_max_length > LARGE_INTEGER:
+#                    if verbose:
+#                        if not self.deprecation_warnings.get("Asking-to-truncate-to-max_length", False):
+#                            logger.warning(
+#                                "Asking to truncate to max_length but no maximum length is provided and the model has no predefined maximum length. "
+#                                "Default to no truncation."
+#                            )
+#                        self.deprecation_warnings["Asking-to-truncate-to-max_length"] = True
+#                    truncation_strategy = TruncationStrategy.DO_NOT_TRUNCATE
+#                else:
+#                    max_length = self.model_max_length
+
+        # Test if we have a padding token
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and not self.padding_value:
+            raise ValueError(
+                "Asking to pad but the tokenizer does not have a padding token. "
+                "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
+                "or add a new pad token via `tokenizer.add_special_tokens({'pad_token': '[PAD]'})`."
+            )
+
+        # Check that we will truncate to a multiple of pad_to_multiple_of if both are provided
+        if (
+            truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE
+            and padding_strategy != PaddingStrategy.DO_NOT_PAD
+            and pad_to_multiple_of is not None
+            and max_length is not None
+            and (max_length % pad_to_multiple_of != 0)
+        ):
+            raise ValueError(
+                f"Truncation and padding are both activated but "
+                f"truncation length ({max_length}) is not a multiple of pad_to_multiple_of ({pad_to_multiple_of})."
+            )
+
+        return padding_strategy, truncation_strategy, max_length, kwargs
