@@ -99,7 +99,6 @@ class Speech2TextTransformerConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=10000,
-        max_position_embeddings=1024,
         encoder_layers=12,
         encoder_ffn_dim=2048,
         encoder_attention_heads=4,
@@ -130,7 +129,6 @@ class Speech2TextTransformerConfig(PretrainedConfig):
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
-        share_embeds=False,
         **kwargs
     ):
         super().__init__(
@@ -143,7 +141,6 @@ class Speech2TextTransformerConfig(PretrainedConfig):
         )
 
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
         self.encoder_layers = encoder_layers
@@ -170,7 +167,6 @@ class Speech2TextTransformerConfig(PretrainedConfig):
         self.conv_channels = conv_channels
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
-        self.share_embeds = share_embeds
 
     @property
     def num_attention_heads(self) -> int:

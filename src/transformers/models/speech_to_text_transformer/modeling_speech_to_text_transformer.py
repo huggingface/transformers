@@ -702,13 +702,13 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
 
         embed_dim = config.d_model
         self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
+        self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         self.conv = Conv1dSubsampler(config)
 
         self.embed_positions = Speech2TextTransformerSinusoidalPositionalEmbedding(
-            config.max_source_positions,
+            self.max_source_positions,
             embed_dim,
             self.padding_idx,
         )
@@ -854,13 +854,13 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
-        self.max_target_positions = config.max_position_embeddings
+        self.max_target_positions = config.max_target_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = Speech2TextTransformerSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
+            self.max_target_positions,
             config.d_model,
             self.padding_idx,
         )
