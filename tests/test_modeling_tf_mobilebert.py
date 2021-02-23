@@ -310,10 +310,6 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_mixed_precision(self):
-        # TODO JP: Make MobileBert float16 compliant
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         # for model_name in TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

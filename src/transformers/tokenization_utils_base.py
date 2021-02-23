@@ -971,6 +971,12 @@ class SpecialTokensMixin:
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary.
 
+        .. Note::
+            When adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix of
+            the model so that its embedding matrix matches the tokenizer.
+
+            In order to do that, please use the :meth:`~transformers.PreTrainedModel.resize_token_embeddings` method.
+
         Args:
             new_tokens (:obj:`str`, :obj:`tokenizers.AddedToken` or a list of `str` or :obj:`tokenizers.AddedToken`):
                 Tokens are only added if they are not already in the vocabulary. :obj:`tokenizers.AddedToken` wraps a
@@ -3054,12 +3060,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
-        Converts a sequence of token ids in a single string. The most simple way to do it is ``" ".join(tokens)`` but
-        we often want to remove sub-word tokenization artifacts at the same time
+        Converts a sequence of tokens in a single string. The most simple way to do it is ``" ".join(tokens)`` but we
+        often want to remove sub-word tokenization artifacts at the same time.
 
         Args:
             tokens (:obj:`List[str]`): The token to join in a string.
-        Return: The joined tokens.
+
+        Returns:
+            :obj:`str`: The joined tokens.
         """
         raise NotImplementedError
 
@@ -3295,6 +3303,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
             Otherwise, input_ids, attention_mask will be the only keys.
         """
+        warnings.warn(
+            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
+            "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
+            "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
+            "details",
+            FutureWarning,
+        )
         # mBART-specific kwargs that should be ignored by other models.
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)
