@@ -34,7 +34,6 @@ IGNORE_NON_TESTED = [
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "Speech2TextTransformerEncoder",  # Building part of bigger (tested) model.
     "Speech2TextTransformerDecoder",  # Building part of bigger (tested) model.
-    "Speech2TextTransformerDecoderWrapper",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
     "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoderWrapper",  # Building part of bigger (tested) model.
@@ -82,7 +81,6 @@ IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
     "Speech2TextTransformerEncoder",
     "Speech2TextTransformerDecoder",
-    "Speech2TextTransformerDecoderWrapper",
     "M2M100Encoder",
     "M2M100Decoder",
     "LEDEncoder",
