@@ -22,9 +22,8 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
+import torch.nn.functional as F
 from torch.nn import CrossEntropyLoss, MSELoss
-
-from bigbird.core import attention
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -461,9 +460,10 @@ class BigBirdBlockSparseAttention(nn.Module):
                                                                 plan_from_length=None,
                                                                 plan_num_rand_blocks=None)
 
-        # outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-        # return outputs
-        return value_layer.contiguous().view(2, 128, -1), 
+        context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        return outputs
 
     def bigbird_block_sparse_attention(self,
                                    query_layer,
@@ -532,40 +532,219 @@ class BigBirdBlockSparseAttention(nn.Module):
                 plan_num_rand_blocks=plan_num_rand_blocks)
 
         rand_attn = np.stack(rand_attn, axis=0)
-        rand_attn = torch.tensor(rand_attn, dtype=torch.int32, device=device)
+        rand_attn = torch.tensor(rand_attn, device=device).long()
         rand_attn.unsqueeze_(0)
         rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
 
         self.ran = rand_attn # TODO: remove this
 
-        # rand_mask = self._create_rand_mask_from_inputs(
-        #     from_blocked_mask, to_blocked_mask, rand_attn,
-        #     h, r,
-        #     batch_size, from_seq_length, wm)
+        # TODO: some issue in torch.gather
+        rand_mask = self._create_rand_mask_from_inputs(
+            from_blocked_mask, to_blocked_mask, rand_attn, h, r, b, m, wm
+            )
 
+        self.rand_mask = rand_mask # TODO: remove this
 
-        # TODO: copy paste remaining (after defining shortcuts)
-        # return  context_layer, attention_probs
+        blocked_query_matrix = query_layer.view(b, h, m // wm, wm, -1)
+        blocked_key_matrix = key_layer.view(b, h, n // wn, wn, -1)
+        blocked_value_matrix = value_layer.view(b, h, n // wn, wn, -1)
+
+        # preparing block for randn attn
+        gathered_key = self.torch_gather_b2(blocked_key_matrix, rand_attn)
+        gathered_key = gathered_key.view(b, h, m // wm - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
+        gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
+        gathered_value = gathered_value.view(b, h, m // wm - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
+
+        # TODO:
+        self.gk = gathered_key
+        self.gv = gathered_value
+        # 
+
+        # fixed query product (1st query is global)
+        # Q1 x (K1,K2,K3,.............)
+        first_product = torch.einsum(
+            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 0],
+            key_layer)  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
+        first_product = first_product*(1.0 / math.sqrt(d))
+        first_product += (1.0 - to_mask) * -10000.0
+        first_attn_weights = F.softmax(first_product, dim=-1)  # [b, h, wm, n]
+        first_context_layer = torch.einsum(
+            "bhqk,bhkd->bhqd", first_attn_weights,
+            value_layer)  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
+        first_context_layer.unsqueeze_(2)
+
+        self.fcl = first_context_layer # TODO: remove this
+
+        second_key_mat = torch.cat([
+            blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, 1],
+            blocked_key_matrix[:, :, 2], blocked_key_matrix[:, :, -1],
+            gathered_key[:, :, 0]], dim=2)  # [b, h, (4+r)*wn, -1]
+        second_value_mat = torch.cat([
+            blocked_value_matrix[:, :, 0], blocked_value_matrix[:, :, 1],
+            blocked_value_matrix[:, :, 2], blocked_value_matrix[:, :, -1],
+            gathered_value[:, :, 0]], dim=2)  # [b, h, (4+r)*wn, -1]
+        second_product = torch.einsum(
+            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 1], second_key_mat
+        )  # [b, h, wm, -1] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, (4+r)*wn]
+        second_seq_pad = torch.cat([
+            to_mask[:, :, :, :3 * wn], to_mask[:, :, :, -wn:],
+            torch.ones(b, 1, 1, r * wn).float()], dim=3)
+        second_rand_pad = torch.cat(
+            [torch.ones(b, h, wm, 4 * wn).float(), rand_mask[:, :, 0]], dim=3)
+        second_product = second_product*(1.0 / math.sqrt(d))
+        second_product += (1.0 -
+                            torch.minimum(second_seq_pad, second_rand_pad)) * -10000.0
+        second_attn_weights = F.softmax(second_product, dim=-1)  # [b , h, wm, (4+r)*wn]
+        second_context_layer = torch.einsum(
+            "bhqk,bhkd->bhqd", second_attn_weights, second_value_mat
+        )  # [b, h, wm, (4+r)*wn] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, -1]
+        second_context_layer.unsqueeze_(2)
+
+        self.scl = second_context_layer # TODO: remove this
+
+        # this is window attn by copying into 3 parts (leaving some queries)
+        exp_blocked_key_matrix = torch.cat([
+            blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2],
+            blocked_key_matrix[:, :, 3:-1]], dim=3)  # [b, h, m//wm-4, 3*wn, -1]
+        exp_blocked_value_matrix = torch.cat([
+            blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2],
+            blocked_value_matrix[:, :, 3:-1]], dim=3)  # [b, h, m//wm-4, 3*wn, -1]
+        middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
+        inner_band_product = torch.einsum(
+            "bhlqd,bhlkd->bhlqk", middle_query_matrix, exp_blocked_key_matrix
+        )  # [b, h, m//wm-4, wm, -1] x [b, h, m//wm-4, 3*wn, -1]
+        #     ==> [b, h, m//wm-4, wm, 3*wn]
+        inner_band_product = inner_band_product*(1.0 / math.sqrt(d))
+        rand_band_product = torch.einsum(
+            "bhlqd,bhlkd->bhlqk", middle_query_matrix, gathered_key[:, :, 1:-1]
+        )  # [b, h, m//wm-4, wm, -1] x [b, h, m//wm-4, r*wn, -1]
+        #     ==> [b, h, m//wm-4, wm, r*wn]
+        rand_band_product = rand_band_product*(1.0 / math.sqrt(d))
+        first_band_product = torch.einsum(
+            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0]
+        )  # [b, h, m//wm-4, wm, -1] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, wn]
+        first_band_product = first_band_product*(1.0 / math.sqrt(d))
+        last_band_product = torch.einsum(
+            "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1]
+        )  # [b, h, m//wm-4, wm, -1] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, wn]
+        last_band_product = last_band_product*(1.0 / math.sqrt(d))
+        inner_band_product += (1.0 - band_mask) * -10000.0
+        first_band_product += (
+            1.0 - to_mask[:, :, :, :wn].unsqueeze(3)) * -10000.0
+        last_band_product += (
+            1.0 - to_mask[:, :, :, -wn:].unsqueeze(3)) * -10000.0
+        rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * -10000.0
+        band_product = torch.cat([
+            first_band_product, inner_band_product, rand_band_product,
+            last_band_product], dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
+        attn_weights = F.softmax(band_product, dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
+        context_layer = torch.einsum(
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, wn:4 * wn],
+            exp_blocked_value_matrix
+        )  # [b, h, m//wm-4, wm, 3*wn] x [b, h, m//wm-4, 3*wn, -1]
+        #     ==> [b, h, m//wm-4, wm, -1]
+        context_layer += torch.einsum(
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, 4 * wn:-wn],
+            gathered_value[:, :, 1:-1]
+        )  # [b, h, m//wm-4, wm, r*wn] x [b, h, m//wm-4, r*wn, -1]
+        #     ==> [b, h, m//wm-4, wm, -1]
+        context_layer += torch.einsum(
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :wn],
+            blocked_value_matrix[:, :, 0]
+        )  # [b, h, m//wm-4, wm, wn] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, -1]
+        context_layer += torch.einsum(
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -wn:],
+            blocked_value_matrix[:, :, -1]
+        )  # [b, h, m//wm-4, wm, wn] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, -1]
+
+        self.cl = context_layer # TODO: remove this
+
+        second_last_key_mat = torch.cat([
+            blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, -3],
+            blocked_key_matrix[:, :, -2], blocked_key_matrix[:, :, -1],
+            gathered_key[:, :, -1]], dim=2)  # [b, h, (4+r)*wn, -1]
+        second_last_value_mat = torch.cat([
+            blocked_value_matrix[:, :, 0], blocked_value_matrix[:, :, -3],
+            blocked_value_matrix[:, :, -2], blocked_value_matrix[:, :, -1],
+            gathered_value[:, :, -1]], dim=2)  # [b, h, (4+r)*wn, -1]
+        second_last_product = torch.einsum(
+            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -2], second_last_key_mat
+        )  # [b, h, wm, -1] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, (4+r)*wn]
+        second_last_seq_pad = torch.cat([
+            to_mask[:, :, :, :wn], to_mask[:, :, :, -3 * wn:],
+            torch.ones([b, 1, 1, r * wn]).float()], dim=3)
+        second_last_rand_pad = torch.cat(
+            [torch.ones([b, h, wm, 4 * wn]).float(), rand_mask[:, :, -1]], dim=3)
+        second_last_product = second_last_product*(1.0 / math.sqrt(d))
+        second_last_product += (
+            1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * -10000.0
+        second_last_attn_weights = F.softmax(
+            second_last_product, dim=-1)  # [b, h, wm, (4+r)*wn]
+        second_last_context_layer = torch.einsum(
+            "bhqk,bhkd->bhqd", second_last_attn_weights, second_last_value_mat
+        )  # [b, h, wm, (4+r)*wn] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, -1]
+        second_last_context_layer.unsqueeze_(2)
+
+        self.slcl = second_last_context_layer # TODO: remove this
+
+        # # fixed query product (last query is global)
+        # # Qlast x (K1,K2,K3,.............)
+        last_product = torch.einsum(
+            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -1],
+            key_layer)  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
+        last_product = last_product*(1.0 / math.sqrt(d))
+        last_product += (1.0 - to_mask) * -10000.0
+        last_attn_weights = F.softmax(last_product, dim=-1)  # [b, h, wm, n]
+        last_context_layer = torch.einsum(
+            "bhqk,bhkd->bhqd", last_attn_weights,
+            value_layer)  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
+        last_context_layer.unsqueeze_(2)
+
+        context_layer = torch.cat([
+            first_context_layer, second_context_layer, context_layer,
+            second_last_context_layer, last_context_layer
+        ], dim=2)
+        context_layer = context_layer.view((b, h, m, -1)) * from_mask
+        context_layer = torch.transpose(context_layer, 1, 2)
+
+        self.final_cl = context_layer # TODO: remove this
 
         # TODO: confirm is torch.einsum is fast enough
-        return None, None
+        # TODO: Fix output to be attention_probs
+        return  context_layer, None # attention_probs
 
-    # def _create_rand_mask_from_inputs(self,
-    #                                 from_blocked_mask,
-    #                                 to_blocked_mask,
-    #                                 rand_attn,
-    #                                 num_attention_heads,
-    #                                 num_rand_blocks,
-    #                                 batch_size,
-    #                                 from_seq_length,
-    #                                 from_block_size):
+    @staticmethod
+    def torch_gather_b2(params, indices):
+        batch_dims = 2
+        assert params.shape[:batch_dims] == indices.shape[:batch_dims]
+        # out_shape = indices.shape + params.shape[-1:]
 
-    #     num_windows = from_seq_length // from_block_size - 2
-    #     rand_mask = tf.gather(to_blocked_mask, rand_attn, batch_dims=1)
-    #     rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
-    #     rand_mask = tf.einsum("BLQ,BHLK->BHLQK", from_blocked_mask[:, 1:-1],
-    #                             rand_mask)
-    #     return rand_mask
+        out = torch.stack(
+            [torch.stack(
+                [p2[i2.flatten()] for p2, i2 in zip(p1, i1)]
+            ) for p1, i1 in zip(params, indices)]
+        )
+        # TODO: fix shape
+        return out#.view(out_shape)
+
+    def _create_rand_mask_from_inputs(self,
+                                    from_blocked_mask,
+                                    to_blocked_mask,
+                                    rand_attn,
+                                    num_attention_heads,
+                                    num_rand_blocks,
+                                    batch_size,
+                                    from_seq_length,
+                                    from_block_size):
+
+        num_windows = from_seq_length // from_block_size - 2
+        rand_mask = torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])
+        # print("rm b", rand_mask.shape)
+        rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
+        # print("rm a", rand_mask.shape)
+        rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1],
+                                rand_mask)
+        return rand_mask
 
     def _get_rand_attn_plan(self, from_seq_length, from_block_size, num_rand_blocks):
 
