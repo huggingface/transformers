@@ -392,14 +392,12 @@ class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
 class TFConvBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = TFConvBertModel.from_pretrained("YituTech/conv-bert-base")
+        model = TFConvBertModel.from_pretrained("YituTech/conv-bert-base", from_pt=True)
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
         expected_shape = [1, 6, 768]
         self.assertEqual(output.shape, expected_shape)
-
-        print(output[:, :3, :3])
 
         expected_slice = tf.constant(
             [

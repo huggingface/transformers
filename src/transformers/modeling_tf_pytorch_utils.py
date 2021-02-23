@@ -56,7 +56,11 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
+    transpose = bool(
+        tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
+        or "emb_projs" in tf_name
+        or "out_projs" in tf_name
+    )
 
     # Convert standard TF2.0 names in PyTorch names
     if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
@@ -164,11 +168,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             sw_name, start_prefix_to_remove=start_prefix_to_remove
         )
 
-        convbert_medium = False
-        if ".gdense." in name:
-            convbert_medium = True
-            name = name.replace(".gdense.", ".dense.")
-
         # Find associated numpy array in pytorch model state dict
         if name not in pt_state_dict:
             if allow_missing_keys:
@@ -182,23 +181,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             raise AttributeError("{} not found in PyTorch model".format(name))
 
         array = pt_state_dict[name].numpy()
-
-        if name.endswith("depthwise.weight"):
-            array = numpy.transpose(array, axes=(2, 0, 1))
-            transpose = False
-
-        if name.endswith("pointwise.weight"):
-            array = numpy.transpose(array, axes=(2, 1, 0))
-            transpose = False
-
-        if name.endswith("conv_attn_key.bias"):
-            array = numpy.squeeze(array)
-            transpose = False
-
-        if convbert_medium:
-            if name.endswith("intermediate.dense.weight") or name.endswith("output.dense.weight"):
-                if not name.endswith("attention.output.dense.weight"):
-                    transpose = False
 
         if transpose:
             array = numpy.transpose(array)
