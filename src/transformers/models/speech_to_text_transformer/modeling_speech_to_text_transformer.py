@@ -694,7 +694,7 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: Speech2TextTransformerConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: Speech2TextTransformerConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -849,7 +849,7 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: Speech2TextTransformerConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: Speech2TextTransformerConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -857,10 +857,7 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = Speech2TextTransformerSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -1114,25 +1111,16 @@ class Speech2TextTransformerModel(Speech2TextTransformerPreTrainedModel):
     def __init__(self, config: Speech2TextTransformerConfig):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-
-        if config.share_embeds:
-            self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
-        else:
-            self.shared = None
-
-        self.encoder = Speech2TextTransformerEncoder(config, self.shared)
-        self.decoder = Speech2TextTransformerDecoder(config, self.shared)
+        self.encoder = Speech2TextTransformerEncoder(config)
+        self.decoder = Speech2TextTransformerDecoder(config)
 
         self.init_weights()
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.decoder.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.shared = value
-        self.encoder.embed_tokens = self.shared
-        self.decoder.embed_tokens = self.shared
+        self.decoder.embed_tokens = value
 
     def get_encoder(self):
         return self.encoder
