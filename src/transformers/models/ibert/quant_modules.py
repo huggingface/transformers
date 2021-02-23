@@ -19,10 +19,9 @@ import decimal
 
 import numpy as np
 import torch
-import torch.multiprocessing as mp
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Function, Variable
+from torch.autograd import Function
 
 from ...utils import logging
 
@@ -782,9 +781,9 @@ class FixedPointMul(Function):
     ):
 
         if len(pre_act_scaling_factor.shape) == 3:
-            reshape = lambda x: x
+            reshape = lambda x: x  # noqa: E731
         else:
-            reshape = lambda x: x.view(1, 1, -1)
+            reshape = lambda x: x.view(1, 1, -1)  # noqa: E731
         ctx.identity = identity
 
         n = 2 ** (bit_num - 1) - 1

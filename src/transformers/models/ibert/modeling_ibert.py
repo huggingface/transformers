@@ -24,29 +24,18 @@ import torch.nn as nn
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss, MSELoss
 
-from ...activations import ACT2FN, gelu
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...activations import gelu
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_ibert import IBertConfig
 from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmbedding, QuantLinear
@@ -529,7 +518,6 @@ class IBertLayer(nn.Module):
         head_mask=None,
         output_attentions=False,
     ):
-        self_attn_past_key_value = None
         self_attention_outputs, self_attention_outputs_scaling_factor = self.attention(
             hidden_states,
             hidden_states_scaling_factor,
@@ -541,7 +529,6 @@ class IBertLayer(nn.Module):
         attention_output_scaling_factor = self_attention_outputs_scaling_factor[0]
 
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-        outputs_scaling_factor = self_attention_outputs_scaling_factor[1:]
 
         layer_output, layer_output_scaling_factor = self.feed_forward_chunk(
             attention_output, attention_output_scaling_factor
@@ -744,7 +731,6 @@ IBERT_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaModel
 @add_start_docstrings(
     "The bare I-BERT Model transformer outputting raw hidden-states without any specific head on top.",
     IBERT_START_DOCSTRING,
@@ -872,7 +858,6 @@ class IBertModel(IBertPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM
 @add_start_docstrings("""I-BERT Model with a `language modeling` head on top. """, IBERT_START_DOCSTRING)
 class IBertForMaskedLM(IBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.bias"]
@@ -954,7 +939,6 @@ class IBertForMaskedLM(IBertPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class IBertLMHead(nn.Module):
     """I-BERT Head for masked language modeling."""
 
@@ -980,7 +964,6 @@ class IBertLMHead(nn.Module):
         return x
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification
 @add_start_docstrings(
     """
     I-BERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
@@ -1064,7 +1047,6 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice
 @add_start_docstrings(
     """
     I-BERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
@@ -1157,7 +1139,6 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification
 @add_start_docstrings(
     """
     I-BERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
@@ -1249,7 +1230,6 @@ class IBertForTokenClassification(IBertPreTrainedModel):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaClassificationHead
 class IBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -1269,7 +1249,6 @@ class IBertClassificationHead(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering
 @add_start_docstrings(
     """
     I-BERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear

@@ -41,7 +41,7 @@ if is_torch_available():
     ]
 
 if TYPE_CHECKING:
-    from .configuration_ibert import IBERT_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .tokenization_ibert import IBertTokenizer
 
     if is_tokenizers_available():
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 
     if is_torch_available():
         from .modeling_ibert import (
-            IBERT_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             IBertForMaskedLM,
             IBertForMultipleChoice,
             IBertForQuestionAnswering,
