@@ -1569,7 +1569,7 @@ class Trainer:
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(_model_unwrap(self.model), PreTrainedModel):
                 if xm.is_master_ordinal():
-                    _model_unwrap(self.model).config.save_pretrained(save_directory)
+                    _model_unwrap(self.model).config.save_pretrained(output_dir)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
             state_dict = self.model.state_dict()
@@ -1587,7 +1587,7 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(_model_unwrap(self.model), PreTrainedModel):
-                _model_unwrap(self.model).config.save_pretrained(save_directory)
+                _model_unwrap(self.model).config.save_pretrained(output_dir)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
             state_dict = self.model.state_dict()
