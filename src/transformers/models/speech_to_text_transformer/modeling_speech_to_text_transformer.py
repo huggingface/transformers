@@ -705,7 +705,7 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        self.subsample = Conv1dSubsampler(config)
+        self.conv = Conv1dSubsampler(config)
 
         self.embed_positions = Speech2TextTransformerSinusoidalPositionalEmbedding(
             config.max_source_positions,
@@ -767,7 +767,7 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
         if attention_mask is not None:
             attention_mask = self._get_subsampled_encoder_attn_mask(attention_mask)
 
-        inputs_embeds = self.subsample(input_features)
+        inputs_embeds = self.conv(input_features)
         inputs_embeds = self.embed_scale * inputs_embeds
 
         if attention_mask is None:
