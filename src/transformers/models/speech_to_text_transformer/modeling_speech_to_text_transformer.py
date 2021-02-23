@@ -576,7 +576,7 @@ class Speech2TextTransformerPreTrainedModel(PreTrainedModel):
         """
 
         for i in range(self.config.num_conv_layers):
-            input_lengths = ((input_lengths.float() - 1) / 2 + 1).floor().long()
+            input_lengths = (input_lengths - 1) // 2 + 1
 
         return input_lengths
 
