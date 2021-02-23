@@ -17,20 +17,8 @@
 """
 import json
 import os
-from collections import UserDict
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-import numpy as np
-
-from .file_utils import (
-    FEATURE_EXTRACTOR_NAME,
-    cached_path,
-    hf_bucket_url,
-    is_remote_url,
-    is_tf_available,
-    is_torch_available,
-)
-from .tokenization_utils_base import PaddingStrategy, TensorType, _is_tensorflow, _is_torch, to_py_obj
+from typing import Any, Dict, Tuple, Union, Optional, List
+from .file_utils import FEATURE_EXTRACTOR_NAME, cached_path, hf_bucket_url, is_remote_url
 from .utils import logging
 
 
@@ -49,9 +37,7 @@ class PreTrainedFeatureExtractor:
     This is a general feature extraction class for speech recognition
     """
 
-    def __init__(
-        self, feature_dim: int, padding_value: Optional[int] = None, sampling_rate: Optional[int] = None, **kwargs
-    ):
+    def __init__(self, feature_dim: int, padding_value: Optional[int] = None, sampling_rate: Optional[int] = None, **kwargs):
         self.feature_dim = feature_dim
         self.padding_value = padding_value
         self.sampling_rate = sampling_rate
@@ -65,9 +51,7 @@ class PreTrainedFeatureExtractor:
         self.return_attention_mask = kwargs.pop("return_attention_mask", True)
 
     @classmethod
-    def from_pretrained(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
-    ) -> "PreTrainedFeatureExtractor":
+    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PreTrainedFeatureExtractor":
         r"""
         Instantiate a :class:`~transformers.PretrainedConfig` (or a derived class) from a pretrained model
         feature_extractoruration.
@@ -84,11 +68,11 @@ class PreTrainedFeatureExtractor:
                 - a path or url to a saved feature_extractoruration JSON `file`, e.g.,
                   ``./my_model_directory/feature_extractoruration.json``.
             cache_dir (:obj:`str` or :obj:`os.PathLike`, `optional`):
-                Path to a directory in which a downloaded pretrained model feature_extractoruration should be cached if
-                the standard cache should not be used.
+                Path to a directory in which a downloaded pretrained model feature_extractoruration should be cached if the
+                standard cache should not be used.
             force_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to force to (re-)download the feature_extractoruration files and override the cached
-                versions if they exist.
+                Whether or not to force to (re-)download the feature_extractoruration files and override the cached versions if
+                they exist.
             resume_download (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to delete incompletely received file. Attempts to resume the download if such a file
                 exists.
@@ -105,14 +89,13 @@ class PreTrainedFeatureExtractor:
             return_unused_kwargs (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 If :obj:`False`, then this function returns just the final feature_extractoruration object.
 
-                If :obj:`True`, then this functions returns a :obj:`Tuple(feature_extractor, unused_kwargs)` where
-                `unused_kwargs` is a dictionary consisting of the key/value pairs whose keys are not
-                feature_extractoruration attributes: i.e., the part of ``kwargs`` which has not been used to update
-                ``feature_extractor`` and is otherwise ignored.
+                If :obj:`True`, then this functions returns a :obj:`Tuple(feature_extractor, unused_kwargs)` where `unused_kwargs`
+                is a dictionary consisting of the key/value pairs whose keys are not feature_extractoruration attributes: i.e.,
+                the part of ``kwargs`` which has not been used to update ``feature_extractor`` and is otherwise ignored.
             kwargs (:obj:`Dict[str, Any]`, `optional`):
-                The values in kwargs of any keys which are feature_extractoruration attributes will be used to override
-                the loaded values. Behavior concerning key/value pairs whose keys are *not* feature_extractoruration
-                attributes is controlled by the ``return_unused_kwargs`` keyword parameter.
+                The values in kwargs of any keys which are feature_extractoruration attributes will be used to override the loaded
+                values. Behavior concerning key/value pairs whose keys are *not* feature_extractoruration attributes is controlled
+                by the ``return_unused_kwargs`` keyword parameter.
 
         .. note::
 
@@ -143,13 +126,12 @@ class PreTrainedFeatureExtractor:
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
-        Save a feature_extractoruration object to the directory ``save_directory``, so that it can be re-loaded using
-        the :func:`~transformers.PretrainedConfig.from_pretrained` class method.
+        Save a feature_extractoruration object to the directory ``save_directory``, so that it can be re-loaded using the
+        :func:`~transformers.PretrainedConfig.from_pretrained` class method.
 
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
-                Directory where the feature_extractoruration JSON file will be saved (will be created if it does not
-                exist).
+                Directory where the feature_extractoruration JSON file will be saved (will be created if it does not exist).
         """
         if os.path.isfile(save_directory):
             raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
@@ -175,8 +157,7 @@ class PreTrainedFeatureExtractor:
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
 
         Returns:
-            :obj:`Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature_extractoruration
-            object.
+            :obj:`Tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the feature_extractoruration object.
 
         """
         cache_dir = kwargs.pop("cache_dir", None)
@@ -226,20 +207,14 @@ class PreTrainedFeatureExtractor:
             msg = (
                 "Couldn't reach server at '{}' to download feature_extractor configuration file or "
                 "feature_extractor configuration file is not a valid JSON file. "
-                "Please check network or file content here: {}.".format(
-                    feature_extractor_file, resolved_feature_extractor_file
-                )
+                "Please check network or file content here: {}.".format(feature_extractor_file, resolved_feature_extractor_file)
             )
             raise EnvironmentError(msg)
 
         if resolved_feature_extractor_file == feature_extractor_file:
             logger.info("loading feature_extractor configuration file {}".format(feature_extractor_file))
         else:
-            logger.info(
-                "loading feature_extractor configuration file {} from cache at {}".format(
-                    feature_extractor_file, resolved_feature_extractor_file
-                )
-            )
+            logger.info("loading feature_extractor configuration file {} from cache at {}".format(feature_extractor_file, resolved_feature_extractor_file))
 
         return feature_extractor_dict, kwargs
 
@@ -250,8 +225,8 @@ class PreTrainedFeatureExtractor:
 
         Args:
             feature_extractor_dict (:obj:`Dict[str, Any]`):
-                Dictionary that will be used to instantiate the feature_extractoruration object. Such a dictionary can
-                be retrieved from a pretrained checkpoint by leveraging the
+                Dictionary that will be used to instantiate the feature_extractoruration object. Such a dictionary can be
+                retrieved from a pretrained checkpoint by leveraging the
                 :func:`~transformers.PretrainedConfig.get_feature_extractor_dict` method.
             kwargs (:obj:`Dict[str, Any]`):
                 Additional parameters from which to initialize the feature_extractoruration object.
@@ -301,8 +276,7 @@ class PreTrainedFeatureExtractor:
         Serializes this instance to a JSON string.
 
         Returns:
-            :obj:`str`: String containing all the attributes that make up this feature_extractoruration instance in
-            JSON format.
+            :obj:`str`: String containing all the attributes that make up this feature_extractoruration instance in JSON format.
         """
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
 
@@ -335,7 +309,7 @@ class PreTrainedFeatureExtractor:
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         verbose: bool = True,
-    ) -> BatchFeature:
+    ) -> BatchEncoding:
         """
         Pad a single encoded input or a batch of encoded inputs up to predefined length or to the max sequence length
         in the batch.
@@ -345,14 +319,14 @@ class PreTrainedFeatureExtractor:
 
         .. note::
 
-            If the ``processed_features`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors,
-            the result will use the same type unless you provide a different tensor type with ``return_tensors``. In
-            the case of PyTorch tensors, you will lose the specific device of your tensors however.
+            If the ``processed_features`` passed are dictionary of numpy arrays, PyTorch tensors or TensorFlow tensors, the
+            result will use the same type unless you provide a different tensor type with ``return_tensors``. In the
+            case of PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
-            processed_features (:class:`~transformers.BatchFeature`, list of :class:`~transformers.BatchFeature`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
-                Tokenized inputs. Can represent one input (:class:`~transformers.BatchFeature` or :obj:`Dict[str,
-                List[int]]`) or a batch of tokenized inputs (list of :class:`~transformers.BatchFeature`, `Dict[str,
+            processed_features (:class:`~transformers.BatchEncoding`, list of :class:`~transformers.BatchEncoding`, :obj:`Dict[str, List[int]]`, :obj:`Dict[str, List[List[int]]` or :obj:`List[Dict[str, List[int]]]`):
+                Tokenized inputs. Can represent one input (:class:`~transformers.BatchEncoding` or :obj:`Dict[str,
+                List[int]]`) or a batch of tokenized inputs (list of :class:`~transformers.BatchEncoding`, `Dict[str,
                 List[List[int]]]` or `List[Dict[str, List[int]]]`) so you can use this method during preprocessing as
                 well as in a PyTorch Dataloader collate function.
 
@@ -391,10 +365,8 @@ class PreTrainedFeatureExtractor:
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
-            processed_features = {
-                key: [example[key] for example in processed_features] for key in processed_features[0].keys()
-            }
+        if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchEncoding)):
+            processed_features = {key: [example[key] for example in processed_features] for key in processed_features[0].keys()}
 
         # The model's main input name, usually `input_ids`, has be passed for padding
         if self.model_input_names[0] not in processed_features:
@@ -436,28 +408,28 @@ class PreTrainedFeatureExtractor:
                     f"Should be one of a python, numpy, pytorch or tensorflow object."
                 )
 
-            for key, value in processed_features.items():
-                processed_features[key] = to_py_obj(value)
+            for key, value in encoded_inputs.items():
+                encoded_inputs[key] = to_py_obj(value)
 
         # Convert padding_strategy in PaddingStrategy
         padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
             padding=padding, max_length=max_length, verbose=verbose
         )
 
-        required_input = processed_features[self.model_input_names[0]]
+        required_input = encoded_inputs[self.model_input_names[0]]
         if required_input and not isinstance(required_input[0], (list, tuple)):
-            processed_features = self._pad(
-                processed_features,
+            encoded_inputs = self._pad(
+                encoded_inputs,
                 max_length=max_length,
                 padding_strategy=padding_strategy,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
             )
-            return BatchFeature(processed_features, tensor_type=return_tensors)
+            return BatchFeature(encoded_inputs, tensor_type=return_tensors)
 
         batch_size = len(required_input)
         assert all(
-            len(v) == batch_size for v in processed_features.values()
+            len(v) == batch_size for v in encoded_inputs.values()
         ), "Some items in the output dictionary have a different batch size than others."
 
         if padding_strategy == PaddingStrategy.LONGEST:
@@ -466,7 +438,7 @@ class PreTrainedFeatureExtractor:
 
         batch_outputs = {}
         for i in range(batch_size):
-            inputs = dict((k, v[i]) for k, v in processed_features.items())
+            inputs = dict((k, v[i]) for k, v in encoded_inputs.items())
             outputs = self._pad(
                 inputs,
                 max_length=max_length,
@@ -482,78 +454,3 @@ class PreTrainedFeatureExtractor:
 
         return BatchFeature(batch_outputs, tensor_type=return_tensors)
 
-    def _pad(
-        self,
-        processed_features: Union[Dict[str, List[float]], BatchFeature],
-        max_length: Optional[int] = None,
-        padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-    ) -> dict:
-        """
-        Pad encoded inputs (on left/right and up to predefined length or max length in the batch)
-
-        Args:
-            processed_features: Dictionary of tokenized inputs (`List[int]`) or batch of tokenized inputs (`List[List[int]]`).
-            max_length: maximum length of the returned list and optionally padding length (see below).
-                Will truncate by taking into account the special tokens.
-            padding_strategy: PaddingStrategy to use for padding.
-
-                - PaddingStrategy.LONGEST Pad to the longest sequence in the batch
-                - PaddingStrategy.MAX_LENGTH: Pad to the max length (default)
-                - PaddingStrategy.DO_NOT_PAD: Do not pad
-                The tokenizer padding sides are defined in self.padding_side:
-
-                    - 'left': pads on the left of the sequences
-                    - 'right': pads on the right of the sequences
-            pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
-                This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
-            return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
-        """
-        # Load from model defaults
-        if return_attention_mask is None:
-            return_attention_mask = "attention_mask" in self.model_input_names
-
-        required_input = processed_features[self.model_input_names[0]]
-
-        if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = len(required_input)
-
-        if max_length is not None and pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_length
-
-        if needs_to_be_padded:
-            difference = max_length - len(required_input)
-            if self.padding_side == "right":
-                if return_attention_mask:
-                    processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
-                if "token_type_ids" in processed_features:
-                    processed_features["token_type_ids"] = (
-                        processed_features["token_type_ids"] + [self.pad_token_type_id] * difference
-                    )
-                if "special_tokens_mask" in processed_features:
-                    processed_features["special_tokens_mask"] = (
-                        processed_features["special_tokens_mask"] + [1] * difference
-                    )
-                processed_features[self.model_input_names[0]] = required_input + [self.pad_token_id] * difference
-            elif self.padding_side == "left":
-                if return_attention_mask:
-                    processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
-                if "token_type_ids" in processed_features:
-                    processed_features["token_type_ids"] = [self.pad_token_type_id] * difference + processed_features[
-                        "token_type_ids"
-                    ]
-                if "special_tokens_mask" in processed_features:
-                    processed_features["special_tokens_mask"] = [1] * difference + processed_features[
-                        "special_tokens_mask"
-                    ]
-                processed_features[self.model_input_names[0]] = [self.pad_token_id] * difference + required_input
-            else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
-        elif return_attention_mask and "attention_mask" not in processed_features:
-            processed_features["attention_mask"] = [1] * len(required_input)
-
-        return processed_features
