@@ -1130,11 +1130,30 @@ class Trainer:
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
             # backward compatibility for pytorch schedulers
-            logs["learning_rate"] = (
-                self.lr_scheduler.get_last_lr()[0]
-                if version.parse(torch.__version__) >= version.parse("1.4")
-                else self.lr_scheduler.get_lr()[0]
-            )
+
+            if self.deepspeed:
+                # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps
+                # may not run for the first few dozens steps while loss is overflowing, so
+                # `get_last_lr` will fail if called during that warm up stage, so handle it cleanly here:
+                try:
+                    last_lr = self.lr_scheduler.get_last_lr()[0]
+                except AssertionError as e:
+                    if "need to call step" in str(e):
+                        logger.warn(
+                            "tried to get lr value before scheduler/optimizer started stepping, returning lr=0"
+                        )
+                        last_lr = 0
+                    else:
+                        raise
+            else:
+                last_lr = (
+                    self.lr_scheduler.get_last_lr()[0]
+                    if version.parse(torch.__version__) >= version.parse("1.4")
+                    else self.lr_scheduler.get_lr()[0]
+                )
+
+            logs["learning_rate"] = last_lr
+
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
 
