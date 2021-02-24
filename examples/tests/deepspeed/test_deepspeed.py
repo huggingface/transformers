@@ -78,6 +78,31 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
                 trainer.train()
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
+    def test_early_get_last_lr(self):
+        # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
+        # not run for the first few dozen steps while loss scale is too large, and thus during
+        # that time `get_last_lr` will fail if called during that warm up stage,
+        #
+        # setting `logging_steps=1` forces an early `trainer._maybe_log_save_evaluate()` which calls
+        # `self.lr_scheduler.get_last_lr()` and originally it'd fail on the very first step.
+        with mockenv_context(**self.dist_env_1_gpu):
+            a = b = 0.0
+            trainer = get_regression_trainer(
+                a=a,
+                b=b,
+                local_rank=0,
+                train_len=8,
+                deepspeed=self.ds_config_file,
+                per_device_train_batch_size=8,
+                logging_steps=1,
+            )
+            trainer.train()
+            no_grad_accum_a = trainer.model.a.item()
+
+            # it's enough that train didn't fail for this test, but we must check that
+            # optimizer/scheduler didn't run (since if it did this test isn't testing the right thing)
+            self.assertEqual(no_grad_accum_a, a)
+
     def test_gradient_accumulation(self):
 
         # this test measures that we get identical weights and similar loss with:

@@ -82,6 +82,7 @@ from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
+    get_learning_rate,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -1129,12 +1130,8 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            # backward compatibility for pytorch schedulers
-            logs["learning_rate"] = (
-                self.lr_scheduler.get_last_lr()[0]
-                if version.parse(torch.__version__) >= version.parse("1.4")
-                else self.lr_scheduler.get_lr()[0]
-            )
+            logs["learning_rate"] = get_learning_rate(self)
+
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
 
