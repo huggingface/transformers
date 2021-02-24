@@ -17,6 +17,8 @@
 import copy
 import unittest
 
+import torch.nn as nn
+
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -639,3 +641,58 @@ class IBertModelIntegrationTest(unittest.TestCase):
                     self.assertTrue(torch.allclose(q, dq, atol=1e-4))
                 else:
                     self.assertFalse(torch.allclose(q, dq, atol=1e-4))
+
+    def quantize(self, model):
+        # Helper function that quantizes the given model
+        # Recursively convert all the `quant_mode` attributes as `True`
+        if hasattr(model, "quant_mode"):
+            model.quant_mode = True
+        elif type(model) == nn.Sequential:
+            for n, m in model.named_children():
+                self.quantize(m)
+        elif type(model) == nn.ModuleList:
+            for n in model:
+                self.quantize(n)
+        else:
+            for attr in dir(model):
+                mod = getattr(model, attr)
+                if isinstance(mod, nn.Module) and mod != model:
+                    self.quantize(mod)
+
+    @slow
+    def test_inference_masked_lm(self):
+        # I-BERT should be "equivalent" to RoBERTa if not quantized
+        # Test coped from `test_modeling_roberta.py`
+        model = IBertForMaskedLM.from_pretrained("kssteven/ibert-roberta-base")
+        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 11, 50265))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[[33.8802, -4.3103, 22.7761], [4.6539, -2.8098, 13.6253], [1.8228, -3.6898, 8.8600]]]
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+
+        # I-BERT should be "similar" to RoBERTa if quantized
+        self.quantize(model)
+        output = model(input_ids)[0]
+        self.assertEqual(output.shape, expected_shape)
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=0.1))
+
+    @slow
+    def test_inference_classification_head(self):
+        # I-BERT should be "equivalent" to RoBERTa if not quantized
+        # Test coped from `test_modeling_roberta.py`
+        model = IBertForSequenceClassification.from_pretrained("kssteven/ibert-roberta-large-mnli")
+        input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
+        output = model(input_ids)[0]
+        expected_shape = torch.Size((1, 3))
+        self.assertEqual(output.shape, expected_shape)
+        expected_tensor = torch.tensor([[-0.9469, 0.3913, 0.5118]])
+        self.assertTrue(torch.allclose(output, expected_tensor, atol=1e-4))
+
+        # I-BERT should be "similar" to RoBERTa if quantized
+        self.quantize(model)
+        output = model(input_ids)[0]
+        self.assertEqual(output.shape, expected_shape)
+        self.assertTrue(torch.allclose(output, expected_tensor, atol=0.1))
