@@ -19,7 +19,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 import collections
 import gc
 import inspect
-import json
 import math
 import os
 import re
@@ -82,7 +81,6 @@ from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
-    get_learning_rate,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -225,6 +223,8 @@ class Trainer:
           while in ``train``)
 
     """
+
+    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics
 
     def __init__(
         self,
@@ -1130,7 +1130,7 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            logs["learning_rate"] = get_learning_rate(self)
+            logs["learning_rate"] = self._get_learning_rate()
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
@@ -1344,61 +1344,6 @@ class Trainer:
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
-
-    def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
-        """
-        Reformat Trainer metrics values to a human-readable format
-
-        Args:
-            metrics (:obj:`Dict[str, float]`):
-                The metrics returned from train/evaluate/predict
-
-        Returns:
-            metrics (:obj:`Dict[str, float]`): The reformatted metrics
-        """
-
-        metrics_copy = metrics.copy()
-        for k, v in metrics_copy.items():
-            if "_mem_" in k:
-                metrics_copy[k] = f"{ v >> 20 }MB"
-            elif k == "total_flos":
-                metrics_copy[k] = f"{ int(v) >> 30 }GF"
-            elif type(metrics_copy[k]) == float:
-                metrics_copy[k] = round(v, 4)
-
-        return metrics_copy
-
-    def log_metrics(self, split, metrics):
-        """
-        Log metrics in a specially formatted way
-
-        Args:
-            split (:obj:`str`):
-                Mode/split name: one of ``train``, ``eval``, ``test``
-            metrics (:obj:`Dict[str, float]`):
-                The metrics returned from train/evaluate/predictmetrics: metrics dict
-        """
-
-        logger.info(f"***** {split} metrics *****")
-        metrics_formatted = self.metrics_format(metrics)
-        k_width = max(len(str(x)) for x in metrics_formatted.keys())
-        v_width = max(len(str(x)) for x in metrics_formatted.values())
-        for key in sorted(metrics_formatted.keys()):
-            logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-
-    def save_metrics(self, split, metrics):
-        """
-        Save metrics into a json file for that split, e.g. ``train_results.json``.
-
-        Args:
-            split (:obj:`str`):
-                Mode/split name: one of ``train``, ``eval``, ``test``, ``all``
-            metrics (:obj:`Dict[str, float]`):
-                The metrics returned from train/evaluate/predict
-        """
-        path = os.path.join(self.args.output_dir, f"{split}_results.json")
-        with open(path, "w") as f:
-            json.dump(metrics, f, indent=4, sort_keys=True)
 
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
