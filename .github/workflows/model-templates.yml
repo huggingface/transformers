@@ -32,6 +32,6 @@ jobs:
             v1.2-tests_templates-${{ hashFiles('setup.py') }}
             v1.2-tests_templates
 
-      - name: Force a crash
+      - name: No crash
         run: |
-          python force_crash
+          python -c "print('success')"
