@@ -82,6 +82,7 @@ from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
+    get_learning_rate,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -1129,7 +1130,7 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            logs["learning_rate"] = self._get_learning_rate()
+            logs["learning_rate"] = get_learning_rate(self)
 
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
@@ -1941,25 +1942,3 @@ class Trainer:
             return self.model.floating_point_ops(inputs)
         else:
             return 0
-
-    def _get_learning_rate(self):
-        if self.deepspeed:
-            # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
-            # not run for the first few dozen steps while loss scale is too large, and thus during
-            # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
-            try:
-                last_lr = self.lr_scheduler.get_last_lr()[0]
-            except AssertionError as e:
-                if "need to call step" in str(e):
-                    logger.warn("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
-                    last_lr = 0
-                else:
-                    raise
-        else:
-            last_lr = (
-                # backward compatibility for pytorch schedulers
-                self.lr_scheduler.get_last_lr()[0]
-                if version.parse(torch.__version__) >= version.parse("1.4")
-                else self.lr_scheduler.get_lr()[0]
-            )
-        return last_lr

@@ -24,6 +24,7 @@ from typing import Iterator, List, Optional, Union
 
 import numpy as np
 import torch
+from packaging import version
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
@@ -260,6 +261,29 @@ def _get_first_shape(arrays):
     if isinstance(arrays, (list, tuple)):
         return _get_first_shape(arrays[0])
     return arrays.shape
+
+
+def get_learning_rate(trainer):
+    if trainer.deepspeed:
+        # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
+        # not run for the first few dozen steps while loss scale is too large, and thus during
+        # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
+        try:
+            last_lr = trainer.lr_scheduler.get_last_lr()[0]
+        except AssertionError as e:
+            if "need to call step" in str(e):
+                logger.warn("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
+                last_lr = 0
+            else:
+                raise
+    else:
+        last_lr = (
+            # backward compatibility for pytorch schedulers
+            trainer.lr_scheduler.get_last_lr()[0]
+            if version.parse(torch.__version__) >= version.parse("1.4")
+            else trainer.lr_scheduler.get_lr()[0]
+        )
+    return last_lr
 
 
 class DistributedTensorGatherer:
