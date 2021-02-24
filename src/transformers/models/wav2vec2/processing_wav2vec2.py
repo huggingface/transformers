@@ -23,6 +23,15 @@ from .tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 
 class Wav2Vec2Processor:
     def __init__(self, feature_extractor, tokenizer):
+        if not isinstance(feature_extractor, Wav2Vec2FeatureExtractor):
+            raise ValueError(
+                f"`feature_extractor` has to be of type {Wav2Vec2FeatureExtractor.__class__}, but is {type(feature_extractor)}"
+            )
+        if not isinstance(tokenizer, Wav2Vec2CTCTokenizer):
+            raise ValueError(
+                f"`tokenizer` has to be of type {Wav2Vec2CTCTokenizer.__class__}, but is {type(tokenizer)}"
+            )
+
         self.feature_extractor = feature_extractor
         self.tokenizer = tokenizer
         self.current_processor = self.feature_extractor
@@ -53,7 +62,7 @@ class Wav2Vec2Processor:
         return self.tokenizer.decode(*args, **kwargs)
 
     @contextmanager
-    def as_target_tokenizer(self):
+    def as_target_processor(self):
         """
         Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to #
         sequence-to-sequence # models that need a slightly different processing for the labels. # #
