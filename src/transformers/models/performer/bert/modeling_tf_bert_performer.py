@@ -309,7 +309,8 @@ class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config: BertPerformerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.self_attention = TFPerformerAttention(config.performer_attention_config, linear_layer_names=('query', 'key', 'value'), name="self")
+        self.self_attention = TFPerformerAttention(config.performer_attention_config, initializer_range=config.initializer_range,
+                                                    linear_layer_names=('query', 'key', 'value'), name="self")
         self.dense_output = TFBertSelfOutput(config, name="output")
 
     def prune_heads(self, heads):

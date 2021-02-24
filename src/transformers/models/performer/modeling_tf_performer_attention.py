@@ -66,7 +66,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
 
         if self.use_linear_layers:
             for name in self.linear_layer_names:
-                setattr(self, name, tf.keras.layers.Dense(units=self.d_model))
+                setattr(self, name, tf.keras.layers.Dense(units=self.d_model, kernel_initializer=get_initializer(config.initializer_range)))
 
     def prune_heads(self, heads):
         raise NotImplementedError
