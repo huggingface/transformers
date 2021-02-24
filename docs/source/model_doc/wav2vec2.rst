@@ -61,8 +61,8 @@ Wav2Vec2FeatureExtractor
 Wav2Vec2Processor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Processor
-    :members: __call__, from_pretrained, save_pretrained, batch_decode, decode
+.. autoclass:: transformers.Wav2Vec2Processor
+    :members: __call__, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
 
 
 Wav2Vec2Model

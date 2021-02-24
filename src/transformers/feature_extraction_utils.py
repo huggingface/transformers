@@ -128,9 +128,9 @@ class PaddingStrategy(ExplicitEnum):
 
 
 class BatchFeature(UserDict):
-    """
+    r"""
     Holds the output of the :meth:`~transformers.PreTrainedFeatureExtractor.pad` and feature extractor specific
-    ``__call__``methods
+    ``__call__`` methods.
 
     This class is derived from a python dictionary and can be used as a dictionary.
 

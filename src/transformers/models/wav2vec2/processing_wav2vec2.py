@@ -27,15 +27,15 @@ class Wav2Vec2Processor:
     processor.
 
     :class:`~transformers.Wav2Vec2Processor` offers all the functionalities of
-    :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.Wav2Vec2Tokenizer`. See the docstring of
-    :meth:`~transformers.Wav2Vec2Processor.__call__` and :meth:`~transformers.Wav2Vec2Processor.decode` for more
+    :class:`~transformers.Wav2Vec2FeatureExtractor` and :class:`~transformers.Wav2Vec2CTCTokenizer`. See the docstring
+    of :meth:`~transformers.Wav2Vec2Processor.__call__` and :meth:`~transformers.Wav2Vec2Processor.decode` for more
     information.
 
     Args:
         feature_extractor (:obj:`Wav2Vec2FeatureExtractor`):
             An instance of :class:`~transformers.Wav2Vec2FeatureExtractor`. The feature extractor is a required input.
-        tokenizer (:obj:`Wav2Vec2Tokenizer`):
-            An instance of :class:`~transformers.Wav2Vec2Tokenizer`. The tokenizer is a required input.
+        tokenizer (:obj:`Wav2Vec2CTCTokenizer`):
+            An instance of :class:`~transformers.Wav2Vec2CTCTokenizer`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
@@ -60,8 +60,8 @@ class Wav2Vec2Processor:
         .. note::
 
             This class method is simply calling :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` and
-            :meth:`~transformers.PreTrainedTokenizer.save_pretrained`. Please refer to the docstrings of the methods
-            above for more information.
+            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
+            docstrings of the methods above for more information.
 
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
@@ -79,9 +79,10 @@ class Wav2Vec2Processor:
 
         .. note::
 
-            This class method is simply calling :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and
-            :meth:`~transformers.PreTrainedTokenizer.from_pretrained`. Please refer to the docstrings of the methods
-            above for more information.
+            This class method is simply calling Wav2Vec2FeatureExtractor's
+            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and Wav2Vec2CTCTokenizer's
+            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
+            docstrings of the methods above for more information.
 
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -91,7 +92,7 @@ class Wav2Vec2Processor:
                   huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
                   namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a feature extractor file saved using the
-                  :func:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
+                  :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
                   ``./my_model_directory/feature_extraction_config.json``.
@@ -106,25 +107,27 @@ class Wav2Vec2Processor:
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to
+        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
         :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` and returns its output. If used in the context
         :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
-        :meth:`~transformers.Wav2Vec2CTCTokenizer.__call__`. Please refer to the doctsring of the above two methods for
-        more information.
+        Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.__call__`. Please refer to the doctsring of
+        the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its argumens to :meth:`~transformers.Wav2Vec2CTCTokenizer.batch_decode`. Please refer
-        to the docstring of this method for more information.
+        This method forwards all its arguments to Wav2Vec2CTCTokenizer's
+        :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
+        information.
         """
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its argumens to :meth:`~transformers.Wav2Vec2CTCTokenizer.decode`. Please refer to the
-        docstring of this method for more information.
+        This method forwards all its arguments to Wav2Vec2CTCTokenizer's
+        :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
+        information.
         """
         return self.tokenizer.decode(*args, **kwargs)
 

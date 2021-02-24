@@ -96,8 +96,8 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.feature_extraction_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
-                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                 index) among:
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
