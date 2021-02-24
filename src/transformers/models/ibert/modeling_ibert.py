@@ -499,10 +499,6 @@ class IBertLayer(nn.Module):
         self.act_bit = 8
 
         self.seq_len_dim = 1
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        if self.chunk_size_feed_forward != 0:
-            raise NotImplementedError("I-BERT only support `config.chunk_size_feed_forward` == 0")
-
         self.attention = IBertAttention(config)
         self.intermediate = IBertIntermediate(config)
         self.output = IBertOutput(config)

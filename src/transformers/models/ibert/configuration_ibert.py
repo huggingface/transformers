@@ -72,6 +72,14 @@ class IBertConfig(PretrainedConfig):
             <https://arxiv.org/abs/1803.02155>`__. For more information on :obj:`"relative_key_query"`, please refer to
             `Method 4` in `Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)
             <https://arxiv.org/abs/2009.13658>`__.
+        quant_mode (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to quantize the model or not.
+        force_dequant (:obj:`str`, `optional`, defaults to :obj:`"none"`):
+            Force dequantize specific nonlinear layer. Dequatized layers are then executed with full precision.
+            :obj:`"none"`, :obj:`"gelu"`, :obj:`"softmax"`, :obj:`"layernorm"` and :obj:`"nonlinear"` are supported. As
+            deafult, it is set as :obj:`"none"`, which does not dequantize any layers. Please specify :obj:`"gelu"`,
+            :obj:`"softmax"`, or :obj:`"layernorm"` to dequantize GELU, Softmax, or LayerNorm, respectively.
+            :obj:`"nonlinear"` will dequantize all nonlinear layers, i.e., GELU, Softmax, and LayerNorm.
     """
 
     model_type = "ibert"
@@ -98,7 +106,7 @@ class IBertConfig(PretrainedConfig):
         force_dequant="none",
         **kwargs
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
