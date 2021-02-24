@@ -109,7 +109,7 @@ class IBertModelTester:
             max_position_embeddings=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
-            quant_mode=True,  # TODO add False as well
+            quant_mode=True,
         )
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -196,13 +196,12 @@ class IBertModelTester:
 
 
 @require_torch
-class IBertModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class IBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     test_pruning = False
     test_torchscript = False
     test_head_masking = False
     test_resize_embeddings = False
-    is_encoder_decoder = False
 
     all_model_classes = (
         (
