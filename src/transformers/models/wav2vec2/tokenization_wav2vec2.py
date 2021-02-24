@@ -464,7 +464,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
-    def convert_tokens_to_string(self, tokens: List[str], spaces_between_special_tokens: bool = False) -> str:
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
