@@ -10,6 +10,7 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
+
 Feature Extractor
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -17,11 +18,13 @@ A feature extractor is in charge of preparing read-in audio files for a speech m
 such as processing audio files to, *e.g.*, Log-Mel Spectrogram features, but also padding, normalization, and
 conversion to Numpy, PyTorch, and TensorFlow tensors.
 
+
 PreTrainedFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedFeatureExtractor
     :members: from_pretrained, save_pretrained, pad
+
 
 BatchFeature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

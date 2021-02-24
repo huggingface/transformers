@@ -27,6 +27,7 @@ PreTrainedTokenizerBase
     :special-members: __call__
     :members:
 
+
 SpecialTokensMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
