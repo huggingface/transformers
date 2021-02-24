@@ -159,21 +159,14 @@ class BatchFeature(UserDict):
         tensor_type (:obj:`Union[None, str, TensorType]`, `optional`):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
-        prepend_batch_axis (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to add a batch axis when converting to tensors (see :obj:`tensor_type` above).
         n_sequences (:obj:`Optional[int]`, `optional`):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
     """
 
-    def __init__(
-        self,
-        data: Optional[Dict[str, Any]] = None,
-        tensor_type: Union[None, str, TensorType] = None,
-        prepend_batch_axis: bool = False,
-    ):
+    def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type, prepend_batch_axis=prepend_batch_axis)
+        self.convert_to_tensors(tensor_type=tensor_type)
 
     def __getitem__(self, item: Union[int, str]) -> Union[Any]:
         """
@@ -212,13 +205,7 @@ class BatchFeature(UserDict):
     def items(self):
         return self.data.items()
 
-    # After this point:
-    # Extended properties and methods only available for fast (Rust-based) tokenizers
-    # provided by HuggingFace tokenizers library.
-
-    def convert_to_tensors(
-        self, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
-    ):
+    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
         """
         Convert the inner content to tensors.
 
@@ -226,8 +213,6 @@ class BatchFeature(UserDict):
             tensor_type (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
                 The type of tensors to use. If :obj:`str`, should be one of the values of the enum
                 :class:`~transformers.tokenization_utils_base.TensorType`. If :obj:`None`, no modification is done.
-            prepend_batch_axis (:obj:`int`, `optional`, defaults to :obj:`False`):
-                Whether or not to add the batch dimension during the conversion.
         """
         if tensor_type is None:
             return self
@@ -267,9 +252,6 @@ class BatchFeature(UserDict):
         # Do the tensor conversion in batch
         for key, value in self.items():
             try:
-                if prepend_batch_axis:
-                    value = [value]
-
                 if not is_tensor(value):
                     tensor = as_tensor(value)
 
@@ -814,14 +796,19 @@ class PreTrainedFeatureExtractor:
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
+            padding_vector = self.feature_dim * [self.padding_value] if self.feature_dim > 1 else self.padding_value
             if self.padding_side == "right":
                 if return_attention_mask:
                     processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
-                processed_features[self.model_input_names[0]] = required_input + [self.padding_value] * difference
+                processed_features[self.model_input_names[0]] = required_input + [
+                    padding_vector for _ in range(difference)
+                ]
             elif self.padding_side == "left":
                 if return_attention_mask:
                     processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
-                processed_features[self.model_input_names[0]] = [self.padding_value] * difference + required_input
+                processed_features[self.model_input_names[0]] = [
+                    padding_vector for _ in range(difference)
+                ] + required_input
             else:
                 raise ValueError("Invalid padding strategy:" + str(self.padding_side))
         elif return_attention_mask and "attention_mask" not in processed_features:
