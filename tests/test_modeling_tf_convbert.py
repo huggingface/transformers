@@ -384,8 +384,6 @@ class TFConvBertModelIntegrationTest(unittest.TestCase):
         expected_shape = [1, 6, 768]
         self.assertEqual(output.shape, expected_shape)
 
-        print(output[:, :3, :3])
-
         expected_slice = tf.constant(
             [
                 [
