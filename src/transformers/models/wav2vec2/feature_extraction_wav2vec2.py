@@ -21,10 +21,80 @@ from typing import List, Optional, Union
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature, PaddingStrategy, PreTrainedFeatureExtractor, TensorType
-from ...file_utils import add_end_docstrings
 
 
-WAV2VEC2_KWARGS_DOCSTRING = r"""
+class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
+    r"""
+    Constructs a Wav2Vec2 feature extractor.
+
+    This feature extractor inherits from :class:`~transformers.Wav2Vec2FeatureExtractor` which contains most of the
+    main methods. Users should refer to this superclass for more information regarding those methods.
+
+    Args:
+        feature_dim (:obj:`int`, `optional`, defaults to 1):
+            The feature dimension of the extracted features.
+        sampling_rate (:obj:`int`, `optional`, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+        padding_value (:obj:`float`, `optional`, defaults to 0.0):
+            The value that is used to fill the padding values / vectors.
+        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
+            improve the performance for some models, *e.g.*, `wav2vec2-lv60
+            <https://huggingface.co/models?search=lv60>`__.
+        return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not :meth:`~transformers.Wav2Vec2Tokenizer.__call__` should return :obj:`attention_mask`.
+
+            .. note::
+
+                Wav2Vec2 models that have set ``config.feat_extract_norm == "group"``, such as `wav2vec2-base
+                <https://huggingface.co/facebook/wav2vec2-base-960h>`__, have **not** been trained using
+                :obj:`attention_mask`. For such models, :obj:`input_values` should simply be padded with 0 and no
+                :obj:`attention_mask` should be passed.
+
+                For Wav2Vec2 models that have set ``config.feat_extract_norm == "layer"``, such as `wav2vec2-lv60
+                <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__, :obj:`attention_mask` should be
+                passed for batched inference.
+    """
+
+    model_input_names = ["input_values", "attention_mask"]
+
+    def __init__(
+        self,
+        feature_dim=1,
+        sampling_rate=16000,
+        padding_value=0.0,
+        return_attention_mask=False,
+        do_normalize=True,
+        **kwargs
+    ):
+        super().__init__(feature_dim=feature_dim, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        self.return_attention_mask = return_attention_mask
+        self.do_normalize = do_normalize
+
+    @staticmethod
+    def zero_mean_unit_var_norm(input_values: List[np.ndarray]) -> List[np.ndarray]:
+        """
+        Every array in the list is normalized to have zero mean and unit variance
+        """
+        return [(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-5) for x in input_values]
+
+    def __call__(
+        self,
+        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
+        padding: Union[bool, str, PaddingStrategy] = False,
+        max_length: Optional[int] = None,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        **kwargs
+    ) -> BatchFeature:
+        """
+        Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
+        sequences.
+
+        Args:
+            raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
+                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
+                values, a list of numpy arrays or a list of list of float values.
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.feature_extraction_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
@@ -65,51 +135,6 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
-"""
-
-
-class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
-
-    model_input_names = ["input_values", "attention_mask"]
-
-    def __init__(
-        self,
-        feature_dim=1,
-        sampling_rate=16000,
-        padding_value=0.0,
-        return_attention_mask=False,
-        do_normalize=True,
-        **kwargs
-    ):
-        super().__init__(feature_dim=feature_dim, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.return_attention_mask = return_attention_mask
-        self.do_normalize = do_normalize
-
-    @staticmethod
-    def zero_mean_unit_var_norm(input_values: List[np.ndarray]) -> List[np.ndarray]:
-        """
-        Every array in the list is normalized to have zero mean and unit variance
-        """
-        return [(x - np.mean(x)) / np.sqrt(np.var(x) + 1e-5) for x in input_values]
-
-    @add_end_docstrings(WAV2VEC2_KWARGS_DOCSTRING)
-    def __call__(
-        self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
-    ) -> BatchFeature:
-        """
-        Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
-        sequences.
-
-        Args:
-            raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
-                The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
-                values, a list of numpy arrays or a list of list of float values.
         """
 
         is_batched = bool(
