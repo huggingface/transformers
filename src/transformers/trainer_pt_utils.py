@@ -547,6 +547,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 # In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
 # helper methods here
 
+
 def _get_learning_rate(self):
     if self.deepspeed:
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
