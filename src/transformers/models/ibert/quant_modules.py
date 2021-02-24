@@ -330,12 +330,10 @@ class IntGELU(nn.Module):
         self.coeff[2] /= self.coeff[0]
 
     def int_erf(self, x_int, scaling_factor):
-        with torch.no_grad():
-            b_int = torch.floor(self.coeff[1] / scaling_factor)
-            c_int = torch.floor(self.coeff[2] / scaling_factor ** 2)
+        b_int = torch.floor(self.coeff[1] / scaling_factor)
+        c_int = torch.floor(self.coeff[2] / scaling_factor ** 2)
+        sign = torch.sign(x_int)
 
-        with torch.no_grad():
-            sign = torch.sign(x_int)
         abs_int = torch.min(torch.abs(x_int), -b_int)
         y_int = sign * ((abs_int + b_int) ** 2 + c_int)
         scaling_factor = scaling_factor ** 2 * self.coeff[0]
@@ -353,7 +351,7 @@ class IntGELU(nn.Module):
         x_int = x / scaling_factor
         sigmoid_int, sigmoid_scaling_factor = self.int_erf(x_int, scaling_factor / self.k)
 
-        shift_int = torch.floor(1.0 / sigmoid_scaling_factor)
+        shift_int = 1.0 // sigmoid_scaling_factor
 
         x_int = x_int * (sigmoid_int + shift_int)
         scaling_factor = scaling_factor * sigmoid_scaling_factor / 2
