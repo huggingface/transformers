@@ -7,9 +7,8 @@ on:
       - "tests/**"
       - ".github/**"
       - "templates/**"
-  pull_request_target:
-    branches:
-      - master
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
 
 jobs:
   run_tests_templates:
@@ -33,38 +32,6 @@ jobs:
             v1.2-tests_templates-${{ hashFiles('setup.py') }}
             v1.2-tests_templates
 
-      - name: Install dependencies
+      - name: Force a crash
         run: |
-          pip install --upgrade pip
-          pip install .[dev]
-      - name: Create model files
-        run: |
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/standalone.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-encoder-bert-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/tf-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
-          transformers-cli add-new-model --testing --testing_file=templates/adding_a_new_model/tests/pt-seq-2-seq-bart-tokenizer.json --path=templates/adding_a_new_model
-          make style
-          python utils/check_table.py --fix_and_overwrite
-          python utils/check_dummies.py --fix_and_overwrite
-
-      - name: Run all non-slow tests
-        run: |
-          python -m pytest -n 2 --dist=loadfile -s --make-reports=tests_templates tests/*template*
-
-      - name: Run style changes
-        run: |
-          git fetch origin master:master
-          make fixup
-
-      - name: Failure short reports
-        if: ${{ always() }}
-        run: cat reports/tests_templates_failures_short.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: run_all_tests_templates_test_reports
-          path: reports
+          python force_crash
