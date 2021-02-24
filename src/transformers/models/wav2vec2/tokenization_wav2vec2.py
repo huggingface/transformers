@@ -107,7 +107,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         },
     }
     # Wav2Vec2 has no max input length
-    max_model_input_sizes = {"facebook/wav2vec2-base-960h": sys.maxint}
+    max_model_input_sizes = {"facebook/wav2vec2-base-960h": sys.maxsize}
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(

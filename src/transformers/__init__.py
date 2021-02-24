@@ -131,6 +131,7 @@ _import_structure = {
         "Wav2Vec2CTCTokenizer",
         "Wav2Vec2Tokenizer",
         "Wav2Vec2FeatureExtractor",
+        "Wav2Vec2Processor",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
@@ -1345,6 +1346,7 @@ if TYPE_CHECKING:
         Wav2Vec2Config,
         Wav2Vec2CTCTokenizer,
         Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
         Wav2Vec2Tokenizer,
     )
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer

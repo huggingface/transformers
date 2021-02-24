@@ -76,7 +76,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
         self,
         feature_dim=1,
         sampling_rate=16000,
-        padding_value=0,
+        padding_value=0.0,
         return_attention_mask=False,
         do_normalize=True,
         **kwargs
