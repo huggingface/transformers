@@ -47,6 +47,18 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 to the specific feature_extractor's default.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
+
+                .. note::
+
+                    Wav2Vec2 models that have set ``config.feat_extract_norm == "group"``, such as `wav2vec2-base
+                    <https://huggingface.co/facebook/wav2vec2-base-960h>`__, have **not** been trained using
+                    :obj:`attention_mask`. For such models, :obj:`input_values` should simply be padded with 0 and no
+                    :obj:`attention_mask` should be passed.
+
+                    For Wav2Vec2 models that have set ``config.feat_extract_norm == "layer"``, such as `wav2vec2-lv60
+                    <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__, :obj:`attention_mask` should be
+                    passed for batched inference.
+
             return_tensors (:obj:`str` or :class:`~transformers.feature_extraction_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 

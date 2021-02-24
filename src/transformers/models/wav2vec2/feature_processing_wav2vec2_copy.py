@@ -16,71 +16,40 @@
 Speech processor class for Wav2Vec2
 """
 
-
-# NOTE inheritance from feature extractor
-class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def __call__(self, raw_speech):
-        """
-        Implement the call method
-        """
-        pass
-
-
-# NOTE inheritance from tokenizer
-class Wav2Vec2Tokenizer(PreTrainedTokenizer):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def __call__(self, text):
-        """
-        Implement encoding functionality
-        """
-        pass
-
-    def _decode(self, text):
-        """
-        Implement decoding functionality
-        """
-        pass
-
-
-class Wav2Vec2Processor:
-    def __init__(self, feature_extractor, tokenizer):
-        self.feature_extractor = feature_extractor
-        self.tokenizer = tokenizer
-        self.current_processor = self.feature_extractor
-
-    def save_pretrained(self, pretrained_model_name_or_path):
-        self.feature_extractor.save_pretrained(pretrained_model_name_or_path)
-        self.tokenizer.save_pretrained(pretrained_model_name_or_path)
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
-        # will look for a `feature_extractor_config.json` file
-        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path)
-        # will look for the tokenizer files
-        tokenizer = Wav2Vec2Tokenizer.from_pretrained(pretrained_model_name_or_path)
-
-        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
-
-    def __call__(self, *args, **kwargs):
-        return self.current_processor(*args, **kwargs)
-
-    def batch_decode(self, *args, **kwargs):
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
+# class Wav2Vec2Processor:
+#    def __init__(self, feature_extractor, tokenizer):
+#        self.feature_extractor = feature_extractor
+#        self.tokenizer = tokenizer
+#        self.current_processor = self.feature_extractor
+#
+#    def save_pretrained(self, pretrained_model_name_or_path):
+#        self.feature_extractor.save_pretrained(pretrained_model_name_or_path)
+#        self.tokenizer.save_pretrained(pretrained_model_name_or_path)
+#
+#    @classmethod
+#    def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
+# will look for a `feature_extractor_config.json` file
+#        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path)
+# will look for the tokenizer files
+#        tokenizer = Wav2Vec2Tokenizer.from_pretrained(pretrained_model_name_or_path)
+#
+#        return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
+#
+#    def __call__(self, *args, **kwargs):
+#        return self.current_processor(*args, **kwargs)
+#
+#    def batch_decode(self, *args, **kwargs):
+#        return self.tokenizer.batch_decode(*args, **kwargs)
+#
+#    def decode(self, *args, **kwargs):
+#        return self.tokenizer.decode(*args, **kwargs)
+#
+#    @contextmanager
+#    def as_target_tokenizer(self):
+#        """
+# Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to # sequence-to-sequence
+# models that need a slightly different processing for the labels. #
+# """
+#        self.current_processor = self.tokenizer
+#        yield
+#        self.current_processor = self.feature_extractor

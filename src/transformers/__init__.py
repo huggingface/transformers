@@ -128,6 +128,7 @@ _import_structure = {
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
+        "Wav2Vec2CTCTokenizer",
         "Wav2Vec2Tokenizer",
         "Wav2Vec2FeatureExtractor",
     ],
@@ -1342,6 +1343,7 @@ if TYPE_CHECKING:
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
+        Wav2Vec2CTCTokenizer,
         Wav2Vec2FeatureExtractor,
         Wav2Vec2Tokenizer,
     )
