@@ -31,6 +31,7 @@ from ..big_bird.modeling_big_bird import (
     BigBirdForSequenceClassification,
     BigBirdForTokenClassification,
     BigBirdModel,
+    BigBirdForPreTraining,
 )
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
@@ -85,6 +86,7 @@ from ..big_bird.modeling_big_bird import (
     BigBirdForSequenceClassification,
     BigBirdForTokenClassification,
     BigBirdModel,
+    BigBirdForPreTraining,
 )
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
@@ -377,6 +379,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForMaskedLM),
         (SqueezeBertConfig, SqueezeBertForMaskedLM),
         (BertConfig, BertForPreTraining),
+        (BigBirdConfig, BigBirdForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
         (MobileBertConfig, MobileBertForPreTraining),

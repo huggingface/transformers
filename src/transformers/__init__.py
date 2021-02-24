@@ -377,6 +377,7 @@ if is_torch_available():
             "BigBirdForTokenClassification",
             "BigBirdLayer",
             "BigBirdModel",
+            "BigBirdForPreTraining",
             "BigBirdPreTrainedModel",
             "load_tf_weights_in_big_bird",
         ]
@@ -1472,6 +1473,7 @@ if TYPE_CHECKING:
             BigBirdForTokenClassification,
             BigBirdLayer,
             BigBirdModel,
+            BigBirdForPreTraining,
             BigBirdPreTrainedModel,
             load_tf_weights_in_big_bird,
         )
