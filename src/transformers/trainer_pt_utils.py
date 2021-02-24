@@ -544,8 +544,8 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         return iter(indices)
 
 
-# Secondary PT Trainer helper methods - placed here to keep trainer.py compact and easy to find one way around
-
+# In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
+# helper methods here
 
 def _get_learning_rate(self):
     if self.deepspeed:
