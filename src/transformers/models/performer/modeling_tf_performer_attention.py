@@ -6,7 +6,7 @@ import tensorflow as tf
 from .configuration_performer_attention import PerformerAttentionConfig, PerformerKernel, OrthogonalFeatureAlgorithm
 from typing import Callable, Optional, Union
 
-from ...modeling_tf_utils import shape_list
+from ...modeling_tf_utils import shape_list, get_initializer
 
 KERNEL_CALLABLES = {
     PerformerKernel.cosh: lambda x, h: tf.concat((tf.exp(h + x), tf.exp(h - x)), axis=-1),
