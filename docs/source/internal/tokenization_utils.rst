@@ -25,7 +25,7 @@ PreTrainedTokenizerBase
 
 .. autoclass:: transformers.tokenization_utils_base.PreTrainedTokenizerBase
     :special-members: __call__
-
+    :members:
 
 SpecialTokensMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
