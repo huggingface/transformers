@@ -20,7 +20,8 @@ import unittest
 
 import numpy as np
 
-from transformers import Wav2Vec2FeatureExtractor
+from transformers import WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST, Wav2Vec2Config, Wav2Vec2FeatureExtractor
+from transformers.testing_utils import slow
 
 from .test_feature_extraction_common import FeatureExtractionMixin
 
@@ -99,3 +100,48 @@ class Wav2Vec2FeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
 
     def setUp(self):
         self.feat_extract_tester = Wav2Vec2FeatureExtractionTester(self)
+
+    def test_call(self):
+        # Tests that all call wrap to encode_plus and batch_encode_plus
+        feat_extract = self.feat_extract_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        # create three inputs of length 800, 1000, and 1200
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+
+        # Test not batched input
+        encoded_sequences_1 = feat_extract(speech_inputs[0], return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs[0], return_tensors="np").input_values
+        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+
+        # Test batched
+        encoded_sequences_1 = feat_extract(speech_inputs, return_tensors="np").input_values
+        encoded_sequences_2 = feat_extract(np_speech_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+
+    def test_zero_mean_unit_variance_normalization(self):
+        feat_extract = self.feat_extract_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        processed = feat_extract(speech_inputs, padding="longest")
+        input_values = processed.input_values
+
+        def _check_zero_mean_unit_variance(input_vector):
+            self.assertTrue(np.abs(np.mean(input_vector)) < 1e-3)
+            self.assertTrue(np.abs(np.var(input_vector) - 1) < 1e-3)
+
+        _check_zero_mean_unit_variance(input_values[0, :800])
+        _check_zero_mean_unit_variance(input_values[1, :1000])
+        _check_zero_mean_unit_variance(input_values[2])
+
+    @slow
+    def test_pretrained_checkpoints_are_set_correctly(self):
+        # this test makes sure that models that are using
+        # group norm don't have their feature extractor return the
+        # attention_mask
+        for model_id in WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST:
+            config = Wav2Vec2Config.from_pretrained(model_id)
+            feat_extract = Wav2Vec2FeatureExtractor.from_pretrained(model_id)
+
+            # only "layer" feature extraction norm should make use of
+            # attention_mask
+            self.assertEqual(feat_extract.return_attention_mask, config.feat_extract_norm == "layer")

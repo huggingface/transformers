@@ -117,7 +117,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
 
         # zero-mean and unit-variance normalization
         if self.do_normalize:
-            self.zero_mean_unit_var_norm(raw_speech)
+            raw_speech = self.zero_mean_unit_var_norm(raw_speech)
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_values": raw_speech})
