@@ -1767,7 +1767,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BigBirdModel(config)
+        self.bert = BigBirdModel(config, add_pooling_layer=True)
         self.cls = BigBirdPreTrainingHeads(config)
 
         self.init_weights()
@@ -1845,7 +1845,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
         # TODO:
         self.sequence_output = sequence_output
-        self.pooler_output = outputs[1]
+        self.pooler_output = pooled_output
         # 
 
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
