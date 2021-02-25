@@ -246,7 +246,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
-        (IBertConfig, (IBertTokenizer, IBertTokenizerFast)),
+        (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
     ]
 )
 
