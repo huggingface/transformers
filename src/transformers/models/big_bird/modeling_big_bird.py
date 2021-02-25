@@ -171,10 +171,6 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     return model
 
 
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -190,7 +186,7 @@ class BigBirdEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))    # TODO: extra
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
     def forward(
@@ -239,9 +235,9 @@ class BigBirdSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -399,9 +395,9 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -423,6 +419,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None
         ):
+        """
+            Useless arguments are `attention_mask`, `head_mask`, `encoder_hidden_states`, `encoder_attention_mask`, `past_key_value`
+            Currently this `class` can't be used in decoder.
+        """
 
         # TODO: remove this
         self.hs = hidden_states
@@ -433,7 +433,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.tbm = to_blocked_mask
         # 
 
-        # TODO: support encoder_hidden_states
         batch_size, from_seq_length, _ = hidden_states.size()
         to_seq_length = from_seq_length
         from_block_size = self.block_size
@@ -515,7 +514,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         np.random.seed(seed)
         if from_seq_length in [1024, 3072, 4096]:  # old plans used in paper
             rand_attn = [
-                self._bigbird_block_rand_mask(  # pylint: disable=g-complex-comprehension
+                self._bigbird_block_rand_mask(
                     self.max_seqlen, self.max_seqlen,
                     wm, wn, r,
                     last_idx=1024)[:(from_seq_length // wm - 2)]
@@ -542,7 +541,6 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         self.ran = rand_attn # TODO: remove this
 
-        # TODO: some issue in torch.gather
         rand_mask = self._create_rand_mask_from_inputs(
             from_blocked_mask, to_blocked_mask, rand_attn, h, r, b, m, wm
             )
@@ -1035,7 +1033,7 @@ class BigBirdAttention(nn.Module):
         from_blocked_mask=None,
         to_blocked_mask=None,
     ):
-        # print(hidden_states[:,0,0])
+
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -1050,7 +1048,7 @@ class BigBirdAttention(nn.Module):
             from_blocked_mask,
             to_blocked_mask
         )
-        # print(self_outputs[0].view(2, 128, 12, 64)[:,0,0,0])
+
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -1079,11 +1077,8 @@ class BigBirdOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
-        self.io = hidden_states # TODO:  remove this
         hidden_states = self.dense(hidden_states)
-        self.o = hidden_states # TODO:  remove this
         hidden_states = self.dropout(hidden_states)
-        self.do = hidden_states # TODO:  remove this
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -1111,7 +1106,6 @@ class BigBirdLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
-        # block_sparse config
         band_mask=None,
         from_mask=None,
         to_mask=None,
@@ -1127,7 +1121,6 @@ class BigBirdLayer(nn.Module):
             encoder_attention_mask=encoder_attention_mask,
             past_key_value=self_attn_past_key_value,
             output_attentions=output_attentions,
-            # block_sparse config
             band_mask=band_mask,
             from_mask=from_mask,
             to_mask=to_mask,
@@ -1268,10 +1261,6 @@ class BigBirdEncoder(nn.Module):
                 if self.layer[0] == layer_module:
                     self.l1_layer_input = hidden_states
                     self.l1_attention_mask = attention_mask
-                    # self.l1_band_mask = band_mask
-                    # self.l1_encoder_from_mask = encoder_from_mask
-                    # self.l1_encoder_to_mask = encoder_to_mask
-                    # self.l1_blocked_encoder_mask = blocked_encoder_mask
                 # 
 
                 layer_outputs = layer_module(
@@ -1355,12 +1344,11 @@ class BigBirdLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False) # TODO: check this later
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias # TODO: check this later
+        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -1546,8 +1534,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.block_size = config.block_size
-        self.attention_type = config.attention_type
+        self.block_size = self.config.block_size
+        self.attention_type = self.config.attention_type
 
         self.embeddings = BigBirdEmbeddings(config)
         self.encoder = BigBirdEncoder(config)

@@ -73,6 +73,17 @@ class BigBirdConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        attention_type (:obj:`str`, `optional`, defaults to :obj:`block_sparse`)
+            Whether to set attention to block sparse attention (with n time) as introduced in paper or original attention layer (with n^2 time). 
+            Possible values are `original_full` & `block_sparse`.
+        use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
+            Whether to use bias in query, key, value
+        rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)
+            Whether to rescale embedding with (hidden_size ** 0.5)
+        block_size (:obj:`int`, `optional`, defaults to :obj:`64`)
+            Size of each block. Useful only when `attention_type` is `block_sparse`
+        num_random_blocks (:obj:`int`, `optional`, defaults to :obj:`3`)
+            Each query is going to attend these many number of random blocks. Useful only when `attention_type` is `block_sparse`
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         Example::
@@ -138,18 +149,14 @@ class BigBirdConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
-
-        # embed layer
-        self.rescale_embeddings = rescale_embeddings
         self.position_embedding_type = position_embedding_type
 
+        self.rescale_embeddings = rescale_embeddings
         self.attention_type = attention_type
         self.use_bias = use_bias
         self.norm_type = norm_type
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
-        
 
-        # TODO: update config-docs
-        # TODO: check tie_embeddings in config
-        # TODO: token_type_ids is irrelevant when type_vocab_size=1
+        # TODO: check use_cache working
+        # TODO: check gradient_checkpointing
