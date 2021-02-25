@@ -375,6 +375,7 @@ TensorFlow and/or Flax.
     main_classes/processors
     main_classes/tokenizer
     main_classes/trainer
+    main_classes/feature_extractor
 
 .. toctree::
     :maxdepth: 2
@@ -441,3 +442,4 @@ TensorFlow and/or Flax.
     internal/tokenization_utils
     internal/trainer_utils
     internal/generation_utils
+    internal/file_utils
