@@ -33,8 +33,9 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = BarthezTokenizer.from_pretrained("moussaKam/mbarthez")
+        tokenizer = BarthezTokenizerFast.from_pretrained("moussaKam/mbarthez")
         tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname, legacy_format=False)
         self.tokenizer = tokenizer
 
     @require_torch

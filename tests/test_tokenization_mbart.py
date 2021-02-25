@@ -22,8 +22,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if is_sentencepiece_available():
-    from .test_tokenization_xlm_roberta import SAMPLE_VOCAB
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
