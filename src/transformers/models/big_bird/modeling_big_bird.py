@@ -170,7 +170,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     logger.info("Weights not initialized in PyTorch model: {}".format(", ".join(pt_names)))
     return model
 
-
+# TODO: enable `relative_position_embedding`incase of `block_sparse`
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -366,7 +366,7 @@ class BigBirdSelfAttention(nn.Module):
         context_layer = context_layer.view(*new_context_layer_shape)
         # TODO 
         # print(context_layer.shape)
-        self.attn_o = context_layer.view(2,128,12,64)
+        # self.attn_o = context_layer.view(2,128,12,64)
         # 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -1398,7 +1398,7 @@ class BigBirdPreTrainedModel(PreTrainedModel):
 
     config_class = BigBirdConfig
     load_tf_weights = load_tf_weights_in_big_bird
-    base_model_prefix = "big_bird"
+    base_model_prefix = "bert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -1760,9 +1760,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
 
         self.init_weights()
 
-    def get_input_embeddings(self):
-        return self.bert.get_input_embeddings()
-
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
@@ -1874,9 +1871,6 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         self.init_weights()
 
-    def get_input_embeddings(self):
-        return self.bert.get_input_embeddings()
-
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
@@ -1961,7 +1955,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
-
+# TODO: check BigBird as decoder
 @add_start_docstrings(
     """BigBird Model with a `language modeling` head on top for CLM fine-tuning. """, BIG_BIRD_START_DOCSTRING
 )
@@ -1975,7 +1969,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         if not config.is_decoder:
             logger.warning("If you want to use `BigBirdForCausalLM` as a standalone, add `is_decoder=True.`")
 
-        self.big_bird = BigBirdModel(config)
+        self.bert = BigBirdModel(config)
         self.cls = BigBirdOnlyMLMHead(config)
 
         self.init_weights()
@@ -2047,7 +2041,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.big_bird(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2136,7 +2130,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.big_bird = BigBirdModel(config)
+        self.bert = BigBirdModel(config)
         self.classifier = BigBirdClassificationHead(config)
 
         self.init_weights()
@@ -2170,7 +2164,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.big_bird(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2206,6 +2200,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """BigBird Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -2215,7 +2210,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.big_bird = BigBirdModel(config)
+        self.bert = BigBirdModel(config)
         self.sequence_summary = SequenceSummary(config)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -2260,7 +2255,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             else None
         )
 
-        outputs = self.big_bird(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2305,7 +2300,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.big_bird = BigBirdModel(config)
+        self.bert = BigBirdModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -2338,7 +2333,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.big_bird(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -2393,7 +2388,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.big_bird = BigBirdModel(config)
+        self.bert = BigBirdModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -2431,7 +2426,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.big_bird(
+        outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
