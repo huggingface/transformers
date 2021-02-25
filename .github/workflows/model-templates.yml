@@ -33,4 +33,4 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python fail
+          python -c "print('This should work')"
