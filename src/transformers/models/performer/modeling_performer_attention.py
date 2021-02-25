@@ -202,7 +202,8 @@ class PerformerAttention(nn.Module):
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
-            k_prime *= mask.squeeze().unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
+            assert len(list(mask.shape)) == 2, f"Mask should have shapes (bs, seq_len) but has shapes {list(mask.shape)}"
+            k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
 
         k_prime_t = k_prime.transpose(-2, -1)
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
