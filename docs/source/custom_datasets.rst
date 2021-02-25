@@ -563,6 +563,7 @@ we can use the built in :func:`~transformers.BatchEncoding.char_to_token` method
             # if start position is None, the answer passage has been truncated
             if start_positions[-1] is None:
                 start_positions[-1] = tokenizer.model_max_length
+            if end_positions[-1] is None:
                 end_positions[-1] = tokenizer.model_max_length
 
         encodings.update({'start_positions': start_positions, 'end_positions': end_positions})
