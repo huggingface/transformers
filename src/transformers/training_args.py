@@ -458,7 +458,12 @@ class TrainingArguments:
     )
     sharded_ddp: str = field(
         default="",
-        metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
+        metadata={
+            "choices": ["simple", "zero_dp_2", "zero_dp_3", "zero_dp_2 offload", "zero_dp_3 offload"],
+            "help": "Whether or not to use sharded DDP training (in distributed training only). The base option "
+            "should be `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` "
+            "like this: zero_dp_2 offload` or `zero_dp_3 offload`",
+        },
     )
     deepspeed: Optional[str] = field(
         default=None,
@@ -555,7 +560,7 @@ class TrainingArguments:
         if self.sharded_ddp == [ShardedDDPOption.OFFLOAD]:
             raise ValueError(
                 "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
-                "`--sharded_ddp zero_dp_3`". For example, `--sharded_ddp "zero_dp_2 offload"`.
+                '`--sharded_ddp zero_dp_3`. For example, `--sharded_ddp "zero_dp_2 offload"`.'
             )
         elif len(self.sharded_ddp) > 1 and ShardedDDPOption.Simple in self.sharded_ddp:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
