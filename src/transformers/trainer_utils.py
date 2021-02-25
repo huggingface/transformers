@@ -33,10 +33,9 @@ from .file_utils import (
     is_sagemaker_distributed_available,
     is_tf_available,
     is_torch_available,
-    is_torch_cuda_available
+    is_torch_cuda_available,
     is_torch_tpu_available,
 )
-
 
 
 def set_seed(seed: int):
