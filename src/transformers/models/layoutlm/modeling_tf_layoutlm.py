@@ -23,22 +23,12 @@ from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
-    TFCausalLMOutput,
     TFMaskedLMOutput,
-    TFMultipleChoiceModelOutput,
-    TFNextSentencePredictorOutput,
-    TFQuestionAnsweringModelOutput,
-    TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
-    TFCausalLanguageModelingLoss,
     TFMaskedLanguageModelingLoss,
-    TFMultipleChoiceLoss,
-    TFNextSentencePredictionLoss,
     TFPreTrainedModel,
-    TFQuestionAnsweringLoss,
-    TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
     input_processing,
@@ -46,12 +36,9 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...file_utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 
 from ...utils import logging
@@ -705,37 +692,6 @@ class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
 
     config_class = LayoutLMConfig
     base_model_prefix = "layoutlm"
-
-
-@dataclass
-class TFLayoutLMForPreTrainingOutput(ModelOutput):
-    """
-    Output type of :class:`~transformers.TFLayoutLMForPreTraining`.
-
-    Args:
-        prediction_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        seq_relationship_logits (:obj:`tf.Tensor` of shape :obj:`(batch_size, 2)`):
-            Prediction scores of the next sequence prediction (classification) head (scores of True/False continuation
-            before SoftMax).
-        hidden_states (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
-            Tuple of :obj:`tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape :obj:`(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (:obj:`tuple(tf.Tensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
-            Tuple of :obj:`tf.Tensor` (one for each layer) of shape :obj:`(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[tf.Tensor] = None
-    prediction_logits: tf.Tensor = None
-    seq_relationship_logits: tf.Tensor = None
-    hidden_states: Optional[Tuple[tf.Tensor]] = None
-    attentions: Optional[Tuple[tf.Tensor]] = None
 
 
 LAYOUTLM_START_DOCSTRING = r"""
