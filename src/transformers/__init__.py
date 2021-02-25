@@ -174,7 +174,7 @@ _import_structure = {
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.herbert": ["HerbertTokenizer"],
-    "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig", "IBertTokenizer"],
+    "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
@@ -280,7 +280,6 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.ibert"].append("IBertTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -1332,7 +1331,7 @@ if TYPE_CHECKING:
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.herbert import HerbertTokenizer
-    from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig, IBertTokenizer
+    from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -1447,7 +1446,6 @@ if TYPE_CHECKING:
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.herbert import HerbertTokenizerFast
-        from .models.ibert import IBertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.led import LEDTokenizerFast
         from .models.longformer import LongformerTokenizerFast

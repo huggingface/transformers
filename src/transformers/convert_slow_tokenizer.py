@@ -678,7 +678,6 @@ SLOW_TO_FAST_CONVERTERS = {
     "T5Tokenizer": T5Converter,
     "XLMRobertaTokenizer": XLMRobertaConverter,
     "XLNetTokenizer": XLNetConverter,
-    "IBertTokenizer": RobertaConverter,
 }
 
 

@@ -44,7 +44,7 @@ from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmb
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "IBertConfig"
-_TOKENIZER_FOR_DOC = "IBertTokenizer"
+_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "kssteven/ibert-roberta-base",
@@ -681,7 +681,7 @@ IBERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.IBertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.RobertaTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
