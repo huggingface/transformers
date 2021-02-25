@@ -23,11 +23,7 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 _import_structure = {
     "configuration_ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
-    "tokenization_ibert": ["IBertTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_ibert_fast"] = ["IBertTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_ibert"] = [
