@@ -39,7 +39,8 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.tokenization_utils_base import PaddingStrategy, PreTrainedTokenizerBase
+from transformers.file_utils import PaddingStrategy
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
@@ -133,7 +134,7 @@ class DataCollatorForMultipleChoice:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 

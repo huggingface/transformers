@@ -88,6 +88,7 @@ _import_structure = {
         "TF_WEIGHTS_NAME",
         "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
+        "TensorType",
         "add_end_docstrings",
         "add_start_docstrings",
         "cached_path",
@@ -125,7 +126,14 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config", "Wav2Vec2Tokenizer"],
+    "models.wav2vec2": [
+        "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2Config",
+        "Wav2Vec2CTCTokenizer",
+        "Wav2Vec2Tokenizer",
+        "Wav2Vec2FeatureExtractor",
+        "Wav2Vec2Processor",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -235,9 +243,9 @@ _import_structure = {
         "CharSpan",
         "PreTrainedTokenizerBase",
         "SpecialTokensMixin",
-        "TensorType",
         "TokenSpan",
     ],
+    "feature_extraction_utils": ["PreTrainedFeatureExtractor", "BatchFeature"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -1232,6 +1240,9 @@ if TYPE_CHECKING:
         xnli_tasks_num_labels,
     )
 
+    # Feature Extractor
+    from .feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+
     # Files and general utilities
     from .file_utils import (
         CONFIG_NAME,
@@ -1243,6 +1254,7 @@ if TYPE_CHECKING:
         TF_WEIGHTS_NAME,
         TRANSFORMERS_CACHE,
         WEIGHTS_NAME,
+        TensorType,
         add_end_docstrings,
         add_start_docstrings,
         cached_path,
@@ -1359,7 +1371,14 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config, Wav2Vec2Tokenizer
+    from .models.wav2vec2 import (
+        WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2Config,
+        Wav2Vec2CTCTokenizer,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+        Wav2Vec2Tokenizer,
+    )
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -1397,7 +1416,6 @@ if TYPE_CHECKING:
         CharSpan,
         PreTrainedTokenizerBase,
         SpecialTokensMixin,
-        TensorType,
         TokenSpan,
     )
 

@@ -372,6 +372,7 @@ DEPRECATED_OBJECTS = [
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
     "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",

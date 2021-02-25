@@ -97,6 +97,7 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    get_last_checkpoint,
     set_seed,
     speed_metrics,
 )
@@ -222,6 +223,8 @@ class Trainer:
           while in ``train``)
 
     """
+
+    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics
 
     def __init__(
         self,
@@ -718,7 +721,7 @@ class Trainer:
     def _wrap_model(self, model, training=True):
         # already initialized its own DDP and AMP
         if self.deepspeed:
-            return model
+            return self.deepspeed
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
@@ -758,7 +761,7 @@ class Trainer:
 
     def train(
         self,
-        resume_from_checkpoint: Optional[str] = None,
+        resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
         **kwargs,
     ):
@@ -766,9 +769,11 @@ class Trainer:
         Main training entry point.
 
         Args:
-            resume_from_checkpoint (:obj:`str`, `optional`):
-                Local path to a saved checkpoint as saved by a previous instance of :class:`~transformers.Trainer`. If
-                present, training will resume from the model/optimizer/scheduler states loaded here.
+            resume_from_checkpoint (:obj:`str` or :obj:`bool`, `optional`):
+                If a :obj:`str`, local path to a saved checkpoint as saved by a previous instance of
+                :class:`~transformers.Trainer`. If a :obj:`bool` and equals `True`, load the last checkpoint in
+                `args.output_dir` as saved by a previous instance of :class:`~transformers.Trainer`. If present,
+                training will resume from the model/optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             kwargs:
@@ -803,6 +808,11 @@ class Trainer:
             self.optimizer, self.lr_scheduler = None, None
 
         # Load potential model checkpoint
+        if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
+            resume_from_checkpoint = get_last_checkpoint(self.args.output_dir)
+            if resume_from_checkpoint is None:
+                raise ValueError(f"No valid checkpoint found in output directory ({self.args.output_dir})")
+
         if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             logger.info(f"Loading model from {resume_from_checkpoint}).")
             if isinstance(self.model, PreTrainedModel):
@@ -996,6 +1006,10 @@ class Trainer:
                     tr_loss += self.training_step(model, inputs)
                 self._total_flos += float(self.floating_point_ops(inputs))
 
+                # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
+                if self.deepspeed:
+                    self.deepspeed.step()
+
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= self.args.gradient_accumulation_steps
@@ -1021,7 +1035,7 @@ class Trainer:
 
                     # Optimizer step
                     if self.deepspeed:
-                        self.deepspeed.step()
+                        pass  # called outside the loop
                     elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
                     elif self.use_amp:
@@ -1030,7 +1044,9 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    self.lr_scheduler.step()
+                    if not self.deepspeed:
+                        self.lr_scheduler.step()
+
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
@@ -1114,12 +1130,8 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            # backward compatibility for pytorch schedulers
-            logs["learning_rate"] = (
-                self.lr_scheduler.get_last_lr()[0]
-                if version.parse(torch.__version__) >= version.parse("1.4")
-                else self.lr_scheduler.get_lr()[0]
-            )
+            logs["learning_rate"] = self._get_learning_rate()
+
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
 
@@ -1333,29 +1345,6 @@ class Trainer:
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
 
-    def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
-        """
-        Reformat Trainer metrics values to a human-readable format
-
-        Args:
-            metrics (:obj:`Dict[str, float]`):
-                The metrics returned from train/evaluate/predict
-
-        Returns:
-            metrics (:obj:`Dict[str, float]`): The reformatted metrics
-        """
-
-        metrics_copy = metrics.copy()
-        for k, v in metrics_copy.items():
-            if "_mem_" in k:
-                metrics_copy[k] = f"{ v >> 20 }MB"
-            elif k == "total_flos":
-                metrics_copy[k] = f"{ int(v) >> 30 }GF"
-            elif type(metrics_copy[k]) == float:
-                metrics_copy[k] = round(v, 4)
-
-        return metrics_copy
-
     def _prepare_inputs(self, inputs: Dict[str, Union[torch.Tensor, Any]]) -> Dict[str, Union[torch.Tensor, Any]]:
         """
         Prepare :obj:`inputs` before feeding them to the model, converting them to tensors if they are not already and
@@ -1388,7 +1377,6 @@ class Trainer:
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
-
         model.train()
         inputs = self._prepare_inputs(inputs)
 
@@ -1401,7 +1389,8 @@ class Trainer:
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        if self.args.gradient_accumulation_steps > 1:
+        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.args.gradient_accumulation_steps
 
         if self.use_amp:
@@ -1410,7 +1399,8 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.deepspeed:
-            self.deepspeed.backward(loss)
+            # loss gets scaled under gradient_accumulation_steps in deepspeed
+            loss = self.deepspeed.backward(loss)
         else:
             loss.backward()
 
@@ -1840,6 +1830,14 @@ class Trainer:
             else:
                 ignore_keys = []
 
+        # labels may be popped when computing the loss (label smoothing for instance) so we grab them first.
+        if has_labels:
+            labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
+            if len(labels) == 1:
+                labels = labels[0]
+        else:
+            labels = None
+
         with torch.no_grad():
             if has_labels:
                 loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
@@ -1869,13 +1867,6 @@ class Trainer:
         logits = nested_detach(logits)
         if len(logits) == 1:
             logits = logits[0]
-
-        if has_labels:
-            labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
-            if len(labels) == 1:
-                labels = labels[0]
-        else:
-            labels = None
 
         return (loss, logits, labels)
 
