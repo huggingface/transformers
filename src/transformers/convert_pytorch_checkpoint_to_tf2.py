@@ -40,6 +40,7 @@ from . import (
     XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -83,6 +84,9 @@ from . import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    LayoutLMConfig,
+    TFLayoutLMForMaskedLM,
+    TFLayoutLMForTokenClassification,
     cached_path,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
@@ -121,6 +125,8 @@ if is_torch_available():
         XLMRobertaForMaskedLM,
         XLMWithLMHeadModel,
         XLNetLMHeadModel,
+        LayoutLMForMaskedLM,
+        LayoutLMForTokenClassification,
     )
 
 
@@ -210,6 +216,12 @@ MODEL_CLASSES = {
         TFRobertaForMaskedLM,
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    ),
+     "layoutlm": (
+        LayoutLMConfig,
+        TFLayoutLMForMaskedLM,
+        LayoutLMForMaskedLM,
+        LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     ),
     "roberta-large-mnli": (
         RobertaConfig,
