@@ -29,6 +29,7 @@ if is_tf_available():
         TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLayoutLMForMaskedLM,
         TFLayoutLMForTokenClassification,
+        TFLayoutLMForSequenceClassification,
         TFLayoutLMModel
     )
 
@@ -154,6 +155,15 @@ class TFLayoutLMModelTester:
         result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFLayoutLMForSequenceClassification(config=config)
+
+        result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def create_and_check_for_token_classification(
         self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -188,7 +198,7 @@ class TFLayoutLMModelTester:
 class LayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFLayoutLMModel, TFLayoutLMForMaskedLM, TFLayoutLMForTokenClassification) if is_tf_available() else ()
+        (TFLayoutLMModel, TFLayoutLMForMaskedLM, TFLayoutLMForTokenClassification, TFLayoutLMForSequenceClassification) if is_tf_available() else ()
     )
 
     def setUp(self):
@@ -211,6 +221,10 @@ class LayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
 
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
