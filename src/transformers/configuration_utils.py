@@ -289,8 +289,9 @@ class PretrainedConfig(object):
 
     @num_labels.setter
     def num_labels(self, num_labels: int):
-        self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
-        self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
+        if self.id2label is None or len(self.id2label) != num_labels:
+            self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
+            self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
