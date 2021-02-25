@@ -89,7 +89,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to tokenize and prepare for the model one or several sequence(s) or one or several pair(s) of
+        Main method to featurize and prepare for the model one or several sequence(s).
         sequences.
 
         Args:

@@ -80,7 +80,7 @@ class BatchFeature(UserDict):
         if isinstance(item, str):
             return self.data[item]
         else:
-            raise KeyError("Indexing with integers is not available when using Python" "based feature extractors")
+            raise KeyError("Indexing with integers is not available when using Python based feature extractors")
 
     def __getattr__(self, item: str):
         try:
@@ -285,7 +285,7 @@ class PreTrainedFeatureExtractor:
 
             # We can't instantiate directly the base class `PreTrainedFeatureExtractor` so let's show the examples on a
             # derived class: Wav2Vec2FeatureExtractor
-            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')    # Download feature_extractoruration from huggingface.co and cache.
+            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')    # Download feature_extraction_config from huggingface.co and cache.
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/')  # E.g. feature_extractor (or model) was saved using `save_pretrained('./test/saved_model/')`
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/preprocessor_config.json')
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h', return_attention_mask=False, foo=False)
@@ -514,7 +514,7 @@ class PreTrainedFeatureExtractor:
 
         Args:
             processed_features (:class:`~transformers.BatchFeature`, list of :class:`~transformers.BatchFeature`, :obj:`Dict[str, List[float]]`, :obj:`Dict[str, List[List[float]]` or :obj:`List[Dict[str, List[float]]]`):
-                Tokenized inputs. Can represent one input (:class:`~transformers.BatchFeature` or :obj:`Dict[str,
+                Processed inputs. Can represent one input (:class:`~transformers.BatchFeature` or :obj:`Dict[str,
                 List[float]]`) or a batch of input values / vectors (list of :class:`~transformers.BatchFeature`,
                 `Dict[str, List[List[float]]]` or `List[Dict[str, List[float]]]`) so you can use this method during
                 preprocessing as well as in a PyTorch Dataloader collate function.
