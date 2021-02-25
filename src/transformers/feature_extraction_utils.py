@@ -19,19 +19,26 @@ import copy
 import json
 import os
 from collections import UserDict
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 from .file_utils import (
     FEATURE_EXTRACTOR_NAME,
+    PaddingStrategy,
+    TensorType,
+    _is_jax,
+    _is_numpy,
+    _is_tensorflow,
+    _is_torch,
+    _is_torch_device,
     cached_path,
     hf_bucket_url,
     is_flax_available,
     is_remote_url,
     is_tf_available,
     is_torch_available,
+    to_py_obj,
     torch_required,
 )
 from .utils import logging
@@ -43,88 +50,6 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     if is_torch_available():
         import torch
-
-
-def _is_numpy(x):
-    return isinstance(x, np.ndarray)
-
-
-def _is_torch(x):
-    import torch
-
-    return isinstance(x, torch.Tensor)
-
-
-def _is_torch_device(x):
-    import torch
-
-    return isinstance(x, torch.device)
-
-
-def _is_tensorflow(x):
-    import tensorflow as tf
-
-    return isinstance(x, tf.Tensor)
-
-
-def _is_jax(x):
-    import jax.numpy as jnp  # noqa: F811
-
-    return isinstance(x, jnp.ndarray)
-
-
-def to_py_obj(obj):
-    """
-    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
-    """
-    if isinstance(obj, (dict, BatchFeature)):
-        return {k: to_py_obj(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [to_py_obj(o) for o in obj]
-    elif is_tf_available() and _is_tensorflow(obj):
-        return obj.numpy().tolist()
-    elif is_torch_available() and _is_torch(obj):
-        return obj.detach().cpu().tolist()
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    else:
-        return obj
-
-
-class ExplicitEnum(Enum):
-    """
-    Enum with more explicit error message for missing values.
-    """
-
-    @classmethod
-    def _missing_(cls, value):
-        raise ValueError(
-            "%r is not a valid %s, please select one of %s"
-            % (value, cls.__name__, str(list(cls._value2member_map_.keys())))
-        )
-
-
-class TensorType(ExplicitEnum):
-    """
-    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedFeatureExtractor.__call__`. Useful for
-    tab-completion in an IDE.
-    """
-
-    PYTORCH = "pt"
-    TENSORFLOW = "tf"
-    NUMPY = "np"
-    JAX = "jax"
-
-
-class PaddingStrategy(ExplicitEnum):
-    """
-    Possible values for the ``padding`` argument in :meth:`PreTrainedFeatureExtractor.__call__`. Useful for
-    tab-completion in an IDE.
-    """
-
-    LONGEST = "longest"
-    MAX_LENGTH = "max_length"
-    DO_NOT_PAD = "do_not_pad"
 
 
 class BatchFeature(UserDict):
