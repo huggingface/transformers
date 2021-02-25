@@ -96,14 +96,14 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
 
 class Wav2Vec2FeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
 
-    feat_extract_class = Wav2Vec2FeatureExtractor
+    feature_extraction_class = Wav2Vec2FeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = Wav2Vec2FeatureExtractionTester(self)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
-        feat_extract = self.feat_extract_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         # create three inputs of length 800, 1000, and 1200
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
@@ -120,7 +120,7 @@ class Wav2Vec2FeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_zero_mean_unit_variance_normalization(self):
-        feat_extract = self.feat_extract_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         processed = feat_extract(speech_inputs, padding="longest")
         input_values = processed.input_values

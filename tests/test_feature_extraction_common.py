@@ -28,50 +28,50 @@ class FeatureExtractionMixin:
 
     # to overwrite at feature extractactor specific tests
     feat_extract_tester = None
-    feat_extract_class = None
+    feature_extraction_class = None
 
     @property
     def feat_extract_dict(self):
         return self.feat_extract_tester.prepare_feat_extract_dict()
 
     def test_feat_extract_common_properties(self):
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feat_extract, "feature_dim"))
         self.assertTrue(hasattr(feat_extract, "sampling_rate"))
         self.assertTrue(hasattr(feat_extract, "padding_value"))
 
     def test_feat_extract_to_json_string(self):
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         obj = json.loads(feat_extract.to_json_string())
         for key, value in self.feat_extract_dict.items():
             self.assertEqual(obj[key], value)
 
     def test_feat_extract_to_json_file(self):
-        feat_extract_first = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             json_file_path = os.path.join(tmpdirname, "feat_extract.json")
             feat_extract_first.to_json_file(json_file_path)
-            feat_extract_second = self.feat_extract_class.from_json_file(json_file_path)
+            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
 
         self.assertEqual(feat_extract_second.to_dict(), feat_extract_first.to_dict())
 
     def test_feat_extract_from_and_save_pretrained(self):
-        feat_extract_first = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             feat_extract_first.save_pretrained(tmpdirname)
-            feat_extract_second = self.feat_extract_class.from_pretrained(tmpdirname)
+            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         self.assertEqual(feat_extract_second.to_dict(), feat_extract_first.to_dict())
 
     def test_init_without_params(self):
-        feat_extract = self.feat_extract_class()
+        feat_extract = self.feature_extraction_class()
         self.assertIsNotNone(feat_extract)
 
     def test_batch_feature(self):
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         input_name = feat_extract.model_input_names[0]
 
         processed_features = BatchFeature({input_name: speech_inputs})
@@ -94,7 +94,7 @@ class FeatureExtractionMixin:
     @require_torch
     def test_batch_feature_pt(self):
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common(equal_length=True)
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         input_name = feat_extract.model_input_names[0]
 
         processed_features = BatchFeature({input_name: speech_inputs}, tensor_type="pt")
@@ -112,7 +112,7 @@ class FeatureExtractionMixin:
     @require_tf
     def test_batch_feature_tf(self):
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common(equal_length=True)
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         input_name = feat_extract.model_input_names[0]
 
         processed_features = BatchFeature({input_name: speech_inputs}, tensor_type="tf")
@@ -144,7 +144,7 @@ class FeatureExtractionMixin:
                     return False
             return True
 
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common(numpify=numpify)
         input_name = feat_extract.model_input_names[0]
 
@@ -244,7 +244,7 @@ class FeatureExtractionMixin:
 
     @require_torch
     def test_padding_accepts_tensors_pt(self):
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
         input_name = feat_extract.model_input_names[0]
 
@@ -257,7 +257,7 @@ class FeatureExtractionMixin:
 
     @require_tf
     def test_padding_accepts_tensors_tf(self):
-        feat_extract = self.feat_extract_class(**self.feat_extract_dict)
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
         input_name = feat_extract.model_input_names[0]
 
@@ -271,7 +271,7 @@ class FeatureExtractionMixin:
     def test_attention_mask(self):
         feat_dict = self.feat_extract_dict
         feat_dict["return_attention_mask"] = True
-        feat_extract = self.feat_extract_class(**feat_dict)
+        feat_extract = self.feature_extraction_class(**feat_dict)
         speech_inputs = self.feat_extract_tester.prepare_inputs_for_common()
         input_lenghts = [len(x) for x in speech_inputs]
         input_name = feat_extract.model_input_names[0]
