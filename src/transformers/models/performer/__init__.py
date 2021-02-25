@@ -23,6 +23,7 @@ from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_availa
 _import_structure = {
     "distilbert.configuration_distilbert_performer": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertPerformerConfig"],
     "bert.configuration_bert_performer": ["BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BertPerformerConfig"],
+    "t5.configuration_t5_performer": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5PerformerConfig"],
 }
 
 
@@ -49,6 +50,14 @@ if is_torch_available():
         "BertPerformerPreTrainedModel",
     ]
 
+    _import_structure["t5.modeling_t5_performer"] = [
+        "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "T5PerformerEncoderModel",
+        "T5PerformerForConditionalGeneration",
+        "T5PerformerModel",
+        "T5PerformerPreTrainedModel",
+    ]
+
 if is_tf_available():
     _import_structure["distilbert.modeling_tf_distilbert_performer"] = [
         "TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -72,6 +81,14 @@ if is_tf_available():
         "TFBertPerformerMainLayer",
         "TFBertPerformerModel",
         "TFBertPerformerPreTrainedModel",
+    ]
+
+    _import_structure["modeling_tf_t5"] = [
+        "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFT5PerformerEncoderModel",
+        "TFT5PerformerForConditionalGeneration",
+        "TFT5PerformerModel",
+        "TFT5PerformerPreTrainedModel",
     ]
 
 
@@ -100,6 +117,13 @@ if TYPE_CHECKING:
             BertPerformerModel,
             BertPerformerPreTrainedModel,
         )
+        from t5.modeling_t5_performer import (
+            T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            T5PerformerEncoderModel,
+            T5PerformerForConditionalGeneration,
+            T5PerformerModel,
+            T5PerformerPreTrainedModel
+        )
 
     if is_tf_available():
         from distilbert.modeling_tf_distilbert_performer import (
@@ -123,6 +147,13 @@ if TYPE_CHECKING:
             TFBertPerformerMainLayer,
             TFBertPerformerModel,
             TFBertPerformerPreTrainedModel,
+        )
+        from t5.modeling_tf_t5_performer import (
+            TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFT5PerformerEncoderModel,
+            TFT5PerformerForConditionalGeneration,
+            TFT5PerformerModel,
+            TFT5PerformerPreTrainedModel,
         )
 
 else:
