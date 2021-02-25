@@ -31,7 +31,6 @@ class TFPerformerAttention(tf.keras.layers.Layer):
 
         # kwargs take precedence over the default values that might be stored in the config object
         for k, v in kwargs.items():
-            #assert hasattr(config, k), f"'{k}' is an invalid config parameter"
             setattr(config, k, v)
 
         self.__dict__.update(config.__dict__)
@@ -65,8 +64,9 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
         if self.use_linear_layers:
+            kernel_initializer = get_initializer(config.initializer_range) if config.initializer_range is not None else 'glorot_uniform'
             for name in self.linear_layer_names:
-                setattr(self, name, tf.keras.layers.Dense(units=self.d_model, kernel_initializer=get_initializer(config.initializer_range)))
+                setattr(self, name, tf.keras.layers.Dense(units=self.d_model, kernel_initializer=kernel_initializer))
 
     def prune_heads(self, heads):
         raise NotImplementedError
