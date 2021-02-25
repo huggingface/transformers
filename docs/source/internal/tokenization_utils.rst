@@ -40,7 +40,7 @@ Enums and namedtuples
 
 .. autoclass:: transformers.tokenization_utils_base.ExplicitEnum
 
-.. autoclass:: transformers.tokenization_utils_base.PaddingStrategy
+.. autoclass:: transformers.file_utils.PaddingStrategy
 
 .. autoclass:: transformers.tokenization_utils_base.TensorType
 

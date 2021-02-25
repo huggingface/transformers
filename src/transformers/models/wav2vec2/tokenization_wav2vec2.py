@@ -23,9 +23,9 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import add_end_docstrings
+from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TensorType
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 
 
@@ -39,7 +39,7 @@ VOCAB_FILES_NAMES = {
 
 
 WAV2VEC2_KWARGS_DOCSTRING = r"""
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a

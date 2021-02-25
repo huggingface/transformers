@@ -21,7 +21,7 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
-from .file_utils import add_end_docstrings
+from .file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -30,11 +30,9 @@ from .tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
     EncodedInputPair,
-    PaddingStrategy,
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
-    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
