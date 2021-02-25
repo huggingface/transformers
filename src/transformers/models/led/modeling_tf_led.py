@@ -108,8 +108,7 @@ class TFLEDLearnedPositionalEmbedding(TFSharedEmbeddings):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, **kwargs):
-        assert padding_idx is not None, "padding_idx cannot be None"
+    def __init__(self, num_embeddings: int, embedding_dim: int, **kwargs):
         super().__init__(num_embeddings, embedding_dim, **kwargs)
 
     def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
@@ -1612,7 +1611,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
         self.embed_positions = TFLEDLearnedPositionalEmbedding(
             config.max_encoder_position_embeddings,
             config.d_model,
-            self.padding_idx,
             name="embed_positions",
         )
         self.layers = [TFLEDEncoderLayer(config, i, name=f"layers.{i}") for i in range(config.encoder_layers)]
@@ -1865,7 +1863,6 @@ class TFLEDDecoder(tf.keras.layers.Layer):
         self.embed_positions = TFLEDLearnedPositionalEmbedding(
             config.max_decoder_position_embeddings,
             config.d_model,
-            self.padding_idx,
             name="embed_positions",
         )
         self.layers = [TFLEDDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
