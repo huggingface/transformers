@@ -919,7 +919,11 @@ Bert Model with two heads on top as done during the pretraining:
 )
 class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
-    _keys_to_ignore_on_load_unexpected = [r"cls.predictions.decoder.weight"]
+    _keys_to_ignore_on_load_unexpected = [
+        r"position_ids",
+        r"cls.predictions.decoder.weight",
+        r"cls.predictions.decoder.bias",
+    ]
 
     def __init__(self, config: BertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
