@@ -7,9 +7,8 @@ on:
       - "tests/**"
       - ".github/**"
       - "templates/**"
-  pull_request_target:
-    branches:
-      - master
+  pull_request:
+    types: [assigned, opened, synchronize, reopened]
 
 jobs:
   run_tests_templates:
