@@ -35,6 +35,7 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
+    TFPreTrainedModel,
     TFTokenClassificationLoss,
     get_initializer,
     input_processing,
@@ -42,12 +43,9 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...file_utils import (
-    MULTIPLE_CHOICE_DUMMY_INPUTS,
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
 )
 
 from ...utils import logging
