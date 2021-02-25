@@ -76,16 +76,6 @@ class SageMakerTrainer(Trainer):
         if self.is_model_parallel_enabled and self.args.gradient_accumulation_steps != 1:
             raise ValueError("Gradient accumulation is not supported when model parallel is enabled.")
 
-    def is_local_process_zero(self) -> bool:
-        """
-        Whether or not this process is the local (e.g., on one machine if training in a distributed fashion on several
-        machines) main process.
-        """
-        if self.is_model_parallel_enabled:
-            return smp.local_rank() == 0
-        else:
-            return super.is_local_process_zero()
-
     def is_world_process_zero(self) -> bool:
         """
         Whether or not this process is the global main process (when training in a distributed fashion on several
