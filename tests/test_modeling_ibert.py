@@ -17,8 +17,6 @@
 import copy
 import unittest
 
-import torch.nn as nn
-
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -29,6 +27,7 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from transformers import (
         IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
