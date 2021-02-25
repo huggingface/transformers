@@ -1,13 +1,12 @@
 name: Model templates runner
 
 on:
-  push:
+  pull_request:
     paths:
       - "src/**"
       - "tests/**"
       - ".github/**"
       - "templates/**"
-  pull_request:
     types: [assigned, opened, synchronize, reopened]
 
 jobs:
