@@ -408,19 +408,19 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - check_code_quality
+#            - check_code_quality
             - check_repository_consistency
-            - run_examples_torch
-            - run_tests_custom_tokenizers
-            - run_tests_torch_and_tf
-            - run_tests_torch
-            - run_tests_tf
-            - run_tests_flax
-            - run_tests_pipelines_torch
-            - run_tests_pipelines_tf
-            - run_tests_git_lfs
-            - build_doc
-            - deploy_doc: *workflow_filters
+#            - run_examples_torch
+#            - run_tests_custom_tokenizers
+#            - run_tests_torch_and_tf
+#            - run_tests_torch
+#            - run_tests_tf
+#            - run_tests_flax
+#            - run_tests_pipelines_torch
+#            - run_tests_pipelines_tf
+#            - run_tests_git_lfs
+#            - build_doc
+#            - deploy_doc: *workflow_filters
 #    tpu_testing_jobs:
 #        triggers:
 #            - schedule:
