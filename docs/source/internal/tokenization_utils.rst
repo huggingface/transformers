@@ -38,11 +38,11 @@ SpecialTokensMixin
 Enums and namedtuples
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.tokenization_utils_base.ExplicitEnum
+.. autoclass:: transformers.file_utils.ExplicitEnum
 
 .. autoclass:: transformers.file_utils.PaddingStrategy
 
-.. autoclass:: transformers.tokenization_utils_base.TensorType
+.. autoclass:: transformers.file_utils.TensorType
 
 .. autoclass:: transformers.tokenization_utils_base.TruncationStrategy
 
