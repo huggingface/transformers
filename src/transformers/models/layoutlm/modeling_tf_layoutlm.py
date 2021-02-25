@@ -41,9 +41,17 @@ from ...modeling_tf_utils import (
     keras_serializable,
     shape_list,
 )
+from ...file_utils import (
+    MULTIPLE_CHOICE_DUMMY_INPUTS,
+    ModelOutput,
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
+
 from ...utils import logging
 from .configuration_layoutlm import LayoutLMConfig
-
 
 logger = logging.get_logger(__name__)
 
@@ -54,7 +62,6 @@ TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "layoutlm-base-uncased",
     "layoutlm-large-uncased",
 ]
-
 
 class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
