@@ -25,7 +25,7 @@ from .file_utils import (
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, LoggingStrategy, SchedulerType, ShardedDDPType
+from .trainer_utils import EvaluationStrategy, LoggingStrategy, SchedulerType, ShardedDDPOption
 from .utils import logging
 
 
@@ -236,24 +236,22 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (:obj:`bool`, :obj:`str` or :class:`~transformers.trainer_utils.ShardedDDPType`, `optional`, defaults to :obj:`False`):
+        sharded_ddp (:obj:`bool`, :obj:`str` or list of :class:`~transformers.trainer_utils.ShardedDDPOption`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
 
-            Can take up to six values:
+            A list of options along the following:
 
-            - :obj:`"no"`: for no sharded DataParallelism (default behavior)
             - :obj:`"simple"`: to use first instance of sharded DDP released by fairscale (:obj:`ShardedDDP`) similar
               to ZeRO-2.
-            - :obj:`"zero_2"`: to use the second instance of sharded DPP released by fairscale (:obj:`FullyShardedDDP`)
-              in Zero-2 mode (with :obj:`reshard_after_forward=False`).
-            - :obj:`"zero_2_offload"`: to use add ZeRO-offload to ZeRO-2.
-            - :obj:`"zero_3"`: to use the second instance of sharded DPP released by fairscale (:obj:`FullyShardedDDP`)
-              in Zero-3 mode (with :obj:`reshard_after_forward=True`).
-            - :obj:`"zero_3_offload"`: to use add ZeRO-offload to ZeRO-3.
+            - :obj:`"zero_dp_2"`: to use the second instance of sharded DPP released by fairscale
+              (:obj:`FullyShardedDDP`) in Zero-2 mode (with :obj:`reshard_after_forward=False`).
+            - :obj:`"zero_dp_3"`: to use the second instance of sharded DPP released by fairscale
+              (:obj:`FullyShardedDDP`) in Zero-3 mode (with :obj:`reshard_after_forward=True`).
+            - :obj:`"offload"`: to add ZeRO-offload (only compatible with :obj:`"zero_dp_2"` and :obj:`"zero_dp_3"`).
 
-            If a bool is passed, it will be converted to :obj:`"no"` for :obj:`False` and :obj:`"simple"` for
-            :obj:`True`.
+            If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
+            list for :obj:`False` and :obj:`["simple"]` for :obj:`True`.
         deepspeed (:obj:`str`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
             evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
@@ -458,8 +456,8 @@ class TrainingArguments:
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
     )
-    sharded_ddp: ShardedDDPType = field(
-        default="no",
+    sharded_ddp: str = field(
+        default="",
         metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
     )
     deepspeed: Optional[str] = field(
@@ -551,8 +549,18 @@ class TrainingArguments:
             )
 
         if isinstance(self.sharded_ddp, bool):
-            self.sharded_ddp = "simple" if self.sharded_ddp else "no"
-        self.sharded_ddp = ShardedDDPType(self.sharded_ddp)
+            self.sharded_ddp = "simple" if self.sharded_ddp else ""
+        if isinstance(self.sharded_ddp, str):
+            self.sharded_ddp = [ShardedDDPOption(s) for s in self.sharded_ddp.split()]
+        if self.sharded_ddp == [ShardedDDPOption.OFFLOAD]:
+            raise ValueError(
+                "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
+                "`--sharded_ddp zero_dp_3`"
+            )
+        elif len(self.sharded_ddp) > 1 and ShardedDDPOption.Simple in self.sharded_ddp:
+            raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
+        elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
+            raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -711,6 +719,8 @@ class TrainingArguments:
         for k, v in d.items():
             if isinstance(v, Enum):
                 d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
         return d
 
     def to_json_string(self):

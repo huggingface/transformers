@@ -423,10 +423,8 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
-class ShardedDDPType(ExplicitEnum):
-    NO = "no"
+class ShardedDDPOption(ExplicitEnum):
     SIMPLE = "simple"
-    ZERO_2 = "zero2"
-    ZERO_2_OFFLOAD = "zero2_offload"
-    ZERO_3 = "zero3"
-    ZERO_3_OFFLOAD = "zero3_offload"
+    ZERO_DP_2 = "zero2"
+    ZERO_DP_3 = "zero3"
+    OFFLOAD = "offload"

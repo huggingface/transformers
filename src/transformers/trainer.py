@@ -94,7 +94,7 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
-    ShardedDDPType,
+    ShardedDDPOption,
     TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
@@ -283,9 +283,38 @@ class Trainer:
         else:
             self.is_model_parallel = False
 
+        # Setup Sharded DDP training
+        self.sharded_ddp = None
+        if len(args.sharded_ddp) > 0:
+            if args.deepspeed:
+                raise ValueError(
+                    "Using --sharded_ddp xxx together with --deepspeed is not possible, deactivate one of those flags."
+                )
+
+            if args.local_rank == -1:
+                raise ValueError("Using sharded DDP only works in distributed training.")
+            elif not is_fairscale_available():
+                raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
+            elif ShardedDDPOption.SIMPLE not in args.sharded_ddp and FullyShardedDDP is None:
+                raise ImportError(
+                    "Sharded DDP in a mode other than simple training requires fairscale version >= 0.3, found "
+                    f"{fairscale.__version__}. Upgrade your fairscale library: `pip install --upgrade fairscale`."
+                )
+            elif ShardedDDPOption.SIMPLE in args.sharded_ddp:
+                self.sharded_ddp = ShardedDDPOption.SIMPLE
+            elif ShardedDDPOption.ZERO_DP_2 in args.sharded_ddp:
+                self.sharded_ddp = ShardedDDPOption.ZERO_DP_2
+            elif ShardedDDPOption.ZERO_DP_3 in args.sharded_ddp:
+                self.sharded_ddp = ShardedDDPOption.ZERO_DP_3
+
         # one place to sort out whether to place the model on device or not
         self.place_model_on_device = args.place_model_on_device
-        if self.is_model_parallel or (args.deepspeed and args.do_train) or (args.fp16_full_eval and not args.do_train):
+        if (
+            self.is_model_parallel
+            or (args.deepspeed and args.do_train)
+            or (args.fp16_full_eval and not args.do_train)
+            or (self.sharded_ddp in [ShardedDDPOption.ZERO_DP_2, ShardedDDPOption.ZERO_DP_3])
+        ):
             self.place_model_on_device = False
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
@@ -352,26 +381,6 @@ class Trainer:
             if isinstance(eval_dataset, datasets.Dataset):
                 self._remove_unused_columns(self.eval_dataset, description="evaluation")
 
-        # Setup Sharded DDP training
-        self.sharded_dpp = False
-        if args.sharded_ddp != ShardedDDPType.NO:
-            if args.deepspeed:
-                raise ValueError(
-                    "Using --sharded_ddp xxx together with --deepspeed is not possible, deactivate one of those flags."
-                )
-
-            if args.local_rank == -1:
-                raise ValueError("Using sharded DDP only works in distributed training.")
-            elif not is_fairscale_available():
-                raise ImportError("Sharded DDP training requires fairscale: `pip install fairscale`.")
-            elif args.sharded_ddp != ShardedDDPType.SIMPLE and FullyShardedDDP is None:
-                raise ImportError(
-                    "Sharded DDP in a mode other than simple training requires fairscale version >= 0.3, found "
-                    f"{fairscale.__version__}. Upgrade your fairscale library: `pip install --upgrade fairscale`."
-                )
-            else:
-                self.sharded_dpp = True
-
         # Mixed precision setup
         self.use_apex = False
         self.use_amp = False
@@ -387,7 +396,7 @@ class Trainer:
         if args.fp16 and not args.deepspeed:  # deepspeed manages its own fp16
             if self.fp16_backend == "amp":
                 self.use_amp = True
-                self.scaler = ShardedGradScaler() if self.sharded_dpp else torch.cuda.amp.GradScaler()
+                self.scaler = ShardedGradScaler() if self.sharded_ddp is not None else torch.cuda.amp.GradScaler()
             else:
                 if not is_apex_available():
                     raise ImportError(
@@ -630,7 +639,7 @@ class Trainer:
                     "eps": self.args.adam_epsilon,
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
-            if self.args.sharded_ddp == ShardedDDPType.SIMPLE:
+            if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 self.optimizer = OSS(
                     params=optimizer_grouped_parameters,
                     optim=optimizer_cls,
@@ -748,18 +757,18 @@ class Trainer:
             return model
 
         # Distributed training (should be after apex fp16 initialization)
-        if self.sharded_dpp:
+        if self.sharded_ddp is not None:
             # Sharded DDP!
-            if self.args.sharded_ddp == ShardedDDPType.SIMPLE:
+            if self.sharded_ddp == ShardedDDPOption.SIMPLE:
                 model = ShardedDDP(model, self.optimizer)
             else:
                 mixed_precision = self.args.fp16
-                cpu_offload = self.args.sharded_ddp in [ShardedDDPType.ZERO_2_OFFLOAD, ShardedDDPType.ZERO_3_OFFLOAD]
-                zero_3 = self.args.sharded_ddp in [ShardedDDPType.ZERO_3, ShardedDDPType.ZERO_3_OFFLOAD]
+                cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
+                zero_3 = self.sharded_ddp == ShardedDDPOption.ZERO_DP_3
                 # Breaking the self.model convention but I see no way around it for now.
-                self.model = FullyShardedDDP(
+                self.model = model = FullyShardedDDP(
                     model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload
-                )
+                ).to(self.args.device)
 
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
@@ -877,7 +886,7 @@ class Trainer:
             num_train_epochs = 1
             num_update_steps_per_epoch = max_steps
 
-        delay_optimizer_creation = self.args.sharded_ddp not in [ShardedDDPType.NO, ShardedDDPType.SIMPLE]
+        delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
             model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
             self.model = model.module
@@ -1054,7 +1063,7 @@ class Trainer:
                             self.optimizer.clip_grad_norm(self.args.max_grad_norm)
                         elif hasattr(model, "clip_grad_norm_"):
                             # Some models (like FullyShardedDDP) have a specific way to do gradient clipping
-                            model.clip_grad_norm(self.args.max_grad_norm)
+                            model.clip_grad_norm_(self.args.max_grad_norm)
                         else:
                             # Revert to normal clipping otherwise, handling Apex or full precision
                             torch.nn.utils.clip_grad_norm_(
@@ -1206,7 +1215,7 @@ class Trainer:
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
-        if self.args.sharded_ddp == ShardedDDPType.SIMPLE:
+        if self.sharded_ddp == ShardedDDPOption.SIMPLE:
             self.optimizer.consolidate_state_dict()
 
         if is_torch_tpu_available():
