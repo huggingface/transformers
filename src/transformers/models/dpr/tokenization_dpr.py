@@ -18,8 +18,8 @@
 import collections
 from typing import List, Optional, Union
 
-from ...file_utils import add_end_docstrings, add_start_docstrings
-from ...tokenization_utils_base import BatchEncoding, TensorType
+from ...file_utils import TensorType, add_end_docstrings, add_start_docstrings
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from ..bert.tokenization_bert import BertTokenizer
 
@@ -147,7 +147,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (:obj:`str` or :obj:`List[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
             Activates and controls padding. Accepts the following values:
 
             * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
@@ -177,7 +177,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
                 If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
                 length is required by one of the truncation/padding parameters. If the model has no specific maximum
                 input length (like XLNet) truncation/padding to a maximum length will be deactivated.
-        return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+        return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.

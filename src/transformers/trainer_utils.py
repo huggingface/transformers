@@ -29,13 +29,13 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 import numpy as np
 
 from .file_utils import (
+    ExplicitEnum,
     is_sagemaker_distributed_available,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
 )
-from .tokenization_utils_base import ExplicitEnum
 
 
 def set_seed(seed: int):

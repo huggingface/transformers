@@ -52,7 +52,7 @@ from ..roberta.tokenization_roberta import RobertaTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
-from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2Tokenizer
+from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 from ..xlm.tokenization_xlm import XLMTokenizer
 from .configuration_auto import (
     AlbertConfig,
@@ -244,7 +244,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
-        (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
+        (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
     ]
 )
 
