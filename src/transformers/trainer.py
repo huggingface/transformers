@@ -93,9 +93,11 @@ from .trainer_utils import (
     EvalPrediction,
     HPSearchBackend,
     PredictionOutput,
+    TrainerMemoryTracker,
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    get_last_checkpoint,
     set_seed,
     speed_metrics,
 )
@@ -217,8 +219,12 @@ class Trainer:
         - **place_model_on_device** -- Whether or not to automatically place the model on the device - it will be set
           to :obj:`False` if model parallel or deepspeed is used, or if the default
           ``TrainingArguments.place_model_on_device`` is overridden to return :obj:`False` .
+        - **is_in_train** -- Whether or not a model is currently running ``train`` (e.g. when ``evaluate`` is called
+          while in ``train``)
 
     """
+
+    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics
 
     def __init__(
         self,
@@ -242,6 +248,11 @@ class Trainer:
         set_seed(self.args.seed)
         self.hp_name = None
         self.deepspeed = None
+        self.is_in_train = False
+
+        # memory metrics - must set up as early as possible
+        self._memory_tracker = TrainerMemoryTracker(self.args.skip_memory_metrics)
+        self._memory_tracker.start()
 
         # force device and distributed setup init explicitly
         args._setup_devices
@@ -268,7 +279,7 @@ class Trainer:
 
         # one place to sort out whether to place the model on device or not
         self.place_model_on_device = args.place_model_on_device
-        if self.is_model_parallel or (args.deepspeed and args.do_train):
+        if self.is_model_parallel or (args.deepspeed and args.do_train) or (args.fp16_full_eval and not args.do_train):
             self.place_model_on_device = False
 
         default_collator = default_data_collator if tokenizer is None else DataCollatorWithPadding(tokenizer)
@@ -393,6 +404,9 @@ class Trainer:
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
         self.control = self.callback_handler.on_init_end(self.args, self.state, self.control)
+
+        # very last
+        self._memory_tracker.stop_and_update_metrics()
 
     def add_callback(self, callback):
         """
@@ -615,10 +629,16 @@ class Trainer:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
         if self.lr_scheduler is None:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.lr_scheduler = get_scheduler(
                 self.args.lr_scheduler_type,
                 self.optimizer,
-                num_warmup_steps=self.args.warmup_steps,
+                num_warmup_steps=warmup_steps,
                 num_training_steps=num_training_steps,
             )
 
@@ -699,6 +719,10 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True):
+        # already initialized its own DDP and AMP
+        if self.deepspeed:
+            return self.deepspeed
+
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
@@ -717,8 +741,6 @@ class Trainer:
             model = ShardedDDP(model, self.optimizer)
         elif is_sagemaker_distributed_available():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
-        elif self.deepspeed:
-            pass  # already initialized its own DDP earlier
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
                 find_unused_parameters = self.args.ddp_find_unused_parameters
@@ -739,7 +761,7 @@ class Trainer:
 
     def train(
         self,
-        resume_from_checkpoint: Optional[str] = None,
+        resume_from_checkpoint: Optional[Union[str, bool]] = None,
         trial: Union["optuna.Trial", Dict[str, Any]] = None,
         **kwargs,
     ):
@@ -747,14 +769,22 @@ class Trainer:
         Main training entry point.
 
         Args:
-            resume_from_checkpoint (:obj:`str`, `optional`):
-                Local path to a saved checkpoint as saved by a previous instance of :class:`~transformers.Trainer`. If
-                present, training will resume from the model/optimizer/scheduler states loaded here.
+            resume_from_checkpoint (:obj:`str` or :obj:`bool`, `optional`):
+                If a :obj:`str`, local path to a saved checkpoint as saved by a previous instance of
+                :class:`~transformers.Trainer`. If a :obj:`bool` and equals `True`, load the last checkpoint in
+                `args.output_dir` as saved by a previous instance of :class:`~transformers.Trainer`. If present,
+                training will resume from the model/optimizer/scheduler states loaded here.
             trial (:obj:`optuna.Trial` or :obj:`Dict[str, Any]`, `optional`):
                 The trial run or the hyperparameter dictionary for hyperparameter search.
             kwargs:
                 Additional keyword arguments used to hide deprecated arguments
         """
+
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
+        self.is_in_train = True
+
         if "model_path" in kwargs:
             resume_from_checkpoint = kwargs.pop("model_path")
             warnings.warn(
@@ -778,6 +808,11 @@ class Trainer:
             self.optimizer, self.lr_scheduler = None, None
 
         # Load potential model checkpoint
+        if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
+            resume_from_checkpoint = get_last_checkpoint(self.args.output_dir)
+            if resume_from_checkpoint is None:
+                raise ValueError(f"No valid checkpoint found in output directory ({self.args.output_dir})")
+
         if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
             logger.info(f"Loading model from {resume_from_checkpoint}).")
             if isinstance(self.model, PreTrainedModel):
@@ -971,6 +1006,10 @@ class Trainer:
                     tr_loss += self.training_step(model, inputs)
                 self._total_flos += float(self.floating_point_ops(inputs))
 
+                # Optimizer step for deepspeed must be called on every step regardless of the value of gradient_accumulation_steps
+                if self.deepspeed:
+                    self.deepspeed.step()
+
                 if (step + 1) % self.args.gradient_accumulation_steps == 0 or (
                     # last step in epoch but step is always smaller than gradient_accumulation_steps
                     steps_in_epoch <= self.args.gradient_accumulation_steps
@@ -996,7 +1035,7 @@ class Trainer:
 
                     # Optimizer step
                     if self.deepspeed:
-                        self.deepspeed.step()
+                        pass  # called outside the loop
                     elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
                     elif self.use_amp:
@@ -1005,7 +1044,9 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    self.lr_scheduler.step()
+                    if not self.deepspeed:
+                        self.lr_scheduler.step()
+
                     model.zero_grad()
                     self.state.global_step += 1
                     self.state.epoch = epoch + (step + 1) / steps_in_epoch
@@ -1070,6 +1111,14 @@ class Trainer:
             self.lr_scheduler = None
             self.model_wrapped = self.model
             gc.collect()  # force memory release
+            # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
+            self.place_model_on_device = self.args.place_model_on_device
+            if self.is_model_parallel:
+                self.place_model_on_device = False
+
+        self.is_in_train = False
+
+        self._memory_tracker.stop_and_update_metrics(metrics)
 
         return TrainOutput(self.state.global_step, self._total_loss_scalar / self.state.global_step, metrics)
 
@@ -1081,12 +1130,8 @@ class Trainer:
             tr_loss -= tr_loss
 
             logs["loss"] = round(tr_loss_scalar / (self.state.global_step - self._globalstep_last_logged), 4)
-            # backward compatibility for pytorch schedulers
-            logs["learning_rate"] = (
-                self.lr_scheduler.get_last_lr()[0]
-                if version.parse(torch.__version__) >= version.parse("1.4")
-                else self.lr_scheduler.get_lr()[0]
-            )
+            logs["learning_rate"] = self._get_learning_rate()
+
             self._total_loss_scalar += tr_loss_scalar
             self._globalstep_last_logged = self.state.global_step
 
@@ -1332,7 +1377,6 @@ class Trainer:
         Return:
             :obj:`torch.Tensor`: The tensor with training loss on this batch.
         """
-
         model.train()
         inputs = self._prepare_inputs(inputs)
 
@@ -1345,7 +1389,8 @@ class Trainer:
         if self.args.n_gpu > 1:
             loss = loss.mean()  # mean() to average on multi-gpu parallel training
 
-        if self.args.gradient_accumulation_steps > 1:
+        if self.args.gradient_accumulation_steps > 1 and not self.deepspeed:
+            # deepspeed handles loss scaling by gradient_accumulation_steps in its `backward`
             loss = loss / self.args.gradient_accumulation_steps
 
         if self.use_amp:
@@ -1354,7 +1399,8 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         elif self.deepspeed:
-            self.deepspeed.backward(loss)
+            # loss gets scaled under gradient_accumulation_steps in deepspeed
+            loss = self.deepspeed.backward(loss)
         else:
             loss.backward()
 
@@ -1536,6 +1582,9 @@ class Trainer:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
         if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
             raise ValueError("eval_dataset must implement __len__")
 
@@ -1561,6 +1610,9 @@ class Trainer:
             xm.master_print(met.metrics_report())
 
         self.control = self.callback_handler.on_evaluate(self.args, self.state, self.control, output.metrics)
+
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
+
         return output.metrics
 
     def predict(
@@ -1596,6 +1648,9 @@ class Trainer:
             - metrics (:obj:`Dict[str, float]`, `optional`): The potential dictionary of metrics (if the dataset
               contained labels).
         """
+        # memory metrics - must set up as early as possible
+        self._memory_tracker.start()
+
         if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
             raise ValueError("test_dataset must implement __len__")
 
@@ -1606,6 +1661,9 @@ class Trainer:
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
+
+        self._memory_tracker.stop_and_update_metrics(output.metrics)
+
         return output
 
     def prediction_loop(
@@ -1633,6 +1691,11 @@ class Trainer:
             logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
         model = self._wrap_model(self.model, training=False)
+
+        # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
+        # ``train`` is running, half it first and then put on device
+        if not self.is_in_train and self.args.fp16_full_eval:
+            model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
@@ -1767,6 +1830,14 @@ class Trainer:
             else:
                 ignore_keys = []
 
+        # labels may be popped when computing the loss (label smoothing for instance) so we grab them first.
+        if has_labels:
+            labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
+            if len(labels) == 1:
+                labels = labels[0]
+        else:
+            labels = None
+
         with torch.no_grad():
             if has_labels:
                 loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
@@ -1796,13 +1867,6 @@ class Trainer:
         logits = nested_detach(logits)
         if len(logits) == 1:
             logits = logits[0]
-
-        if has_labels:
-            labels = nested_detach(tuple(inputs.get(name) for name in self.label_names))
-            if len(labels) == 1:
-                labels = labels[0]
-        else:
-            labels = None
 
         return (loss, logits, labels)
 

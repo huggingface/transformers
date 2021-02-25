@@ -94,15 +94,25 @@ class TFTrainingArguments(TrainingArguments):
         max_steps (:obj:`int`, `optional`, defaults to -1):
             If set to a positive number, the total number of training steps to perform. Overrides
             :obj:`num_train_epochs`.
+        warmup_ratio (:obj:`float`, `optional`, defaults to 0.0):
+            Ratio of total training steps used for a linear warmup from 0 to :obj:`learning_rate`.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
-            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
+            :obj:`warmup_ratio`.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
+        logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.LoggingStrategy`, `optional`, defaults to :obj:`"steps"`):
+            The logging strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No logging is done during training.
+                * :obj:`"epoch"`: Logging is done at the end of each epoch.
+                * :obj:`"steps"`: Logging is done every :obj:`logging_steps`.
+
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of update steps between two logs.
+            Number of update steps between two logs if :obj:`logging_strategy="steps"`.
         save_steps (:obj:`int`, `optional`, defaults to 500):
             Number of updates steps before two checkpoint saves.
         save_total_limit (:obj:`int`, `optional`):

@@ -18,7 +18,6 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
-import json
 import logging
 import os
 import re
@@ -53,11 +52,6 @@ with FileLock(".lock") as lock:
 
 
 logger = logging.getLogger(__name__)
-
-
-def save_json(content, path, indent=4, **json_dump_kwargs):
-    with open(path, "w") as f:
-        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
 
 
 @dataclass
@@ -403,10 +397,18 @@ def main():
             text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
         else:
             text_column = data_args.text_column
+            if text_column not in column_names:
+                raise ValueError(
+                    f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
+                )
         if data_args.summary_column is None:
             summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
         else:
             summary_column = data_args.summary_column
+            if summary_column not in column_names:
+                raise ValueError(
+                    f"--summary_column' value '{data_args.summary_column}' needs to be one of: {', '.join(column_names)}"
+                )
     else:
         # Get the language codes for input/target.
         lang_search = re.match("translation_([a-z]+)_to_([a-z]+)", data_args.task)
@@ -588,10 +590,8 @@ def main():
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
         if trainer.is_world_process_zero():
-            logger.info("***** train metrics *****")
-            for key in sorted(metrics.keys()):
-                logger.info(f"  {key} = {metrics[key]}")
-            save_json(metrics, os.path.join(training_args.output_dir, "train_results.json"))
+            trainer.log_metrics("train", metrics)
+            trainer.save_metrics("train", metrics)
             all_metrics.update(metrics)
 
             # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
@@ -603,17 +603,14 @@ def main():
         logger.info("*** Evaluate ***")
 
         metrics = trainer.evaluate(
-            max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="val"
+            max_length=data_args.val_max_target_length, num_beams=data_args.num_beams, metric_key_prefix="eval"
         )
-        metrics = {k: round(v, 4) for k, v in metrics.items()}
         max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
-        metrics["val_samples"] = min(max_val_samples, len(eval_dataset))
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
         if trainer.is_world_process_zero():
-            logger.info("***** val metrics *****")
-            for key in sorted(metrics.keys()):
-                logger.info(f"  {key} = {metrics[key]}")
-            save_json(metrics, os.path.join(training_args.output_dir, "val_results.json"))
+            trainer.log_metrics("eval", metrics)
+            trainer.save_metrics("eval", metrics)
             all_metrics.update(metrics)
 
     if training_args.do_predict:
@@ -628,13 +625,10 @@ def main():
         metrics = test_results.metrics
         max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
         metrics["test_samples"] = min(max_test_samples, len(test_dataset))
-        metrics = {k: round(v, 4) for k, v in metrics.items()}
 
         if trainer.is_world_process_zero():
-            logger.info("***** test metrics *****")
-            for key in sorted(metrics.keys()):
-                logger.info(f"  {key} = {metrics[key]}")
-            save_json(metrics, os.path.join(training_args.output_dir, "test_results.json"))
+            trainer.log_metrics("test", metrics)
+            trainer.save_metrics("test", metrics)
             all_metrics.update(metrics)
 
             if training_args.predict_with_generate:
@@ -647,7 +641,7 @@ def main():
                     writer.write("\n".join(test_preds))
 
     if trainer.is_world_process_zero():
-        save_json(all_metrics, os.path.join(training_args.output_dir, "all_results.json"))
+        trainer.save_metrics("all", metrics)
 
     return results
 
