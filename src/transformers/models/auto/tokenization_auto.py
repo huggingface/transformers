@@ -75,6 +75,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    IBertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
@@ -245,6 +246,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
+        (IBertConfig, (IBertTokenizer, IBertTokenizerFast)),
     ]
 )
 
