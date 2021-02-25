@@ -212,7 +212,7 @@ TF2_WEIGHTS_NAME = "tf_model.h5"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 CONFIG_NAME = "config.json"
-FEATURE_EXTRACTOR_NAME = "feature_extractor_config.json"
+FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 MODEL_CARD_NAME = "modelcard.json"
 
 SENTENCEPIECE_UNDERLINE = "▁"

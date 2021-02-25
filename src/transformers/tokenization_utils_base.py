@@ -641,9 +641,9 @@ class BatchEncoding(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            tensor_type (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 The type of tensors to use. If :obj:`str`, should be one of the values of the enum
-                :class:`~transformers.tokenization_utils_base.TensorType`. If :obj:`None`, no modification is done.
+                :class:`~transformers.file_utils.TensorType`. If :obj:`None`, no modification is done.
             prepend_batch_axis (:obj:`int`, `optional`, defaults to :obj:`False`):
                 Whether or not to add the batch dimension during the conversion.
         """
@@ -1282,7 +1282,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -2550,7 +2550,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -3187,7 +3187,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.

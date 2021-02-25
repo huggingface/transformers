@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature, PaddingStrategy, PreTrainedFeatureExtractor, TensorType
+from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+from ...file_utils import PaddingStrategy, TensorType
 
 
 class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
@@ -95,7 +96,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
             raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.feature_extraction_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -111,7 +112,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (:obj:`bool`, `optional`):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -129,7 +130,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
                     <https://huggingface.co/facebook/wav2vec2-large-960h-lv60-self>`__, :obj:`attention_mask` should be
                     passed for batched inference.
 
-            return_tensors (:obj:`str` or :class:`~transformers.feature_extraction_utils.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.

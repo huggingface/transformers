@@ -95,12 +95,15 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
+    # Copied from transformers.tokenization_utils_base.BatchEncoding.keys
     def keys(self):
         return self.data.keys()
 
+    # Copied from transformers.tokenization_utils_base.BatchEncoding.values
     def values(self):
         return self.data.values()
 
+    # Copied from transformers.tokenization_utils_base.BatchEncoding.items
     def items(self):
         return self.data.items()
 
@@ -109,9 +112,9 @@ class BatchFeature(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (:obj:`str` or :class:`~transformers.feature_extraction_utils.TensorType`, `optional`):
+            tensor_type (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 The type of tensors to use. If :obj:`str`, should be one of the values of the enum
-                :class:`~transformers.feature_extraction_utils.TensorType`. If :obj:`None`, no modification is done.
+                :class:`~transformers.file_utils.TensorType`. If :obj:`None`, no modification is done.
         """
         if tensor_type is None:
             return self
@@ -166,6 +169,7 @@ class BatchFeature(UserDict):
         return self
 
     @torch_required
+    # Copied from transformers.tokenization_utils_base.BatchEncoding.to with BatchEncoding->BatchFeature
     def to(self, device: Union[str, "torch.device"]) -> "BatchFeature":
         """
         Send all values to device by calling :obj:`v.to(device)` (PyTorch only).
@@ -174,19 +178,17 @@ class BatchFeature(UserDict):
             device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
 
         Returns:
-            :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
+            :class:`~transformers.BatchFeature`: The same instance of :class:`~transformers.BatchFeature` after
             modification.
         """
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
-        # Otherwise it passes the casts down and casts the LongTensor containing the values
+        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
-            logger.warning(
-                f"Attempting to cast a BatchEncoding to another type, {str(device)}. This is not supported."
-            )
+            logger.warning(f"Attempting to cast a BatchFeature to another type, {str(device)}. This is not supported.")
         return self
 
 
@@ -216,7 +218,7 @@ class PreTrainedFeatureExtractor:
             try:
                 setattr(self, key, value)
             except AttributeError as err:
-                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
     @classmethod
@@ -285,10 +287,10 @@ class PreTrainedFeatureExtractor:
             # derived class: Wav2Vec2FeatureExtractor
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')    # Download feature_extractoruration from huggingface.co and cache.
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/')  # E.g. feature_extractor (or model) was saved using `save_pretrained('./test/saved_model/')`
-            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/feature_extractor_config.json')
+            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/preprocessor_config.json')
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h', return_attention_mask=False, foo=False)
             assert feature_extractor.return_attention_mask is False
-            feature_extractor, unused_kwargs = Wav2Vec2FeatureExtractor.from_pretrained('bert-base-uncased', return_attention_mask=False,
+            feature_extractor, unused_kwargs = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h', return_attention_mask=False,
                                                                foo=False, return_unused_kwargs=True)
             assert feature_extractor.return_attention_mask is False
             assert unused_kwargs == {'foo': False}
@@ -323,8 +325,6 @@ class PreTrainedFeatureExtractor:
         """
         From a ``pretrained_model_name_or_path``, resolve to a dictionary of parameters, to be used for instantiating a
         :class:`~transformers.PreTrainedFeatureExtractor` using ``from_dict``.
-
-
 
         Parameters:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -521,9 +521,9 @@ class PreTrainedFeatureExtractor:
 
                 Instead of :obj:`List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow
                 tensors), see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.feature_extraction_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
-                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                 index) among:
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
                   single sequence if provided).
@@ -537,13 +537,13 @@ class PreTrainedFeatureExtractor:
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask (:obj:`bool`, `optional`):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            return_tensors (:obj:`str` or :class:`~transformers.feature_extraction_utils.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -669,7 +669,7 @@ class PreTrainedFeatureExtractor:
                     - 'right': pads on the right of the sequences
             pad_to_multiple_of: (optional) Integer if set will pad the sequence to a multiple of the provided value.
                 This is especially useful to enable the use of Tensor Core on NVIDIA hardware with compute capability
-                >= 7.5 (Volta).
+                >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_attention_mask: (optional) Set to False to avoid returning attention mask (default: set to model specifics)
         """
         required_input = processed_features[self.model_input_names[0]]
@@ -731,7 +731,7 @@ class PreTrainedFeatureExtractor:
         if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.padding_value is None):
             raise ValueError(
                 "Asking to pad but the feature_extractor does not have a padding value. "
-                "Please select a value to use as `padding_value` `(feature_extractor.padding_value = 0.0 e.g.)`."
+                "Please select a value to use as `padding_value`. For example: `feature_extractor.padding_value = 0.0`."
             )
 
         return padding_strategy, max_length, kwargs
