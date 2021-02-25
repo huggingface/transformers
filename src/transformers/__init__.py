@@ -1209,6 +1209,15 @@ if is_tf_available():
             "TFXLMRobertaModel",
         ]
     )
+    _import_structure["models.layoutlm"].extend(
+        [
+            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TF_LayoutLMForMaskedLM",
+            "TF_LayoutLMForSequenceClassification",
+            "TF_LayoutLMForTokenClassification",
+            "TF_LayoutLMModel",
+        ]
+    )
     _import_structure["models.xlnet"].extend(
         [
             "TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1415,15 +1424,6 @@ if TYPE_CHECKING:
         TFGPT2MainLayer,
         TFGPT2Model,
         TFGPT2PreTrainedModel,
-    )
-    from .models.layoutlm import (
-        TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFLayoutLMEmbeddings,
-        TFLayoutLMForMaskedLM,
-        TFLayoutLMForTokenClassification,
-        TFLayoutLMMainLayer,
-        TFLayoutLMModel,
-        TFLayoutLMPreTrainedModel,
     )
     from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
     from .models.longformer import (
@@ -2389,6 +2389,15 @@ if TYPE_CHECKING:
             TFXLNetMainLayer,
             TFXLNetModel,
             TFXLNetPreTrainedModel,
+        )
+        from .modeling_tf_layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMMainLayer,
+            TFLayoutLMModel,
+            TFLayoutLMPreTrainedModel,
         )
 
         # Optimization
