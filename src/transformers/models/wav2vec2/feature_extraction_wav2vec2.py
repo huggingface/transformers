@@ -22,6 +22,10 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
 from ...file_utils import PaddingStrategy, TensorType
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
@@ -32,12 +36,12 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
     main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        feature_dim (:obj:`int`, `optional`, defaults to 1):
+        feature_size (:obj:`int`, defaults to 1):
             The feature dimension of the extracted features.
-        sampling_rate (:obj:`int`, `optional`, defaults to 16000):
+        sampling_rate (:obj:`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        padding_value (:obj:`float`, `optional`, defaults to 0.0):
-            The value that is used to fill the padding values / vectors.
+        padding_value (:obj:`float`, defaults to 0.0):
+            The value that is used to fill the padding values.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
             improve the performance for some models, *e.g.*, `wav2vec2-lv60
@@ -61,14 +65,14 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
 
     def __init__(
         self,
-        feature_dim=1,
+        feature_size=1,
         sampling_rate=16000,
         padding_value=0.0,
         return_attention_mask=False,
         do_normalize=True,
         **kwargs
     ):
-        super().__init__(feature_dim=feature_dim, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
+        super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
 
@@ -86,11 +90,11 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
+        sampling_rate: Optional[int] = None,
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s).
-        sequences.
+        Main method to featurize and prepare for the model one or several sequence(s). sequences.
 
         Args:
             raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
@@ -136,7 +140,23 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+            sampling_rate (:obj:`int`, `optional`):
+                The sampling rate at which the ``raw_speech`` input was sampled. It is strongly recommended to pass
+                ``sampling_rate`` at the forward call to prevent silent errors.
+            padding_value (:obj:`float`, defaults to 0.0):
         """
+
+        if sampling_rate is not None:
+            if sampling_rate != self.sampling_rate:
+                raise ValueError(
+                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of {self.sampling_rate}."
+                    f"Please make sure that the provided `raw_speech` input was sampled with {self.sampling_rate} and not {sampling_rate}."
+                )
+        else:
+            logger.warning(
+                "It is strongly recommended to pass the ``sampling_rate`` argument to this function."
+                "Failing to do so can result in silent errors that might be hard to debug."
+            )
 
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))

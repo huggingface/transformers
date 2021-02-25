@@ -736,9 +736,7 @@ class BatchEncoding(UserDict):
         if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
-            logger.warning(
-                f"Attempting to cast a BatchEncoding to another type, {str(device)}. This is not supported."
-            )
+            logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
 
 

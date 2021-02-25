@@ -18,6 +18,7 @@ import shutil
 import tempfile
 import unittest
 
+from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor, Wav2Vec2Processor
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
 
@@ -36,7 +37,7 @@ class Wav2Vec2ProcessorTest(unittest.TestCase):
             "eos_token": "</s>",
         }
         feature_extractor_map = {
-            "feature_dim": 1,
+            "feature_size": 1,
             "padding_value": 0.0,
             "sampling_rate": 16000,
             "return_attention_mask": False,
@@ -45,7 +46,7 @@ class Wav2Vec2ProcessorTest(unittest.TestCase):
 
         self.tmpdirname = tempfile.mkdtemp()
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
-        self.feature_extraction_file = os.path.join(self.tmpdirname, "feature_extractor_config.json")
+        self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
 

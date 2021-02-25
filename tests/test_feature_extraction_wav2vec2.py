@@ -50,7 +50,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         batch_size=7,
         min_seq_length=400,
         max_seq_length=2000,
-        feature_dim=1,
+        feature_size=1,
         padding_value=0.0,
         sampling_rate=16000,
         return_attention_mask=True,
@@ -61,7 +61,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
         self.min_seq_length = min_seq_length
         self.max_seq_length = max_seq_length
         self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
-        self.feature_dim = feature_dim
+        self.feature_size = feature_size
         self.padding_value = padding_value
         self.sampling_rate = sampling_rate
         self.return_attention_mask = return_attention_mask
@@ -69,7 +69,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
 
     def prepare_feat_extract_dict(self):
         return {
-            "feature_dim": self.feature_dim,
+            "feature_size": self.feature_size,
             "padding_value": self.padding_value,
             "sampling_rate": self.sampling_rate,
             "return_attention_mask": self.return_attention_mask,
@@ -84,7 +84,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
             speech_inputs = floats_list((self.batch_size, self.max_seq_length))
         else:
             speech_inputs = [
-                _flatten(floats_list((x, self.feature_dim)))
+                _flatten(floats_list((x, self.feature_size)))
                 for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
             ]
 

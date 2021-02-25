@@ -188,27 +188,27 @@ class BatchFeature(UserDict):
         if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
-            logger.warning(f"Attempting to cast a BatchFeature to another type, {str(device)}. This is not supported.")
+            logger.warning(f"Attempting to cast a BatchFeature to type {str(device)}. This is not supported.")
         return self
 
 
 class PreTrainedFeatureExtractor:
     """
-    This is a general feature extraction class for speech recognition
+    This is a general feature extraction class for speech recognition.
+
+    Args:
+        feature_size (:obj:`int`):
+            The feature dimension of the extracted features.
+        sampling_rate (:obj:`int`):
+            The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
+        padding_value (:obj:`float`):
+            The value that is used to fill the padding values / vectors.
     """
 
-    def __init__(
-        self, feature_dim: int, padding_value: Optional[int] = None, sampling_rate: Optional[int] = None, **kwargs
-    ):
-        self.feature_dim = feature_dim
-        self.padding_value = padding_value
+    def __init__(self, feature_size: int, sampling_rate: int, padding_value: float, **kwargs):
+        self.feature_size = feature_size
         self.sampling_rate = sampling_rate
-
-        if self.sampling_rate is None:
-            logger.warning(
-                f"It is strongly recommended to instantiate {self.__class__} with ``sampling_rate!= None``."
-                f"Failing to do so can result in silent errors that might be hard to debug."
-            )
+        self.padding_value = padding_value
 
         self.padding_side = kwargs.pop("padding_side", "right")
         self.return_attention_mask = kwargs.pop("return_attention_mask", True)
@@ -684,7 +684,7 @@ class PreTrainedFeatureExtractor:
 
         if needs_to_be_padded:
             difference = max_length - len(required_input)
-            padding_vector = self.feature_dim * [self.padding_value] if self.feature_dim > 1 else self.padding_value
+            padding_vector = self.feature_size * [self.padding_value] if self.feature_size > 1 else self.padding_value
             if self.padding_side == "right":
                 if return_attention_mask:
                     processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference

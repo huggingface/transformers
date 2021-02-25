@@ -36,7 +36,7 @@ class FeatureExtractionMixin:
 
     def test_feat_extract_common_properties(self):
         feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feat_extract, "feature_dim"))
+        self.assertTrue(hasattr(feat_extract, "feature_size"))
         self.assertTrue(hasattr(feat_extract, "sampling_rate"))
         self.assertTrue(hasattr(feat_extract, "padding_value"))
 
@@ -88,7 +88,7 @@ class FeatureExtractionMixin:
 
         self.assertTrue(
             batch_features_input.shape
-            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_dim)
+            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_size)
         )
 
     @require_torch
@@ -106,7 +106,7 @@ class FeatureExtractionMixin:
 
         self.assertTrue(
             batch_features_input.shape
-            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_dim)
+            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_size)
         )
 
     @require_tf
@@ -124,7 +124,7 @@ class FeatureExtractionMixin:
 
         self.assertTrue(
             batch_features_input.shape
-            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_dim)
+            == (self.feat_extract_tester.batch_size, len(speech_inputs[0]), self.feat_extract_tester.feature_size)
         )
 
     def _check_padding(self, numpify=False):
@@ -154,7 +154,7 @@ class FeatureExtractionMixin:
         pad_max_length = self.feat_extract_tester.max_seq_length + pad_diff
         pad_min_length = self.feat_extract_tester.min_seq_length
         batch_size = self.feat_extract_tester.batch_size
-        feature_dim = self.feat_extract_tester.feature_dim
+        feature_size = self.feat_extract_tester.feature_size
 
         # test padding for List[int] + numpy
         input_1 = feat_extract.pad(processed_features, padding=False)[input_name]
@@ -181,8 +181,8 @@ class FeatureExtractionMixin:
         self.assertTrue(input_4.shape[:2] == (batch_size, len(input_3[0])))
         self.assertTrue(input_5.shape[:2] == (batch_size, pad_max_length))
 
-        if feature_dim > 1:
-            self.assertTrue(input_4.shape[2] == input_5.shape[2] == feature_dim)
+        if feature_size > 1:
+            self.assertTrue(input_4.shape[2] == input_5.shape[2] == feature_size)
 
         # test padding for `pad_to_multiple_of` for List[int] + numpy
         input_6 = feat_extract.pad(processed_features, pad_to_multiple_of=10)[input_name]
@@ -205,11 +205,11 @@ class FeatureExtractionMixin:
         self.assertTrue(all(len(x) == expected_mult_pad_length for x in input_8))
         self.assertTrue(input_9.shape[:2], (batch_size, expected_mult_pad_length))
 
-        if feature_dim > 1:
-            self.assertTrue(input_9.shape[2] == feature_dim)
+        if feature_size > 1:
+            self.assertTrue(input_9.shape[2] == feature_size)
 
         # Check padding value is correct
-        padding_vector_sum = (np.ones(self.feat_extract_tester.feature_dim) * feat_extract.padding_value).sum()
+        padding_vector_sum = (np.ones(self.feat_extract_tester.feature_size) * feat_extract.padding_value).sum()
         self.assertTrue(
             abs(np.asarray(input_2[0])[pad_min_length:].sum() - padding_vector_sum * (pad_max_length - pad_min_length))
             < 1e-3
