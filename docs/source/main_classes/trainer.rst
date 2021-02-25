@@ -301,7 +301,7 @@ For example here is how you could use it for ``run_seq2seq.py`` with 2 GPUs:
 :obj:`zero_dp_2` is an optimized version of the simple wrapper, while :obj:`zero_dp_3` fully shards model weights,
 gradients and optimizer states.
 
-Both are compatible with adding :obj:`cpu_offload` to enable ZeRO-offload (activat it like this: :obj:`--sharded_ddp
+Both are compatible with adding :obj:`cpu_offload` to enable ZeRO-offload (activate it like this: :obj:`--sharded_ddp
 "zero_dp_2 cpu_offload"`).
 
 Notes:
@@ -309,15 +309,15 @@ Notes:
 - This feature requires distributed training (so multiple GPUs).
 - It is not implemented for TPUs.
 - It works with ``--fp16`` too, to make things even faster.
-- The ``cpu_offload`` additional option require ``--fp16``.
+- The ``cpu_offload`` additional option requires ``--fp16``.
 - This is an area of active development, so make sure you have a source install of fairscale to use this feature as
   some bugs you encounter may have been fixed there already.
 
 Known caveats:
 
-- This feature is incompatible with :obj:`--predict_with_generate` in the run_seq2seq script.
+- This feature is incompatible with :obj:`--predict_with_generate` in the `run_seq2seq.py` script.
 - Using :obj:`--sharded_ddp zero_dp_3` requires wrapping each layer of the model in the special container
-  :obj:`FullyShardedDataParallelism` of fairscale. This is not done automatically by any of the example script of the
+  :obj:`FullyShardedDataParallelism` of fairscale. This is not done automatically by any of the example scripts of the
   :class:`~transformers.Trainer`.
 
 

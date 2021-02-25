@@ -765,7 +765,7 @@ class Trainer:
                 mixed_precision = self.args.fp16
                 cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
                 zero_3 = self.sharded_ddp == ShardedDDPOption.ZERO_DP_3
-                # Breaking the self.model convention but I see no way around it for now.
+                # XXX: Breaking the self.model convention but I see no way around it for now.
                 self.model = model = FullyShardedDDP(
                     model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload
                 ).to(self.args.device)

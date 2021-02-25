@@ -555,7 +555,7 @@ class TrainingArguments:
         if self.sharded_ddp == [ShardedDDPOption.OFFLOAD]:
             raise ValueError(
                 "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
-                "`--sharded_ddp zero_dp_3`"
+                "`--sharded_ddp zero_dp_3`". For example, `--sharded_ddp "zero_dp_2 offload"`.
             )
         elif len(self.sharded_ddp) > 1 and ShardedDDPOption.Simple in self.sharded_ddp:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
