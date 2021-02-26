@@ -61,8 +61,8 @@ class DataCollatorCTCWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
-        processor (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
-            The processor used for encoding the data.
+        processor (:class:`~transformers.Wav2Vec2Processor`)
+            The processor used for proccessing the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:

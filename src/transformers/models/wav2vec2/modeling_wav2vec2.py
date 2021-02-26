@@ -46,9 +46,9 @@ WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 def _compute_mask_indices(
     shape: Tuple[int, int],
-    padding_mask: Optional[torch.Tensor],
     mask_prob: float,
     mask_length: int,
+    attention_mask: Optional[torch.Tensor] = None,
     min_masks: int = 0,
 ) -> np.ndarray:
     """
@@ -57,7 +57,7 @@ def _compute_mask_indices(
     Args:
         shape: the the shape for which to compute masks.
             should be of size 2 where first element is batch size and 2nd is timesteps
-        padding_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
+        attention_mask: optional padding mask of the same size as shape, which will prevent masking padded elements
         mask_prob: probability for each token to be chosen as start of the span to be masked. this will be multiplied by
             number of timesteps divided by length of mask span to mask approximately this percentage of all elements.
             however due to overlaps, the actual number will be smaller (unless no_overlap is True)
@@ -67,7 +67,6 @@ def _compute_mask_indices(
     Adapted from `fairseq's data_utils.py
     <https://github.com/pytorch/fairseq/blob/e0788f7007a8473a76db573985031f3c94201e79/fairseq/data/data_utils.py#L376>`__.
     """
-
     bsz, all_sz = shape
     mask = np.full((bsz, all_sz), False)
 
@@ -80,7 +79,7 @@ def _compute_mask_indices(
     all_num_mask = max(min_masks, all_num_mask)
 
     mask_idcs = []
-    padding_mask = padding_mask.ne(1) if padding_mask is not None else None
+    padding_mask = attention_mask.ne(1) if attention_mask is not None else None
     for i in range(bsz):
         if padding_mask is not None:
             sz = all_sz - padding_mask[i].long().sum().item()
@@ -854,9 +853,9 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             if self.config.mask_time_prob > 0:
                 mask_time_indices = _compute_mask_indices(
                     (batch_size, sequence_length),
-                    attention_mask,
                     self.config.mask_time_prob,
                     self.config.mask_time_length,
+                    attention_mask=attention_mask,
                     min_masks=2,
                 )
                 hidden_states[torch.from_numpy(mask_time_indices)] = self.masked_spec_embed.to(hidden_states.dtype)
@@ -865,7 +864,6 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             if self.config.mask_feature_prob > 0:
                 mask_feature_indices = _compute_mask_indices(
                     (batch_size, hidden_size),
-                    None,
                     self.config.mask_feature_prob,
                     self.config.mask_feature_length,
                 )

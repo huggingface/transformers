@@ -30,6 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import Wav2Vec2Config, Wav2Vec2ForCTC, Wav2Vec2ForMaskedLM, Wav2Vec2Model, Wav2Vec2Processor
+    from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 
 
 class Wav2Vec2ModelTester:
@@ -366,6 +367,49 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
+
+
+@require_torch
+class Wav2Vec2UtilsTest(unittest.TestCase):
+    def test_compute_mask_indices(self):
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.5
+        mask_length = 1
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length for _ in range(batch_size)])
+
+        attention_mask = torch.ones((batch_size, sequence_length), device=torch_device, dtype=torch.long)
+        attention_mask[:, -sequence_length // 2 :] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+        )
+
+        self.assertListEqual(mask.sum(axis=-1).tolist(), [mask_prob * sequence_length // 2 for _ in range(batch_size)])
+
+    def test_compute_mask_indices_overlap(self):
+        return
+        batch_size = 4
+        sequence_length = 60
+        mask_prob = 0.5
+        mask_length = 4
+
+        mask = _compute_mask_indices((batch_size, sequence_length), mask_prob, mask_length)
+
+        #        self.assertTrue(int(mask.sum()) == int(mask_prob * batch_size * sequence_length))
+        print(mask.sum())
+
+        attention_mask = torch.ones((batch_size, sequence_length), device=torch_device, dtype=torch.long)
+        attention_mask[:, -sequence_length // 2 :] = 0
+
+        mask = _compute_mask_indices(
+            (batch_size, sequence_length), mask_prob, mask_length, attention_mask=attention_mask
+        )
+
+        self.assertTrue(int(mask.sum()) == int(mask_prob * batch_size * sequence_length // 2))
 
 
 @require_torch
