@@ -38,8 +38,8 @@ class Speech2TextFeatureExtractor(PreTrainedFeatureExtractor):
     r"""
     Constructs a Speech2TextTransformer feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.Speech2TextFeatureExtractor` which contains
-    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from :class:`~transformers.Speech2TextFeatureExtractor` which contains most of the
+    main methods. Users should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
     mean and variance normalization to the extracted features.

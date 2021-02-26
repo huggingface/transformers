@@ -33,9 +33,9 @@ if is_torch_available():
 
     from transformers import (
         Speech2TextConfig,
+        Speech2TextTokenizer,
         Speech2TextTransformerForConditionalGeneration,
         Speech2TextTransformerModel,
-        Speech2TextTokenizer,
     )
     from transformers.models.speech_to_text_transformer.modeling_speech_to_text_transformer import (
         Speech2TextTransformerDecoder,
