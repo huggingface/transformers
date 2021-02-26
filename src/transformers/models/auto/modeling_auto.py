@@ -68,6 +68,8 @@ from ..camembert.modeling_camembert import (
 )
 
 # Add modeling imports here
+# Add modeling imports here
+from ..clip.modeling_clip import ClipModel
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
     ConvBertForMultipleChoice,
@@ -258,6 +260,7 @@ from .configuration_auto import (
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
+    ClipConfig,
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
@@ -304,6 +307,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (ClipConfig, ClipModel),
         (Wav2Vec2Config, Wav2Vec2Model),
         (ConvBertConfig, ConvBertModel),
         (LEDConfig, LEDModel),
