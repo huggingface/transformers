@@ -43,7 +43,7 @@ if is_torch_available():
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_bert"] = [
+    _import_structure["modeling_tf_layoutlm"] = [
         "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFLayoutLMForMaskedLM",
         "TFLayoutLMForTokenClassification",
