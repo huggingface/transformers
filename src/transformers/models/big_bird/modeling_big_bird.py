@@ -170,7 +170,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     logger.info("Weights not initialized in PyTorch model: {}".format(", ".join(pt_names)))
     return model
 
-# TODO: enable `relative_position_embedding`incase of `block_sparse`
+
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -388,6 +388,9 @@ class BigBirdBlockSparseAttention(nn.Module):
                 "heads (%d)" % (config.hidden_size, config.num_attention_heads)
             )
 
+        if config.position_embedding_type != "absolute":
+            raise NotImplementedError("Block sparse attention is only supported with `absolute` position embedding")
+
         self.num_attention_heads = config.num_attention_heads
         self.num_random_blocks = config.num_random_blocks
         self.block_size = config.block_size
@@ -433,61 +436,60 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.tbm = to_blocked_mask
         # 
 
-        batch_size, from_seq_length, _ = hidden_states.size()
-        to_seq_length = from_seq_length
-        from_block_size = self.block_size
-        to_block_size = self.block_size
+        batch_size, seqlen, _ = hidden_states.size()
+        to_seq_length = from_seq_length = seqlen
+        from_block_size = to_block_size = self.block_size
+
+        assert from_seq_length % from_block_size == 0, "Query sided sequence length must be multiple of block size"
+        assert to_seq_length % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         context_layer, attention_probs = self.bigbird_block_sparse_attention(
-                                                                query_layer,
-                                                                key_layer,
-                                                                value_layer,
-                                                                band_mask,
-                                                                from_mask,
-                                                                to_mask,
-                                                                from_blocked_mask,
-                                                                to_blocked_mask,
-                                                                self.num_attention_heads,
-                                                                self.num_random_blocks,
-                                                                self.attention_head_size,
-                                                                from_block_size,
-                                                                to_block_size,
-                                                                batch_size,
-                                                                from_seq_length,
-                                                                to_seq_length,
-                                                                seed=self.seed,
-                                                                plan_from_length=None,
-                                                                plan_num_rand_blocks=None)
+                                                query_layer, key_layer, value_layer, band_mask,
+                                                from_mask, to_mask, from_blocked_mask, to_blocked_mask,
+                                                self.num_attention_heads, self.num_random_blocks, self.attention_head_size,
+                                                from_block_size, to_block_size, batch_size, from_seq_length,
+                                                to_seq_length, seed=self.seed, plan_from_length=None,
+                                                plan_num_rand_blocks=None, output_attentions=output_attentions
+                                                )
 
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
 
-    def bigbird_block_sparse_attention(self,
-                                   query_layer,
-                                   key_layer,
-                                   value_layer,
-                                   band_mask,
-                                   from_mask,
-                                   to_mask,
-                                   from_blocked_mask,
-                                   to_blocked_mask,
-                                   num_attention_heads,
-                                   num_rand_blocks,
-                                   attention_head_size,
-                                   from_block_size,
-                                   to_block_size,
-                                   batch_size,
-                                   from_seq_length,
-                                   to_seq_length,
-                                   seed=None,
-                                   plan_from_length=None,
-                                   plan_num_rand_blocks=None):
+    def bigbird_block_sparse_attention(
+        self,
+        query_layer,
+        key_layer,
+        value_layer,
+        band_mask,
+        from_mask,
+        to_mask,
+        from_blocked_mask,
+        to_blocked_mask,
+        num_attention_heads,
+        num_rand_blocks,
+        attention_head_size,
+        from_block_size,
+        to_block_size,
+        batch_size,
+        from_seq_length,
+        to_seq_length,
+        seed=None,
+        plan_from_length=None,
+        plan_num_rand_blocks=None,
+        output_attentions=None,
+        ):
+        """
+            ITC:
+                global tokens : 2 x block_size
+                window tokens : 3 x block_size
+                random tokens : num_rand_tokens x block_size
+        """
 
         # Define shorthands
         h = num_attention_heads
@@ -640,6 +642,11 @@ class BigBirdBlockSparseAttention(nn.Module):
             first_band_product, inner_band_product, rand_band_product,
             last_band_product], dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
         attn_weights = F.softmax(band_product, dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
+        
+        
+        
+        
+        # [product attention weights and value]
         context_layer = torch.einsum(
             "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, wn:4 * wn],
             exp_blocked_value_matrix
@@ -711,9 +718,40 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         self.final_cl = context_layer # TODO: remove this
 
-        # TODO: confirm is torch.einsum is fast enough
-        # TODO: Fix output to be attention_probs
-        return  context_layer, None # attention_probs
+        if output_attentions:
+            # raise NotImplementedError
+            attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device, requires_grad=True)
+
+            # corresponding to `first_context_layer`
+            attention_probs[:, :, :wm, :] = first_attn_weights
+
+            # corresponding to `second_context_layer`
+            attention_probs[:, :, wm:wm*2, :3*wn] = second_attn_weights[:, :, :, :3*wn]
+            attention_probs[:, :, wm:wm*2, -wn:] = second_attn_weights[:, :, :, 3*wn:4*wn]
+            # put for gathered
+            # attention_probs[:, :, ] =  second_attn_weights[:, :, :, ]
+
+            # corresponding to `context_layer`
+            attn_weights = attn_weights.view(b,h,(m//wm-4)*wm,n)
+            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, wn:4*wn] # inner_band_product
+            # # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, ] # rand_band_product
+            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, :wn] # first_band_product
+            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, -wn:] # last_band_product
+
+            # corresponding to `second_last_context_layer`
+            attention_probs[:, :, -2*wm:-wm, :wn] = second_last_attn_weights[:,:,:,:wn]
+            attention_probs[:, :, -2*wm:-wm, -3*wn:] = second_last_attn_weights[:,:,:,wn:4*wn]
+            # put for gathered
+            # attention_probs[:, :, ] =  second_last_attn_weights[:, :, :, ]
+
+            # corresponding to `last_context_layer`
+            attention_probs[:, :, -wm:, :] = last_attn_weights
+        
+        else:
+            attention_probs = None
+
+        # TODO: confirm if torch.einsum is fast enough
+        return  context_layer, attention_probs
 
     @staticmethod
     def torch_gather_b2(params, indices):
@@ -1532,6 +1570,11 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
+
+        if config.attention_type != "original_full" and config.add_cross_attention:
+            logger.warning("When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`")
+            config.attention_type = "original_full"
+
         self.config = config
 
         self.block_size = self.config.block_size
@@ -1640,6 +1683,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         if self.attention_type == "block_sparse":
             block_size = self.block_size
+            assert seq_length % block_size == 0, "Sequence length must be multiple of block size"
 
             blocked_encoder_mask = attention_mask.view(batch_size, seq_length//block_size, block_size)
             band_mask = self.create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
@@ -1836,11 +1880,13 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
         total_loss = None
-        if labels is not None and next_sentence_label is not None:
+        if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            total_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if next_sentence_label is not None and total_loss is not None:
             next_sentence_loss = loss_fct(seq_relationship_score.view(-1, 2), next_sentence_label.view(-1))
-            total_loss = masked_lm_loss + next_sentence_loss
+            total_loss = total_loss + next_sentence_loss
 
         if not return_dict:
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
@@ -2099,6 +2145,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
         for layer_past in past:
             reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
         return reordered_past
+
 
 class BigBirdClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
