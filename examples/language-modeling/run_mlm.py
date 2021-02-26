@@ -431,7 +431,9 @@ def main():
         eval_output = trainer.evaluate()
 
         perplexity = math.exp(eval_output["eval_loss"])
-        results["perplexity"] = perplexity
+        results["perplexity"] = perplexity 
+        # Add to extract eval_loss
+        results['eval_loss'] = eval_output["eval_loss"]
 
         output_eval_file = os.path.join(training_args.output_dir, "eval_results_mlm.txt")
         if trainer.is_world_process_zero():
