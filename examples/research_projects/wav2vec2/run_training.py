@@ -10,14 +10,7 @@ from packaging import version
 
 import soundfile as sf
 from jiwer import wer
-from transformers import (
-    PreTrainedTokenizer,
-    Trainer,
-    TrainingArguments,
-    Wav2Vec2ForCTC,
-    Wav2Vec2Tokenizer,
-    is_apex_available,
-)
+from transformers import Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Processor, is_apex_available
 
 
 if is_apex_available():
@@ -30,7 +23,7 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 
 
 model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-lv60", gradient_checkpointing=True)
-tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
 
 train_dataset = datasets.load_dataset("librispeech_asr", "clean", split="train.100")
 val_dataset = datasets.load_dataset("librispeech_asr", "clean", split="validation")
@@ -46,22 +39,10 @@ train_dataset = train_dataset.map(map_to_array, remove_columns=["file"])
 val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
 
 
-def encode_labels(tokenizer, text):
-    batch_tokens = []
-    for text_str in text:
-        batch_tokens.append(
-            list(text_str.strip().replace(" ", tokenizer.word_delimiter_token) + tokenizer.word_delimiter_token)
-        )
-
-    batch_ids = []
-    for tokens in batch_tokens:
-        batch_ids.append(tokenizer.convert_tokens_to_ids(tokens))
-    return batch_ids
-
-
 def prepare_dataset(batch):
-    batch["input_values"] = tokenizer(batch["speech"]).input_values
-    batch["labels"] = encode_labels(tokenizer, batch["text"])
+    batch["input_values"] = processor(batch["speech"]).input_values
+    with processor.as_target_processor():
+        batch["labels"] = processor(batch["text"]).input_ids
     return batch
 
 
@@ -74,8 +55,8 @@ class DataCollatorCTCWithPadding:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
-        tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
-            The tokenizer used for encoding the data.
+        processor (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
+            The processor used for encoding the data.
         padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
@@ -86,16 +67,17 @@ class DataCollatorCTCWithPadding:
             * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
               different lengths).
         max_length (:obj:`int`, `optional`):
-            Maximum length of the returned list and optionally padding length (see above).
+            Maximum length of the ``input_values`` of the returned list and optionally padding length (see above).
+        max_length_labels (:obj:`int`, `optional`):
+            Maximum length of the ``labels`` returned list and optionally padding length (see above).
         pad_to_multiple_of (:obj:`int`, `optional`):
             If set will pad the sequence to a multiple of the provided value.
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
     """
 
-    tokenizer: PreTrainedTokenizer
+    processor: Wav2Vec2Processor
     padding: Union[bool, str] = True
-    return_attention_mask: bool = True
     max_length: Optional[int] = None
     max_length_labels: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -103,22 +85,22 @@ class DataCollatorCTCWithPadding:
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
-        label_features = [{"input_values": feature["labels"]} for feature in features]
-        batch = self.tokenizer.pad(
+        label_features = [{"input_ids": feature["labels"]} for feature in features]
+        batch = self.processor.pad(
             input_features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
-            return_attention_mask=self.return_attention_mask,
             return_tensors="pt",
         )
-        labels_batch = self.tokenizer.pad(
-            label_features,
-            padding=self.padding,
-            max_length=self.max_length_labels,
-            pad_to_multiple_of=self.pad_to_multiple_of_labels,
-            return_tensors="pt",
-        )
+        with self.processor.as_target_processor:
+            labels_batch = self.processor.pad(
+                label_features,
+                padding=self.padding,
+                max_length=self.max_length_labels,
+                pad_to_multiple_of=self.pad_to_multiple_of_labels,
+                return_tensors="pt",
+            )
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_values"].masked_fill(labels_batch.attention_mask.ne(1), -100)
@@ -128,7 +110,7 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
-data_collator = DataCollatorCTCWithPadding(tokenizer=tokenizer, return_attention_mask=True, padding=True)
+data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
 
 def compute_metrics(pred):
@@ -137,8 +119,8 @@ def compute_metrics(pred):
 
     pred.label_ids[pred.label_ids == -100] = 0
 
-    pred_str = tokenizer.batch_decode(pred_ids)
-    label_str = tokenizer.batch_decode(pred.label_ids)
+    pred_str = processor.batch_decode(pred_ids)
+    label_str = processor.batch_decode(pred.label_ids)
 
     wer_score = wer(label_str, pred_str)
 
@@ -223,7 +205,7 @@ trainer = CTCTrainer(
     compute_metrics=compute_metrics,
     train_dataset=train_dataset,
     eval_dataset=val_dataset,
-    tokenizer=tokenizer,
+    tokenizer=processor.feature_extractor,
 )
 
 trainer.train()

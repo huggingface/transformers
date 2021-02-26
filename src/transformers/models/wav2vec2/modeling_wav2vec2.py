@@ -1024,14 +1024,14 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             >>> logits = model(input_values).logits
 
             >>> predicted_ids = torch.argmax(logits, dim=-1)
-            
+
             >>> transcription = processor.decode(predicted_ids[0])
 
             >>> TO IMPROVE: # compute loss
             >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
             >>> tokens = list(target_transcription.replace(" ", tokenizer.word_delimiter_token) + tokenizer.word_delimiter_token)
             >>> labels = torch.tensor([tokenizer.convert_tokens_to_ids(tokens)])
-            >>> loss = model(input_values, labels=labels).loss  
+            >>> loss = model(input_values, labels=labels).loss
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
