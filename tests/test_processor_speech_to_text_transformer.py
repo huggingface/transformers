@@ -21,9 +21,9 @@ from shutil import copyfile
 
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.speech_to_text_transformer import (
-    Speech2TextTransformerFeatureExtractor,
-    Speech2TextTransformerProcessor,
-    Speech2TextTransformerTokenizer,
+    Speech2TextFeatureExtractor,
+    Speech2TextProcessor,
+    Speech2TextTokenizer,
 )
 from transformers.models.speech_to_text_transformer.tokenization_speech_to_text_transformer import (
     VOCAB_FILES_NAMES,
@@ -40,7 +40,7 @@ SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/t
 @require_torch
 @require_torchaudio
 @require_sentencepiece
-class Speech2TextTransformerProcessorTest(unittest.TestCase):
+class Speech2TextProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
@@ -51,7 +51,7 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
             copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
 
-        tokenizer = Speech2TextTransformerTokenizer.from_pretrained(self.tmpdirname)
+        tokenizer = Speech2TextTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
         feature_extractor_map = {
@@ -65,10 +65,10 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         save_json(feature_extractor_map, save_dir / FEATURE_EXTRACTOR_NAME)
 
     def get_tokenizer(self, **kwargs):
-        return Speech2TextTransformerTokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return Speech2TextTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return Speech2TextTransformerFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return Speech2TextFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -77,19 +77,19 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         tokenizer = self.get_tokenizer()
         feature_extractor = self.get_feature_extractor()
 
-        processor = Speech2TextTransformerProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         processor.save_pretrained(self.tmpdirname)
-        processor = Speech2TextTransformerProcessor.from_pretrained(self.tmpdirname)
+        processor = Speech2TextProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, Speech2TextTransformerTokenizer)
+        self.assertIsInstance(processor.tokenizer, Speech2TextTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, Speech2TextTransformerFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, Speech2TextFeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
-        processor = Speech2TextTransformerProcessor(
+        processor = Speech2TextProcessor(
             tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor()
         )
         processor.save_pretrained(self.tmpdirname)
@@ -97,21 +97,21 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         tokenizer_add_kwargs = self.get_tokenizer(bos_token="(BOS)", eos_token="(EOS)")
         feature_extractor_add_kwargs = self.get_feature_extractor(do_normalize=False, padding_value=1.0)
 
-        processor = Speech2TextTransformerProcessor.from_pretrained(
+        processor = Speech2TextProcessor.from_pretrained(
             self.tmpdirname, bos_token="(BOS)", eos_token="(EOS)", do_normalize=False, padding_value=1.0
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, Speech2TextTransformerTokenizer)
+        self.assertIsInstance(processor.tokenizer, Speech2TextTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, Speech2TextTransformerFeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, Speech2TextFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Speech2TextTransformerProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         raw_speech = floats_list((3, 1000))
 
@@ -125,7 +125,7 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Speech2TextTransformerProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         input_str = "This is a test string"
 
@@ -141,7 +141,7 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
 
-        processor = Speech2TextTransformerProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
 
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 

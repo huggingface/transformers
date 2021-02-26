@@ -34,7 +34,7 @@ _import_structure = {
 }
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_speech_to_text_transformer"] = ["Speech2TextTransformerTokenizer"]
+    _import_structure["tokenization_speech_to_text_transformer"] = ["Speech2TextTokenizer"]
 
 
 if is_torch_available():
@@ -46,17 +46,17 @@ if is_torch_available():
     ]
 
 if is_torch_available() and is_torchaudio_available():
-    _import_structure["feature_extraction_speech_to_text_transformer"] = ["Speech2TextTransformerFeatureExtractor"]
+    _import_structure["feature_extraction_speech_to_text_transformer"] = ["Speech2TextFeatureExtractor"]
 
 if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
-    _import_structure["processing_speech_to_text_transformer"] = ["Speech2TextTransformerProcessor"]
+    _import_structure["processing_speech_to_text_transformer"] = ["Speech2TextProcessor"]
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextTransformerConfig,
     )
-    from .tokenization_speech_to_text_transformer import Speech2TextTransformerTokenizer
+    from .tokenization_speech_to_text_transformer import Speech2TextTokenizer
 
     if is_torch_available():
         from .modeling_speech_to_text_transformer import (
@@ -67,10 +67,10 @@ if TYPE_CHECKING:
         )
 
     if is_torch_available() and is_torchaudio_available():
-        from .feature_extraction_speech_to_text_transformer import Speech2TextTransformerFeatureExtractor
+        from .feature_extraction_speech_to_text_transformer import Speech2TextFeatureExtractor
 
     if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
-        from .processing_speech_to_text_transformer import Speech2TextTransformerProcessor
+        from .processing_speech_to_text_transformer import Speech2TextProcessor
 
 else:
     import importlib

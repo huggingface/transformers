@@ -35,25 +35,25 @@ Speech2TextTransformerConfig
     :members:
 
 
-Speech2TextTransformerTokenizer
+Speech2TextTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Speech2TextTransformerTokenizer
+.. autoclass:: transformers.Speech2TextTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
 
 
-Speech2TextTransformerFeatureExtractor
+Speech2TextFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Speech2TextTransformerFeatureExtractor
+.. autoclass:: transformers.Speech2TextFeatureExtractor
     :members: __call__
 
 
-Speech2TextTransformerProcessor
+Speech2TextProcessor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Speech2TextTransformerProcessor
+.. autoclass:: transformers.Speech2TextProcessor
     :members: __call__, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
 
 

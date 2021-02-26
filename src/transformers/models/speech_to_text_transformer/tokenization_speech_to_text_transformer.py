@@ -44,7 +44,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 
-class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
+class Speech2TextTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2TextTransformer tokenizer.
 

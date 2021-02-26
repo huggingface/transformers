@@ -34,11 +34,11 @@ if is_torchaudio_available():
 logger = logging.get_logger(__name__)
 
 
-class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
+class Speech2TextFeatureExtractor(PreTrainedFeatureExtractor):
     r"""
     Constructs a Speech2TextTransformer feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.Speech2TextTransformerFeatureExtractor` which contains
+    This feature extractor inherits from :class:`~transformers.Speech2TextFeatureExtractor` which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
     This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
@@ -60,7 +60,7 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
         norm_vars (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to unit-variance normalize the extracted features.
         return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not :meth:`~transformers.Speech2TextTransformerFeatureExtractor.__call__` should return
+            Whether or not :meth:`~transformers.Speech2TextFeatureExtractor.__call__` should return
             :obj:`attention_mask`.
 
             .. note::

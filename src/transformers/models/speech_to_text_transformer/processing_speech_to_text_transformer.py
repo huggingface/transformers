@@ -17,37 +17,37 @@ Speech processor class for Speech2TextTransformer
 """
 from contextlib import contextmanager
 
-from .feature_extraction_speech_to_text_transformer import Speech2TextTransformerFeatureExtractor
-from .tokenization_speech_to_text_transformer import Speech2TextTransformerTokenizer
+from .feature_extraction_speech_to_text_transformer import Speech2TextFeatureExtractor
+from .tokenization_speech_to_text_transformer import Speech2TextTokenizer
 
 
-class Speech2TextTransformerProcessor:
+class Speech2TextProcessor:
     r"""
     Constructs a Speech2TextTransformer processor which wraps a Speech2TextTransformer feature extractor and a
     Speech2TextTransformer tokenizer into a single processor.
 
-    :class:`~transformers.Speech2TextTransformerProcessor` offers all the functionalities of
-    :class:`~transformers.Speech2TextTransformerFeatureExtractor` and
-    :class:`~transformers.Speech2TextTransformerTokenizer`. See the docstring of
-    :meth:`~transformers.Speech2TextTransformerProcessor.__call__` and
-    :meth:`~transformers.Speech2TextTransformerProcessor.decode` for more information.
+    :class:`~transformers.Speech2TextProcessor` offers all the functionalities of
+    :class:`~transformers.Speech2TextFeatureExtractor` and
+    :class:`~transformers.Speech2TextTokenizer`. See the docstring of
+    :meth:`~transformers.Speech2TextProcessor.__call__` and
+    :meth:`~transformers.Speech2TextProcessor.decode` for more information.
 
     Args:
-        feature_extractor (:obj:`Speech2TextTransformerFeatureExtractor`):
-            An instance of :class:`~transformers.Speech2TextTransformerFeatureExtractor`. The feature extractor is a
+        feature_extractor (:obj:`Speech2TextFeatureExtractor`):
+            An instance of :class:`~transformers.Speech2TextFeatureExtractor`. The feature extractor is a
             required input.
-        tokenizer (:obj:`Speech2TextTransformerTokenizer`):
-            An instance of :class:`~transformers.Speech2TextTransformerTokenizer`. The tokenizer is a required input.
+        tokenizer (:obj:`Speech2TextTokenizer`):
+            An instance of :class:`~transformers.Speech2TextTokenizer`. The tokenizer is a required input.
     """
 
     def __init__(self, feature_extractor, tokenizer):
-        if not isinstance(feature_extractor, Speech2TextTransformerFeatureExtractor):
+        if not isinstance(feature_extractor, Speech2TextFeatureExtractor):
             raise ValueError(
-                f"`feature_extractor` has to be of type {Speech2TextTransformerFeatureExtractor.__class__}, but is {type(feature_extractor)}"
+                f"`feature_extractor` has to be of type {Speech2TextFeatureExtractor.__class__}, but is {type(feature_extractor)}"
             )
-        if not isinstance(tokenizer, Speech2TextTransformerTokenizer):
+        if not isinstance(tokenizer, Speech2TextTokenizer):
             raise ValueError(
-                f"`tokenizer` has to be of type {Speech2TextTransformerTokenizer.__class__}, but is {type(tokenizer)}"
+                f"`tokenizer` has to be of type {Speech2TextTokenizer.__class__}, but is {type(tokenizer)}"
             )
 
         self.feature_extractor = feature_extractor
@@ -58,7 +58,7 @@ class Speech2TextTransformerProcessor:
         """
         Save a Speech2TextTransformer feature_extractor object and Speech2TextTransformer tokenizer object to the
         directory ``save_directory``, so that it can be re-loaded using the
-        :func:`~transformers.Speech2TextTransformerProcessor.from_pretrained` class method.
+        :func:`~transformers.Speech2TextProcessor.from_pretrained` class method.
 
         .. note::
 
@@ -78,13 +78,13 @@ class Speech2TextTransformerProcessor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.Speech2TextTransformerProcessor` from a pretrained Speech2TextTransformer
+        Instantiate a :class:`~transformers.Speech2TextProcessor` from a pretrained Speech2TextTransformer
         processor.
 
         .. note::
 
-            This class method is simply calling Speech2TextTransformerFeatureExtractor's
-            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and Speech2TextTransformerTokenizer's
+            This class method is simply calling Speech2TextFeatureExtractor's
+            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and Speech2TextTokenizer's
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
             docstrings of the methods above for more information.
 
@@ -104,26 +104,26 @@ class Speech2TextTransformerProcessor:
                 Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`
         """
-        feature_extractor = Speech2TextTransformerFeatureExtractor.from_pretrained(
+        feature_extractor = Speech2TextFeatureExtractor.from_pretrained(
             pretrained_model_name_or_path, **kwargs
         )
-        tokenizer = Speech2TextTransformerTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+        tokenizer = Speech2TextTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to Speech2TextTransformerFeatureExtractor's
-        :meth:`~transformers.Speech2TextTransformerFeatureExtractor.__call__` and returns its output. If used in the
-        context :meth:`~transformers.Speech2TextTransformerProcessor.as_target_processor` this method forwards all its
-        arguments to Speech2TextTransformerTokenizer's :meth:`~transformers.Speech2TextTransformerTokenizer.__call__`.
+        When used in normal mode, this method forwards all its arguments to Speech2TextFeatureExtractor's
+        :meth:`~transformers.Speech2TextFeatureExtractor.__call__` and returns its output. If used in the
+        context :meth:`~transformers.Speech2TextProcessor.as_target_processor` this method forwards all its
+        arguments to Speech2TextTokenizer's :meth:`~transformers.Speech2TextTokenizer.__call__`.
         Please refer to the doctsring of the above two methods for more information.
         """
         return self.current_processor(*args, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Speech2TextTransformerTokenizer's
+        This method forwards all its arguments to Speech2TextTokenizer's
         :meth:`~transformers.PreTrainedTokenizer.batch_decode`. Please refer to the docstring of this method for more
         information.
         """
@@ -131,7 +131,7 @@ class Speech2TextTransformerProcessor:
 
     def decode(self, *args, **kwargs):
         """
-        This method forwards all its arguments to Speech2TextTransformerTokenizer's
+        This method forwards all its arguments to Speech2TextTokenizer's
         :meth:`~transformers.PreTrainedTokenizer.decode`. Please refer to the docstring of this method for more
         information.
         """

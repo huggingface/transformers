@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import Speech2TextTransformerFeatureExtractor
+from transformers import Speech2TextFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 
 from .test_feature_extraction_common import FeatureExtractionMixin
@@ -99,7 +99,7 @@ class Speech2TextTransformerFeatureExtractionTester(unittest.TestCase):
 
 class Speech2TextTransformerFeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
 
-    feature_extraction_class = Speech2TextTransformerFeatureExtractor
+    feature_extraction_class = Speech2TextFeatureExtractor
 
     def setUp(self):
         self.feat_extract_tester = Speech2TextTransformerFeatureExtractionTester(self)

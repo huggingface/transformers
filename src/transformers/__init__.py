@@ -138,9 +138,9 @@ _import_structure = {
     "models.speech_to_text_transformer": [
         "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextTransformerConfig",
-        "Speech2TextTransformerTokenizer",
-        "Speech2TextTransformerFeatureExtractor",
-        "Speech2TextTransformerProcessor",
+        "Speech2TextTokenizer",
+        "Speech2TextFeatureExtractor",
+        "Speech2TextProcessor",
     ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
@@ -1397,9 +1397,9 @@ if TYPE_CHECKING:
     from .models.speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextTransformerConfig,
-        Speech2TextTransformerFeatureExtractor,
-        Speech2TextTransformerProcessor,
-        Speech2TextTransformerTokenizer,
+        Speech2TextFeatureExtractor,
+        Speech2TextProcessor,
+        Speech2TextTokenizer,
     )
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config

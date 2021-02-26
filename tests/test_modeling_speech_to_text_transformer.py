@@ -35,7 +35,7 @@ if is_torch_available():
         Speech2TextTransformerConfig,
         Speech2TextTransformerForConditionalGeneration,
         Speech2TextTransformerModel,
-        Speech2TextTransformerTokenizer,
+        Speech2TextTokenizer,
     )
     from transformers.models.speech_to_text_transformer.modeling_speech_to_text_transformer import (
         Speech2TextTransformerDecoder,
@@ -309,7 +309,7 @@ TOLERANCE = 1e-4
 class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return Speech2TextTransformerTokenizer.from_pretrained("s2t_transformer_s")
+        return Speech2TextTokenizer.from_pretrained("s2t_transformer_s")
 
     def test_inference_no_head(self):
         model = Speech2TextTransformerModel.from_pretrained("s2t_transformer_s").to(torch_device)
@@ -345,7 +345,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
 
     def test_seq_to_seq_generation(self):
         hf = Speech2TextTransformerForConditionalGeneration.from_pretrained("s2t_transformer_s").to(torch_device)
-        tok = Speech2TextTransformerTokenizer.from_pretrained("s2t_transformer_s")
+        tok = Speech2TextTokenizer.from_pretrained("s2t_transformer_s")
 
         batch_input = [
             # string 1,
