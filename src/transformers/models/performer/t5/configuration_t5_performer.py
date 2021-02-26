@@ -30,7 +30,7 @@ T5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class T5Config(PretrainedConfig):
+class T5PerformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.T5Model` or a
     :class:`~transformers.TFT5Model`. It is used to instantiate a T5 model according to the specified arguments,
@@ -122,14 +122,14 @@ class T5Config(PretrainedConfig):
         # Prepare Performer Attention Config
         if isinstance(performer_attention_config, dict):
             performer_attention_config["attention_dropout"] = dropout_rate
-            performer_attention_config["d_model"] = hidden_size
-            performer_attention_config["num_heads"] = num_attention_heads
+            performer_attention_config["d_model"] = d_model
+            performer_attention_config["num_heads"] = num_heads
             self.performer_attention_config = {**performer_attention_config, **locals()["kwargs"]} # Apply any remaining kwargs directly
 
         else:
-            performer_attention_config.attention_dropout = attention_probs_dropout_prob
-            performer_attention_config.d_model = hidden_size
-            performer_attention_config.num_heads = num_attention_heads
+            performer_attention_config.attention_dropout = dropout_rate
+            performer_attention_config.d_model = d_model
+            performer_attention_config.num_heads = num_heads
             performer_attention_config.__dict__.update(kwargs)  # Apply any remaining kwargs directly
 
             # Correct for the fact that PretrainedConfig doesn't call .__dict__ recursively on non-JSON primitives

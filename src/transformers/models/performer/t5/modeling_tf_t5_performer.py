@@ -385,11 +385,13 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
         normed_hidden_states = self.layer_norm(hidden_states)
         attention_output = self.SelfAttention(
             normed_hidden_states,
+            normed_hidden_states,
+            normed_hidden_states,
             mask=attention_mask,
-            position_bias=position_bias,
-            layer_head_mask=layer_head_mask,
-            past_key_value=past_key_value,
-            use_cache=use_cache,
+            #position_bias=position_bias,
+            head_mask=layer_head_mask,
+            #past_key_value=past_key_value,
+            #use_cache=use_cache,
             output_attentions=output_attentions,
             training=training,
         )
