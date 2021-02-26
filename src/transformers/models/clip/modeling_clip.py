@@ -553,8 +553,8 @@ class ClipTransformer(ClipPreTrainedModel):
 
         embed_dim = config.d_model
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim)
-        self.embed_positions = nn.Embedding(config.max_position_embeddings, embed_dim)
+        self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
+        self.positional_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
         self.encoder = ClipEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
@@ -625,11 +625,11 @@ class ClipTransformer(ClipPreTrainedModel):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
+            inputs_embeds = self.token_embedding(input_ids)
 
         bsz, seq_len = input_shape
         position_ids = torch.arange(seq_len).expand(1, -1).to(inputs_embeds.device)
-        embed_pos = self.embed_positions(position_ids)
+        embed_pos = self.positional_embedding(position_ids)
         hidden_states = inputs_embeds + embed_pos
 
         bsz, seq_len = input_shape
@@ -836,12 +836,12 @@ class ClipVisionTransformer(ClipPreTrainedModel):
 
         scale = embed_dim ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
-        self.embed_positions = nn.Parameter(scale * torch.randn((image_resolution // patch_size) ** 2 + 1, embed_dim))
-        self.ln_pre = nn.LayerNorm(embed_dim)
+        self.positional_embedding = nn.Parameter(scale * torch.randn((image_resolution // patch_size) ** 2 + 1, embed_dim))
+        self.pre_layrnorm = nn.LayerNorm(embed_dim)
 
         self.encoder = ClipEncoder(config)
 
-        self.ln_post = nn.LayerNorm(embed_dim)
+        self.post_layernorm = nn.LayerNorm(embed_dim)
 
         self.init_weights()
 
@@ -909,8 +909,8 @@ class ClipVisionTransformer(ClipPreTrainedModel):
             ],
             dim=1,
         )  # shape = [*, grid ** 2 + 1, width]
-        hidden_states = hidden_states + self.embed_positions
-        hidden_states = self.ln_pre(hidden_states)
+        hidden_states = hidden_states + self.positional_embedding
+        hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -922,7 +922,7 @@ class ClipVisionTransformer(ClipPreTrainedModel):
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = last_hidden_state[:, 0, :]
-        hidden_states = self.ln_post(last_hidden_state)
+        last_hidden_state = self.post_layernorm(last_hidden_state)
 
         if not return_dict:
             return (last_hidden_state,) + encoder_outputs[1:]
@@ -943,13 +943,12 @@ class ClipModel(ClipPreTrainedModel):
         self.output_dim = config.output_dim
         self.text_embed_dim = text_config.d_model
         self.vision_embed_dim = vision_config.d_model
-        scale = self.vision_embed_dim ** -0.5
 
         self.transformer = ClipTransformer(text_config)
         self.vision_transformer = ClipVisionTransformer(vision_config)
 
-        self.visiual_projection = nn.Parameter(scale * torch.randn(self.vision_embed_dim, self.output_dim))
-        self.text_projection = nn.Parameter(torch.empty(self.text_embed_dim, self.output_dim))
+        self.visiual_projection = nn.Linear(self.vision_embed_dim, self.output_dim, bias=False) # TODO (PS): Copy init logic from CLIP repo
+        self.text_projection = nn.Linear(self.text_embed_dim, self.output_dim, bias=False) # TODO (PS): Copy init logic from CLIP repo
         self.logit_scale = nn.Parameter(torch.ones([]))
     
     def encode_text(
@@ -975,9 +974,9 @@ class ClipModel(ClipPreTrainedModel):
         text_embeds = text_outputs[0]
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        text_features = (
-            text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)] @ self.text_projection
-        )
+        pooled_output = text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)]
+        text_features = self.text_projection(pooled_output)
+        
         return text_features
     
     def encode_image(
@@ -995,7 +994,7 @@ class ClipModel(ClipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-        image_features = image_embeds @ self.visiual_projection
+        image_features = self.visiual_projection(image_embeds)
 
         return image_features
 
