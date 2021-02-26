@@ -34,22 +34,31 @@ The Authors' code can be found `here <https://github.com/pytorch/fairseq/tree/ma
 Training of MBart
 _______________________________________________________________________________________________________________________
 
-MBart is a multilingual encoder-decoder (seq-to-seq) model primarily intended for translation task. As the model is
-multilingual it expects the sequences in a different format. A special language id token is added in both the source
-and target text. The source text format is :obj:`X [eos, src_lang_code]` where :obj:`X` is the source text. The target
-text format is :obj:`[tgt_lang_code] X [eos]`. :obj:`bos` is never used.
+MBart is a multilingual encoder-decoder (sequence-to-sequence) model primarily intended for translation task. As the
+model is multilingual it expects the sequences in a different format. A special language id token is added in both the
+source and target text. The source text format is :obj:`X [eos, src_lang_code]` where :obj:`X` is the source text. The
+target text format is :obj:`[tgt_lang_code] X [eos]`. :obj:`bos` is never used.
 
-The :meth:`~transformers.MBartTokenizer.prepare_seq2seq_batch` handles this automatically and should be used to encode
-the sequences for sequence-to-sequence fine-tuning.
+The regular :meth:`~transformers.MBartTokenizer.__call__` will encode source text format, and it should be wrapped
+inside the context manager :meth:`~transformers.MBartTokenizer.as_target_tokenizer` to encode target text format.
 
 - Supervised training
 
 .. code-block::
 
-    example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
-    expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    batch = tokenizer.prepare_seq2seq_batch(example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt")
-    model(input_ids=batch['input_ids'], labels=batch['labels']) # forward pass
+    >>> from transformers import MBartForConditionalGeneration, MBartTokenizer
+
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
+    >>> example_english_phrase = "UN Chief Says There Is No Military Solution in Syria"
+    >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
+
+    >>> inputs = tokenizer(example_english_phrase, return_tensors="pt", src_lang="en_XX", tgt_lang="ro_RO")
+    >>> with tokenizer.as_target_tokenizer():
+    ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+
+    >>> model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
+    >>> # forward pass
+    >>> model(**inputs, labels=batch['labels'])
 
 - Generation
 
@@ -58,14 +67,14 @@ the sequences for sequence-to-sequence fine-tuning.
 
 .. code-block::
 
-    from transformers import MBartForConditionalGeneration, MBartTokenizer
-    model = MBartForConditionalGeneration.from_pretrained("facebook/mbart-large-en-ro")
-    tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro")
-    article = "UN Chief Says There Is No Military Solution in Syria"
-    batch = tokenizer.prepare_seq2seq_batch(src_texts=[article], src_lang="en_XX", return_tensors="pt")
-    translated_tokens = model.generate(**batch, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
-    translation = tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
-    assert translation == "Şeful ONU declară că nu există o soluţie militară în Siria"
+    >>> from transformers import MBartForConditionalGeneration, MBartTokenizer
+
+    >>> tokenizer = MBartTokenizer.from_pretrained("facebook/mbart-large-en-ro", src_lang="en_XX")
+    >>> article = "UN Chief Says There Is No Military Solution in Syria"
+    >>> inputs = tokenizer(article, return_tensors="pt")
+    >>> translated_tokens = model.generate(**inputs, decoder_start_token_id=tokenizer.lang_code_to_id["ro_RO"])
+    >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
+    "Şeful ONU declară că nu există o soluţie militară în Siria"
 
 
 Overview of MBart-50
@@ -160,7 +169,7 @@ MBartTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.MBartTokenizer
-    :members: build_inputs_with_special_tokens, prepare_seq2seq_batch
+    :members: as_target_tokenizer, build_inputs_with_special_tokens
 
 
 MBartTokenizerFast

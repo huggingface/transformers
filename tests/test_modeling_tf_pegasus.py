@@ -245,14 +245,6 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
         # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_mixed_precision(self):
-        # TODO JP: Make Pegasus float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make Pegasus XLA compliant
-        pass
-
     def test_resize_token_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -364,9 +356,7 @@ class TFPegasusIntegrationTests(unittest.TestCase):
         assert self.expected_text == generated_words
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(
-            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
-        )
+        model_inputs = self.tokenizer(self.src_text, **tokenizer_kwargs, return_tensors="tf")
         generated_ids = self.model.generate(
             model_inputs.input_ids,
             attention_mask=model_inputs.attention_mask,

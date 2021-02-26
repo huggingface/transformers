@@ -735,9 +735,9 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
         input_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`):
             Float values of input raw speech waveform. Values can be obtained by loading a `.flac` or `.wav` audio file
             into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via the soundfile library (`pip install
-            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Tokenizer` should
+            soundfile`). To prepare the array into `input_values`, the :class:`~transformers.Wav2Vec2Processor` should
             be used for padding and conversion into a tensor of type `torch.FloatTensor`. See
-            :meth:`transformers.Wav2Vec2Tokenizer.__call__` for details.
+            :meth:`transformers.Wav2Vec2Processor.__call__` for details.
         attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
             1]``:
@@ -748,8 +748,8 @@ WAV_2_VEC_2_INPUTS_DOCSTRING = r"""
             `What are attention masks? <../glossary.html#attention-mask>`__
 
             .. warning::
-                :obj:`attention_mask` should only be passed if the corresponding tokenizer has
-                ``config.return_attention_mask == True``. For all models whose tokenizer has
+                :obj:`attention_mask` should only be passed if the corresponding processor has
+                ``config.return_attention_mask == True``. For all models whose processor has
                 ``config.return_attention_mask == False``, such as `wav2vec2-base
                 <https://huggingface.co/facebook/wav2vec2-base-960h>`__, :obj:`attention_mask` should **not** be passed
                 to avoid degraded performance when doing batched inference. For such models :obj:`input_values` should
@@ -803,11 +803,11 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
 
         Example::
 
-            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
+            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
             >>> model = Wav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
@@ -818,7 +818,7 @@ class Wav2Vec2Model(Wav2Vec2PreTrainedModel):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> hidden_states = model(input_values).last_hidden_state
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -926,11 +926,11 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
 
         Example::
 
-            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2Model
+            >>> from transformers import Wav2Vec2Processor, Wav2Vec2Model
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
             >>> model = Wav2Vec2ForMaskedLM.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
@@ -941,11 +941,11 @@ class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
 
             >>> predicted_ids = torch.argmax(logits, dim=-1)
-            >>> transcription = tokenizer.decode(predicted_ids[0])
+            >>> transcription = processor.decode(predicted_ids[0])
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1005,11 +1005,11 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         Example::
 
             >>> import torch
-            >>> from transformers import Wav2Vec2Tokenizer, Wav2Vec2ForCTC
+            >>> from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> tokenizer = Wav2Vec2Tokenizer.from_pretrained("facebook/wav2vec2-base-960h")
+            >>> processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base-960h")
             >>> model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
             >>> def map_to_array(batch):
@@ -1020,17 +1020,18 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> input_values = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+            >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
 
             >>> predicted_ids = torch.argmax(logits, dim=-1)
-            >>> transcription = tokenizer.decode(predicted_ids[0])
+            
+            >>> transcription = processor.decode(predicted_ids[0])
 
-            >>> # compute loss
+            >>> TO IMPROVE: # compute loss
             >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
             >>> tokens = list(target_transcription.replace(" ", tokenizer.word_delimiter_token) + tokenizer.word_delimiter_token)
             >>> labels = torch.tensor([tokenizer.convert_tokens_to_ids(tokens)])
-            >>> loss = model(input_values, labels=labels).loss
+            >>> loss = model(input_values, labels=labels).loss  
         """
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

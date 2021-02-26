@@ -389,14 +389,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
 
-    def test_mixed_precision(self):
-        # TODO JP: Make GPT2 float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make GPT2 XLA compliant
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
