@@ -587,14 +587,14 @@ SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING = r"""
 
 SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`):
+        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, fbank_feature_length, num_mel_bins)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
             :class:`Speech2TextTransformerTokenizer` should be used for extracting the fbank features, padding and
             conversion into a tensor of type `torch.FloatTensor`. See
             :meth:`transformers.Speech2TextTransformerTokenizer.__call__`
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`, `optional`):
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, fbank_feature_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
             1]``:
 
@@ -701,14 +701,14 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
     ):
         r"""
         Args:
-            input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`):
+            input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, fbank_feature_length, num_mel_bins)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_features`, the :class:`Speech2TextTransformerTokenizer` should be used for extracting the fbank
                 features, padding and conversion into a tensor of type `torch.FloatTensor`. See
                 :meth:`transformers.Speech2TextTransformerTokenizer.__call__`
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length, num_mel_bins)`, `optional`):
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, fbank_feature_length)`, `optional`):
                 Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
                 ``[0, 1]``:
 
@@ -1244,12 +1244,12 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
         Example::
 
             >>> import torch
-            >>> from transformers import Speech2TextTransformerTokenizer, Speech2TextTransformerForConditionalGeneration
+            >>> from transformers import Speech2TextTransformerProcessor, Speech2TextTransformerForConditionalGeneration
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_transformer_small")
-            >>> tokenizer = Speech2TextTransformerTokenizer.from_pretrained("facebook/s2t_librispeech_transformer_small")
+            >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_small")
+            >>> tokenizer = Speech2TextTransformerTokenizer.from_pretrained("facebook/s2t_librispeech_small")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
@@ -1259,10 +1259,10 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
             >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
             >>> ds = ds.map(map_to_array)
 
-            >>> model_inputs = tokenizer(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
-            >>> generated_ids = model.generate(**model_inputs)
+            >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
+            >>> generated_ids = model.generate(input_ids=input_features)
 
-            >>> transcription = tokenizer.batch_decode(generated_ids)
+            >>> transcription = processor.batch_decode(generated_ids)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
