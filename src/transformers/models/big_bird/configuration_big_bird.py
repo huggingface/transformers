@@ -125,7 +125,6 @@ class BigBirdConfig(PretrainedConfig):
         norm_type="postnorm", # "prenorm"
         block_size=64,
         num_random_blocks=3,
-        position_embedding_type="absolute",
         **kwargs
     ):
         super().__init__(
@@ -149,7 +148,6 @@ class BigBirdConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
-        self.position_embedding_type = position_embedding_type
 
         self.rescale_embeddings = rescale_embeddings
         self.attention_type = attention_type
