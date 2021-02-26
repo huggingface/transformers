@@ -15,7 +15,7 @@
 """ TF 2.0 LayoutLM model. """
 
 import math
-from dataclasses import dataclass
+import warnings
 from typing import Optional, Tuple, Union, Dict
 
 import numpy as np
