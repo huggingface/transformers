@@ -689,7 +689,7 @@ class TFBertPerformerMainLayer(tf.keras.layers.Layer):
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            attention_mask=inputs["attention_mask"],
+            attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
