@@ -630,7 +630,7 @@ def save_metrics(self, split, metrics, combined=True):
         metrics (:obj:`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
         combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Creates combined metrics by updating ``all_results.json`` with metrics of this file
+            Creates combined metrics by updating ``all_results.json`` with metrics of this call
     """
     if not self.is_world_process_zero():
         return
