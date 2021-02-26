@@ -22,16 +22,17 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     from torch.cuda.amp import autocast
 
 
-model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-lv60", gradient_checkpointing=True)
-processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h-lv60")
+model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base", gradient_checkpointing=True)
+processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base")
 
 train_dataset = datasets.load_dataset("librispeech_asr", "clean", split="train.100")
 val_dataset = datasets.load_dataset("librispeech_asr", "clean", split="validation")
 
 
 def map_to_array(batch):
-    speech_array, _ = sf.read(batch["file"])
+    speech_array, sampling_rate = sf.read(batch["file"])
     batch["speech"] = speech_array
+    batch["sampling_rate"] = sampling_rate
     return batch
 
 
@@ -40,7 +41,12 @@ val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
 
 
 def prepare_dataset(batch):
-    batch["input_values"] = processor(batch["speech"]).input_values
+    # check that all files have the correct sampling rate
+    assert (
+        len(set(batch["sampling_rate"])) == 1
+    ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
+
+    batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
     with processor.as_target_processor():
         batch["labels"] = processor(batch["text"]).input_ids
     return batch
@@ -84,8 +90,11 @@ class DataCollatorCTCWithPadding:
     pad_to_multiple_of_labels: Optional[int] = None
 
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
+        # split inputs and labels since they have to be of different lenghts and need
+        # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
         label_features = [{"input_ids": feature["labels"]} for feature in features]
+
         batch = self.processor.pad(
             input_features,
             padding=self.padding,
@@ -93,7 +102,7 @@ class DataCollatorCTCWithPadding:
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
-        with self.processor.as_target_processor:
+        with self.processor.as_target_processor():
             labels_batch = self.processor.pad(
                 label_features,
                 padding=self.padding,
@@ -103,7 +112,7 @@ class DataCollatorCTCWithPadding:
             )
 
         # replace padding with -100 to ignore loss correctly
-        labels = labels_batch["input_values"].masked_fill(labels_batch.attention_mask.ne(1), -100)
+        labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
 
         batch["labels"] = labels
 
@@ -120,7 +129,8 @@ def compute_metrics(pred):
     pred.label_ids[pred.label_ids == -100] = 0
 
     pred_str = processor.batch_decode(pred_ids)
-    label_str = processor.batch_decode(pred.label_ids)
+    # we do not want to group tokens when computing the metrics
+    label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
     wer_score = wer(label_str, pred_str)
 
@@ -181,17 +191,16 @@ class CTCTrainer(Trainer):
 
 
 training_args = TrainingArguments(
-    output_dir="./results",
-    num_train_epochs=40,
-    per_device_train_batch_size=16,
-    per_device_eval_batch_size=16,
+    output_dir="./wav2vec2-base-100h",
+    num_train_epochs=30,
+    per_device_train_batch_size=32,
+    per_device_eval_batch_size=32,
     evaluation_strategy="steps",
-    gradient_accumulation_steps=2,
     save_total_limit=3,
     save_steps=500,
     eval_steps=100,
     logging_steps=50,
-    learning_rate=1e-4,
+    learning_rate=5e-4,
     warmup_steps=3000,
     group_by_length=True,
     logging_dir="./logs",

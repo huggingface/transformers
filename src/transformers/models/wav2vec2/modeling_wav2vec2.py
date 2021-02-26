@@ -1022,15 +1022,17 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
             >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
             >>> logits = model(input_values).logits
-
             >>> predicted_ids = torch.argmax(logits, dim=-1)
 
             >>> transcription = processor.decode(predicted_ids[0])
 
-            >>> TO IMPROVE: # compute loss
+            >>> # compute loss
             >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
-            >>> tokens = list(target_transcription.replace(" ", tokenizer.word_delimiter_token) + tokenizer.word_delimiter_token)
-            >>> labels = torch.tensor([tokenizer.convert_tokens_to_ids(tokens)])
+
+            >>> # wrap processor as target processor to encode labels
+            >>> with processor.as_target_processor():
+            >>>     labels = processor(transcription, return_tensors="pt").input_ids
+
             >>> loss = model(input_values, labels=labels).loss
         """
 
