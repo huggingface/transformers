@@ -299,7 +299,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
-    Speech2TextTransformerConfig,
+    Speech2TextConfig,
     SqueezeBertConfig,
     T5Config,
     TapasConfig,
@@ -319,7 +319,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-        (Speech2TextTransformerConfig, Speech2TextTransformerModel),
+        (Speech2TextConfig, Speech2TextTransformerModel),
         (Wav2Vec2Config, Wav2Vec2Model),
         (M2M100Config, M2M100Model),
         (ConvBertConfig, ConvBertModel),
@@ -404,7 +404,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-        (Speech2TextTransformerConfig, Speech2TextTransformerForConditionalGeneration),
+        (Speech2TextConfig, Speech2TextTransformerForConditionalGeneration),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (M2M100Config, M2M100ForConditionalGeneration),
         (ConvBertConfig, ConvBertForMaskedLM),

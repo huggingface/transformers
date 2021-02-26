@@ -26,7 +26,7 @@ SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class Speech2TextTransformerConfig(PretrainedConfig):
+class Speech2TextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextTransformerModel`.
     It is used to instantiate an Speech2TextTransformer model according to the specified arguments, defining the model
@@ -82,10 +82,10 @@ class Speech2TextTransformerConfig(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import Speech2TextTransformerModel, Speech2TextTransformerConfig
+        >>> from transformers import Speech2TextTransformerModel, Speech2TextConfig
 
         >>> # Initializing a Speech2TextTransformer s2t_transformer_s style configuration
-        >>> configuration = Speech2TextTransformerConfig()
+        >>> configuration = Speech2TextConfig()
 
         >>> # Initializing a model from the s2t_transformer_s style configuration
         >>> model = Speech2TextTransformerModel(configuration)

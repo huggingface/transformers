@@ -137,7 +137,7 @@ _import_structure = {
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
     "models.speech_to_text_transformer": [
         "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Speech2TextTransformerConfig",
+        "Speech2TextConfig",
         "Speech2TextTokenizer",
         "Speech2TextFeatureExtractor",
         "Speech2TextProcessor",
@@ -1396,7 +1396,7 @@ if TYPE_CHECKING:
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Speech2TextTransformerConfig,
+        Speech2TextConfig,
         Speech2TextFeatureExtractor,
         Speech2TextProcessor,
         Speech2TextTokenizer,

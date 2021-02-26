@@ -28,10 +28,10 @@ Tips:
 
 <INSERT TIPS ABOUT MODEL HERE>
 
-Speech2TextTransformerConfig
+Speech2TextConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Speech2TextTransformerConfig
+.. autoclass:: transformers.Speech2TextConfig
     :members:
 
 

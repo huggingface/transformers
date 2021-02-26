@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from transformers import Speech2TextTransformerConfig, Speech2TextTransformerForConditionalGeneration
+from transformers import Speech2TextConfig, Speech2TextTransformerForConditionalGeneration
 
 
 def remove_ignore_keys_(state_dict):
@@ -46,7 +46,7 @@ def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
     tie_embeds = args.share_decoder_input_output_embed
 
     conv_kernel_sizes = [int(i) for i in args.conv_kernel_sizes.split(",")]
-    config = Speech2TextTransformerConfig(
+    config = Speech2TextConfig(
         vocab_size=vocab_size,
         max_source_positions=args.max_source_positions,
         max_target_positions=args.max_target_positions,

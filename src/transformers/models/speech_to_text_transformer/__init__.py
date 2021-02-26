@@ -29,7 +29,7 @@ from ...file_utils import (
 _import_structure = {
     "configuration_speech_to_text_transformer": [
         "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Speech2TextTransformerConfig",
+        "Speech2TextConfig",
     ],
 }
 
@@ -54,7 +54,7 @@ if is_torch_available() and is_torchaudio_available() and is_sentencepiece_avail
 if TYPE_CHECKING:
     from .configuration_speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Speech2TextTransformerConfig,
+        Speech2TextConfig,
     )
     from .tokenization_speech_to_text_transformer import Speech2TextTokenizer
 

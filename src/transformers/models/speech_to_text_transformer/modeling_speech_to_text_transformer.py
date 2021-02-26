@@ -39,12 +39,12 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_speech_to_text_transformer import Speech2TextTransformerConfig
+from .configuration_speech_to_text_transformer import Speech2TextConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Speech2TextTransformerConfig"
+_CONFIG_FOR_DOC = "Speech2TextConfig"
 _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
 
 
@@ -340,7 +340,7 @@ class Speech2TextTransformerAttention(nn.Module):
 
 
 class Speech2TextTransformerEncoderLayer(nn.Module):
-    def __init__(self, config: Speech2TextTransformerConfig):
+    def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = Speech2TextTransformerAttention(
@@ -406,7 +406,7 @@ class Speech2TextTransformerEncoderLayer(nn.Module):
 
 
 class Speech2TextTransformerDecoderLayer(nn.Module):
-    def __init__(self, config: Speech2TextTransformerConfig):
+    def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -522,7 +522,7 @@ class Speech2TextTransformerDecoderLayer(nn.Module):
 
 
 class Speech2TextTransformerPreTrainedModel(PreTrainedModel):
-    config_class = Speech2TextTransformerConfig
+    config_class = Speech2TextConfig
     base_model_prefix = "model"
 
     def _init_weights(self, module):
@@ -584,7 +584,7 @@ SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING = r"""
     general usage and behavior.
 
     Parameters:
-        config (:class:`~transformers.Speech2TextTransformerConfig`):
+        config (:class:`~transformers.Speech2TextConfig`):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
@@ -668,11 +668,11 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
     :class:`Speech2TextTransformerEncoderLayer`.
 
     Args:
-        config: Speech2TextTransformerConfig
+        config: Speech2TextConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: Speech2TextTransformerConfig):
+    def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -823,11 +823,11 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
     :class:`Speech2TextTransformerDecoderLayer`
 
     Args:
-        config: Speech2TextTransformerConfig
+        config: Speech2TextConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: Speech2TextTransformerConfig):
+    def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -1086,7 +1086,7 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
     SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING,
 )
 class Speech2TextTransformerModel(Speech2TextTransformerPreTrainedModel):
-    def __init__(self, config: Speech2TextTransformerConfig):
+    def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
 
         self.encoder = Speech2TextTransformerEncoder(config)
@@ -1196,7 +1196,7 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
         r"lm_head\.weight",
     ]
 
-    def __init__(self, config: Speech2TextTransformerConfig):
+    def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
         self.model = Speech2TextTransformerModel(config)
         self.lm_head = nn.Linear(config.d_model, self.config.vocab_size, bias=False)

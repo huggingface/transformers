@@ -32,7 +32,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Speech2TextTransformerConfig,
+        Speech2TextConfig,
         Speech2TextTransformerForConditionalGeneration,
         Speech2TextTransformerModel,
         Speech2TextTokenizer,
@@ -111,7 +111,7 @@ class Speech2TextTransformerModelTester:
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
-        config = Speech2TextTransformerConfig(
+        config = Speech2TextConfig(
             vocab_size=self.vocab_size,
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
@@ -213,7 +213,7 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
 
     def setUp(self):
         self.model_tester = Speech2TextTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Speech2TextTransformerConfig)
+        self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -450,7 +450,7 @@ class Speech2TextTransformerStandaloneDecoderModelTester:
         if self.use_labels:
             lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
-        config = Speech2TextTransformerConfig(
+        config = Speech2TextConfig(
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
