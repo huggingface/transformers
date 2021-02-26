@@ -17,7 +17,6 @@ Integrations with other Python libraries.
 import importlib.util
 import io
 import json
-import math
 import numbers
 import os
 import re
