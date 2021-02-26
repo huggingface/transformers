@@ -200,7 +200,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
                 f"Currently keeping {kwargs['keep_checkpoint_num']} checkpoints for each trial. "
-                f"Checkpoints are usually huge, "
+                "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
             )
     if "scheduler" in kwargs:
