@@ -161,7 +161,6 @@ class ClipConfig(PretrainedConfig):
 
     def __init__(self, output_dim=512, **kwargs):
         super().__init__(**kwargs)
-        print("kwargs", kwargs)
         text_config_dict = kwargs.pop("text_config")
         vision_config_dict = kwargs.pop("vision_config")
 
