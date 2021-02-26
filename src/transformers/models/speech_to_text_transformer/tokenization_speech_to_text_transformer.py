@@ -13,23 +13,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for Speech2TextTransformer."""
+
 import json
 from pathlib import Path
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
-import numpy as np
-import torch
-
 import sentencepiece
 
-
-try:
-    import torchaudio.compliance.kaldi as ta_kaldi
-except ImportError:
-    raise ImportError("Please install `torchaudio` to enable fbank feature extraction")
-
-from ...tokenization_utils import BatchEncoding, PaddingStrategy, PreTrainedTokenizer, TensorType
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -55,11 +47,34 @@ PRETRAINED_VOCAB_FILES_MAP = {
 class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
     """
     Construct an Speech2TextTransformer tokenizer.
+
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains some of the main methods.
+    Users should refer to the superclass for more information regarding such methods.
+
+    Args:
+        vocab_file (:obj:`str`):
+            File containing the vocabulary.
+        spm_file (:obj:`str`):
+            Path to the `SentencePiece <https://github.com/google/sentencepiece>`__ model file
+        bos_token (:obj:`str`, `optional`, defaults to :obj:`"<s>"`):
+            The beginning of sentence token.
+        eos_token (:obj:`str`, `optional`, defaults to :obj:`"</s>"`):
+            The end of sentence token.
+        unk_token (:obj:`str`, `optional`, defaults to :obj:`"<unk>"`):
+            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+            token instead.
+        pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        do_upper_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+           Whether or not to uppercase the output when decoding.
+
+        **kwargs
+            Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    model_input_names = ["input_features", "attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -86,8 +101,6 @@ class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
         self.sp_model = load_spm(spm_file)
-
-        self.transforms = [UtteranceCMVN()]
 
     @property
     def vocab_size(self) -> int:
@@ -148,115 +161,6 @@ class Speech2TextTransformerTokenizer(PreTrainedTokenizer):
             copyfile(self.spm_file, spm_save_path)
 
         return (str(vocab_save_path), str(spm_save_path))
-
-    def __call__(
-        self,
-        raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        sample_rate: int,
-        num_mel_bins: int = 80,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        verbose: bool = True,
-        return_attention_mask: bool = True,
-        **kwargs
-    ):
-        is_batched = bool(
-            isinstance(raw_speech, (list, tuple))
-            and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
-        )
-
-        # make sure input is in list format
-        if is_batched and not isinstance(raw_speech[0], np.ndarray):
-            raw_speech = [np.asarray(speech) for speech in raw_speech]
-        elif not is_batched and not isinstance(raw_speech, np.ndarray):
-            raw_speech = np.asarray(raw_speech)
-
-        # always return batch
-        if not is_batched:
-            raw_speech = [raw_speech]
-
-        features = [self._extract_fbank_features(waveform, sample_rate, num_mel_bins) for waveform in raw_speech]
-        for transform in self.transforms:
-            features = [transform(feature) for feature in features]
-
-        # Convert padding_strategy in PaddingStrategy
-        padding_strategy, _, max_length, _ = self._get_padding_truncation_strategies(
-            padding=padding, max_length=max_length, verbose=verbose
-        )
-
-        padded_inputs = self._pad_frames(
-            features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask
-        )
-        padded_inputs = BatchEncoding(padded_inputs, tensor_type=return_tensors)
-
-        return padded_inputs
-
-    def _extract_fbank_features(
-        self,
-        waveform,
-        sample_rate: int,
-        num_mel_bins: int = 80,
-    ):
-        waveform = waveform * (2 ** 15)  # Kaldi compliance: 16-bit signed integers
-        waveform = torch.from_numpy(waveform).unsqueeze(0)
-        features = ta_kaldi.fbank(waveform, num_mel_bins=num_mel_bins, sample_frequency=sample_rate)
-        return features.numpy()
-
-    def _pad_frames(self, features, padding_strategy, max_length, pad_to_multiple_of, return_attention_mask):
-        cur_max_length = max(feature.shape[0] for feature in features)
-
-        if padding_strategy == PaddingStrategy.LONGEST:
-            max_length = cur_max_length
-
-        if pad_to_multiple_of is not None and (max_length % pad_to_multiple_of != 0):
-            max_length = ((max_length // pad_to_multiple_of) + 1) * pad_to_multiple_of
-
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD:
-            input_features = np.zeros((len(features), max_length, features[0].shape[1]))
-            for i, v in enumerate(features):
-                input_features[i, : v.shape[0]] = v
-
-            if return_attention_mask:
-                attention_mask = np.not_equal(input_features, 0).astype(np.long).tolist()
-
-            input_features = input_features.tolist()
-        else:
-            features = features
-            if return_attention_mask:
-                attention_mask = [np.not_equal(feature, 0).astype(np.long).tolist() for feature in features]
-
-            input_features = [feature.tolist() for feature in features]
-
-        encoded_inputs = {"input_features": input_features}
-        if return_attention_mask:
-            encoded_inputs["attention_mask"] = attention_mask
-
-        return encoded_inputs
-
-
-class UtteranceCMVN:
-    """Utterance-level CMVN (cepstral mean and variance normalization)"""
-
-    def __init__(self, norm_means=True, norm_vars=True):
-        self.norm_means, self.norm_vars = norm_means, norm_vars
-
-    def __repr__(self):
-        return self.__class__.__name__ + f"(norm_means={self.norm_means}, norm_vars={self.norm_vars})"
-
-    def __call__(self, x):
-        mean = x.mean(axis=0)
-        square_sums = (x ** 2).sum(axis=0)
-
-        if self.norm_means:
-            x = np.subtract(x, mean)
-        if self.norm_vars:
-            var = square_sums / x.shape[0] - mean ** 2
-            std = np.sqrt(np.maximum(var, 1e-10))
-            x = np.divide(x, std)
-
-        return x
 
 
 def load_spm(path: str) -> sentencepiece.SentencePieceProcessor:

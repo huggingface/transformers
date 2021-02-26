@@ -135,7 +135,13 @@ _import_structure = {
         "Wav2Vec2Processor",
     ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
-    "models.speech_to_text_transformer": ["SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechToTextTransformerConfig", "SpeechToTextTransformerTokenizer"],
+    "models.speech_to_text_transformer": [
+        "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Speech2TextTransformerConfig",
+        "Speech2TextTransformerTokenizer",
+        "Speech2TextTransformerFeatureExtractor",
+        "Speech2TextTransformerProcessor",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -1391,6 +1397,8 @@ if TYPE_CHECKING:
     from .models.speech_to_text_transformer import (
         SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextTransformerConfig,
+        Speech2TextTransformerFeatureExtractor,
+        Speech2TextTransformerProcessor,
         Speech2TextTransformerTokenizer,
     )
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer

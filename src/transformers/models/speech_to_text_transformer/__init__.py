@@ -17,7 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_tokenizers_available, is_torch_available
+from ...file_utils import (
+    _BaseLazyModule,
+    is_sentencepiece_available,
+    is_tokenizers_available,
+    is_torch_available,
+    is_torchaudio_available,
+)
 
 
 _import_structure = {
@@ -39,6 +45,11 @@ if is_torch_available():
         "Speech2TextTransformerPreTrainedModel",
     ]
 
+if is_torch_available() and is_torchaudio_available():
+    _import_structure["feature_extraction_speech_to_text_transformer"] = ["Speech2TextTransformerFeatureExtractor"]
+
+if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
+    _import_structure["processing_speech_to_text_transformer"] = ["Speech2TextTransformerProcessor"]
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text_transformer import (
@@ -55,6 +66,11 @@ if TYPE_CHECKING:
             Speech2TextTransformerPreTrainedModel,
         )
 
+    if is_torch_available() and is_torchaudio_available():
+        from .feature_extraction_speech_to_text_transformer import Speech2TextTransformerFeatureExtractor
+
+    if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
+        from .processing_speech_to_text_transformer import Speech2TextTransformerProcessor
 
 else:
     import importlib
