@@ -528,8 +528,6 @@ class ClipEncoder(ClipPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-        hidden_states = self.final_layer_norm(hidden_states)
-
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -565,6 +563,7 @@ class ClipTransformer(ClipPreTrainedModel):
     def forward(
         self,
         input_ids=None,
+        position_ids=None,
         attention_mask=None,
         inputs_embeds=None,
         output_attentions=None,
@@ -651,8 +650,8 @@ class ClipTransformer(ClipPreTrainedModel):
             return (last_hidden_state,) + encoder_outputs[1:]
         return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.encoder_states,
-            attentions=encoder_outputs.all_attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
     def _build_attention_mask(self, bsz, seq_len):
@@ -827,7 +826,7 @@ class ClipVisionTransformer(ClipPreTrainedModel):
         image_resolution = config.image_resolution
         embed_dim = config.d_model
         patch_size = config.patch_size
-        self.conv1 = nn.Conv2d(
+        self.conv = nn.Conv2d(
             in_channels=3,
             out_channels=embed_dim,
             kernel_size=patch_size,
@@ -897,7 +896,7 @@ class ClipVisionTransformer(ClipPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.conv1(input_features)  # shape = [*, width, grid, grid]
+        hidden_states = self.conv(input_features)  # shape = [*, width, grid, grid]
         hidden_states = hidden_states.reshape(
             hidden_states.shape[0], hidden_states.shape[1], -1
         )  # shape = [*, width, grid ** 2]
@@ -910,7 +909,7 @@ class ClipVisionTransformer(ClipPreTrainedModel):
             ],
             dim=1,
         )  # shape = [*, grid ** 2 + 1, width]
-        hidden_states = hidden_states + self.positional_embedding
+        hidden_states = hidden_states + self.embed_positions
         hidden_states = self.ln_pre(hidden_states)
 
         encoder_outputs = self.encoder(
@@ -922,14 +921,15 @@ class ClipVisionTransformer(ClipPreTrainedModel):
         )
 
         last_hidden_state = encoder_outputs[0]
+        last_hidden_state = last_hidden_state[:, 0, :]
         hidden_states = self.ln_post(last_hidden_state)
 
         if not return_dict:
             return (last_hidden_state,) + encoder_outputs[1:]
         return BaseModelOutput(
             last_hidden_state=last_hidden_state,
-            hidden_states=encoder_outputs.encoder_states,
-            attentions=encoder_outputs.all_attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -945,12 +945,59 @@ class ClipModel(ClipPreTrainedModel):
         self.vision_embed_dim = vision_config.d_model
         scale = self.vision_embed_dim ** -0.5
 
-        self.text_encoder = ClipTransformer(text_config)
-        self.vision_transformer = ClipVisualTransformer(vision_config)
+        self.transformer = ClipTransformer(text_config)
+        self.vision_transformer = ClipVisionTransformer(vision_config)
 
         self.visiual_projection = nn.Parameter(scale * torch.randn(self.vision_embed_dim, self.output_dim))
         self.text_projection = nn.Parameter(torch.empty(self.text_embed_dim, self.output_dim))
         self.logit_scale = nn.Parameter(torch.ones([]))
+    
+    def encode_text(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        text_outputs = self.transformer(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        text_embeds = text_outputs[0]
+        # text_embeds.shape = [batch_size, n_ctx, transformer.width]
+        # take features from the eot embedding (eot_token is the highest number in each sequence)
+        text_features = (
+            text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)] @ self.text_projection
+        )
+        return text_features
+    
+    def encode_image(
+        self,
+        input_features=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        vision_outputs = self.vision_transformer(
+            input_features=input_features,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        image_embeds = vision_outputs[0]
+        image_features = image_embeds @ self.visiual_projection
+
+        return image_features
 
     def forward(
         self,
@@ -970,12 +1017,19 @@ class ClipModel(ClipPreTrainedModel):
             return_dict=return_dict,
         )
 
+        text_outputs = self.transformer(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
         image_embeds = vision_outputs[0]
         image_features = image_embeds @ self.visiual_projection
 
-        text_outputs = self.text_encoder(
-            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, inputs_embeds=inputs_embeds
-        )
 
         text_embeds = text_outputs[0]
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]

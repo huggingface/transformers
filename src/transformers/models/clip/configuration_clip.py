@@ -38,6 +38,7 @@ class ClipTextConfig(PretrainedConfig):
         vocab_size=49408,
         d_model=512,
         ffn_dim=2048,
+        output_dim=512,
         dropout=0.0,
         num_hidden_layers=12,
         num_attention_heads=8,
@@ -54,6 +55,7 @@ class ClipTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.ffn_dim = ffn_dim
+        self.output_dim = output_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -69,6 +71,7 @@ class ClipVisionConfig(PretrainedConfig):
         self,
         d_model=768,
         ffn_dim=3072,
+        output_dim=512,
         dropout=0.0,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -82,6 +85,7 @@ class ClipVisionConfig(PretrainedConfig):
 
         self.d_model = d_model
         self.ffn_dim = ffn_dim
+        self.output_dim = output_dim
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
