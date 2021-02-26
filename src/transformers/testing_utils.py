@@ -38,6 +38,7 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
+    is_torchaudio_available,
 )
 from .integrations import is_optuna_available, is_ray_available
 
@@ -191,6 +192,19 @@ def require_torch_scatter(test_case):
     """
     if not is_scatter_available():
         return unittest.skip("test requires PyTorch scatter")(test_case)
+    else:
+        return test_case
+
+
+def require_torch_audio(test_case):
+    """
+    Decorator marking a test that requires torchaudio.
+
+    These tests are skipped when torchaudio isn't installed.
+
+    """
+    if not is_torchaudio_available:
+        return unittest.skip("test requires torchaudio")(test_case)
     else:
         return test_case
 

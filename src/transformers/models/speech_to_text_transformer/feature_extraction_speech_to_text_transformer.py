@@ -55,7 +55,7 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
             The value that is used to fill the padding values.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
-        norm_mean (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        norm_means (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to zero-mean normalize the extracted features.
         norm_vars (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to unit-variance normalize the extracted features.
@@ -78,7 +78,7 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
         num_mel_bins=80,
         padding_value=0.0,
         do_normalize=True,
-        norm_mean=True,
+        norm_means=True,
         norm_vars=True,
         return_attention_mask=False,
         **kwargs
@@ -86,9 +86,9 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
         self.do_normalize = do_normalize
+        self.norm_means = norm_means
+        self.norm_vars = norm_vars
         self.return_attention_mask = return_attention_mask
-
-        self.uttterance_cmvn = UtteranceCMVN(norm_mean, norm_vars)
 
     def _extract_fbank_features(
         self,
@@ -103,8 +103,24 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
         features = ta_kaldi.fbank(waveform, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate)
         return features.numpy()
 
+    @staticmethod
+    def utterance_cmvn(
+        x: np.ndarray, norm_means: Optional[bool] = True, norm_vars: Optional[bool] = True
+    ) -> np.ndarray:
+        mean = x.mean(axis=0)
+        square_sums = (x ** 2).sum(axis=0)
+
+        if norm_means:
+            x = np.subtract(x, mean)
+        if norm_vars:
+            var = square_sums / x.shape[0] - mean ** 2
+            std = np.sqrt(np.maximum(var, 1e-10))
+            x = np.divide(x, std)
+
+        return x
+
     def normalize(self, input_values: List[np.ndarray]) -> List[np.ndarray]:
-        return [self.uttterance_cmvn(x) for x in input_values]
+        return [self.utterance_cmvn(x, self.norm_means, self.norm_vars) for x in input_values]
 
     def __call__(
         self,
@@ -212,26 +228,3 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
         )
 
         return padded_inputs
-
-
-class UtteranceCMVN:
-    """Utterance-level CMVN (cepstral mean and variance normalization)"""
-
-    def __init__(self, norm_means=True, norm_vars=True):
-        self.norm_means, self.norm_vars = norm_means, norm_vars
-
-    def __repr__(self):
-        return self.__class__.__name__ + f"(norm_means={self.norm_means}, norm_vars={self.norm_vars})"
-
-    def __call__(self, x: np.ndarray) -> np.ndarray:
-        mean = x.mean(axis=0)
-        square_sums = (x ** 2).sum(axis=0)
-
-        if self.norm_means:
-            x = np.subtract(x, mean)
-        if self.norm_vars:
-            var = square_sums / x.shape[0] - mean ** 2
-            std = np.sqrt(np.maximum(var, 1e-10))
-            x = np.divide(x, std)
-
-        return x
