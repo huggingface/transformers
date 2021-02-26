@@ -180,9 +180,9 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         """
         Computes the attention output given Q' and K' from the above get_projected_queries_and_keys method.
         Parameters:
-            q_prime: tf.tensor(bs, seq_length, num_features)
-            k_prime: tf.tensor(bs, seq_length, num_features)
-            v: tf.tensor(bs, seq_length, dim)
+            q_prime: tf.tensor(bs, n_heads, q_length, dim_per_head)
+            k_prime: tf.tensor(bs, n_heads, q_length, dim_per_head)
+            v: tf.tensor(bs, n_heads, q_length, dim_per_head)
             mask: tf.tensor(bs, seq_length)
 
         Returns:
@@ -190,8 +190,10 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
+            #assert len(shape_list(mask)) == 2, f"Mask should have shapes (bs, seq_len) but has shapes {shape_list(mask)}"
             #mask = tf.cast(mask, dtype=k_prime.dtype)
             k_prime *= mask
+            #k_prime *= tf.expand_dims(tf.expand_dims(mask, 1), -1)
 
         k_prime_t = tf.linalg.matrix_transpose(k_prime)
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
