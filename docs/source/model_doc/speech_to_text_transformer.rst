@@ -43,6 +43,20 @@ Speech2TextTransformerTokenizer
         create_token_type_ids_from_sequences, save_vocabulary
 
 
+Speech2TextTransformerFeatureExtractor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Speech2TextTransformerFeatureExtractor
+    :members: __call__
+
+
+Speech2TextTransformerProcessor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.Speech2TextTransformerProcessor
+    :members: __call__, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
+
+
 Speech2TextTransformerModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
