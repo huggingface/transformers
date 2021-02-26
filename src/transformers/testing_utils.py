@@ -196,7 +196,7 @@ def require_torch_scatter(test_case):
         return test_case
 
 
-def require_torch_audio(test_case):
+def require_torchaudio(test_case):
     """
     Decorator marking a test that requires torchaudio.
 

@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import Speech2TextTransformerFeatureExtractor
-from transformers.testing_utils import require_datasets, require_torch, require_torch_audio, slow
+from transformers.testing_utils import require_torch, require_torchaudio
 
 from .test_feature_extraction_common import FeatureExtractionMixin
 
@@ -44,7 +44,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-@require_torch_audio
+@require_torchaudio
 class Speech2TextTransformerFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
