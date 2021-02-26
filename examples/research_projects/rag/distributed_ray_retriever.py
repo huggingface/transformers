@@ -6,6 +6,10 @@ from transformers import RagConfig, RagRetriever, RagTokenizer
 from transformers.file_utils import requires_datasets, requires_faiss
 from transformers.models.rag.retrieval_rag import CustomHFIndex
 
+from transformers import (
+    DPRContextEncoderTokenizerFast)
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -14,11 +18,13 @@ class RayRetriever:
     def __init__(self):
         self.initialized = False
 
-    def create_rag_retriever(self, config, question_encoder_tokenizer, generator_tokenizer, index):
+    # same as before, only the new paramter ctx_encoder_tokenizer get passed.    
+    def create_rag_retriever(self, config, question_encoder_tokenizer, ctx_encoder_tokenizer,generator_tokenizer, index):
         if not self.initialized:
             self.retriever = RagRetriever(
                 config,
                 question_encoder_tokenizer=question_encoder_tokenizer,
+                ctx_encoder_tokenizer=ctx_encoder_tokenizer,
                 generator_tokenizer=generator_tokenizer,
                 index=index,
                 init_retrieval=False,
@@ -27,10 +33,19 @@ class RayRetriever:
 
     def init_retrieval(self):
         self.retriever.index.init_index()
+        
+    # @amogkam added this function to re-initlize the index.   
+    def set_index(self,index):
+        #Update the index object and re_initialized the index
+        self.retriever.index=index
+        self.retriever.index.init_index()
 
     def retrieve(self, question_hidden_states, n_docs):
         doc_ids, retrieved_doc_embeds = self.retriever._main_retrieve(question_hidden_states, n_docs)
-        return doc_ids, retrieved_doc_embeds
+        
+        #calculate the doc_dicts here with updated index.
+        doc_dicts= self.retriever.index.get_doc_dicts(doc_ids)
+        return doc_ids, retrieved_doc_embeds,doc_dicts
 
 
 class RagRayDistributedRetriever(RagRetriever):
@@ -61,7 +76,9 @@ class RagRayDistributedRetriever(RagRetriever):
             If specified, use this index instead of the one built using the configuration
     """
 
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, retrieval_workers, index=None):
+    # passed the ctx_encoder_tokenizer
+    def __init__(self, config, question_encoder_tokenizer,ctx_encoder_tokenizer, 
+                 generator_tokenizer, retrieval_workers, index=None):
         if index is not None and index.is_initialized() and len(retrieval_workers) > 0:
             raise ValueError(
                 "When using Ray for distributed fine-tuning, "
@@ -72,6 +89,7 @@ class RagRayDistributedRetriever(RagRetriever):
         super().__init__(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
+            ctx_encoder_tokenizer=ctx_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
             index=index,
             init_retrieval=False,
@@ -80,7 +98,7 @@ class RagRayDistributedRetriever(RagRetriever):
         if len(self.retrieval_workers) > 0:
             ray.get(
                 [
-                    worker.create_rag_retriever.remote(config, question_encoder_tokenizer, generator_tokenizer, index)
+                    worker.create_rag_retriever.remote(config, question_encoder_tokenizer,ctx_encoder_tokenizer, generator_tokenizer, index)
                     for worker in self.retrieval_workers
                 ]
             )
@@ -123,10 +141,12 @@ class RagRayDistributedRetriever(RagRetriever):
         if len(self.retrieval_workers) > 0:
             # Select a random retrieval actor.
             random_worker = self.retrieval_workers[random.randint(0, len(self.retrieval_workers) - 1)]
-            doc_ids, retrieved_doc_embeds = ray.get(random_worker.retrieve.remote(question_hidden_states, n_docs))
+            doc_ids, retrieved_doc_embeds,doc_dicts = ray.get(random_worker.retrieve.remote(question_hidden_states, n_docs))
         else:
             doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
-        return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
+            doc_dicts=self.index.get_doc_dicts(doc_ids)
+                
+        return retrieved_doc_embeds, doc_ids, doc_dicts
 
     @classmethod
     def get_tokenizers(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
@@ -140,6 +160,8 @@ class RagRayDistributedRetriever(RagRetriever):
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder
         generator_tokenizer = rag_tokenizer.generator
+        
+        ctx_encoder_tokenizer = DPRContextEncoderTokenizerFast.from_pretrained('facebook/dpr-ctx_encoder-multiset-base')
         if indexed_dataset is not None:
             config.index_name = "custom"
             index = CustomHFIndex(config.retrieval_vector_size, indexed_dataset)
@@ -148,7 +170,18 @@ class RagRayDistributedRetriever(RagRetriever):
         return cls(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
+            ctx_encoder_tokenizer = ctx_encoder_tokenizer,
             generator_tokenizer=generator_tokenizer,
             retrieval_workers=actor_handles,
             index=index,
         )
+
+    # @amogkam This function is used to re-initilize the index, when the new faiss index is calulated 
+    def re_load(self):
+
+        #build the index again
+        #now this uses the new  my_knowledge_dataset_hnsw_index.faiss file and passase
+        index = self._build_index(self.config) #the new index being loaded (raw form)
+
+        #assign the new index
+        ray.get([worker.set_index.remote(index) for worker in self.retrieval_workers])

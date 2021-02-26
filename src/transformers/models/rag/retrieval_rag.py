@@ -370,7 +370,7 @@ class RagRetriever:
 
     """
 
-    def __init__(self, config, question_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
+    def __init__(self, config, question_encoder_tokenizer,ctx_encoder_tokenizer, generator_tokenizer, index=None, init_retrieval=True):
         self._init_retrieval = init_retrieval
         requires_datasets(self)
         requires_faiss(self)
@@ -378,12 +378,13 @@ class RagRetriever:
         self.index = index or self._build_index(config)
         self.generator_tokenizer = generator_tokenizer
         self.question_encoder_tokenizer = question_encoder_tokenizer
+        self.ctx_encoder_tokenizer=ctx_encoder_tokenizer
 
         self.n_docs = config.n_docs
         self.batch_size = config.retrieval_batch_size
 
         self.config = config
-        if self._init_retrieval:
+        if self._init_retrieval: #retrival initialization only happen when it get called in the training loop so doesn't get called from here. No worries
             self.init_retrieval()
 
     @staticmethod
@@ -421,7 +422,7 @@ class RagRetriever:
             config.index_name = "custom"
             index = CustomHFIndex(config.retrieval_vector_size, indexed_dataset)
         else:
-            index = cls._build_index(config)
+            index = cls._build_index(config) #here the row dataset with the embeddings are loaded
         return cls(
             config,
             question_encoder_tokenizer=question_encoder_tokenizer,
@@ -488,6 +489,7 @@ class RagRetriever:
             )
             return out
 
+
         rag_input_strings = [
             cat_input_and_doc(
                 docs[i]["title"][j],
@@ -498,6 +500,8 @@ class RagRetriever:
             for i in range(len(docs))
             for j in range(n_docs)
         ]
+
+
 
         contextualized_inputs = self.generator_tokenizer.batch_encode_plus(
             rag_input_strings,
@@ -550,7 +554,6 @@ class RagRetriever:
               index
             - **doc_dicts** (:obj:`List[dict]`): The :obj:`retrieved_doc_embeds` examples per query.
         """
-
         doc_ids, retrieved_doc_embeds = self._main_retrieve(question_hidden_states, n_docs)
         return retrieved_doc_embeds, doc_ids, self.index.get_doc_dicts(doc_ids)
 
@@ -573,7 +576,7 @@ class RagRetriever:
                 The prefix used by the generator's tokenizer.
             n_docs (:obj:`int`, `optional`):
                 The number of docs retrieved per query.
-            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`, defaults to "pt"):
+            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`, defaults to "pt"):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -600,6 +603,21 @@ class RagRetriever:
         prefix = prefix if prefix is not None else self.config.generator.prefix
         retrieved_doc_embeds, doc_ids, docs = self.retrieve(question_hidden_states, n_docs)
 
+
+
+        retrived_doc_text=[]
+        retrived_doc_title=[]
+
+        for b_idx in range(len(docs)):  #get an element in the
+             for doc_idx in range(n_docs):
+                    retrived_doc_text.append(docs[b_idx]['text'][doc_idx])
+                    retrived_doc_title.append(docs[b_idx]['title'][doc_idx])
+
+
+        #newly added
+        tokenized_docs=self.ctx_encoder_tokenizer(retrived_doc_title, retrived_doc_text, 
+        truncation=True, padding="longest", return_tensors="pt")
+
         input_strings = self.question_encoder_tokenizer.batch_decode(question_input_ids, skip_special_tokens=True)
         context_input_ids, context_attention_mask = self.postprocess_docs(
             docs, input_strings, prefix, n_docs, return_tensors=return_tensors
@@ -607,10 +625,12 @@ class RagRetriever:
 
         return BatchEncoding(
             {
-                "context_input_ids": context_input_ids,
+                "context_input_ids": context_input_ids, #combined context
                 "context_attention_mask": context_attention_mask,
                 "retrieved_doc_embeds": retrieved_doc_embeds,
                 "doc_ids": doc_ids,
+                "tokenized_doc_ids":tokenized_docs["input_ids"],
+                "tokenized_doc_attention_mask":tokenized_docs["attention_mask"],
             },
             tensor_type=return_tensors,
         )

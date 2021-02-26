@@ -27,14 +27,18 @@ from transformers import (
     RagTokenForGeneration,
     RagTokenizer,
     T5ForConditionalGeneration,
+    DPRContextEncoder,
+    DPRContextEncoderTokenizerFast
 )
 from transformers import logging as transformers_logging
 from transformers.integrations import is_ray_available
 
 
+
 if is_ray_available():
     import ray
     from distributed_ray_retriever import RagRayDistributedRetriever, RayRetriever
+    from ray_embedding_saver import RayEncode,RayCreateEmbedding
 
 
 from callbacks_rag import (  # noqa: E402 # isort:skipq
@@ -107,7 +111,7 @@ class GenerativeQAModule(BaseTransformer):
     mode = "generative_qa"
     loss_names = ["loss"]
     metric_names = ["em"]
-    val_metric = "em"
+    val_metric = "em"#"rouge2"# "em"
 
     def __init__(self, hparams, **kwargs):
         # when loading from a pytorch lightning checkpoint, hparams are passed as dict
@@ -146,8 +150,16 @@ class GenerativeQAModule(BaseTransformer):
                 retriever = RagRayDistributedRetriever.from_pretrained(
                     hparams.model_name_or_path, hparams.actor_handles, config=config
                 )
-            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, retriever=retriever)
+            
+                
+            #amogkam Here I initialized a context encoder from pre-trained huggingface checkpoint which will be
+            # used to calculate embeddings later.
+            ctx_encoder = DPRContextEncoder.from_pretrained(hparams.context_encoder_type)
+            #I passed the ctx_encoder as an extra papramter
+            model = self.model_class.from_pretrained(hparams.model_name_or_path, config=config, 
+                                                    retriever=retriever,ctx_encoder=ctx_encoder)
             prefix = config.question_encoder.prefix
+     
         else:
             if hparams.prefix is not None:
                 config.prefix = hparams.prefix
@@ -160,6 +172,12 @@ class GenerativeQAModule(BaseTransformer):
             if self.is_rag_model
             else AutoTokenizer.from_pretrained(hparams.model_name_or_path)
         )
+
+        self.context_tokenizer=DPRContextEncoderTokenizerFast.from_pretrained(hparams.context_encoder_type)
+        self.embedding_saver=RayCreateEmbedding(hparams.saver_actor_handles, self.context_tokenizer,hparams)
+
+  
+
 
         super().__init__(hparams, config=config, tokenizer=tokenizer, model=model)
 
@@ -259,10 +277,32 @@ class GenerativeQAModule(BaseTransformer):
     @property
     def pad(self) -> int:
         raise NotImplementedError("pad not implemented")
-
+    
+    
+    
     def training_step(self, batch, batch_idx) -> Dict:
-        loss_tensors = self._step(batch)
 
+        if (not self.trainer.global_step==0 and  self.trainer.global_step%5000==0) and (self.trainer.global_rank==1):
+            ctx_encoder=self.trainer.model.module.model.rag.ctx_encoder
+  
+            #calculate the embeddings with updated context encoder and save the new dataset and index every 5000 steps
+            self.embedding_saver.save_indexed_embeddings(
+                ctx_encoder
+                )
+
+        #use a barrier to make sure no clashes when one GPU is doing the calculation .
+        self.trainer.accelerator_connector.accelerator.barrier("barrier1")
+
+
+        if (not self.trainer.global_step==0 and  self.trainer.global_step%5000==0) and (self.trainer.global_rank==0):
+
+            #reload the kb with new embeddings and re initialized it.
+            self.trainer.model.module.model.rag.retriever.re_load()
+            
+            
+        self.trainer.accelerator_connector.accelerator.barrier("barrier2") 
+          
+        loss_tensors = self._step(batch)
         logs = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         # tokens per batch
         tgt_pad_token_id = (
@@ -326,15 +366,20 @@ class GenerativeQAModule(BaseTransformer):
             max_length=self.target_lens["val"],
         )
 
+    
         gen_time = (time.time() - start_time) / batch["input_ids"].shape[0]
         preds: List[str] = self.ids_to_clean_text(generated_ids)
         target: List[str] = self.ids_to_clean_text(batch["decoder_input_ids"])
+
+        #print(self.tokenizer.question_encoder.batch_decode(batch["input_ids"], skip_special_tokens=True, clean_up_tokenization_spaces=True))
         loss_tensors = self._step(batch)
+     
         base_metrics = {name: loss for name, loss in zip(self.loss_names, loss_tensors)}
         gen_metrics: Dict = self.calc_generative_metrics(preds, target)
 
         summ_len = np.mean(lmap(len, generated_ids))
         base_metrics.update(gen_time=gen_time, gen_len=summ_len, preds=preds, target=target, **gen_metrics)
+   
         return base_metrics
 
     def test_step(self, batch, batch_idx):
@@ -443,6 +488,17 @@ class GenerativeQAModule(BaseTransformer):
             type=str,
             help="RAG model type: sequence or token, if none specified, the type is inferred from the model_name_or_path",
         )
+        parser.add_argument(
+            "--context_encoder_type",
+            type=str,
+            help="Name of the pre-trained context encoder checkpoint from the DPR",
+        )
+
+        parser.add_argument(
+            "--csv_path",
+            type=str,
+            help="path of the raw KB csv",
+        )
         return parser
 
     @staticmethod
@@ -549,6 +605,24 @@ def main(args=None, model=None) -> GenerativeQAModule:
                 remote_cls.options(name="retrieval_worker_{}".format(i)).remote()
                 for i in range(args.num_retrieval_workers)
             ]
+            
+            
+            # @amogkam Here I have iniitlaized another worker that help to re-calculate embeddings with
+            # the updated ctx_encoder and save them. 
+            remote_cls_saver = ray.remote(RayEncode)  #saver class
+            # saver_actor = [  #single actor for calculate embeddings and save them
+            #     remote_cls_saver.options(name="embedding_saver_{}".format(i)).remote() 
+            #     for i in range(1)
+            # ]
+            
+            
+            # @amogkam I wanted  the actor to use a GPU to do the embeddings calculation thing faster.
+            # here I make sure the actor see 3 GPUs where first two will used in training and last one for the embedding update.
+            # There is a problem with GPU memory release. Can you please help me on this?
+            saver_actor = [  #single actor for calculate embeddings and save them
+                remote_cls_saver.options(name="embedding_saver_{}".format(i),num_gpus=3).remote() 
+                for i in range(1)
+            ]            
         else:
             logger.info(
                 "Getting named actors for NODE_RANK {}, LOCAL_RANK {}".format(
@@ -556,8 +630,11 @@ def main(args=None, model=None) -> GenerativeQAModule:
                 )
             )
             named_actors = [ray.get_actor("retrieval_worker_{}".format(i)) for i in range(args.num_retrieval_workers)]
+            saver_actor = [ray.get_actor("embedding_saver_{}".format(i)) for i in range(1)]
     args.actor_handles = named_actors
     assert args.actor_handles == named_actors
+    args.saver_actor_handles = saver_actor
+
 
     if model is None:
         model: GenerativeQAModule = GenerativeQAModule(args)
