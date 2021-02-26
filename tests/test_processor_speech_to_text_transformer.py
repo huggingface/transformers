@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
 import shutil
 import tempfile
@@ -105,8 +104,8 @@ class Speech2TextTransformerProcessorTest(unittest.TestCase):
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
         self.assertIsInstance(processor.tokenizer, Speech2TextTransformerTokenizer)
 
-        # self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        # self.assertIsInstance(processor.feature_extractor, Speech2TextTransformerFeatureExtractor)
+        self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
+        self.assertIsInstance(processor.feature_extractor, Speech2TextTransformerFeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()
