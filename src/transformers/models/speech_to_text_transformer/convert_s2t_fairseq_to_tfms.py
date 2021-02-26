@@ -25,7 +25,6 @@ def rename_keys(s_dict):
             s_dict[key.replace("subsample", "conv")] = s_dict.pop(key)
 
 
-
 def make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
     lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
@@ -38,14 +37,14 @@ def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
     args = m2m_100["args"]
     state_dict = m2m_100["model"]
     lm_head_weights = state_dict["decoder.output_projection.weight"]
-    
+
     remove_ignore_keys_(state_dict)
     rename_keys(state_dict)
-    
+
     vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
-    
+
     tie_embeds = args.share_decoder_input_output_embed
-    
+
     conv_kernel_sizes = [int(i) for i in args.conv_kernel_sizes.split(",")]
     config = Speech2TextTransformerConfig(
         vocab_size=vocab_size,
