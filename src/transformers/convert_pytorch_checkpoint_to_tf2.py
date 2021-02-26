@@ -86,7 +86,6 @@ from . import (
     XLNetConfig,
     LayoutLMConfig,
     TFLayoutLMForMaskedLM,
-    TFLayoutLMForTokenClassification,
     cached_path,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
@@ -126,7 +125,6 @@ if is_torch_available():
         XLMWithLMHeadModel,
         XLNetLMHeadModel,
         LayoutLMForMaskedLM,
-        LayoutLMForTokenClassification,
     )
 
 
