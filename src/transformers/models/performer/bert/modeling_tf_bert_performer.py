@@ -230,7 +230,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.value = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.favor_attention = TFPerformerAttention(config.performer_attention_config)
+        self.performer_attention = TFPerformerAttention(config.performer_attention_config)
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
@@ -258,7 +258,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
 
         # Note that dropout is not used in the original favor implementation so we also do not use it
-        attention_output = self.favor_attention(query_layer, key_layer, value_layer, attention_mask, head_mask, output_attentions)
+        attention_output = self.performer_attention(query_layer, key_layer, value_layer, attention_mask, head_mask, output_attentions)
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
@@ -659,8 +659,23 @@ class TFBertPerformerMainLayer(tf.keras.layers.Layer):
             inputs_embeds=inputs["inputs_embeds"],
             training=inputs["training"],
         )
+        # We create a 3D attention mask from a 2D tensor mask.
+        # Sizes are [batch_size, 1, 1, to_seq_length]
+        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+        # this attention mask is more simple than the triangular masking of causal attention
+        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
 
-        # Extended Attention Mask is done in Performer Attention
+        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+        # masked positions, this operation will create a tensor which is 0.0 for
+        # positions we want to attend and -10000.0 for masked positions.
+        # Since we are adding it to the raw scores before the softmax, this is
+        # effectively the same as removing these entirely.
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+
+        #one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        #ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        #extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
