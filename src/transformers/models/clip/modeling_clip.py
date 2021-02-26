@@ -23,6 +23,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+from torch.nn.modules.sparse import Embedding
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
@@ -836,12 +837,15 @@ class ClipVisionTransformer(ClipPreTrainedModel):
 
         scale = embed_dim ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
-        self.positional_embedding = nn.Parameter(scale * torch.randn((image_resolution // patch_size) ** 2 + 1, embed_dim))
+
+        self.num_positions = (image_resolution // patch_size) ** 2 + 1
+        self.positional_embedding = nn.Embedding(self.num_positions, embed_dim) # TODO (PS): Copy init logic from CLIP repo
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
+        
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
-
-        self.encoder = ClipEncoder(config)
-
         self.post_layernorm = nn.LayerNorm(embed_dim)
+        
+        self.encoder = ClipEncoder(config)
 
         self.init_weights()
 
@@ -901,15 +905,11 @@ class ClipVisionTransformer(ClipPreTrainedModel):
             hidden_states.shape[0], hidden_states.shape[1], -1
         )  # shape = [*, width, grid ** 2]
         hidden_states = hidden_states.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        hidden_states = torch.cat(
-            [
-                self.class_embedding
-                + torch.zeros(hidden_states.shape[0], 1, hidden_states.shape[-1], device=hidden_states.device),
-                hidden_states,
-            ],
-            dim=1,
-        )  # shape = [*, grid ** 2 + 1, width]
-        hidden_states = hidden_states + self.positional_embedding
+        
+        class_embeds = self.class_embedding.expand(hidden_states.shape[0], 1, -1)
+        hidden_states = torch.cat([class_embeds, hidden_states], dim=1)  # shape = [*, grid ** 2 + 1, width]
+        
+        hidden_states = hidden_states + self.positional_embedding(self.position_ids)
         hidden_states = self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.encoder(
