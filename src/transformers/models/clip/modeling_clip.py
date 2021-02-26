@@ -686,6 +686,7 @@ class ClipModel(ClipPreTrainedModel):
         input_ids=None,
         input_features=None,
         attention_mask=None,
+        logit_scale=100, # hack
         position_ids=None,
         inputs_embeds=None,
         output_attentions=None,
@@ -710,21 +711,19 @@ class ClipModel(ClipPreTrainedModel):
         )
 
         image_embeds = vision_outputs[0]
-        image_features = image_embeds @ self.visiual_projection
+        image_features = self.visiual_projection(image_embeds)
 
         text_embeds = text_outputs[0]
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        text_features = (
-            text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)] @ self.text_projection
-        )
+        pooled_output = text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)]
+        text_features = self.text_projection(pooled_output)
 
         # normalized features
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
         text_features = text_features / text_features.norm(dim=-1, keepdim=True)
 
         # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
         logits_per_image = logit_scale * image_features @ text_features.t()
         logits_per_text = logit_scale * text_features @ image_features.t()
 
