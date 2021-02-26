@@ -39,6 +39,7 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFTokenClassificationLoss,
     TFSequenceClassificationLoss,
+    TFModelInputType,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -62,6 +63,7 @@ TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "layoutlm-base-uncased",
     "layoutlm-large-uncased",
 ]
+
 
 class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -159,9 +161,11 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
+        if position_ids is None:
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
+        
         if bbox is None:
             bbox = bbox = tf.fill(input_shape + [4], value=0)
-
         try:
             left_position_embeddings = tf.gather(self.x_position_embeddings, bbox[:, :, 0])
             upper_position_embeddings = tf.gather(self.y_position_embeddings, bbox[:, :, 1])
@@ -616,7 +620,6 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
 
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
-
         if inputs["bbox"] is None:
             inputs["bbox"] = tf.fill(dims=input_shape + [4], value=0)
 
@@ -681,7 +684,6 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
 
 class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
     """
@@ -861,7 +863,6 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
             hidden_states=hs,
             attentions=attns,
         )
-
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top. """, LAYOUTLM_START_DOCSTRING)
 class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingLoss):

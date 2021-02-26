@@ -182,6 +182,7 @@ from ..xlnet.modeling_tf_xlnet import (
 from ..layoutlm.modeling_tf_layoutlm import (
     TFLayoutLMForMaskedLM,
     TFLayoutLMForTokenClassification,
+    TFLayoutLMForSequenceClassification,
     TFLayoutLMModel,
 )
 from .configuration_auto import (
@@ -401,6 +402,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
         (TransfoXLConfig, TFTransfoXLForSequenceClassification),
         (CTRLConfig, TFCTRLForSequenceClassification),
+        (LayoutLMConfig,TFLayoutLMForSequenceClassification),
     ]
 )
 
