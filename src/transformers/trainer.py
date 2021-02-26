@@ -1558,9 +1558,9 @@ class Trainer:
             else:
                 self.state.total_flos = self._total_flos
 
-    def _sorted_checkpoints(self,
-                            output_dir=None,
-                            checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
+    def _sorted_checkpoints(
+        self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
+    ) -> List[str]:
         ordering_and_checkpoint_path = []
 
         glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*")]
@@ -1589,8 +1589,7 @@ class Trainer:
             return
 
         # Check if we should delete older checkpoint(s)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime,
-                                                      output_dir=output_dir)
+        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 
