@@ -183,7 +183,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         logger.info(
             "No `resources_per_trial` arg was passed into "
             "`hyperparameter_search`. Setting it to a default value "
-            f"of {resource_msg} for each trial"
+            f"of {resource_msg} for each trial."
         )
     # Make sure each trainer only uses GPUs that were allocated per trial.
     gpus_per_trial = kwargs["resources_per_trial"].get("gpu", 0)
