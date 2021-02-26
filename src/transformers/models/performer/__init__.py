@@ -83,7 +83,7 @@ if is_tf_available():
         "TFBertPerformerPreTrainedModel",
     ]
 
-    _import_structure["modeling_tf_t5"] = [
+    _import_structure["t5.modeling_tf_t5_performer"] = [
         "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFT5PerformerEncoderModel",
         "TFT5PerformerForConditionalGeneration",
