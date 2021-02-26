@@ -240,7 +240,6 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     inputs = tokenizer(question, text, add_special_tokens=True, return_tensors="pt")
     ...     input_ids = inputs["input_ids"].tolist()[0]
     ...
-    ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
     ...     outputs = model(**inputs)
     ...     answer_start_scores = outputs.start_logits
     ...     answer_end_scores = outputs.end_logits
@@ -284,7 +283,6 @@ Here is an example of question answering using a model and a tokenizer. The proc
     ...     inputs = tokenizer(question, text, add_special_tokens=True, return_tensors="tf")
     ...     input_ids = inputs["input_ids"].numpy()[0]
     ...
-    ...     text_tokens = tokenizer.convert_ids_to_tokens(input_ids)
     ...     outputs = model(inputs)
     ...     answer_start_scores = outputs.start_logits
     ...     answer_end_scores = outputs.end_logits

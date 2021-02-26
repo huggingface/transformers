@@ -29,13 +29,13 @@ from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 import numpy as np
 
 from .file_utils import (
+    ExplicitEnum,
     is_sagemaker_distributed_available,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
     is_torch_tpu_available,
 )
-from .tokenization_utils_base import ExplicitEnum
 
 
 def set_seed(seed: int):
@@ -421,3 +421,10 @@ class TrainerMemoryTracker:
         # init doesn't have metrics to update so we just save that data for later stages to retrieve
         if metrics is not None:
             self.update_metrics(stage, metrics)
+
+
+class ShardedDDPOption(ExplicitEnum):
+    SIMPLE = "simple"
+    ZERO_DP_2 = "zero2"
+    ZERO_DP_3 = "zero3"
+    OFFLOAD = "offload"

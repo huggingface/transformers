@@ -263,6 +263,8 @@ TensorFlow and/or Flax.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |     Funnel Transformer      |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|           I-BERT            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |             LED             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           LXMERT            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
@@ -375,6 +377,7 @@ TensorFlow and/or Flax.
     main_classes/processors
     main_classes/tokenizer
     main_classes/trainer
+    main_classes/feature_extractor
 
 .. toctree::
     :maxdepth: 2
@@ -404,6 +407,7 @@ TensorFlow and/or Flax.
     model_doc/fsmt
     model_doc/funnel
     model_doc/herbert
+    model_doc/ibert
     model_doc/layoutlm
     model_doc/led
     model_doc/longformer
@@ -441,3 +445,4 @@ TensorFlow and/or Flax.
     internal/tokenization_utils
     internal/trainer_utils
     internal/generation_utils
+    internal/file_utils

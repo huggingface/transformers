@@ -41,7 +41,7 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     @slow
     def test_roberta_from_pretrained(self):
-        for model_name in ["roberta-base-cased", "roberta-large-uncased"]:
+        for model_name in ["roberta-base", "roberta-large"]:
             with self.subTest(model_name):
                 config = AutoConfig.from_pretrained(model_name)
                 self.assertIsNotNone(config)
@@ -66,7 +66,7 @@ class FlaxAutoModelTest(unittest.TestCase):
 
     @slow
     def test_roberta_jax_jit(self):
-        for model_name in ["roberta-base-cased", "roberta-large-uncased"]:
+        for model_name in ["roberta-base", "roberta-large"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             model = FlaxRobertaModel.from_pretrained(model_name)
             tokens = tokenizer("Do you support jax jitted function?", return_tensors=TensorType.JAX)

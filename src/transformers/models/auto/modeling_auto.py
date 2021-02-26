@@ -131,6 +131,14 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
+from ..ibert.modeling_ibert import (
+    IBertForMaskedLM,
+    IBertForMultipleChoice,
+    IBertForQuestionAnswering,
+    IBertForSequenceClassification,
+    IBertForTokenClassification,
+    IBertModel,
+)
 from ..layoutlm.modeling_layoutlm import (
     LayoutLMForMaskedLM,
     LayoutLMForSequenceClassification,
@@ -273,6 +281,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    IBertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
@@ -351,6 +360,7 @@ MODEL_MAPPING = OrderedDict(
         (MPNetConfig, MPNetModel),
         (TapasConfig, TapasModel),
         (MarianConfig, MarianModel),
+        (IBertConfig, IBertModel),
     ]
 )
 
@@ -383,6 +393,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (FunnelConfig, FunnelForPreTraining),
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
+        (IBertConfig, IBertForMaskedLM),
     ]
 )
 
@@ -422,6 +433,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (TapasConfig, TapasForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
+        (IBertConfig, IBertForMaskedLM),
     ]
 )
 
@@ -480,6 +492,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (TapasConfig, TapasForMaskedLM),
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
+        (IBertConfig, IBertForMaskedLM),
     ]
 )
 
@@ -533,6 +546,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (TransfoXLConfig, TransfoXLForSequenceClassification),
         (MPNetConfig, MPNetForSequenceClassification),
         (TapasConfig, TapasForSequenceClassification),
+        (IBertConfig, IBertForSequenceClassification),
     ]
 )
 
@@ -562,6 +576,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (MPNetConfig, MPNetForQuestionAnswering),
         (DebertaConfig, DebertaForQuestionAnswering),
         (DebertaV2Config, DebertaV2ForQuestionAnswering),
+        (IBertConfig, IBertForQuestionAnswering),
     ]
 )
 
@@ -595,6 +610,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (MPNetConfig, MPNetForTokenClassification),
         (DebertaConfig, DebertaForTokenClassification),
         (DebertaV2Config, DebertaV2ForTokenClassification),
+        (IBertConfig, IBertForTokenClassification),
     ]
 )
 
@@ -617,6 +633,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (FlaubertConfig, FlaubertForMultipleChoice),
         (FunnelConfig, FunnelForMultipleChoice),
         (MPNetConfig, MPNetForMultipleChoice),
+        (IBertConfig, IBertForMultipleChoice),
     ]
 )
 

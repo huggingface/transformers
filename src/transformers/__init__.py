@@ -88,6 +88,7 @@ _import_structure = {
         "TF_WEIGHTS_NAME",
         "TRANSFORMERS_CACHE",
         "WEIGHTS_NAME",
+        "TensorType",
         "add_end_docstrings",
         "add_start_docstrings",
         "cached_path",
@@ -126,7 +127,14 @@ _import_structure = {
     "models": [],
     # Models
     "models.clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "ClipConfig", "ClipTokenizer"],
-    "models.wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config", "Wav2Vec2Tokenizer"],
+    "models.wav2vec2": [
+        "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Wav2Vec2Config",
+        "Wav2Vec2CTCTokenizer",
+        "Wav2Vec2Tokenizer",
+        "Wav2Vec2FeatureExtractor",
+        "Wav2Vec2Processor",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -175,6 +183,7 @@ _import_structure = {
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
     "models.herbert": ["HerbertTokenizer"],
+    "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
     "models.led": ["LED_PRETRAINED_CONFIG_ARCHIVE_MAP", "LEDConfig", "LEDTokenizer"],
     "models.longformer": ["LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "LongformerConfig", "LongformerTokenizer"],
@@ -235,9 +244,9 @@ _import_structure = {
         "CharSpan",
         "PreTrainedTokenizerBase",
         "SpecialTokensMixin",
-        "TensorType",
         "TokenSpan",
     ],
+    "feature_extraction_utils": ["PreTrainedFeatureExtractor", "BatchFeature"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -612,6 +621,20 @@ if is_torch_available():
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
+        ]
+    )
+    _import_structure["models.ibert"].extend(
+        [
+            "IBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "IBertForMaskedLM",
+            "IBertForMultipleChoice",
+            "IBertForQuestionAnswering",
+            "IBertForSequenceClassification",
+            "IBertForTokenClassification",
+            "IBertLayer",
+            "IBertModel",
+            "IBertPreTrainedModel",
+            "load_tf_weights_in_ibert",
         ]
     )
     _import_structure["models.layoutlm"].extend(
@@ -1226,6 +1249,9 @@ if TYPE_CHECKING:
         xnli_tasks_num_labels,
     )
 
+    # Feature Extractor
+    from .feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+
     # Files and general utilities
     from .file_utils import (
         CONFIG_NAME,
@@ -1237,6 +1263,7 @@ if TYPE_CHECKING:
         TF_WEIGHTS_NAME,
         TRANSFORMERS_CACHE,
         WEIGHTS_NAME,
+        TensorType,
         add_end_docstrings,
         add_start_docstrings,
         cached_path,
@@ -1326,6 +1353,7 @@ if TYPE_CHECKING:
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
     from .models.herbert import HerbertTokenizer
+    from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
@@ -1353,7 +1381,14 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config, Wav2Vec2Tokenizer
+    from .models.wav2vec2 import (
+        WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Wav2Vec2Config,
+        Wav2Vec2CTCTokenizer,
+        Wav2Vec2FeatureExtractor,
+        Wav2Vec2Processor,
+        Wav2Vec2Tokenizer,
+    )
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
     from .models.xlm_roberta import XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMRobertaConfig
@@ -1391,7 +1426,6 @@ if TYPE_CHECKING:
         CharSpan,
         PreTrainedTokenizerBase,
         SpecialTokensMixin,
-        TensorType,
         TokenSpan,
     )
 
@@ -1702,6 +1736,15 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
+        )
+        from .models.ibert import (
+            IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            IBertForMaskedLM,
+            IBertForMultipleChoice,
+            IBertForQuestionAnswering,
+            IBertForSequenceClassification,
+            IBertForTokenClassification,
+            IBertModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
