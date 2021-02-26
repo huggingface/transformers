@@ -15,18 +15,12 @@
 """ PyTorch Clip model. """
 
 
-import math
-import os
-import random
-from json import encoder
 from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch.nn.modules.sparse import Embedding
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -35,23 +29,8 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_outputs import BaseModelOutput
+from ...modeling_utils import PreTrainedModel, SequenceSummary, apply_chunking_to_forward
 from ...utils import logging
 from .configuration_clip import ClipConfig
 
@@ -275,158 +254,6 @@ class ClipPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
         if isinstance(module, nn.Linear) and module.bias is not None:
             module.bias.data.zero_()
-
-
-class ClipTransformer_(ClipPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
-    :class:`ClipEncoderLayer`.
-
-    Args:
-        config: ClipConfig
-        embed_tokens (torch.nn.Embedding): output embedding
-    """
-
-    def __init__(self, config: ClipConfig):
-        super().__init__(config)
-
-        embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
-        self.max_source_positions = config.max_position_embeddings
-
-        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim)
-        self.embed_positions = nn.Parameter(torch.empty(config.max_position_embeddings, embed_dim))
-        self.layers = nn.ModuleList([ClipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.final_layer_norm = nn.LayerNorm(embed_dim)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.ClipTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input_ids)
-
-        embed_pos = self.embed_positions(input_shape)
-        hidden_states = inputs_embeds + embed_pos
-
-        # expand attention_mask
-        # if attention_mask is not None:
-        #     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        #     attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-        bsz, seq_len = input_shape
-        attention_mask = self._build_attention_mask(bsz, seq_len)
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
-                    hidden_states,
-                    attention_mask,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-    def _build_attention_mask(self, bsz, seq_len):
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len)
-        mask.fill_(float("-inf"))
-        mask.triu_(1)  # zero out the lower diagonal
-        mask = mask.unsqueeze(1)  # expand mask
-        return mask
 
 
 class ClipEncoder(ClipPreTrainedModel):
@@ -665,152 +492,6 @@ class ClipTransformer(ClipPreTrainedModel):
         return mask
 
 
-class ClipVisualTransformer(ClipPreTrainedModel):
-    """
-    Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
-    :class:`ClipEncoderLayer`.
-
-    Args:
-        config: ClipConfig
-        embed_tokens (torch.nn.Embedding): output embedding
-    """
-
-    def __init__(self, config: ClipConfig):
-        super().__init__(config)
-
-        image_resolution = config.image_resolution
-        embed_dim = config.d_model
-        patch_size = config.patch_size
-        self.conv1 = nn.Conv2d(
-            in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False
-        )
-
-        scale = embed_dim ** -0.5
-        self.class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
-        self.embed_positions = nn.Parameter(scale * torch.randn((image_resolution // patch_size) ** 2 + 1, embed_dim))
-        self.ln_pre = nn.LayerNorm(embed_dim)
-
-        self.layers = nn.ModuleList([ClipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
-
-        self.ln_post = nn.LayerNorm(embed_dim)
-
-        self.init_weights()
-
-    def forward(
-        self,
-        input_features=None,
-        attention_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using :class:`~transformers.ClipTokenizer`. See
-                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
-                for details.
-
-                `What are input IDs? <../glossary.html#input-ids>`__
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
-            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
-            output_attentions (:obj:`bool`, `optional`):
-                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
-                returned tensors for more detail.
-            output_hidden_states (:obj:`bool`, `optional`):
-                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
-                for more detail.
-            return_dict (:obj:`bool`, `optional`):
-                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        hidden_states = self.conv1(input_features)  # shape = [*, width, grid, grid]
-        hidden_states = hidden_states.reshape(
-            hidden_states.shape[0], hidden_states.shape[1], -1
-        )  # shape = [*, width, grid ** 2]
-        hidden_states = hidden_states.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        hidden_states = torch.cat(
-            [
-                self.class_embedding
-                + torch.zeros(hidden_states.shape[0], 1, hidden_states.shape[-1], device=hidden_states.device),
-                hidden_states,
-            ],
-            dim=1,
-        )  # shape = [*, grid ** 2 + 1, width]
-        hidden_states = hidden_states + self.positional_embedding
-        hidden_states = self.ln_pre(hidden_states)
-
-        # expand attention_mask
-        if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
-        for idx, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
-                    hidden_states,
-                    attention_mask,
-                )
-            else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions=output_attentions,
-                )
-
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        hidden_states = self.ln_post(hidden_states)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
-
-
 class ClipVisionTransformer(ClipPreTrainedModel):
     """
     Transformer encoder consisting of *config.num_hidden_layers* self attention layers. Each layer is a
@@ -828,23 +509,21 @@ class ClipVisionTransformer(ClipPreTrainedModel):
         embed_dim = config.d_model
         patch_size = config.patch_size
         self.conv = nn.Conv2d(
-            in_channels=3,
-            out_channels=embed_dim,
-            kernel_size=patch_size,
-            stride=patch_size,
-            bias=False
+            in_channels=3, out_channels=embed_dim, kernel_size=patch_size, stride=patch_size, bias=False
         )
 
         scale = embed_dim ** -0.5
         self.class_embedding = nn.Parameter(scale * torch.randn(embed_dim))
 
         self.num_positions = (image_resolution // patch_size) ** 2 + 1
-        self.positional_embedding = nn.Embedding(self.num_positions, embed_dim) # TODO (PS): Copy init logic from CLIP repo
+        self.positional_embedding = nn.Embedding(
+            self.num_positions, embed_dim
+        )  # TODO (PS): Copy init logic from CLIP repo
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)))
-        
+
         self.pre_layrnorm = nn.LayerNorm(embed_dim)
         self.post_layernorm = nn.LayerNorm(embed_dim)
-        
+
         self.encoder = ClipEncoder(config)
 
         self.init_weights()
@@ -905,10 +584,10 @@ class ClipVisionTransformer(ClipPreTrainedModel):
             hidden_states.shape[0], hidden_states.shape[1], -1
         )  # shape = [*, width, grid ** 2]
         hidden_states = hidden_states.permute(0, 2, 1)  # shape = [*, grid ** 2, width]
-        
+
         class_embeds = self.class_embedding.expand(hidden_states.shape[0], 1, -1)
         hidden_states = torch.cat([class_embeds, hidden_states], dim=1)  # shape = [*, grid ** 2 + 1, width]
-        
+
         hidden_states = hidden_states + self.positional_embedding(self.position_ids)
         hidden_states = self.pre_layrnorm(hidden_states)
 
@@ -947,10 +626,14 @@ class ClipModel(ClipPreTrainedModel):
         self.transformer = ClipTransformer(text_config)
         self.vision_transformer = ClipVisionTransformer(vision_config)
 
-        self.visiual_projection = nn.Linear(self.vision_embed_dim, self.output_dim, bias=False) # TODO (PS): Copy init logic from CLIP repo
-        self.text_projection = nn.Linear(self.text_embed_dim, self.output_dim, bias=False) # TODO (PS): Copy init logic from CLIP repo
+        self.visiual_projection = nn.Linear(
+            self.vision_embed_dim, self.output_dim, bias=False
+        )  # TODO (PS): Copy init logic from CLIP repo
+        self.text_projection = nn.Linear(
+            self.text_embed_dim, self.output_dim, bias=False
+        )  # TODO (PS): Copy init logic from CLIP repo
         self.logit_scale = nn.Parameter(torch.ones([]))
-    
+
     def encode_text(
         self,
         input_ids=None,
@@ -976,9 +659,9 @@ class ClipModel(ClipPreTrainedModel):
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         pooled_output = text_embeds[torch.arange(text_embeds.shape[0]), input_ids.argmax(dim=-1)]
         text_features = self.text_projection(pooled_output)
-        
+
         return text_features
-    
+
     def encode_image(
         self,
         input_features=None,
@@ -1028,7 +711,6 @@ class ClipModel(ClipPreTrainedModel):
 
         image_embeds = vision_outputs[0]
         image_features = image_embeds @ self.visiual_projection
-
 
         text_embeds = text_outputs[0]
         # text_embeds.shape = [batch_size, n_ctx, transformer.width]
