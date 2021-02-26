@@ -32,7 +32,7 @@ from transformers.models.speech_to_text_transformer.tokenization_speech_to_text_
 )
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
-from .test_feature_extraction_wav2vec2 import floats_list
+from .test_feature_extraction_speech_to_text import floats_list
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
