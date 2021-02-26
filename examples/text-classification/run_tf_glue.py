@@ -249,16 +249,11 @@ def main():
         logger.info("*** Evaluate ***")
 
         result = trainer.evaluate()
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
 
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
+        trainer.log_metrics("eval", result)
+        trainer.save_metrics("eval", result)
 
-            for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
-
-            results.update(result)
+        results.update(result)
 
     return results
 
