@@ -29,6 +29,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_PRETRAINING_MAPPING,
         BigBirdConfig,
         BigBirdForCausalLM,
         BigBirdForMaskedLM,
@@ -151,6 +152,33 @@ class BigBirdModelTester:
 
         return config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
 
+    def prepare_config_and_inputs_for_decoder(self):
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = self.prepare_config_and_inputs()
+
+        config.is_decoder = True
+        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+        return (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
+
     def create_and_check_model(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -178,55 +206,55 @@ class BigBirdModelTester:
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, config.num_labels))
 
-    # def create_and_check_model_as_decoder(
-    #         self,
-    #         config,
-    #         input_ids,
-    #         token_type_ids,
-    #         input_mask,
-    #         sequence_labels,
-    #         token_labels,
-    #         choice_labels,
-    #         encoder_hidden_states,
-    #         encoder_attention_mask,
-    # ):
-    #     config.add_cross_attention = True
-    #     model = BigBirdModel(config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(
-    #         input_ids,
-    #         attention_mask=input_mask,
-    #         token_type_ids=token_type_ids,
-    #         encoder_hidden_states=encoder_hidden_states,
-    #         encoder_attention_mask=encoder_attention_mask,
-    #     )
-    #     result = model(
-    #         input_ids,
-    #         attention_mask=input_mask,
-    #         token_type_ids=token_type_ids,
-    #         encoder_hidden_states=encoder_hidden_states,
-    #     )
-    #     result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
-    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+    def create_and_check_model_as_decoder(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+    ):
+        config.add_cross_attention = True
+        model = BigBirdModel(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    # def create_and_check_for_causal_lm(
-    #         self,
-    #         config,
-    #         input_ids,
-    #         token_type_ids,
-    #         input_mask,
-    #         sequence_labels,
-    #         token_labels,
-    #         choice_labels,
-    #         encoder_hidden_states,
-    #         encoder_attention_mask,
-    # ):
-    #     model = BigBirdForCausalLM(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
-    #     result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
-    #     self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+    def create_and_check_for_causal_lm(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+    ):
+        model = BigBirdForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_for_masked_lm(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -237,67 +265,67 @@ class BigBirdModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    # def create_and_check_decoder_model_past_large_inputs(
-    #     self,
-    #     config,
-    #     input_ids,
-    #     token_type_ids,
-    #     input_mask,
-    #     sequence_labels,
-    #     token_labels,
-    #     choice_labels,
-    #     encoder_hidden_states,
-    #     encoder_attention_mask,
-    # ):
-    #     config.is_decoder = True
-    #     config.add_cross_attention = True
-    #     model = BigBirdForCausalLM(config=config)
-    #     model.to(torch_device)
-    #     model.eval()
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = BigBirdForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
 
-    #     # first forward pass
-    #     outputs = model(
-    #         input_ids,
-    #         attention_mask=input_mask,
-    #         encoder_hidden_states=encoder_hidden_states,
-    #         encoder_attention_mask=encoder_attention_mask,
-    #         use_cache=True,
-    #     )
-    #     past_key_values = outputs.past_key_values
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
 
-    #     # create hypothetical multiple next token and extent to next_input_ids
-    #     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-    #     next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
-    #     # append to next input_ids and
-    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-    #     next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-    #     output_from_no_past = model(
-    #         next_input_ids,
-    #         attention_mask=next_attention_mask,
-    #         encoder_hidden_states=encoder_hidden_states,
-    #         encoder_attention_mask=encoder_attention_mask,
-    #         output_hidden_states=True,
-    #     )["hidden_states"][0]
-    #     output_from_past = model(
-    #         next_tokens,
-    #         attention_mask=next_attention_mask,
-    #         encoder_hidden_states=encoder_hidden_states,
-    #         encoder_attention_mask=encoder_attention_mask,
-    #         past_key_values=past_key_values,
-    #         output_hidden_states=True,
-    #     )["hidden_states"][0]
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
 
-    #     # select random slice
-    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-    #     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-    #     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
-    #     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
-    #     # test that outputs are equal for slice
-    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
     def create_and_check_for_question_answering(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -387,6 +415,20 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (BigBirdForCausalLM,) if is_torch_available() else ()
 
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["next_sentence_label"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
     def setUp(self):
         self.model_tester = BigBirdModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=37)
@@ -416,9 +458,9 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    # def test_decoder_model_past_with_large_inputs(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-    #     self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -432,37 +474,37 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
-    # def test_model_as_decoder(self):
-    #     config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-    #     self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
+    def test_model_as_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
-    # def test_model_as_decoder_with_default_input_mask(self):
-    #     # This regression test was failing with PyTorch < 1.3
-    #     (
-    #         config,
-    #         input_ids,
-    #         token_type_ids,
-    #         input_mask,
-    #         sequence_labels,
-    #         token_labels,
-    #         choice_labels,
-    #         encoder_hidden_states,
-    #         encoder_attention_mask,
-    #     ) = self.model_tester.prepare_config_and_inputs_for_decoder()
+    def test_model_as_decoder_with_default_input_mask(self):
+        # This regression test was failing with PyTorch < 1.3
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ) = self.model_tester.prepare_config_and_inputs_for_decoder()
 
-    #     input_mask = None
+        input_mask = None
 
-    #     self.model_tester.create_and_check_model_as_decoder(
-    #         config,
-    #         input_ids,
-    #         token_type_ids,
-    #         input_mask,
-    #         sequence_labels,
-    #         token_labels,
-    #         choice_labels,
-    #         encoder_hidden_states,
-    #         encoder_attention_mask,
-    #     )
+        self.model_tester.create_and_check_model_as_decoder(
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        )
 
     @slow
     def test_model_from_pretrained(self):
@@ -507,7 +549,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         prediction_logits = outputs.prediction_logits
         seq_relationship_logits = outputs.seq_relationship_logits
 
-        self.assertEqual(prediction_logits.shape, torch.Size((1, 512, 50358)))
+        self.assertEqual(prediction_logits.shape, torch.Size((1, 512*4, 50358)))
         self.assertEqual(seq_relationship_logits.shape, torch.Size((1, 2)))
 
         expected_prediction_logits_slice = torch.tensor(
