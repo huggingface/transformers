@@ -65,7 +65,8 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
 
             .. note::
 
-                For Speech2TextTransoformer models :obj:`attention_mask` should be passed for batched inference.
+                For Speech2TextTransoformer models, :obj:`attention_mask` should alwys be passed for batched inference,
+                to avoid subtle bugs.
 
     """
 
@@ -80,7 +81,7 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
         do_normalize=True,
         norm_means=True,
         norm_vars=True,
-        return_attention_mask=False,
+        return_attention_mask=True,
         **kwargs
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
@@ -165,7 +166,8 @@ class Speech2TextTransformerFeatureExtractor(PreTrainedFeatureExtractor):
 
                 .. note::
 
-                    For Speech2TextTransoformer models :obj:`attention_mask` should be passed for batched inference.
+                    For Speech2TextTransoformer models, :obj:`attention_mask` should alwys be passed for batched
+                    inference, to avoid subtle bugs.
 
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
