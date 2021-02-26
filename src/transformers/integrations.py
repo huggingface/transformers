@@ -183,7 +183,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         logger.info(
             "No `resources_per_trial` arg was passed into "
             "`hyperparameter_search`. Setting it to a default value "
-            "of {} for each trial".format(resource_msg)
+            f"of {resource_msg} for each trial"
         )
     # Make sure each trainer only uses GPUs that were allocated per trial.
     gpus_per_trial = kwargs["resources_per_trial"].get("gpu", 0)
@@ -199,8 +199,9 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
-                "Currently keeping {} checkpoints for each trial. Checkpoints are usually huge, "
-                "consider setting `keep_checkpoints_num=1`.".format(kwargs["keep_checkpoints_num"])
+                f"Currently keeping {kwargs['keep_checkpoint_num']} checkpoints for each trial. "
+                f"Checkpoints are usually huge, "
+                "consider setting `keep_checkpoints_num=1`."
             )
     if "scheduler" in kwargs:
         from ray.tune.schedulers import ASHAScheduler, HyperBandForBOHB, MedianStoppingRule, PopulationBasedTraining
