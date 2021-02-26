@@ -220,7 +220,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         # assert key.size() == value.size()
         dim_per_head = tf.math.divide(self.dim, self.n_heads)
         dim_per_head = tf.cast(dim_per_head, dtype=tf.int32)
-        mask_reshape = [bs, 1, k_length, 1]
+        mask_reshape = [bs, 1, k_length, 1] # Slight change in dimension for Performer Attention
 
         def shape(x):
             """ separate heads """

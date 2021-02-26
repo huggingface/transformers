@@ -170,6 +170,8 @@ class TFT5Attention(tf.keras.layers.Layer):
         self.o = tf.keras.layers.Dense(self.d_model, use_bias=False, name="o")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
+        self.performer_attention = TFPerformerAttention(config.performer_attention_config)
+
         if self.has_relative_attention_bias:
             self.relative_attention_bias = tf.keras.layers.Embedding(
                 self.relative_attention_num_buckets,
@@ -320,10 +322,12 @@ class TFT5Attention(tf.keras.layers.Layer):
             present_key_value_state = (key_states, value_states)
         else:
             present_key_value_state = None
+        
+        attn_output = self.performer_attention(query_states, key_states, value_states, mask)
 
-        scores = tf.einsum(
-            "bnqd,bnkd->bnqk", query_states, key_states
-        )  # (batch_size, n_heads, query_length, key_length)
+        #scores = tf.einsum(
+        #    "bnqd,bnkd->bnqk", query_states, key_states
+        #)  # (batch_size, n_heads, query_length, key_length)
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
@@ -339,22 +343,19 @@ class TFT5Attention(tf.keras.layers.Layer):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
 
-        scores += position_bias
-        weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
-        weights = self.dropout(weights, training=training)  # (batch_size, n_heads, query_length, key_length)
+        #scores += position_bias
+        #weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
+        #weights = self.dropout(weights, training=training)  # (batch_size, n_heads, query_length, key_length)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
-            weights = weights * layer_head_mask
+            attn_output = attn_output * layer_head_mask
 
-        attn_output = tf.matmul(weights, value_states)  # (batch_size, n_heads, query_length, dim_per_head)
+        #attn_output = tf.matmul(weights, value_states)  # (batch_size, n_heads, query_length, dim_per_head)
 
         attn_output = self.o(unshape(attn_output))
 
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
-
-        if output_attentions:
-            outputs = outputs + (weights,)
 
         return outputs
 
@@ -362,12 +363,11 @@ class TFT5Attention(tf.keras.layers.Layer):
 class TFT5LayerSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
         super().__init__(**kwargs)
-        #self.SelfAttention = TFT5Attention(
-        #    config,
-        #    has_relative_attention_bias=has_relative_attention_bias,
-        #    name="SelfAttention",
-        #)
-        self.SelfAttention = TFPerformerAttention(config.performer_attention_config, linear_layer_names=('q', 'k', 'v', 'o'), name="SelfAttention")
+        self.SelfAttention = TFT5Attention(
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            name="SelfAttention",
+        )
         self.layer_norm = TFT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
 
@@ -388,10 +388,10 @@ class TFT5LayerSelfAttention(tf.keras.layers.Layer):
             normed_hidden_states,
             normed_hidden_states,
             mask=attention_mask,
-            #position_bias=position_bias,
+            position_bias=position_bias,
             head_mask=layer_head_mask,
-            #past_key_value=past_key_value,
-            #use_cache=use_cache,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             training=training,
         )

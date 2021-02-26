@@ -664,6 +664,8 @@ class TFBertPerformerMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+
+        # We change the dimension here for Performer Attention.
         extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, input_shape[1], 1))
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
