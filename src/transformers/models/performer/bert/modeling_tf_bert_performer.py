@@ -230,6 +230,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         self.value = tf.keras.layers.Dense(
             units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
+        self.favor_attention = TFPerformerAttention(config.performer_attention_config)
         self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
@@ -255,34 +256,39 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
+
+        # Note that dropout is not used in the original favor implementation so we also do not use it
+        attention_output = self.favor_attention(query_layer, key_layer, value_layer, attention_mask, head_mask, output_attentions)
+
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.
         # (batch size, num_heads, seq_len_q, seq_len_k)
-        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
-        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
-        attention_scores = tf.divide(attention_scores, dk)
+        #attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
+        #dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
+        #attention_scores = tf.divide(attention_scores, dk)
 
-        if attention_mask is not None:
+        #if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-            attention_scores = tf.add(attention_scores, attention_mask)
+        #    attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        #attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(inputs=attention_probs, training=training)
+        #attention_probs = self.dropout(inputs=attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = tf.multiply(attention_probs, head_mask)
+            attention_output = tf.multiply(attention_output, head_mask)
 
-        attention_output = tf.matmul(attention_probs, value_layer)
+        #attention_output = tf.matmul(attention_probs, value_layer)
         attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
 
         # (batch_size, seq_len_q, all_head_size)
         attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
-        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        #outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
+        outputs = (attention_output,)
 
         return outputs
 
@@ -309,8 +315,9 @@ class TFBertAttention(tf.keras.layers.Layer):
     def __init__(self, config: BertPerformerConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.self_attention = TFPerformerAttention(config.performer_attention_config, initializer_range=config.initializer_range,
-                                                    linear_layer_names=('query', 'key', 'value'), name="self")
+        #self.self_attention = TFPerformerAttention(config.performer_attention_config, initializer_range=config.initializer_range,
+        #                                            linear_layer_names=('query', 'key', 'value'), name="self")
+        self.self_attention = TFBertSelfAttention(config, name="self")
         self.dense_output = TFBertSelfOutput(config, name="output")
 
     def prune_heads(self, heads):
@@ -325,12 +332,10 @@ class TFBertAttention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
-            input_tensor,
-            input_tensor,
-            input_tensor,
-            attention_mask,
-            head_mask,
-            output_attentions,
+            hidden_states=input_tensor,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
             training=training,
         )
         attention_output = self.dense_output(

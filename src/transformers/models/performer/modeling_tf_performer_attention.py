@@ -63,10 +63,10 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
             self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        if self.use_linear_layers:
-            kernel_initializer = get_initializer(config.initializer_range) if hasattr(config, 'initializer_range') else 'glorot_uniform'
-            for name in self.linear_layer_names:
-                setattr(self, name, tf.keras.layers.Dense(units=self.d_model, kernel_initializer=kernel_initializer))
+        #if self.use_linear_layers:
+        #    kernel_initializer = get_initializer(config.initializer_range) if hasattr(config, 'initializer_range') else 'glorot_uniform'
+        #    for name in self.linear_layer_names:
+        #        setattr(self, name, tf.keras.layers.Dense(units=self.d_model, kernel_initializer=kernel_initializer))
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -102,20 +102,22 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             weights: tf.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: tf.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.shape
-        dim_per_head = self.d_model // self.num_heads
+        #bs, q_length, dim = query
+        #dim_per_head = self.d_model // self.num_heads
 
-        def shape(x):
-            """ separate heads """
-            new_shape = tf.concat((shape_list(x)[:-1], tf.constant([self.num_heads, dim_per_head])), axis=0)
-            return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
+        #def shape(x):
+        #    """ separate heads """
+        #    new_shape = tf.concat((shape_list(x)[:-1], tf.constant([self.num_heads, dim_per_head])), axis=0)
+        #    return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
 
-        if self.use_linear_layers:
-            query, key, value = (getattr(self, name)(x) for name, x in
-                                 zip(self.linear_layer_names, (query, key, value)))
+        #if self.use_linear_layers:
+        #    query, key, value = (getattr(self, name)(x) for name, x in
+        #                         zip(self.linear_layer_names, (query, key, value)))
         
         # (bs, num_heads, q_length, dim_per_head)
-        query, key, value = (shape(x) for x in (query, key, value))
+        #query, key, value = (shape(x) for x in (query, key, value))
+
+        bs, q_length = shape_list(query)[:2]
 
         assert not output_attentions, "Can't output attention maps when using Performer attention."
         if self.use_recurrent_decoding:
@@ -197,8 +199,9 @@ class TFPerformerAttention(tf.keras.layers.Layer):
 
         if self.normalize_output:
             output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
-
-        return self._finalize_attention_output(output, head_mask)
+        
+        return output
+        #return self._finalize_attention_output(output, head_mask)
 
     def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
         # Noncausal
