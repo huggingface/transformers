@@ -557,9 +557,6 @@ class Speech2TextTransformerPreTrainedModel(PreTrainedModel):
         return input_lengths
 
     def _get_subsampled_encoder_attn_mask(self, attention_mask):
-        # convert the 3D attention mask to 2D
-        attention_mask = attention_mask[:, :, -1]
-
         subsampled_lengths = self._get_subsampled_output_lengths(attention_mask.sum(-1))
         max_len = subsampled_lengths.max().item()
         bsz = attention_mask.size()[0]
