@@ -149,7 +149,7 @@ TFLayoutLMForMaskedLM
 TFLayoutLMForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.LayoutLMForSequenceClassification
+.. autoclass:: transformers.TFLayoutLMForSequenceClassification
     :members:
 
 
