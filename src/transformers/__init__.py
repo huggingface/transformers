@@ -1197,10 +1197,10 @@ if is_tf_available():
     _import_structure["models.layoutlm"].extend(
         [
             "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TF_LayoutLMForMaskedLM",
-            "TF_LayoutLMForSequenceClassification",
-            "TF_LayoutLMForTokenClassification",
-            "TF_LayoutLMModel",
+            "TFLayoutLMForMaskedLM",
+            "TFLayoutLMForSequenceClassification",
+            "TFLayoutLMForTokenClassification",
+            "TFLayoutLMModel",
         ]
     )
     _import_structure["models.xlnet"].extend(
