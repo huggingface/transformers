@@ -14,7 +14,7 @@ requirements:
   host:
     - python
     - pip
-    - numpy
+    - numpy >=1.17
     - dataclasses
     - packaging
     - filelock
@@ -23,10 +23,10 @@ requirements:
     - sacremoses
     - regex !=2019.12.17
     - protobuf
-    - tokenizers ==0.10.1rc1
+    - tokenizers >=0.10.1,<0.11.0
   run:
     - python
-    - numpy
+    - numpy >=1.17
     - dataclasses
     - packaging
     - filelock
@@ -35,7 +35,7 @@ requirements:
     - sacremoses
     - regex !=2019.12.17
     - protobuf
-    - tokenizers ==0.10.1rc1
+    - tokenizers >=0.10.1,<0.11.0
 
 test:
   imports:
