@@ -319,7 +319,9 @@ class Trainer:
         ):
             self.place_model_on_device = False
 
-
+        # XXX: this is probably wrong - as it won't fit on device normally
+        if len(self.args.pipeline):
+            model = model.to(args.device)
 
         self.mpu = None
         # XXX: for now hack over naive MP to have the same behavior
@@ -391,9 +393,6 @@ class Trainer:
         # Force n_gpu to 1 to avoid DataParallel as MP will manage the GPUs
         if self.is_model_parallel:
             self.args._n_gpu = 1
-
-        if len(self.args.pipeline):
-            model = model.to(args.device)
 
         # later use `self.model is self.model_wrapped` to check if it's wrapped or not
         self.model_wrapped = model
