@@ -377,12 +377,9 @@ def main():
 
         metrics = train_result.metrics
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("train", metrics)
-            trainer.save_metrics("train", metrics)
-
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
     results = {}
@@ -394,9 +391,8 @@ def main():
         perplexity = math.exp(eval_output["eval_loss"])
         results["perplexity"] = perplexity
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("eval", results)
-            trainer.save_metrics("eval", results)
+        trainer.log_metrics("eval", results)
+        trainer.save_metrics("eval", results)
 
     return results
 

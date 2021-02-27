@@ -390,12 +390,9 @@ def main():
         metrics = train_result.metrics
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("train", metrics)
-            trainer.save_metrics("train", metrics)
-
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
     results = {}
@@ -404,9 +401,8 @@ def main():
 
         results = trainer.evaluate()
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("eval", results)
-            trainer.save_metrics("eval", results)
+        trainer.log_metrics("eval", results)
+        trainer.save_metrics("eval", results)
 
     # Predict
     if training_args.do_predict:
@@ -422,9 +418,8 @@ def main():
             for prediction, label in zip(predictions, labels)
         ]
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("test", metrics)
-            trainer.save_metrics("test", metrics)
+        trainer.log_metrics("test", metrics)
+        trainer.save_metrics("test", metrics)
 
         # Save predictions
         output_test_predictions_file = os.path.join(training_args.output_dir, "test_predictions.txt")

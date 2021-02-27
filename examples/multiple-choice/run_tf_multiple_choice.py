@@ -206,11 +206,10 @@ def main():
 
         result = trainer.evaluate()
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("eval", results)
-            trainer.save_metrics("eval", results)
+        trainer.log_metrics("eval", results)
+        trainer.save_metrics("eval", results)
 
-            results.update(result)
+        results.update(result)
 
     return results
 

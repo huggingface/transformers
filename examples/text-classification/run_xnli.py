@@ -291,12 +291,9 @@ def main():
 
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("train", metrics)
-            trainer.save_metrics("train", metrics)
-
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
     eval_results = {}
@@ -305,9 +302,8 @@ def main():
 
         eval_result = trainer.evaluate(eval_dataset=eval_dataset)
 
-        if trainer.is_world_process_zero():
-            trainer.log_metrics("eval", eval_result)
-            trainer.save_metrics("eval", eval_result)
+        trainer.log_metrics("eval", eval_result)
+        trainer.save_metrics("eval", eval_result)
 
         eval_results.update(eval_result)
 
