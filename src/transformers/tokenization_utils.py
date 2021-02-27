@@ -21,7 +21,7 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Optional, Tuple, Union, overload
 
-from .file_utils import add_end_docstrings
+from .file_utils import PaddingStrategy, TensorType, add_end_docstrings
 from .tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING,
@@ -30,11 +30,9 @@ from .tokenization_utils_base import (
     BatchEncoding,
     EncodedInput,
     EncodedInputPair,
-    PaddingStrategy,
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
-    TensorType,
     TextInput,
     TextInputPair,
     TruncationStrategy,
@@ -101,7 +99,7 @@ def _is_start_of_word(text):
     return bool(_is_control(first_char) | _is_punctuation(first_char) | _is_whitespace(first_char))
 
 
-@add_end_docstrings(INIT_TOKENIZER_DOCSTRING, """    .. automethod:: __call__""")
+@add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizer(PreTrainedTokenizerBase):
     """
     Base class for all slow tokenizers.

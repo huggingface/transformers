@@ -80,19 +80,22 @@ class MarianTokenizer(PreTrainedTokenizer):
     Examples::
 
         >>> from transformers import MarianTokenizer
-        >>> tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
         >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-        >>> batch_enc = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts, return_tensors="pt")
-        >>> # keys  [input_ids, attention_mask, labels].
-        >>> # model(**batch) should work
+        >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
+        >>> with tokenizer.as_target_tokenizer():
+        ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
+        >>> inputs["labels"] = labels["input_ids"]
+        # keys  [input_ids, attention_mask, labels].
+        >>> outputs = model(**inputs) should work
     """
 
     vocab_files_names = vocab_files_names
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(

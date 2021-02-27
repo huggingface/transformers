@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import inspect
 import logging
 import os
@@ -28,9 +29,11 @@ from .file_utils import (
     is_datasets_available,
     is_faiss_available,
     is_flax_available,
+    is_onnx_available,
     is_pandas_available,
     is_scatter_available,
     is_sentencepiece_available,
+    is_soundfile_availble,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -155,6 +158,13 @@ def require_git_lfs(test_case):
     """
     if not _run_git_lfs_tests:
         return unittest.skip("test of git lfs workflow")(test_case)
+    else:
+        return test_case
+
+
+def require_onnx(test_case):
+    if not is_onnx_available():
+        return unittest.skip("test requires ONNX")(test_case)
     else:
         return test_case
 
@@ -363,6 +373,19 @@ def require_ray(test_case):
     """
     if not is_ray_available():
         return unittest.skip("test requires Ray/tune")(test_case)
+    else:
+        return test_case
+
+
+def require_soundfile(test_case):
+    """
+    Decorator marking a test that requires soundfile
+
+    These tests are skipped when soundfile isn't installed.
+
+    """
+    if not is_soundfile_availble():
+        return unittest.skip("test requires soundfile")(test_case)
     else:
         return test_case
 
@@ -808,12 +831,47 @@ class TestCasePlus(unittest.TestCase):
 
 def mockenv(**kwargs):
     """
-    this is a convenience wrapper, that allows this:
+    this is a convenience wrapper, that allows this ::
 
-    @mockenv(RUN_SLOW=True, USE_TF=False) def test_something(): run_slow = os.getenv("RUN_SLOW", False) use_tf =
-    os.getenv("USE_TF", False)
+    @mockenv(RUN_SLOW=True, USE_TF=False)
+    def test_something():
+        run_slow = os.getenv("RUN_SLOW", False)
+        use_tf = os.getenv("USE_TF", False)
+
     """
     return unittest.mock.patch.dict(os.environ, kwargs)
+
+
+# from https://stackoverflow.com/a/34333710/9201239
+@contextlib.contextmanager
+def mockenv_context(*remove, **update):
+    """
+    Temporarily updates the ``os.environ`` dictionary in-place. Similar to mockenv
+
+    The ``os.environ`` dictionary is updated in-place so that the modification is sure to work in all situations.
+
+    Args:
+      remove: Environment variables to remove.
+      update: Dictionary of environment variables and values to add/update.
+    """
+    env = os.environ
+    update = update or {}
+    remove = remove or []
+
+    # List of environment variables being updated or removed.
+    stomped = (set(update.keys()) | set(remove)) & set(env.keys())
+    # Environment variables and values to restore on exit.
+    update_after = {k: env[k] for k in stomped}
+    # Environment variables and values to remove on exit.
+    remove_after = frozenset(k for k in update if k not in env)
+
+    try:
+        env.update(update)
+        [env.pop(k, None) for k in remove]
+        yield
+    finally:
+        env.update(update_after)
+        [env.pop(k) for k in remove_after]
 
 
 # --- pytest conf functions --- #

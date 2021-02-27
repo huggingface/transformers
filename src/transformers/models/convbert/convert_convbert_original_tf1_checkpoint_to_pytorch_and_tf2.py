@@ -16,8 +16,8 @@
 
 import argparse
 
-from ...utils import logging
-from .modeling_convbert import ConvBertConfig, ConvBertModel, load_tf_weights_in_convbert
+from transformers import ConvBertConfig, ConvBertModel, TFConvBertModel, load_tf_weights_in_convbert
+from transformers.utils import logging
 
 
 logging.set_verbosity_info()
@@ -29,6 +29,9 @@ def convert_orig_tf1_checkpoint_to_pytorch(tf_checkpoint_path, convbert_config_f
 
     model = load_tf_weights_in_convbert(model, conf, tf_checkpoint_path)
     model.save_pretrained(pytorch_dump_path)
+
+    tf_model = TFConvBertModel.from_pretrained(pytorch_dump_path, from_pt=True)
+    tf_model.save_pretrained(pytorch_dump_path)
 
 
 if __name__ == "__main__":
@@ -49,4 +52,4 @@ if __name__ == "__main__":
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
     )
     args = parser.parse_args()
-    convert_orig_tf1_checkpoint_to_pytorch(args.tf_checkpoint_path, args.conv_bert_config_file, args.pytorch_dump_path)
+    convert_orig_tf1_checkpoint_to_pytorch(args.tf_checkpoint_path, args.convbert_config_file, args.pytorch_dump_path)

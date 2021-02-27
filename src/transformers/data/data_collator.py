@@ -20,7 +20,9 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
-from ..tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTrainedTokenizerBase
+from ..file_utils import PaddingStrategy
+from ..modeling_utils import PreTrainedModel
+from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -88,7 +90,7 @@ class DataCollatorWithPadding:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -137,7 +139,7 @@ class DataCollatorForTokenClassification:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -232,7 +234,12 @@ class DataCollatorForSeq2Seq:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        model (:class:`~transformers.PreTrainedModel`):
+            The model that is being trained. If set and has the `prepare_decoder_input_ids_from_labels`, use it to
+            prepare the `decoder_input_ids`
+
+            This is useful when using `label_smoothing` to avoid calculating loss twice.
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -254,6 +261,7 @@ class DataCollatorForSeq2Seq:
     """
 
     tokenizer: PreTrainedTokenizerBase
+    model: Optional[PreTrainedModel] = None
     padding: Union[bool, str, PaddingStrategy] = True
     max_length: Optional[int] = None
     pad_to_multiple_of: Optional[int] = None
@@ -272,13 +280,20 @@ class DataCollatorForSeq2Seq:
                     feature["labels"] + remainder if padding_side == "right" else remainder + feature["labels"]
                 )
 
-        return self.tokenizer.pad(
+        features = self.tokenizer.pad(
             features,
             padding=self.padding,
             max_length=self.max_length,
             pad_to_multiple_of=self.pad_to_multiple_of,
             return_tensors="pt",
         )
+
+        # prepare decoder_input_ids
+        if self.model is not None and hasattr(self.model, "prepare_decoder_input_ids_from_labels"):
+            decoder_input_ids = self.model.prepare_decoder_input_ids_from_labels(labels=features["labels"])
+            features["decoder_input_ids"] = decoder_input_ids
+
+        return features
 
 
 @dataclass
@@ -402,7 +417,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             # For Chinese tokens, we need extra inf to mark sub-word, e.g [喜,欢]-> [喜，##欢]
             if "chinese_ref" in e:
                 ref_pos = tolist(e["chinese_ref"])
-                len_seq = e["input_ids"].size(0)
+                len_seq = len(e["input_ids"])
                 for i in range(len_seq):
                     if i in ref_pos:
                         ref_tokens[i] = "##" + ref_tokens[i]

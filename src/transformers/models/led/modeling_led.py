@@ -112,9 +112,8 @@ class LEDLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
-        assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        super().__init__(num_embeddings, embedding_dim)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
@@ -164,6 +163,7 @@ class LEDEncoderSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
+        layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -251,6 +251,12 @@ class LEDEncoderSelfAttention(nn.Module):
 
         attn_probs = F.softmax(attn_scores, dim=-1, dtype=torch.float32)  # use fp32 for numerical stability
 
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            attn_probs = layer_head_mask.view(1, 1, -1, 1) * attn_probs
+
         # softmax sometimes inserts NaN if all positions are masked, replace them with 0
         attn_probs = torch.masked_fill(attn_probs, is_index_masked[:, :, None, None], 0.0)
         attn_probs = attn_probs.type_as(attn_scores)
@@ -288,6 +294,7 @@ class LEDEncoderSelfAttention(nn.Module):
             global_attn_output, global_attn_probs = self._compute_global_attn_output_from_hidden(
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
+                layer_head_mask=layer_head_mask,
                 is_local_index_global_attn_nonzero=is_local_index_global_attn_nonzero,
                 is_index_global_attn_nonzero=is_index_global_attn_nonzero,
                 is_local_index_no_global_attn_nonzero=is_local_index_no_global_attn_nonzero,
@@ -595,6 +602,7 @@ class LEDEncoderSelfAttention(nn.Module):
         self,
         hidden_states,
         max_num_global_attn_indices,
+        layer_head_mask,
         is_local_index_global_attn_nonzero,
         is_index_global_attn_nonzero,
         is_local_index_no_global_attn_nonzero,
@@ -656,6 +664,18 @@ class LEDEncoderSelfAttention(nn.Module):
             global_attn_scores, dim=-1, dtype=torch.float32
         )  # use fp32 for numerical stability
 
+        # apply layer head masking
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            global_attn_probs_float = layer_head_mask.view(1, -1, 1, 1) * global_attn_probs_float.view(
+                batch_size, self.num_heads, max_num_global_attn_indices, seq_len
+            )
+            global_attn_probs_float = global_attn_probs_float.view(
+                batch_size * self.num_heads, max_num_global_attn_indices, seq_len
+            )
+
         global_attn_probs = F.dropout(
             global_attn_probs_float.type_as(global_attn_scores), p=self.dropout, training=self.training
         )
@@ -686,6 +706,7 @@ class LEDEncoderAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         is_index_masked: Optional[torch.Tensor] = None,
         is_index_global_attn: Optional[torch.Tensor] = None,
         is_global_attn: Optional[bool] = None,
@@ -696,6 +717,7 @@ class LEDEncoderAttention(nn.Module):
         self_outputs = self.longformer_self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
@@ -744,6 +766,7 @@ class LEDDecoderAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -810,6 +833,12 @@ class LEDDecoderAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
+        if layer_head_mask is not None:
+            assert layer_head_mask.size() == (
+                self.num_heads,
+            ), f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
             # this operation is a bit akward, but it's required to
@@ -859,6 +888,7 @@ class LEDEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
+        layer_head_mask: torch.Tensor,
         is_index_masked=None,
         is_index_global_attn=None,
         is_global_attn=None,
@@ -869,11 +899,14 @@ class LEDEncoderLayer(nn.Module):
             hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
         """
         residual = hidden_states
         attn_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
             is_index_masked=is_index_masked,
             is_index_global_attn=is_index_global_attn,
             is_global_attn=is_global_attn,
@@ -931,6 +964,8 @@ class LEDDecoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        encoder_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -943,6 +978,10 @@ class LEDDecoderLayer(nn.Module):
             encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
+            encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
+                size `(config.encoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (:obj:`bool`): Whether the base model outputs attentions.
                 This requires the attentions tensor to be reshaped in this function.
@@ -957,6 +996,7 @@ class LEDDecoderLayer(nn.Module):
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -975,6 +1015,7 @@ class LEDDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
+                layer_head_mask=encoder_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
@@ -1155,6 +1196,17 @@ class LEDSeq2SeqModelOutput(ModelOutput):
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
             in the sequence.
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -1166,6 +1218,8 @@ class LEDSeq2SeqModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1221,6 +1275,17 @@ class LEDSeq2SeqLMOutput(ModelOutput):
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
             in the sequence.
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1233,6 +1298,8 @@ class LEDSeq2SeqLMOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1288,6 +1355,17 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
             in the sequence.
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1300,6 +1378,8 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -1357,6 +1437,17 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
             Global attentions weights after the attention softmax, used to compute the weighted average in the
             self-attention heads. Those are the attention weights from every token with global attention to every token
             in the sequence.
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -1370,6 +1461,8 @@ class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_global_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    head_mask: Optional[torch.FloatTensor] = None
+    decoder_head_mask: Optional[torch.FloatTensor] = None
 
 
 LED_START_DOCSTRING = r"""
@@ -1423,8 +1516,17 @@ LED_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the :obj:`input_ids` to the right, following the paper.
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.LedTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            LED uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
@@ -1442,6 +1544,17 @@ LED_INPUTS_DOCSTRING = r"""
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+        head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the heas is **masked**.
+
+        decoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (:obj:`last_hidden_state`, `optional`: :obj:`hidden_states`, `optional`:
             :obj:`attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)`,
@@ -1517,7 +1630,6 @@ class LEDEncoder(LEDPreTrainedModel):
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_source_positions,
             embed_dim,
-            self.padding_idx,
         )
         self.layers = nn.ModuleList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -1582,6 +1694,7 @@ class LEDEncoder(LEDPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         global_attention_mask=None,
+        head_mask=None,
         inputs_embeds=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1615,6 +1728,11 @@ class LEDEncoder(LEDPreTrainedModel):
 
                 - 0 for local attention (a sliding window attention),
                 - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
+            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
             inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
                 representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
@@ -1686,7 +1804,12 @@ class LEDEncoder(LEDPreTrainedModel):
         all_attentions = () if output_attentions else None
         all_global_attentions = () if (output_attentions and is_global_attn) else None
 
-        for encoder_layer in self.layers:
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+        for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1707,6 +1830,7 @@ class LEDEncoder(LEDPreTrainedModel):
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
+                        head_mask[idx] if head_mask is not None else None,
                         is_index_masked,
                         is_index_global_attn,
                     )
@@ -1714,6 +1838,7 @@ class LEDEncoder(LEDPreTrainedModel):
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask=attention_mask,
+                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         is_index_masked=is_index_masked,
                         is_index_global_attn=is_index_global_attn,
                         is_global_attn=is_global_attn,
@@ -1773,7 +1898,6 @@ class LEDDecoder(LEDPreTrainedModel):
         self.embed_positions = LEDLearnedPositionalEmbedding(
             self.max_target_positions,
             config.d_model,
-            self.padding_idx,
         )
         self.layers = nn.ModuleList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -1787,6 +1911,8 @@ class LEDDecoder(LEDPreTrainedModel):
         global_attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
+        head_mask=None,
+        encoder_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
@@ -1833,6 +1959,19 @@ class LEDDecoder(LEDPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
+            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
+            encoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
+                on hidden heads. Mask values selected in ``[0, 1]``:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the heas is **masked**.
+
             past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding.
@@ -1910,6 +2049,12 @@ class LEDDecoder(LEDPreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
+
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -1942,6 +2087,8 @@ class LEDDecoder(LEDPreTrainedModel):
                     combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    head_mask[idx] if head_mask is not None else None,
+                    encoder_head_mask[idx] if encoder_head_mask is not None else None,
                     None,
                 )
             else:
@@ -1950,6 +2097,8 @@ class LEDDecoder(LEDPreTrainedModel):
                     attention_mask=combined_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
@@ -2027,6 +2176,8 @@ class LEDModel(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         global_attention_mask=None,
         past_key_values=None,
@@ -2049,6 +2200,7 @@ class LEDModel(LEDPreTrainedModel):
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 global_attention_mask=global_attention_mask,
+                head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -2069,6 +2221,8 @@ class LEDModel(LEDPreTrainedModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            encoder_head_mask=head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -2148,6 +2302,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         global_attention_mask=None,
         past_key_values=None,
@@ -2198,6 +2354,8 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -2231,7 +2389,14 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        use_cache=None,
+        encoder_outputs=None,
+        **kwargs,
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
@@ -2243,8 +2408,12 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "head_mask": head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
@@ -2290,6 +2459,8 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         global_attention_mask=None,
         inputs_embeds=None,
@@ -2320,6 +2491,8 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -2394,6 +2567,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         global_attention_mask=None,
         start_positions=None,
@@ -2425,6 +2600,8 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             global_attention_mask=global_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,

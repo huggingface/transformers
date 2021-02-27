@@ -18,6 +18,8 @@ import math
 import os
 from typing import Callable, Dict, Optional, Tuple
 
+from .file_utils import ENV_VARS_TRUE_VALUES
+
 
 # Integrations must be imported before ML frameworks:
 from .integrations import (  # isort: split
@@ -110,7 +112,7 @@ class TFTrainer:
 
         if is_wandb_available():
             self.setup_wandb()
-        elif os.environ.get("WANDB_DISABLED") != "true":
+        elif os.getenv("WANDB_DISABLED", "").upper() not in ENV_VARS_TRUE_VALUES:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
@@ -216,10 +218,16 @@ class TFTrainer:
         TFTrainer's init through :obj:`optimizers`, or subclass and override this method.
         """
         if not self.optimizer and not self.lr_scheduler:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.optimizer, self.lr_scheduler = create_optimizer(
                 self.args.learning_rate,
                 num_training_steps,
-                self.args.warmup_steps,
+                warmup_steps,
                 adam_beta1=self.args.adam_beta1,
                 adam_beta2=self.args.adam_beta2,
                 adam_epsilon=self.args.adam_epsilon,

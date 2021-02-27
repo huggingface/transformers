@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import EvaluationStrategy
+from .trainer_utils import EvaluationStrategy, LoggingStrategy
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -52,8 +52,9 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (:obj:`int`, `optional`, defaults to 0):
             The number of update steps to do during the current training.
-        total_flos (:obj:`int`, `optional`, defaults to 0):
-            The total number of floating operations done by the model since the beginning of training.
+        total_flos (:obj:`float`, `optional`, defaults to 0):
+            The total number of floating operations done by the model since the beginning of training (stored as floats
+            to avoid overflow).
         log_history (:obj:`List[Dict[str, float]]`, `optional`):
             The list of logs done since the beginning of training.
         best_metric (:obj:`float`, `optional`):
@@ -76,7 +77,7 @@ class TrainerState:
     global_step: int = 0
     max_steps: int = 0
     num_train_epochs: int = 0
-    total_flos: int = 0
+    total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
@@ -402,7 +403,11 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if args.logging_steps > 0 and state.global_step % args.logging_steps == 0:
+        if (
+            args.logging_strategy == LoggingStrategy.STEPS
+            and args.logging_steps > 0
+            and state.global_step % args.logging_steps == 0
+        ):
             control.should_log = True
 
         # Evaluate
@@ -422,6 +427,11 @@ class DefaultFlowCallback(TrainerCallback):
         return control
 
     def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        # Log
+        if args.logging_strategy == LoggingStrategy.EPOCH:
+            control.should_log = True
+
+        # Evaluate
         if args.evaluation_strategy == EvaluationStrategy.EPOCH:
             control.should_evaluate = True
             if args.load_best_model_at_end:
