@@ -23,7 +23,7 @@ requirements:
     - sacremoses
     - regex !=2019.12.17
     - protobuf
-    - tokenizers ==0.9.4
+    - tokenizers ==0.10.1rc1
   run:
     - python
     - numpy
@@ -35,7 +35,7 @@ requirements:
     - sacremoses
     - regex !=2019.12.17
     - protobuf
-    - tokenizers ==0.9.4
+    - tokenizers ==0.10.1rc1
 
 test:
   imports:

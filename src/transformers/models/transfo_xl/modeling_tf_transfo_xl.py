@@ -468,9 +468,6 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
     def set_input_embeddings(self, value):
         raise NotImplementedError
 
-    def _resize_token_embeddings(self, new_num_tokens):
-        return self.word_emb
-
     def backward_compatible(self):
         self.sample_softmax = -1
 
@@ -501,8 +498,8 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
 
         # There are `mlen + qlen` steps that can be cached into mems
         new_mems = []
-        end_idx = mlen + max(0, qlen)
-        beg_idx = max(0, end_idx - self.mem_len)
+        end_idx = mlen + tf.math.maximum(0, qlen)
+        beg_idx = tf.math.maximum(0, end_idx - tf.convert_to_tensor(self.mem_len))
         for i in range(len(hids)):
 
             cat = tf.concat([mems[i], hids[i]], axis=0)
@@ -658,6 +655,18 @@ class TFTransfoXLPreTrainedModel(TFPreTrainedModel):
 
     config_class = TransfoXLConfig
     base_model_prefix = "transformer"
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 @dataclass
@@ -819,12 +828,15 @@ TRANSFO_XL_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -885,24 +897,16 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
 
         return outputs
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-class TFTransfoXLMHead(tf.keras.layers.Layer):
-    def __init__(self, config, input_embeddings, **kwargs):
-        super().__init__(**kwargs)
-        self.vocab_size = config.vocab_size
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
-
-    def build(self, input_shape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
-        super().build(input_shape)
-
-    def call(self, hidden_states):
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
-        return hidden_states
+        return TFTransfoXLModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            mems=tf.convert_to_tensor(output.mems),
+            hidden_states=hs,
+            attentions=attns,
+        )
 
 
 @add_start_docstrings(
@@ -924,6 +928,9 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
         self.crit = TFAdaptiveSoftmaxMask(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val, name="crit"
         )
+
+    def _resize_token_embeddings(self, new_num_tokens):
+        raise NotImplementedError()
 
     def get_output_embeddings(self):
         """Double-check if you are using adaptive softmax."""
@@ -1000,6 +1007,17 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTransfoXLLMHeadModelOutput(
+            prediction_scores=output.prediction_scores,
+            mems=tf.convert_to_tensor(output.mems),
+            hidden_states=hs,
+            attentions=attns,
         )
 
     def prepare_inputs_for_generation(self, inputs, past, **model_kwargs):
@@ -1155,4 +1173,12 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
             mems=transformer_outputs.mems,
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
+        )
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTransfoXLSequenceClassifierOutputWithPast(
+            logits=output.logits, mems=tf.convert_to_tensor(output.mems), hidden_states=hs, attentions=attns
         )

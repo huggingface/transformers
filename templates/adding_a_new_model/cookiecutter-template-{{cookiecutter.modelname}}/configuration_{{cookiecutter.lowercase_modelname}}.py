@@ -74,6 +74,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
         {% else -%}
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
@@ -133,6 +135,10 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "{{cookiecutter.lowercase_modelname}}"
+    {% if cookiecutter.is_encoder_decoder_model == "False" -%}
+    {% else -%}
+    keys_to_ignore_at_inference = ["past_key_values"]
+    {% endif -%}
 
     def __init__(
         self,
@@ -172,6 +178,8 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         classifier_dropout=0.0,
+        scale_embedding=False,
+        gradient_checkpointing=False,
         {% endif -%}
         pad_token_id=1,
         bos_token_id=0,
@@ -222,6 +230,9 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
+        self.gradient_checkpointing = gradient_checkpointing
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         {% endif -%}
 
     {% if cookiecutter.is_encoder_decoder_model == "False" %}

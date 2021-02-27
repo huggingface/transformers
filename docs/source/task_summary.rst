@@ -54,12 +54,11 @@ Sequence Classification
 
 Sequence classification is the task of classifying sequences according to a given number of classes. An example of
 sequence classification is the GLUE dataset, which is entirely based on that task. If you would like to fine-tune a
-model on a GLUE sequence classification task, you may leverage the `run_glue.py
-<https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_glue.py>`__ and
-`run_pl_glue.py
-<https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_pl_glue.py>`__ or
-`run_tf_glue.py
-<https://github.com/huggingface/transformers/tree/master/examples/text-classification/run_tf_glue.py>`__ scripts.
+model on a GLUE sequence classification task, you may leverage the :prefix_link:`run_glue.py
+<examples/text-classification/run_glue.py>`, :prefix_link:`run_tf_glue.py
+<examples/text-classification/run_tf_glue.py>`, :prefix_link:`run_tf_text_classification.py
+<examples/text-classification/run_tf_text_classification.py>` or :prefix_link:`run_xnli.py
+<examples/text-classification/run_xnli.py>` scripts.
 
 Here is an example of using pipelines to do sentiment analysis: identifying if a sequence is positive or negative. It
 leverages a fine-tuned model on sst2, which is a GLUE task.
@@ -750,8 +749,7 @@ Summarization is the task of summarizing a document or an article into a shorter
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
 created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
-approaches are described in this `document
-<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+approaches are described in this :prefix_link:`document <examples/seq2seq/README.md>`.
 
 Here is an example of using the pipelines to do summarization. It leverages a Bart model that was fine-tuned on the CNN
 / Daily Mail data set.
@@ -829,8 +827,7 @@ Translation is the task of translating a text from one language to another.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
-translation task, various approaches are described in this `document
-<https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+translation task, various approaches are described in this :prefix_link:`document <examples/seq2seq/README.md>`.
 
 Here is an example of using the pipelines to do translation. It leverages a T5 model that was only pre-trained on a
 multi-task mixture dataset (including WMT), yet, yielding impressive translation results.

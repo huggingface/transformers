@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import {{cookiecutter.camelcase_modelname}}Config, is_tf_available
+from transformers import is_tf_available, {{cookiecutter.camelcase_modelname}}Config
 from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
@@ -28,12 +28,12 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
+        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}ForMaskedLM,
         TF{{cookiecutter.camelcase_modelname}}ForMultipleChoice,
         TF{{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
         TF{{cookiecutter.camelcase_modelname}}ForSequenceClassification,
         TF{{cookiecutter.camelcase_modelname}}ForTokenClassification,
-        TF{{cookiecutter.camelcase_modelname}}ForCausalLM,
         TF{{cookiecutter.camelcase_modelname}}Model,
     )
 
@@ -252,6 +252,8 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
         else ()
     )
 
+    test_head_masking = False
+
     def setUp(self):
         self.model_tester = TF{{cookiecutter.camelcase_modelname}}ModelTester(self)
         self.config_tester = ConfigTester(self, config_class={{cookiecutter.camelcase_modelname}}Config, hidden_size=37)
@@ -323,8 +325,12 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
 {% else %}
 import unittest
 
-from transformers import {{cookiecutter.camelcase_modelname}}Config, {{cookiecutter.camelcase_modelname}}Tokenizer, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_tf, slow
+from transformers import (
+    is_tf_available,
+    {{cookiecutter.camelcase_modelname}}Config,
+    {{cookiecutter.camelcase_modelname}}Tokenizer,
+)
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -333,7 +339,10 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration, TF{{cookiecutter.camelcase_modelname}}Model
+    from transformers import (
+        TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+        TF{{cookiecutter.camelcase_modelname}}Model,
+    )
 
 
 @require_tf
@@ -453,7 +462,7 @@ def prepare_{{cookiecutter.lowercase_modelname}}_inputs_dict(
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
     if decoder_attention_mask is None:
-        decoder_attention_mask = tf.cast(tf.math.not_equal(decoder_input_ids, config.pad_token_id), tf.int8)
+        decoder_attention_mask = tf.concat([tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8), tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8)], axis=-1)
     return {
         "input_ids": input_ids,
         "decoder_input_ids": decoder_input_ids,
@@ -468,6 +477,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     all_generative_model_classes = (TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_head_masking = False
 
     def setUp(self):
         self.model_tester = TF{{cookiecutter.camelcase_modelname}}ModelTester(self)
@@ -486,10 +496,82 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
         for model_class in self.all_model_classes:
             model = model_class(config)
             assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
-            x = model.get_output_layer_with_bias()
-            assert x is None
-            name = model.get_prefix_bias_name()
-            assert name is None
+
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
+    def test_resize_token_embeddings(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def _get_word_embedding_weight(model, embedding_layer):
+            if hasattr(embedding_layer, "weight"):
+                return embedding_layer.weight
+            else:
+                # Here we build the word embeddings weights if not exists.
+                # And then we retry to get the attribute once built.
+                model(model.dummy_inputs)
+                if hasattr(embedding_layer, "weight"):
+                    return embedding_layer.weight
+                else:
+                    return None
+
+        for model_class in self.all_model_classes:
+            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+                # build the embeddings
+                model = model_class(config=config)
+                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                old_final_logits_bias = model.get_bias()
+
+                # reshape the embeddings
+                model.resize_token_embeddings(size)
+                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                new_final_logits_bias = model.get_bias()
+
+                # check that the resized embeddings size matches the desired size.
+                assert_size = size if size is not None else config.vocab_size
+
+                self.assertEqual(new_input_embeddings.shape[0], assert_size)
+
+                # check that weights remain the same after resizing
+                models_equal = True
+                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
+                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                        models_equal = False
+                self.assertTrue(models_equal)
+
+                if old_output_embeddings is not None and new_output_embeddings is not None:
+                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
+
+                    models_equal = True
+                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
+                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                            models_equal = False
+                    self.assertTrue(models_equal)
+
+                if old_final_logits_bias is not None and new_final_logits_bias is not None:
+                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
+                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
+                    self.assertEqual(new_final_logits_bias.shape[0], 1)
+                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
+
+                    models_equal = True
+                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
+                        for p1, p2 in zip(old, new):
+                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                                models_equal = False
+                    self.assertTrue(models_equal)
 
 
 def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
@@ -532,7 +614,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
         expected_slice = tf.Tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_inference_with_head(self):
         model = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')
@@ -547,7 +629,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelIntegrationTest(unittest.TestCa
         expected_slice = tf.Tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
 
     def test_seq_to_seq_generation(self):
         hf = TF{{cookiecutter.camelcase_modelname}}ForConditionalGeneration.from_pretrained('{{cookiecutter.checkpoint_identifier}}')

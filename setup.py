@@ -26,7 +26,7 @@ To create the package for pypi.
 
 2. Commit these changes with the message: "Release: VERSION"
 
-3. Add a tag in git to mark the release: "git tag VERSION -m'Adds tag VERSION for pypi' "
+3. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
    Push the tag to git: git push --tags origin master
 
 4. Build both the sources and the wheel. Do not change anything in setup.py between
@@ -99,12 +99,13 @@ _deps = [
     "flake8>=3.8.3",
     "flax>=0.2.2",
     "fugashi>=1.0",
+    "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
-    "jax>=0.2.0",
-    "jaxlib==0.1.55",
+    "jax>=0.2.8",
+    "jaxlib>=0.1.59",
     "keras2onnx",
-    "numpy",
+    "numpy>=1.17",
     "onnxconverter-common",
     "onnxruntime-tools>=1.4.2",
     "onnxruntime>=1.4.0",
@@ -122,6 +123,7 @@ _deps = [
     "sacremoses",
     "scikit-learn",
     "sentencepiece==0.1.91",
+    "soundfile",
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
@@ -130,7 +132,7 @@ _deps = [
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
     "timeout-decorator",
-    "tokenizers==0.9.4",
+    "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "tqdm>=4.27",
     "unidic>=1.0.2",
@@ -139,9 +141,29 @@ _deps = [
 ]
 
 
-# tokenizers: "tokenizers==0.9.4" lookup table
-# support non-versions file too so that they can be checked at run time
+# this is a lookup table with items like:
+#
+# tokenizers: "tokenizers==0.9.4"
+# packaging: "packaging"
+#
+# some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>]+)(?:[!=<>].*)?$)", x)[0] for x in _deps)}
+
+# since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
+# anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
+#
+# python -c 'import sys; from transformers.dependency_versions_table import deps; \
+# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets
+#
+# Just pass the desired package names to that script as it's shown with 2 packages above.
+#
+# If transformers is not yet installed and the work is done from the cloned repo remember to add `PYTHONPATH=src` to the script above
+#
+# You can then feed this for example to `pip`:
+#
+# pip install -U $(python -c 'import sys; from transformers.dependency_versions_table import deps; \
+# print(" ".join([ deps[x] for x in sys.argv[1:]]))' tokenizers datasets)
+#
 
 
 def deps_list(*pkgs):
@@ -205,13 +227,14 @@ extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
+extras["speech"] = deps_list("soundfile")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
-extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
     + extras["retrieval"]
     + extras["modelcreation"]
+    + extras["speech"]
 )
 extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
 extras["quality"] = deps_list("black", "isort", "flake8")
@@ -228,10 +251,25 @@ extras["dev"] = (
     + extras["modelcreation"]
 )
 
+extras["torchhub"] = deps_list(
+    "filelock",
+    "importlib_metadata",
+    "numpy",
+    "packaging",
+    "protobuf",
+    "regex",
+    "requests",
+    "sacremoses",
+    "sentencepiece",
+    "torch",
+    "tokenizers",
+    "tqdm",
+)
 
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["dataclasses"] + ";python_version<'3.7'",  # dataclasses for Python versions that don't have it
+    deps["importlib_metadata"] + ";python_version<'3.8'",  # importlib_metadata for Python versions that don't have it
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
@@ -244,7 +282,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.2.0.dev0", # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.4.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

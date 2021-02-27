@@ -64,6 +64,10 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     if tf_name[-1] == "beta":
         tf_name[-1] = "bias"
 
+    # The SeparableConv1D TF layer contains two weights that are translated to PyTorch Conv1D here
+    if tf_name[-1] == "pointwise_kernel" or tf_name[-1] == "depthwise_kernel":
+        tf_name[-1] = tf_name[-1].replace("_kernel", ".weight")
+
     # Remove prefix if needed
     tf_name = ".".join(tf_name)
     if start_prefix_to_remove:
@@ -127,7 +131,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
-
     # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []

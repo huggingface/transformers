@@ -18,7 +18,7 @@
 import argparse
 import os
 
-from transformers import (
+from . import (
     ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     BART_PRETRAINED_MODEL_ARCHIVE_LIST,
     BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -87,15 +87,15 @@ from transformers import (
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
-from transformers.file_utils import hf_bucket_url
-from transformers.utils import logging
+from .file_utils import hf_bucket_url
+from .utils import logging
 
 
 if is_torch_available():
     import numpy as np
     import torch
 
-    from transformers import (
+    from . import (
         AlbertForPreTraining,
         BartForConditionalGeneration,
         BertForPreTraining,

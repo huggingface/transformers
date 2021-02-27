@@ -15,9 +15,9 @@
 import platform
 from argparse import ArgumentParser
 
-from transformers import __version__ as version
-from transformers import is_tf_available, is_torch_available
-from transformers.commands import BaseTransformersCLICommand
+from .. import __version__ as version
+from ..file_utils import is_tf_available, is_torch_available
+from . import BaseTransformersCLICommand
 
 
 def info_command_factory(_):
