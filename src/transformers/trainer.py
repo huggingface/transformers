@@ -707,7 +707,7 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
 
-            if self.state.global_step % self.args.save_steps == 0:
+            if self.control.should_save:
                 self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
 
@@ -717,8 +717,7 @@ class Trainer:
         if not self.use_tune_checkpoints:
             return
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
-            self.args.output_dir = checkpoint_dir
-            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
+            output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             self.save_model(output_dir)
             if self.is_world_process_zero():
                 self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
@@ -1201,12 +1200,12 @@ class Trainer:
 
                 run_id = tune.get_trial_id()
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
-            output_dir = os.path.join(self.args.output_dir, run_name, checkpoint_folder)
+            run_dir = os.path.join(self.args.output_dir, run_name)
         else:
-            output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
-
+            run_dir = self.args.output_dir
             self.store_flos()
 
+        output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
         if self.deepspeed:
             self.deepspeed.save_checkpoint(output_dir)
@@ -1250,7 +1249,7 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.is_world_process_zero():
-            self._rotate_checkpoints(use_mtime=True)
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
@@ -1559,10 +1558,12 @@ class Trainer:
             else:
                 self.state.total_flos = self._total_flos
 
-    def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
+    def _sorted_checkpoints(
+        self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
+    ) -> List[str]:
         ordering_and_checkpoint_path = []
 
-        glob_checkpoints = [str(x) for x in Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")]
+        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*")]
 
         for path in glob_checkpoints:
             if use_mtime:
@@ -1583,12 +1584,12 @@ class Trainer:
             )
         return checkpoints_sorted
 
-    def _rotate_checkpoints(self, use_mtime=False) -> None:
+    def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
         if self.args.save_total_limit is None or self.args.save_total_limit <= 0:
             return
 
         # Check if we should delete older checkpoint(s)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime)
+        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 
