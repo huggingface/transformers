@@ -541,9 +541,10 @@ class BigBirdBlockSparseAttention(nn.Module):
                 plan_num_rand_blocks=plan_num_rand_blocks)
 
         rand_attn = np.stack(rand_attn, axis=0)
-        rand_attn = torch.tensor(rand_attn, device=device).long()
+        rand_attn = torch.tensor(rand_attn, dtype=torch.long, device=device)
         rand_attn.unsqueeze_(0)
         rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
+        # -> (b, h, n/wn-2, r)
 
         self.ran = rand_attn # TODO: remove this
 
@@ -562,11 +563,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         gathered_key = gathered_key.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
         gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
         gathered_value = gathered_value.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
-
-        # TODO:
-        self.gk = gathered_key
-        self.gv = gathered_value
-        # 
 
         """
             1st block is global
@@ -753,8 +749,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.final_cl = context_layer # TODO: remove this
 
         if output_attentions:
-            # raise NotImplementedError
-            attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device, requires_grad=True)
+            # rand_attn : (b,h,n//wn-2,r)
+            # attn_probs : (b,h,m,n)
+
+            attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device)
 
             # corresponding to `first_context_layer`
             attention_probs[:, :, :wm, :] = first_attn_weights
@@ -763,14 +761,16 @@ class BigBirdBlockSparseAttention(nn.Module):
             attention_probs[:, :, wm:wm*2, :3*wn] = second_attn_weights[:, :, :, :3*wn]
             attention_probs[:, :, wm:wm*2, -wn:] = second_attn_weights[:, :, :, 3*wn:4*wn]
             # put for gathered
-            # attention_probs[:, :, ] =  second_attn_weights[:, :, :, ]
+            # attention_probs[:, :, wm:wm*2, ] =  second_attn_weights[:, :, :, 4*wn:]
 
             # corresponding to `context_layer`
-            attn_weights = attn_weights.view(b,h,(m//wm-4)*wm,n)
-            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, wn:4*wn] # inner_band_product
-            # # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, ] # rand_band_product
-            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, :wn] # first_band_product
-            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, -wn:] # last_band_product
+            for q_idx in range(m//wm - 4):
+                slice = attention_probs.view(b,h,m//wm,wm,n)[:,:,2:-2,:,wn:-wn]
+                slice[:, :, q_idx, :, (q_idx)*wn:(q_idx+3)*wn] = attn_weights[:, :, q_idx, :, wn:4*wn] # inner_band_product
+            # put for gathered
+            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, ] # rand_band_product
+            attention_probs[:, :, 2*wm:-2*wm, :wn] = attn_weights[:, :, :, :, :wn].view(b,h,-1,wn) # first_band_product
+            attention_probs[:, :, 2*wm:-2*wm, -wn:] = attn_weights[:, :, :, :, -wn:].view(b,h,-1,wn) # last_band_product
 
             # corresponding to `second_last_context_layer`
             attention_probs[:, :, -2*wm:-wm, :wn] = second_last_attn_weights[:,:,:,:wn]
@@ -780,7 +780,13 @@ class BigBirdBlockSparseAttention(nn.Module):
 
             # corresponding to `last_context_layer`
             attention_probs[:, :, -wm:, :] = last_attn_weights
-        
+
+            # TODO: remove this
+            self.ap = attention_probs
+            self.my_cl = torch.einsum(
+                            "bhqk,bhkd->bhqd", attention_probs,
+                            value_layer)
+            # 
         else:
             attention_probs = None
 
@@ -791,15 +797,13 @@ class BigBirdBlockSparseAttention(nn.Module):
     def torch_gather_b2(params, indices):
         batch_dims = 2
         assert params.shape[:batch_dims] == indices.shape[:batch_dims]
-        # out_shape = indices.shape + params.shape[-1:]
 
         out = torch.stack(
             [torch.stack(
                 [p2[i2.flatten()] for p2, i2 in zip(p1, i1)]
             ) for p1, i1 in zip(params, indices)]
         )
-        # TODO: fix shape
-        return out#.view(out_shape)
+        return out
 
     def _create_rand_mask_from_inputs(self,
                                     from_blocked_mask,
