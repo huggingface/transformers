@@ -484,12 +484,19 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_num_rand_blocks=None,
         output_attentions=None,
         ):
+        """BigBird Block sparse attention as suggested in paper
+
+        ITC:
+            global tokens : 2 x block_size
+            window tokens : 3 x block_size
+            random tokens : num_rand_tokens x block_size
+
+        ETC:
+            global tokens : extra_globals_tokens + 2 x block_size
+            window tokens : 3 x block_size
+            random tokens : num_rand_tokens x block_size
         """
-            ITC:
-                global tokens : 2 x block_size
-                window tokens : 3 x block_size
-                random tokens : num_rand_tokens x block_size
-        """
+        assert from_seq_length//from_block_size == to_seq_length//to_block_size
 
         # Define shorthands
         h = num_attention_heads
@@ -500,9 +507,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         n = to_seq_length
         wm = from_block_size
         wn = to_block_size
-
-        assert from_seq_length//from_block_size == to_seq_length//to_block_size
-
         device = query_layer.device
 
         # cast masks to float
@@ -555,17 +559,19 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         # preparing block for randn attn
         gathered_key = self.torch_gather_b2(blocked_key_matrix, rand_attn)
-        gathered_key = gathered_key.view(b, h, m // wm - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
+        gathered_key = gathered_key.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
         gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
-        gathered_value = gathered_value.view(b, h, m // wm - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
+        gathered_value = gathered_value.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
 
         # TODO:
         self.gk = gathered_key
         self.gv = gathered_value
         # 
 
-        # fixed query product (1st query is global)
-        # Q1 x (K1,K2,K3,.............)
+        """
+            1st block is global
+            q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
+        """
         first_product = torch.einsum(
             "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 0],
             key_layer)  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
@@ -578,6 +584,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         first_context_layer.unsqueeze_(2)
 
         self.fcl = first_context_layer # TODO: remove this
+
+        """
+            q[1] x (sliding_keys, random_keys, global_keys)
+        """
 
         second_key_mat = torch.cat([
             blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, 1],
@@ -606,7 +616,11 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         self.scl = second_context_layer # TODO: remove this
 
-        # this is window attn by copying into 3 parts (leaving some queries)
+        """
+            q[-2:2] x (sliding_keys, random_keys, global_keys)
+        """
+
+        # initialize q,k,v->q,k,v[-2:2]
         exp_blocked_key_matrix = torch.cat([
             blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2],
             blocked_key_matrix[:, :, 3:-1]], dim=3)  # [b, h, m//wm-4, 3*wn, -1]
@@ -614,49 +628,64 @@ class BigBirdBlockSparseAttention(nn.Module):
             blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2],
             blocked_value_matrix[:, :, 3:-1]], dim=3)  # [b, h, m//wm-4, 3*wn, -1]
         middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
+
+        # sliding attention scores for q[-2:2]
         inner_band_product = torch.einsum(
             "bhlqd,bhlkd->bhlqk", middle_query_matrix, exp_blocked_key_matrix
         )  # [b, h, m//wm-4, wm, -1] x [b, h, m//wm-4, 3*wn, -1]
         #     ==> [b, h, m//wm-4, wm, 3*wn]
         inner_band_product = inner_band_product*(1.0 / math.sqrt(d))
+
+        # randn attention scores for q[-2:2]
         rand_band_product = torch.einsum(
             "bhlqd,bhlkd->bhlqk", middle_query_matrix, gathered_key[:, :, 1:-1]
         )  # [b, h, m//wm-4, wm, -1] x [b, h, m//wm-4, r*wn, -1]
         #     ==> [b, h, m//wm-4, wm, r*wn]
         rand_band_product = rand_band_product*(1.0 / math.sqrt(d))
+
+        # 1st block is global
         first_band_product = torch.einsum(
             "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0]
         )  # [b, h, m//wm-4, wm, -1] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, wn]
         first_band_product = first_band_product*(1.0 / math.sqrt(d))
+
+        # last block is global
         last_band_product = torch.einsum(
             "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1]
         )  # [b, h, m//wm-4, wm, -1] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, wn]
         last_band_product = last_band_product*(1.0 / math.sqrt(d))
+
+        # masking padded tokens
         inner_band_product += (1.0 - band_mask) * -10000.0
         first_band_product += (
             1.0 - to_mask[:, :, :, :wn].unsqueeze(3)) * -10000.0
         last_band_product += (
             1.0 - to_mask[:, :, :, -wn:].unsqueeze(3)) * -10000.0
         rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * -10000.0
+        
+        # completing attention scores matrix for all q[-2:2]
         band_product = torch.cat([
             first_band_product, inner_band_product, rand_band_product,
             last_band_product], dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
+
+        # safely doing softmax since attention matrix is completed
         attn_weights = F.softmax(band_product, dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
-        
-        
-        
-        
-        # [product attention weights and value]
+
+        # contibution of sliding keys
         context_layer = torch.einsum(
-            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, wn:4 * wn],
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, wn: 4*wn],
             exp_blocked_value_matrix
         )  # [b, h, m//wm-4, wm, 3*wn] x [b, h, m//wm-4, 3*wn, -1]
         #     ==> [b, h, m//wm-4, wm, -1]
+    
+        # adding contribution of random keys
         context_layer += torch.einsum(
-            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, 4 * wn:-wn],
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, 4*wn:-wn],
             gathered_value[:, :, 1:-1]
         )  # [b, h, m//wm-4, wm, r*wn] x [b, h, m//wm-4, r*wn, -1]
         #     ==> [b, h, m//wm-4, wm, -1]
+
+        # adding contribution of global keys
         context_layer += torch.einsum(
             "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :wn],
             blocked_value_matrix[:, :, 0]
@@ -667,6 +696,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         )  # [b, h, m//wm-4, wm, wn] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, -1]
 
         self.cl = context_layer # TODO: remove this
+
+        """
+            q[-2] x (sliding_keys, random_keys, global_keys)
+        """
 
         second_last_key_mat = torch.cat([
             blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, -3],
@@ -696,8 +729,10 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         self.slcl = second_last_context_layer # TODO: remove this
 
-        # # fixed query product (last query is global)
-        # # Qlast x (K1,K2,K3,.............)
+        """
+            last block is global
+            q[-1] x (k[0], k[1], k[2], k[3], .... )
+        """    
         last_product = torch.einsum(
             "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -1],
             key_layer)  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
@@ -708,7 +743,6 @@ class BigBirdBlockSparseAttention(nn.Module):
             "bhqk,bhkd->bhqd", last_attn_weights,
             value_layer)  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
         last_context_layer.unsqueeze_(2)
-
         context_layer = torch.cat([
             first_context_layer, second_context_layer, context_layer,
             second_last_context_layer, last_context_layer
@@ -2001,7 +2035,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
-# TODO: check BigBird as decoder
+
 @add_start_docstrings(
     """BigBird Model with a `language modeling` head on top for CLM fine-tuning. """, BIG_BIRD_START_DOCSTRING
 )
