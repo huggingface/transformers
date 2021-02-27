@@ -299,14 +299,11 @@ def main():
     eval_results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
         eval_result = trainer.evaluate(eval_dataset=eval_dataset)
-
-
         trainer.log_metrics("eval", eval_result)
         trainer.save_metrics("eval", eval_result)
-
         eval_results.update(eval_result)
+
     return eval_results
 
 
