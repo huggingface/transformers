@@ -233,6 +233,8 @@ class BertSelfAttention(nn.Module):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
+        self.performer_attention = PerformerAttention(config.performer_attention_config)
+
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
@@ -288,47 +290,49 @@ class BertSelfAttention(nn.Module):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        #attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+        #if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        #    seq_length = hidden_states.size()[1]
+        #    position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+        #    position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+        #    distance = position_ids_l - position_ids_r
+        #    positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+        #    positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+        #    if self.position_embedding_type == "relative_key":
+        #        relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+        #        attention_scores = attention_scores + relative_position_scores
+        #    elif self.position_embedding_type == "relative_key_query":
+        #        relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+        #        relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+        #        attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
+        #attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+        #if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
-            attention_scores = attention_scores + attention_mask
+        #    attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        #attention_probs = nn.Softmax(dim=-1)(attention_scores)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        #attention_probs = self.dropout(attention_probs)
+
+        context_layer = self.performer_attention(query_layer, key_layer, value_layer, attention_mask, output_attentions)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            context_layer = context_layer * head_mask
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        #context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        outputs = (context_layer,)
 
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
@@ -352,7 +356,7 @@ class BertSelfOutput(nn.Module):
 class BertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = PerformerAttention(config.performer_attention_config, linear_layer_names=('query', 'key', 'value'))
+        self.self = BertSelfAttention(config)
         self.output = BertSelfOutput(config)
         self.pruned_heads = set()
 
@@ -387,12 +391,13 @@ class BertAttention(nn.Module):
 
         assert encoder_hidden_states is None, "Encoder - Decoder Performer Attention is not yet implemented"
         self_outputs = self.self(
-            query=hidden_states,
-            key=hidden_states,
-            value=hidden_states,
-            mask=attention_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            encoder_hidden_states,
+            encoder_attention_mask,
+            past_key_value,
+            output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -936,14 +941,25 @@ class BertPerformerModel(BertPerformerPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        #extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device) # We do not want a -inf mask
+
+
+        # For Performer we want it to be of shape [bs, 1, seq_len, 1]
+        mask_reshape = [input_shape[0], 1, -1, 1] # Slight change in dimension for Performer Attention
+        extended_attention_mask = attention_mask.view(mask_reshape)
+
         # If a 2D or 3D attention mask is provided for the cross-attention
+        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
-            encoder_attention_mask = None
+            encoder_extended_attention_mask = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -961,10 +977,10 @@ class BertPerformerModel(BertPerformerPreTrainedModel):
         )
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=attention_mask,
+            attention_mask=extended_attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
+            encoder_attention_mask=encoder_extended_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,

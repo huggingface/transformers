@@ -258,7 +258,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
 
 
         # Note that dropout is not used in the original favor implementation so we also do not use it
-        attention_output = self.performer_attention(query_layer, key_layer, value_layer, attention_mask, head_mask, output_attentions)
+        attention_output = self.performer_attention(query_layer, key_layer, value_layer, attention_mask, output_attentions)
 
         # Take the dot product between "query" and "key" to get the raw
         # attention scores.

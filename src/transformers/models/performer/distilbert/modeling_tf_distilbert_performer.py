@@ -238,7 +238,7 @@ class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
         mask = tf.reshape(mask, mask_reshape)  # (bs, n_heads, qlen, klen)
         mask = tf.cast(mask, dtype=q.dtype)
 
-        context = self.performer_attention(q, k, v, mask, head_mask, output_attentions)
+        context = self.performer_attention(q, k, v, mask, output_attentions)
 
         #q = tf.multiply(q, tf.math.rsqrt(tf.cast(dim_per_head, dtype=tf.float32)))
         #k = tf.cast(k, dtype=q.dtype)

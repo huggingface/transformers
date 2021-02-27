@@ -129,6 +129,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
+        self.performer_attention = PerformerAttention(config.performer_attention_config)
+
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -165,7 +167,7 @@ class MultiHeadSelfAttention(nn.Module):
 
         dim_per_head = self.dim // self.n_heads
 
-        mask_reshp = (bs, 1, 1, k_length)
+        mask_reshp = (bs, 1, k_length, 1) # Shape for Performer
 
         def shape(x):
             """ separate heads """
@@ -179,26 +181,27 @@ class MultiHeadSelfAttention(nn.Module):
         k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
         v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
-        q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
-        scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
-        mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
-        scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
+        mask = mask.view(mask_reshp)  # (bs, n_heads, q_length, k_length)
 
-        weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
-        weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
+        context = self.performer_attention(q, k, v, mask, output_attentions)
+
+        #q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
+        #scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
+        #mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
+        #scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
+
+        #weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
+        #weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
 
         # Mask heads if we want to
         if head_mask is not None:
-            weights = weights * head_mask
+            context = context * head_mask
 
-        context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
+        #context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
 
-        if output_attentions:
-            return (context, weights)
-        else:
-            return (context,)
+        return (context,)
 
 
 class FFN(nn.Module):
@@ -230,7 +233,8 @@ class TransformerBlock(nn.Module):
         super().__init__()
 
         assert config.dim % config.n_heads == 0
-        self.attention = PerformerAttention(config.performer_attention_config, linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'))
+        #self.attention = PerformerAttention(config.performer_attention_config, linear_layer_names=('q_lin', 'k_lin', 'v_lin', 'out_lin'))
+        self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)

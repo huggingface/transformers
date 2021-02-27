@@ -73,9 +73,9 @@ class PerformerAttention(nn.Module):
             self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
             self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        if self.use_linear_layers:
-            for name in self.linear_layer_names:
-                setattr(self, name, nn.Linear(self.d_model, self.d_model))
+        #if self.use_linear_layers:
+        #    for name in self.linear_layer_names:
+        #        setattr(self, name, nn.Linear(self.d_model, self.d_model))
 
         self.pruned_heads = set()
 
@@ -106,7 +106,7 @@ class PerformerAttention(nn.Module):
         else:
             assert not self.use_recurrent_decoding
 
-    def forward(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
+    def forward(self, query, key, value, mask=None, output_attentions=False, position_bias=None):
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -118,25 +118,17 @@ class PerformerAttention(nn.Module):
             weights: torch.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: torch.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        bs, q_length, dim = query.shape
-        dim_per_head = self.d_model // self.num_heads
+        bs, q_length, _, _ = query.shape
 
         assert not output_attentions, "Can't output attention maps when using Performer attention."
         if self.use_recurrent_decoding:
             assert q_length == 1, "When use_recurrent_decoding == True, we only input and output one token at a time."
 
-        if self.use_linear_layers:
-            query, key, value = (getattr(self, name)(x) for name, x in
-                                 zip(self.linear_layer_names, (query, key, value)))
-
-        # Add the head dimension: (bs, num_heads, q_length, dim_per_head)
-        query, key, value = (x.view(bs, -1, self.num_heads, dim_per_head).transpose(1, 2) for x in (query, key, value))
-
         self._redraw_features_if_needed(bs, query.device)
 
         # Get the transformed values of Q and K
         q_prime, k_prime = self.get_projected_queries_and_keys(query, key)
-        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask, head_mask)
+        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask, position_bias)
 
     def get_projected_queries_and_keys(self, q, k):
         """
@@ -188,7 +180,7 @@ class PerformerAttention(nn.Module):
         else:
             return (self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
 
-    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask=None, head_mask=None):
+    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask=None, position_bias=None):
         """
         Computes the attention output given Q' and K' from the above get_projected_queries_and_keys method.
         Parameters:
@@ -202,16 +194,20 @@ class PerformerAttention(nn.Module):
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
-            assert len(list(mask.shape)) == 2, f"Mask should have shapes (bs, seq_len) but has shapes {list(mask.shape)}"
-            k_prime *= mask.unsqueeze(1).unsqueeze(-1).expand_as(k_prime)
+            k_prime *= mask
 
         k_prime_t = k_prime.transpose(-2, -1)
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
 
+        if position_bias is not None:
+            # position_bias: (bs, n_heads, q_length, q_length)
+            add_pos = position_bias @ v
+            output += add_pos
+
         if self.normalize_output:
             output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
 
-        return self._finalize_attention_output(output, head_mask)
+        return output
 
     def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
         # Noncausal
@@ -246,24 +242,6 @@ class PerformerAttention(nn.Module):
 
         # Avoid dividing by very small numbers
         return denom + 2 * self.normalization_stabilizer * (torch.abs(denom) <= self.normalization_stabilizer)
-
-    def _finalize_attention_output(self, context, head_mask=None, att_map_to_output=None):
-        def unshape(x):
-            return x.transpose(1, 2).reshape(x.shape[0], -1, x.shape[1] * x.shape[-1])
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            context *= head_mask
-
-        context = unshape(context)  # (bs, q_length, dim)
-
-        if self.use_linear_layers and len(self.linear_layer_names) > 3:
-            context = getattr(self, self.linear_layer_names[3])(context)  # (bs, q_length, dim)
-
-        if att_map_to_output:
-            return context, att_map_to_output
-        else:
-            return context,
 
     def redraw_features_now(self):
         """
@@ -354,24 +332,6 @@ class PerformerAttention(nn.Module):
             # Keep track of how many forward passes we do before we redraw again
             else:
                 self.calls_since_last_redraw += 1
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-
-        attention_head_size = self.d_model // self.num_heads
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, attention_head_size, self.pruned_heads)
-
-        # Prune linear layers
-        if self.use_linear_layers:
-            for name in self.linear_layer_names:
-                setattr(self, name, prune_linear_layer(getattr(self, name), index))
-
-        # Update hyper params
-        self.num_heads -= len(heads)
-        self.d_model = attention_head_size * self.num_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
 
 # Not currently used
 def _get_square_orthogonal_block_qr(batch, size, device=None):

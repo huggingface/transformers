@@ -25,29 +25,31 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...activations import ACT2FN
-from ...file_utils import (
+from ....activations import ACT2FN
+from ....file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
+from ....modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import logging
-from ...utils.model_parallel_utils import assert_device_map, get_device_map
-from .configuration_t5 import T5Config
+from ....modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ....utils import logging
+from ....utils.model_parallel_utils import assert_device_map, get_device_map
+
+from .configuration_t5_performer import T5PerformerConfig
+from ..modeling_performer_attention import PerformerAttention
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "T5Config"
+_CONFIG_FOR_DOC = "T5PerformerConfig"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 
 ####################################################
@@ -302,7 +304,7 @@ class T5LayerFF(nn.Module):
 
 
 class T5Attention(nn.Module):
-    def __init__(self, config: T5Config, has_relative_attention_bias=False):
+    def __init__(self, config: T5PerformerConfig, has_relative_attention_bias=False):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.has_relative_attention_bias = has_relative_attention_bias
@@ -319,6 +321,8 @@ class T5Attention(nn.Module):
         self.k = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.v = nn.Linear(self.d_model, self.inner_dim, bias=False)
         self.o = nn.Linear(self.inner_dim, self.d_model, bias=False)
+
+        self.performer_attention = PerformerAttention(config.performer_attention_config)
 
         if self.has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(self.relative_attention_num_buckets, self.n_heads)
@@ -476,14 +480,14 @@ class T5Attention(nn.Module):
         )
 
         # compute scores
-        scores = torch.matmul(
-            query_states, key_states.transpose(3, 2)
-        )  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
+        #scores = torch.matmul(
+        #    query_states, key_states.transpose(3, 2)
+        #)  # equivalent of torch.einsum("bnqd,bnkd->bnqk", query_states, key_states), compatible with onnx op>9
 
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads, real_seq_length, key_length), device=query_states.device, dtype=query_states.dtype
                 )
             else:
                 position_bias = self.compute_bias(real_seq_length, key_length)
@@ -494,28 +498,29 @@ class T5Attention(nn.Module):
                 position_bias = position_bias[:, :, -seq_length:, :]
 
             if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
+                # Multiplying by the mask here as we will compute: Q' @ (K' * M) @ V + (B * M) @ V, where M is the mask & B is the pos bias
+                position_bias = position_bias * mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
-        attn_weights = F.softmax(scores.float(), dim=-1).type_as(
-            scores
-        )  # (batch_size, n_heads, seq_length, key_length)
-        attn_weights = F.dropout(
-            attn_weights, p=self.dropout, training=self.training
-        )  # (batch_size, n_heads, seq_length, key_length)
+        attn_output = self.performer_attention(query_states, key_states, value_states, mask, output_attentions, position_bias=position_bias)
+
+        #scores += position_bias
+        #attn_weights = F.softmax(scores.float(), dim=-1).type_as(
+        #    scores
+        #)  # (batch_size, n_heads, seq_length, key_length)
+        #attn_weights = F.dropout(
+        #    attn_weights, p=self.dropout, training=self.training
+        #)  # (batch_size, n_heads, seq_length, key_length)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
-            attn_weights = attn_weights * layer_head_mask
+            attn_output = attn_output * layer_head_mask
 
-        attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
+        #attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
 
         present_key_value_state = (key_states, value_states) if (self.is_decoder and use_cache) else None
         outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
 
-        if output_attentions:
-            outputs = outputs + (attn_weights,)
         return outputs
 
 
@@ -690,13 +695,13 @@ class T5Block(nn.Module):
         return outputs  # hidden-states, present_key_value_states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
 
 
-class T5PreTrainedModel(PreTrainedModel):
+class T5PerformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = T5Config
+    config_class = T5PerformerConfig
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
     is_parallelizable = True
@@ -717,7 +722,7 @@ class T5PreTrainedModel(PreTrainedModel):
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, T5LayerNorm):
             module.weight.data.fill_(factor * 1.0)
-        elif isinstance(module, (T5Model, T5ForConditionalGeneration, T5EncoderModel)):
+        elif isinstance(module, (T5PerformerModel, T5PerformerForConditionalGeneration, T5PerformerEncoderModel)):
             # Mesh TensorFlow embeddings initialization
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/layers.py#L1624
             module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
@@ -776,7 +781,7 @@ class T5PreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-class T5Stack(T5PreTrainedModel):
+class T5Stack(T5PerformerPreTrainedModel):
     def __init__(self, config, embed_tokens=None):
         super().__init__(config)
 
@@ -1175,7 +1180,7 @@ num_heads)`.
     "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
     T5_START_DOCSTRING,
 )
-class T5Model(T5PreTrainedModel):
+class T5PerformerModel(T5PerformerPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
@@ -1184,7 +1189,7 @@ class T5Model(T5PreTrainedModel):
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
-    def __init__(self, config: T5Config):
+    def __init__(self, config: T5PerformerConfig):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
@@ -1358,7 +1363,7 @@ class T5Model(T5PreTrainedModel):
 
 
 @add_start_docstrings("""T5 Model with a `language modeling` head on top. """, T5_START_DOCSTRING)
-class T5ForConditionalGeneration(T5PreTrainedModel):
+class T5PerformerForConditionalGeneration(T5PerformerPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
@@ -1640,12 +1645,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
     "The bare T5 Model transformer outputting encoder's raw hidden-states" "without any specific head on top.",
     T5_START_DOCSTRING,
 )
-class T5EncoderModel(T5PreTrainedModel):
+class T5PerformerEncoderModel(T5PerformerPreTrainedModel):
     authorized_missing_keys = [
         r"encoder\.embed_tokens\.weight",
     ]
 
-    def __init__(self, config: T5Config):
+    def __init__(self, config: T5PerformerConfig):
         super().__init__(config)
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 

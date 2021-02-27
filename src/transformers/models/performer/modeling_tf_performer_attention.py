@@ -63,11 +63,6 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             self.kernel_type = resolve_enum(PerformerKernel, self.kernel_type)
             self.kernel_fn = KERNEL_CALLABLES[self.kernel_type]
 
-        #if self.use_linear_layers:
-        #    kernel_initializer = get_initializer(config.initializer_range) if hasattr(config, 'initializer_range') else 'glorot_uniform'
-        #    for name in self.linear_layer_names:
-        #        setattr(self, name, tf.keras.layers.Dense(units=self.d_model, kernel_initializer=kernel_initializer))
-
     def prune_heads(self, heads):
         raise NotImplementedError
 
@@ -90,7 +85,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         self.s = None
         self.z = None
 
-    def call(self, query, key, value, mask=None, head_mask=None, output_attentions=False):
+    def call(self, query, key, value, mask=None, output_attentions=False, position_bias=None):
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -102,21 +97,6 @@ class TFPerformerAttention(tf.keras.layers.Layer):
             weights: tf.tensor(bs, num_heads, seq_length, seq_length) Attention weights context: tf.tensor(bs,
             seq_length, dim) Contextualized layer. Optional: only if `output_attentions=True`
         """
-        #bs, q_length, dim = query
-        #dim_per_head = self.d_model // self.num_heads
-
-        #def shape(x):
-        #    """ separate heads """
-        #    new_shape = tf.concat((shape_list(x)[:-1], tf.constant([self.num_heads, dim_per_head])), axis=0)
-        #    return tf.transpose(tf.reshape(x, new_shape), perm=[0, 2, 1, 3])
-
-        #if self.use_linear_layers:
-        #    query, key, value = (getattr(self, name)(x) for name, x in
-        #                         zip(self.linear_layer_names, (query, key, value)))
-        
-        # (bs, num_heads, q_length, dim_per_head)
-        #query, key, value = (shape(x) for x in (query, key, value))
-
         bs, q_length = shape_list(query)[:2]
 
         assert not output_attentions, "Can't output attention maps when using Performer attention."
@@ -127,7 +107,7 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         
         # Get the transformed values of Q and K
         q_prime, k_prime = self.get_projected_queries_and_keys(query, key)
-        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask, head_mask)
+        return self.compute_attention_with_projected_queries_and_keys(q_prime, k_prime, value, mask, position_bias)
 
     def get_projected_queries_and_keys(self, q, k):
         """
@@ -176,33 +156,34 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         else:
             return tuple(self.kernel_fn(x) + self.kernel_epsilon for x in (projected_q, projected_k))
 
-    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask=None, head_mask=None):
+    def compute_attention_with_projected_queries_and_keys(self, q_prime, k_prime, v, mask=None, position_bias=None):
         """
         Computes the attention output given Q' and K' from the above get_projected_queries_and_keys method.
         Parameters:
             q_prime: tf.tensor(bs, n_heads, q_length, dim_per_head)
             k_prime: tf.tensor(bs, n_heads, q_length, dim_per_head)
             v: tf.tensor(bs, n_heads, q_length, dim_per_head)
-            mask: tf.tensor(bs, seq_length)
+            mask: tf.tensor(bs, 1, q_length, 1)
 
         Returns:
             V': tf.tensor(bs, seq_length, dim)
         """
         # Apply the padding mask to K'. Also applying it to Q' would be redundant.
         if mask is not None:
-            #assert len(shape_list(mask)) == 2, f"Mask should have shapes (bs, seq_len) but has shapes {shape_list(mask)}"
-            #mask = tf.cast(mask, dtype=k_prime.dtype)
             k_prime *= mask
-            #k_prime *= tf.expand_dims(tf.expand_dims(mask, 1), -1)
 
         k_prime_t = tf.linalg.matrix_transpose(k_prime)
         output = self._numerator_for_projected_queries_and_keys(q_prime, k_prime_t, v)
+
+        if position_bias is not None:
+            # position_bias: (bs, n_heads, q_length, q_length)
+            add_pos = position_bias @ v
+            output += add_pos
 
         if self.normalize_output:
             output /= self._denominator_for_projected_queries_and_keys(q_prime, k_prime_t)
         
         return output
-        #return self._finalize_attention_output(output, head_mask)
 
     def _numerator_for_projected_queries_and_keys(self, q_prime, k_prime_t, v):
         # Noncausal
@@ -239,23 +220,6 @@ class TFPerformerAttention(tf.keras.layers.Layer):
         extreme_vals = tf.cast(tf.math.abs(denom) <= self.normalization_stabilizer, denom.dtype)
         return denom + 2 * self.normalization_stabilizer * extreme_vals
     
-    def _finalize_attention_output(self, context, head_mask=None, att_map_to_output=None):
-        # Mask heads if we want to
-        if head_mask is not None:
-            context = context * head_mask
-
-        x = tf.transpose(context, perm=[0, 2, 1, 3])  # [...seq_len, num_heads, dim_per_head]
-        new_last_dim = x.shape[-2] * x.shape[-1]
-        context = tf.reshape(x, shape_list(x)[:-2] + [new_last_dim])  # (bs, q_length, dim)
-
-        if self.use_linear_layers and len(self.linear_layer_names) > 3:
-            context = getattr(self, self.linear_layer_names[3])(context)  # (bs, q_length, dim)
-
-        if att_map_to_output:
-            return context, att_map_to_output
-        else:
-            return context,
-
     def _generate_feature_matrix(self, batch_size):
         dim_per_head = self.d_model // self.num_heads
         num_rows = self.num_random_features or round(dim_per_head * math.log(dim_per_head))

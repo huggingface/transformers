@@ -322,8 +322,9 @@ class TFT5Attention(tf.keras.layers.Layer):
             present_key_value_state = (key_states, value_states)
         else:
             present_key_value_state = None
-        
-        attn_output = self.performer_attention(query_states, key_states, value_states, mask)
+
+        # Make sure mask has shapes : bs, 1, seq_len, 1 instead of bs, 1, 1, seq_len for performer
+        mask = tf.transpose(mask, perm=(0, 1, 3, 2))
 
         #scores = tf.einsum(
         #    "bnqd,bnkd->bnqk", query_states, key_states
@@ -339,13 +340,16 @@ class TFT5Attention(tf.keras.layers.Layer):
             # we want only the last query position bias
             if past_key_value is not None:
                 position_bias = position_bias[:, :, -seq_length:, :]
-
+            
             if mask is not None:
-                position_bias = position_bias + mask  # (batch_size, n_heads, query_length, key_length)
-
+                # Multiplying by the mask here as we will compute: Q' @ (K' * M) @ V + (B * M) @ V, where M is the mask & B is the pos bias
+                position_bias = position_bias * mask  # (batch_size, n_heads, query_length, key_length)
+    
         #scores += position_bias
         #weights = tf.nn.softmax(scores, axis=-1)  # (batch_size, n_heads, query_length, key_length)
         #weights = self.dropout(weights, training=training)  # (batch_size, n_heads, query_length, key_length)
+
+        attn_output = self.performer_attention(query_states, key_states, value_states, mask=mask, position_bias=position_bias)
 
         # Mask heads if we want to
         if layer_head_mask is not None:
@@ -691,7 +695,8 @@ class TFT5PerformerMainLayer(tf.keras.layers.Layer):
         # extended_attention_mask = tf.math.equal(extended_attention_mask,
         #                                         tf.transpose(extended_attention_mask, perm=(-1, -2)))
 
-        extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
+        # Not use this for Performer
+        #extended_attention_mask = (1.0 - extended_attention_mask) * -1e9
 
         if self.is_decoder and inputs["encoder_attention_mask"] is not None:
             # If a 2D ou 3D attention mask is provided for the cross-attention
@@ -709,7 +714,8 @@ class TFT5PerformerMainLayer(tf.keras.layers.Layer):
             # encoder_extended_attention_mask = tf.math.equal(encoder_extended_attention_mask,
             #                                         tf.transpose(encoder_extended_attention_mask, perm=(-1, -2)))
 
-            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
+            # Not use this for Performer
+            #encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             encoder_extended_attention_mask = None
 
@@ -730,10 +736,10 @@ class TFT5PerformerMainLayer(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (hidden_states,)
             layer_outputs = layer_module(
                 hidden_states,
-                attention_mask=inputs["attention_mask"],
+                attention_mask=extended_attention_mask,
                 position_bias=position_bias,
                 encoder_hidden_states=inputs["encoder_hidden_states"],
-                encoder_attention_mask=inputs["encoder_attention_mask"],
+                encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
                 layer_head_mask=inputs["head_mask"][i],
                 encoder_layer_head_mask=inputs["encoder_head_mask"][i],
