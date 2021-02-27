@@ -17,7 +17,6 @@ Integrations with other Python libraries.
 import importlib.util
 import io
 import json
-import math
 import numbers
 import os
 import re
@@ -174,16 +173,23 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
     _tb_writer = trainer.pop_callback(TensorBoardCallback)
     trainer.model = None
-    # Setup default `resources_per_trial` and `reporter`.
-    if "resources_per_trial" not in kwargs and trainer.args.n_gpu > 0:
-        # `args.n_gpu` is considered the total number of GPUs that will be split
-        # among the `n_jobs`
-        n_jobs = int(kwargs.pop("n_jobs", 1))
-        num_gpus_per_trial = trainer.args.n_gpu
-        if num_gpus_per_trial / n_jobs >= 1:
-            num_gpus_per_trial = int(math.ceil(num_gpus_per_trial / n_jobs))
-        kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
+    # Setup default `resources_per_trial`.
+    if "resources_per_trial" not in kwargs:
+        # Default to 1 CPU and 1 GPU (if applicable) per trial.
+        kwargs["resources_per_trial"] = {"cpu": 1}
+        if trainer.args.n_gpu > 0:
+            kwargs["resources_per_trial"]["gpu"] = 1
+        resource_msg = "1 CPU" + (" and 1 GPU" if trainer.args.n_gpu > 0 else "")
+        logger.info(
+            "No `resources_per_trial` arg was passed into "
+            "`hyperparameter_search`. Setting it to a default value "
+            f"of {resource_msg} for each trial."
+        )
+    # Make sure each trainer only uses GPUs that were allocated per trial.
+    gpus_per_trial = kwargs["resources_per_trial"].get("gpu", 0)
+    trainer.args._n_gpu = gpus_per_trial
 
+    # Setup default `progress_reporter`.
     if "progress_reporter" not in kwargs:
         from ray.tune import CLIReporter
 
@@ -193,7 +199,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
-                "Currently keeping {} checkpoints for each trial. Checkpoints are usually huge, "
+                f"Currently keeping {kwargs['keep_checkpoint_num']} checkpoints for each trial. "
+                "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
             )
     if "scheduler" in kwargs:
