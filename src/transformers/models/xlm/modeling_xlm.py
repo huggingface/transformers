@@ -56,7 +56,7 @@ from .configuration_xlm import XLMConfig
 
 
 logger = logging.get_logger(__name__)
-_CHECKPOINT_FOR_DOC ="xlm-mlm-en-2048"
+_CHECKPOINT_FOR_DOC = "xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
 _TOKENIZER_FOR_DOC = "XLMTokenizer"
 
