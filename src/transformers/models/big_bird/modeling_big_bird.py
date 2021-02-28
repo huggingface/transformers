@@ -541,7 +541,7 @@ class BigBirdBlockSparseAttention(nn.Module):
                 plan_num_rand_blocks=plan_num_rand_blocks)
 
         rand_attn = np.stack(rand_attn, axis=0)
-        rand_attn = torch.tensor(rand_attn, dtype=torch.long, device=device)
+        rand_attn = torch.tensor(rand_attn, device=device).long()
         rand_attn.unsqueeze_(0)
         rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
         # -> (b, h, n/wn-2, r)
@@ -563,6 +563,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         gathered_key = gathered_key.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
         gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
         gathered_value = gathered_value.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
+
+        self.gk = gathered_key # TODO: remove this
 
         """
             1st block is global
@@ -752,7 +754,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             # attn_probs : (b,h,m//wm, wm, n)
             # rand_attn.unsqueeze_(2)
             # rand_attn = torch.stack([rand_attn for _ in range(m)])
-            # -> (b,h,n//wn-2,r)
+            # -> (b,h,m//wm-2,r)
 
             attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device)
 
@@ -765,9 +767,10 @@ class BigBirdBlockSparseAttention(nn.Module):
             # put for gathered
             # attention_probs[:, :, wm:wm*2, ] =  second_attn_weights[:, :, :, 4*wn:]
 
-            # for p1, i1, w1 in zip(attention_probs.view(b,h,m//wm,wm,n)[:,:,1,:,1:-1], rand_attn, second_attn_weights):
+            # for p1, i1, w1 in zip(attention_probs.view(b,h,m//wm,wm,n)[:,:,2:-2,:,1:-1], rand_attn, second_attn_weights):
             #     for p2, i2, w2 in zip(p1, i1, w1):
-            #             p2[i2] = w2[:, 4*wn:]
+            #         for p3, i3 in zip(p2, i2):
+            #             p3[:, i3] = w2[:, 4*wn:]
 
             # corresponding to `context_layer`
             for q_idx in range(m//wm - 4):
@@ -1825,7 +1828,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
             band_mask = torch.einsum("blq,blk->blqk",
                                 from_blocked_mask[:, 2:-2].float(),
                                 exp_blocked_to_pad.float())
-            # "BLQ,BLK->BLQK"
             band_mask.unsqueeze_(1)
             return band_mask
     
