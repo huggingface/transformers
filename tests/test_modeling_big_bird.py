@@ -395,7 +395,6 @@ class BigBirdModelTester:
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
-
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
 
@@ -512,9 +511,28 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
             model = BigBirdForPreTraining.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # bigbird cannot keep gradients in attentions when `attention_type=block_sparse`
+
+        if self.model_tester.attention_type == "original_full":
+            super().test_retain_grad_hidden_states_attentions()
+
 
 @require_torch
 class BigBirdModelIntegrationTest(unittest.TestCase):
+
+    def _get_dummy_input_ids(self):
+        return torch.tensor([[  6, 117,  33,  36,  70,  22,  63,  31,  71,  72,  88,  58, 109,  49,
+          48, 116,  92,   6,  19,  95, 118, 100,  80, 111,  93,   2,  31,  84,
+          26,   5,   6,  82,  46,  96, 109,   4,  39,  19, 109,  13,  92,  31,
+          36,  90, 111,  18,  75,   6,  56,  74,  16,  42,  56,  92,  69, 108,
+         127,  81,  82,  41, 106,  19,  44,  24,  82, 121, 120,  65,  36,  26,
+          72,  13,  36,  98,  43,  64,   8,  53, 100,  92,  51, 122,  66,  17,
+          61,  50, 104, 127,  26,  35,  94,  23, 110,  71,  80,  67, 109, 111,
+          44,  19,  51,  41,  86,  71,  76,  44,  18,  68,  44,  77, 107,  81,
+          98, 126, 100,   2,  49,  98,  84,  39,  23,  98,  52,  46,  10,  82,
+         121,  73]], dtype=torch.long, device=torch_device)
+
     @slow
     def test_inference_block_sparse_pretraining(self):
         model = BigBirdForPreTraining.from_pretrained("google/bigbird-base", attention_type="block_sparse")
@@ -563,3 +581,103 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         expected_seq_relationship_logits = torch.tensor([[41.4503, 41.2406]], device=torch_device)
         self.assertTrue(torch.allclose(seq_relationship_logits, expected_seq_relationship_logits, atol=1e-4))
 
+    def test_block_sparse_attention_probs(self):
+        """
+        Asserting if outputted attention matrix is similar to hard coded attention matrix
+        """
+
+        model = BigBirdModel.from_pretrained(
+            "google/bigbird-base", attention_type="block_sparse", 
+            num_random_blocks=3, block_size=16)
+        model.to(torch_device)
+        model.eval()
+        config = model.config
+
+        input_ids = self._get_dummy_input_ids()
+
+        hidden_states = model.embeddings(input_ids)
+
+        batch_size, seqlen, _ = hidden_states.size()
+        attn_mask = torch.ones(batch_size, seqlen, device=torch_device, dtype=torch.float)
+        to_seq_length = from_seq_length = seqlen
+        from_block_size = to_block_size = config.block_size
+
+        blocked_mask, band_mask, from_mask, to_mask = model.create_masks_for_block_sparse_attn(attn_mask, config.block_size)
+        from_blocked_mask = to_blocked_mask = blocked_mask
+
+        for i in range(config.num_hidden_layers):
+            pointer = model.encoder.layer[i].attention.self
+
+            query_layer = pointer.transpose_for_scores(pointer.query(hidden_states))
+            key_layer = pointer.transpose_for_scores(pointer.key(hidden_states))
+            value_layer = pointer.transpose_for_scores(pointer.value(hidden_states))
+
+            context_layer, attention_probs = pointer.bigbird_block_sparse_attention(
+                                                    query_layer, key_layer, value_layer, band_mask,
+                                                    from_mask, to_mask, from_blocked_mask, to_blocked_mask,
+                                                    pointer.num_attention_heads, pointer.num_random_blocks, pointer.attention_head_size,
+                                                    from_block_size, to_block_size, batch_size, from_seq_length,
+                                                    to_seq_length, seed=pointer.seed, plan_from_length=None,
+                                                    plan_num_rand_blocks=None, output_attentions=True
+                                                    )
+
+            context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
+            cl = torch.einsum("bhqk,bhkd->bhqd", attention_probs, value_layer)
+            cl = cl.view(context_layer.size())
+
+            self.assertTrue(torch.allclose(context_layer, cl, atol=0.001))
+
+    def test_block_sparse_context_layer(self):
+        model = BigBirdModel.from_pretrained(
+            "google/bigbird-base", attention_type="block_sparse", 
+            num_random_blocks=3, block_size=16
+            )
+        model.to(torch_device)
+        model.eval()
+        config = model.config
+
+        input_ids = self._get_dummy_input_ids()
+        dummy_hidden_states = model.embeddings(input_ids)
+
+        attn_mask = torch.ones_like(input_ids, device=torch_device)
+        blocked_mask, band_mask, from_mask, to_mask = model.create_masks_for_block_sparse_attn(attn_mask, config.block_size)
+        targeted_cl = torch.tensor([[ 0.0044,  0.0275,  0.0695, -0.0201,  0.0178,  0.0692, -0.0542, -0.0154,
+            -0.0023,  0.0008],
+            [ 0.0042,  0.0262,  0.0695, -0.0199,  0.0182,  0.0681, -0.0545, -0.0155,
+            -0.0023,  0.0009],
+            [ 0.0042,  0.0261,  0.0695, -0.0199,  0.0182,  0.0681, -0.0545, -0.0155,
+            -0.0022,  0.0010],
+            [ 0.0044,  0.0278,  0.0696, -0.0201,  0.0182,  0.0696, -0.0540, -0.0151,
+            -0.0024,  0.0013],
+            [ 0.0044,  0.0275,  0.0695, -0.0202,  0.0176,  0.0693, -0.0541, -0.0154,
+            -0.0023,  0.0006],
+            [ 0.0044,  0.0275,  0.0695, -0.0201,  0.0177,  0.0692, -0.0541, -0.0155,
+            -0.0023,  0.0007],
+            [ 0.0044,  0.0274,  0.0695, -0.0201,  0.0178,  0.0691, -0.0541, -0.0155,
+            -0.0023,  0.0008],
+            [ 0.0044,  0.0275,  0.0695, -0.0201,  0.0177,  0.0693, -0.0541, -0.0154,
+            -0.0023,  0.0008],
+            [ 0.0044,  0.0275,  0.0695, -0.0202,  0.0176,  0.0693, -0.0541, -0.0154,
+            -0.0023,  0.0007],
+            [ 0.0043,  0.0274,  0.0695, -0.0201,  0.0178,  0.0692, -0.0542, -0.0155,
+            -0.0023,  0.0008],
+            [ 0.0044,  0.0275,  0.0695, -0.0201,  0.0177,  0.0694, -0.0541, -0.0154,
+            -0.0023,  0.0007],
+            [ 0.0044,  0.0274,  0.0695, -0.0201,  0.0177,  0.0692, -0.0542, -0.0155,
+            -0.0023,  0.0008],
+            [ 0.0044,  0.0275,  0.0695, -0.0201,  0.0178,  0.0693, -0.0542, -0.0154,
+            -0.0022,  0.0008],
+            [ 0.0044,  0.0275,  0.0695, -0.0201,  0.0177,  0.0693, -0.0541, -0.0154,
+            -0.0023,  0.0007]],
+            device=torch_device
+        )
+
+        context_layer = model.encoder.layer[0].attention.self(
+                                dummy_hidden_states, band_mask=band_mask, from_mask=from_mask, 
+                                to_mask=to_mask, from_blocked_mask=blocked_mask, 
+                                to_blocked_mask=blocked_mask
+                                )
+        context_layer = context_layer[0]
+
+        self.assertEqual(context_layer.shape, torch.Size((1, 128, 768)))
+        self.assertTrue(torch.allclose(context_layer[0, 64:78, 300:310], targeted_cl, atol=0.0001))
