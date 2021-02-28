@@ -749,8 +749,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.final_cl = context_layer # TODO: remove this
 
         if output_attentions:
-            # rand_attn : (b,h,n//wn-2,r)
-            # attn_probs : (b,h,m,n)
+            # attn_probs : (b,h,m//wm, wm, n)
+            # rand_attn.unsqueeze_(2)
+            # rand_attn = torch.stack([rand_attn for _ in range(m)])
+            # -> (b,h,n//wn-2,r)
 
             attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device)
 
@@ -762,6 +764,10 @@ class BigBirdBlockSparseAttention(nn.Module):
             attention_probs[:, :, wm:wm*2, -wn:] = second_attn_weights[:, :, :, 3*wn:4*wn]
             # put for gathered
             # attention_probs[:, :, wm:wm*2, ] =  second_attn_weights[:, :, :, 4*wn:]
+
+            # for p1, i1, w1 in zip(attention_probs.view(b,h,m//wm,wm,n)[:,:,1,:,1:-1], rand_attn, second_attn_weights):
+            #     for p2, i2, w2 in zip(p1, i1, w1):
+            #             p2[i2] = w2[:, 4*wn:]
 
             # corresponding to `context_layer`
             for q_idx in range(m//wm - 4):
@@ -1721,15 +1727,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         if self.attention_type == "block_sparse":
             block_size = self.block_size
-            assert seq_length % block_size == 0, "Sequence length must be multiple of block size"
-
-            blocked_encoder_mask = attention_mask.view(batch_size, seq_length//block_size, block_size)
-            band_mask = self.create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
-            
-            from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
-            to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
-
+            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, block_size)
             extended_attention_mask = None
+
         elif self.attention_type == "original_full":
             blocked_encoder_mask = None
             band_mask = None
@@ -1801,29 +1801,41 @@ class BigBirdModel(BigBirdPreTrainedModel):
         )
 
     @staticmethod
-    def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
-        """Create 3D attention mask from a 2D tensor mask.
+    def create_masks_for_block_sparse_attn(attention_mask:torch.Tensor, block_size:int):
 
-        Args:
-            from_blocked_mask: 2D Tensor of shape [batch_size,
-            from_seq_length//from_block_size, from_block_size].
-            to_blocked_mask: int32 Tensor of shape [batch_size,
-            to_seq_length//to_block_size, to_block_size].
+        batch_size, seq_length = attention_mask.size()
+        assert seq_length % block_size == 0, "Sequence length must be multiple of block size"
 
-        Returns:
-            float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4,
-                                from_block_size,  3*to_block_size].
-        """
-        exp_blocked_to_pad = torch.cat(
-            [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2],
-            to_blocked_mask[:, 3:-1]], dim=2)
-        band_mask = torch.einsum("blq,blk->blqk",
-                            from_blocked_mask[:, 2:-2].float(),
-                            exp_blocked_to_pad.float())
-        # "BLQ,BLK->BLQK"
-        band_mask.unsqueeze_(1)
-        return band_mask
+        def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
+            """Create 3D attention mask from a 2D tensor mask.
 
+            Args:
+                from_blocked_mask: 2D Tensor of shape [batch_size,
+                from_seq_length//from_block_size, from_block_size].
+                to_blocked_mask: int32 Tensor of shape [batch_size,
+                to_seq_length//to_block_size, to_block_size].
+
+            Returns:
+                float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4,
+                                    from_block_size,  3*to_block_size].
+            """
+            exp_blocked_to_pad = torch.cat(
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2],
+                to_blocked_mask[:, 3:-1]], dim=2)
+            band_mask = torch.einsum("blq,blk->blqk",
+                                from_blocked_mask[:, 2:-2].float(),
+                                exp_blocked_to_pad.float())
+            # "BLQ,BLK->BLQK"
+            band_mask.unsqueeze_(1)
+            return band_mask
+    
+        blocked_encoder_mask = attention_mask.view(batch_size, seq_length//block_size, block_size)
+        band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
+            
+        from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
+        to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
+
+        return blocked_encoder_mask, band_mask, from_mask, to_mask
 
 # Copied from transformers.models.bert.modeling_bert.BertForPreTraining
 @add_start_docstrings(
