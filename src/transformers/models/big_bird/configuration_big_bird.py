@@ -125,6 +125,7 @@ class BigBirdConfig(PretrainedConfig):
         norm_type="postnorm", # "prenorm"
         block_size=64,
         num_random_blocks=3,
+        position_embedding_type="absolute",
         **kwargs
     ):
         super().__init__(
@@ -155,6 +156,7 @@ class BigBirdConfig(PretrainedConfig):
         self.norm_type = norm_type
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
+        self.position_embedding_type = position_embedding_type
 
         # TODO: check use_cache working
         # TODO: check gradient_checkpointing
