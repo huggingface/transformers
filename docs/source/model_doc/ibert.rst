@@ -16,7 +16,7 @@ I-BERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The I-BERT model was proposed in `I-BERT: Integer-only BERT Quantization <https://arxiv.org/abs/2006.10220>`__ by
+The I-BERT model was proposed in `I-BERT: Integer-only BERT Quantization <https://arxiv.org/abs/2101.01321>`__ by
 Sehoon Kim, Amir Gholami, Zhewei Yao, Michael W. Mahoney and Kurt Keutzer. It's a quantized version of RoBERTa running
 inference up to four times faster.
 
