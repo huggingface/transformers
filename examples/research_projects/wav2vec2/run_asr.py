@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import datasets
@@ -9,8 +9,14 @@ import torch.nn as nn
 from packaging import version
 
 import soundfile as sf
-from jiwer import wer
-from transformers import Trainer, TrainingArguments, Wav2Vec2ForCTC, Wav2Vec2Processor, is_apex_available
+from transformers import (
+    HfArgumentParser,
+    Trainer,
+    TrainingArguments,
+    Wav2Vec2ForCTC,
+    Wav2Vec2Processor,
+    is_apex_available,
+)
 
 
 if is_apex_available():
@@ -22,38 +28,53 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
     from torch.cuda.amp import autocast
 
 
-model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base", gradient_checkpointing=True)
-processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-base")
+@dataclass
+class ModelArguments:
+    """
+    Arguments pertaining to which model/config/tokenizer we are going to fine-tune from.
+    """
 
-train_dataset = datasets.load_dataset("librispeech_asr", "clean", split="train.100")
-val_dataset = datasets.load_dataset("librispeech_asr", "clean", split="validation")
-
-
-def map_to_array(batch):
-    speech_array, sampling_rate = sf.read(batch["file"])
-    batch["speech"] = speech_array
-    batch["sampling_rate"] = sampling_rate
-    return batch
-
-
-train_dataset = train_dataset.map(map_to_array, remove_columns=["file"])
-val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
-
-
-def prepare_dataset(batch):
-    # check that all files have the correct sampling rate
-    assert (
-        len(set(batch["sampling_rate"])) == 1
-    ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
-
-    batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
-    with processor.as_target_processor():
-        batch["labels"] = processor(batch["text"]).input_ids
-    return batch
+    model_name_or_path: str = field(
+        metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
+    )
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
+    )
+    freeze_feature_extractor: Optional[bool] = field(
+        default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+    )
 
 
-train_dataset = train_dataset.map(prepare_dataset, batch_size=16, batched=True, num_proc=32)
-val_dataset = val_dataset.map(prepare_dataset, batch_size=16, batched=True, num_proc=32)
+@dataclass
+class DataTrainingArguments:
+    """
+    Arguments pertaining to what data we are going to input our model for training and eval.
+
+    Using `HfArgumentParser` we can turn this class
+    into argparse arguments to be able to specify them on
+    the command line.
+    """
+
+    dataset_name: str = field(
+        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
+    )
+    dataset_config_name: Optional[str] = field(
+        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
+    )
+    train_split_name: Optional[str] = field(
+        default="train",
+        metadata={
+            "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
+        },
+    )
+    overwrite_cache: bool = field(
+        default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
+    )
+    preprocessing_num_workers: Optional[int] = field(
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
+    )
 
 
 @dataclass
@@ -119,24 +140,6 @@ class DataCollatorCTCWithPadding:
         return batch
 
 
-data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-
-
-def compute_metrics(pred):
-    pred_logits = pred.predictions
-    pred_ids = np.argmax(pred_logits, axis=-1)
-
-    pred.label_ids[pred.label_ids == -100] = 0
-
-    pred_str = processor.batch_decode(pred_ids)
-    # we do not want to group tokens when computing the metrics
-    label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
-
-    wer_score = wer(label_str, pred_str)
-
-    return {"wer": wer_score}
-
-
 class CTCTrainer(Trainer):
     def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
         """
@@ -190,31 +193,89 @@ class CTCTrainer(Trainer):
         return loss.detach()
 
 
-training_args = TrainingArguments(
-    output_dir="./wav2vec2-base-100h",
-    num_train_epochs=30,
-    per_device_train_batch_size=32,
-    per_device_eval_batch_size=32,
-    evaluation_strategy="steps",
-    save_total_limit=3,
-    save_steps=500,
-    eval_steps=100,
-    logging_steps=50,
-    learning_rate=5e-4,
-    warmup_steps=3000,
-    group_by_length=True,
-    logging_dir="./logs",
-    fp16=True,
-)
+def main():
+    # See all possible arguments in src/transformers/training_args.py
+    # or by passing the --help flag to this script.
+    # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-trainer = CTCTrainer(
-    model=model,
-    data_collator=data_collator,
-    args=training_args,
-    compute_metrics=compute_metrics,
-    train_dataset=train_dataset,
-    eval_dataset=val_dataset,
-    tokenizer=processor.feature_extractor,
-)
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
 
-trainer.train()
+    model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+    processor = Wav2Vec2Processor.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
+
+    train_dataset = datasets.load_dataset(
+        data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
+    )
+    val_dataset = datasets.load_dataset(data_args.dataset_name, data_args.dataset_config_name, split="validation")
+
+    wer_metric = datasets.load_metric("wer")
+
+    def map_to_array(batch):
+        speech_array, sampling_rate = sf.read(batch["file"])
+        batch["speech"] = speech_array
+        batch["sampling_rate"] = sampling_rate
+        return batch
+
+    train_dataset = train_dataset.map(map_to_array, remove_columns=["file"])
+    val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
+
+    def prepare_dataset(batch):
+        # check that all files have the correct sampling rate
+        assert (
+            len(set(batch["sampling_rate"])) == 1
+        ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
+
+        batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+        with processor.as_target_processor():
+            batch["labels"] = processor(batch["text"]).input_ids
+        return batch
+
+    train_dataset = train_dataset.map(
+        prepare_dataset,
+        batch_size=model_args.per_device_train_batch_size,
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+    )
+    val_dataset = val_dataset.map(
+        prepare_dataset,
+        batch_size=model_args.per_device_train_batch_size,
+        batched=True,
+        num_proc=data_args.preprocessing_num_workers,
+    )
+
+    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+
+    def compute_metrics(pred):
+        pred_logits = pred.predictions
+        pred_ids = np.argmax(pred_logits, axis=-1)
+
+        pred.label_ids[pred.label_ids == -100] = 0
+
+        pred_str = processor.batch_decode(pred_ids)
+        # we do not want to group tokens when computing the metrics
+        label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
+
+        wer = wer_metric(predictions=pred_str, references=label_str)
+
+        return {"wer": wer}
+
+    if model_args.freeze_feature_extractor:
+        model.freeze_feature_extractor()
+
+    trainer = CTCTrainer(
+        model=model,
+        data_collator=data_collator,
+        args=training_args,
+        compute_metrics=compute_metrics,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
+        tokenizer=processor.feature_extractor,
+    )
+
+    trainer.train()
+
+
+if __name__ == "__main__":
+    main()

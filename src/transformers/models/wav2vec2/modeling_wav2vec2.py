@@ -243,10 +243,9 @@ class Wav2Vec2FeatureExtractor(nn.Module):
             )
         self.conv_layers = nn.ModuleList(conv_layers)
 
-        if config.freeze_feat_extract_train:
-            # freeze feature_extractor
-            for param in self.parameters():
-                param.requires_grad = False
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
 
     def forward(self, input_values):
         hidden_states = input_values[:, None]
@@ -979,6 +978,13 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.init_weights()
+
+    def freeze_feature_extractor(self):
+        """
+        Calling this function will disable the gradient computation for the feature extractor so that its parameter
+        will not be updated during training.
+        """
+        self.wav2vec2.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(WAV_2_VEC_2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
