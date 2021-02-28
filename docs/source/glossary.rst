@@ -21,7 +21,7 @@ General terms
 - CLM: causal language modeling, a pretraining task where the model reads the texts in order and has to predict the
   next word. It's usually done by reading the whole sentence but using a mask inside the model to hide the future
   tokens at a certain timestep.
-- deep learning: machine learning algorithms which uses NN which several layers.
+- deep learning: machine learning algorithms which uses neural networks with several layers.
 - MLM: masked language modeling, a pretraining task where the model sees a corrupted version of the texts, usually done
   by masking some tokens randomly, and has to predict the original text.
 - multimodal: a task that combines texts with another kind of inputs (for instance images).
