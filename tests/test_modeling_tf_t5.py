@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import unittest
 
 from transformers import T5Config, is_tf_available
@@ -132,8 +133,6 @@ class TFT5ModelTester:
         self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
         self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
 
-        output, past_key_values = outputs
-
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
 
@@ -141,7 +140,7 @@ class TFT5ModelTester:
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
 
         output_from_no_past = model(next_input_ids)[0]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
+        output_from_past = model(next_tokens, past_key_values=outputs.past_key_values)[0]
 
         # select random slice
         random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
@@ -163,7 +162,7 @@ class TFT5ModelTester:
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
-        _, past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)
+        outputs = model(input_ids, attention_mask=attn_mask, use_cache=True)
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
@@ -186,7 +185,7 @@ class TFT5ModelTester:
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
-        output_from_past = model(next_tokens, past_key_values=past_key_values, attention_mask=attn_mask)[0]
+        output_from_past = model(next_tokens, past_key_values=outputs.past_key_values, attention_mask=attn_mask)[0]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).numpy().item()
@@ -202,21 +201,24 @@ class TFT5ModelTester:
         model = TFT5Model(config=config).get_decoder()
 
         input_ids = input_ids[:1, :]
+        attention_mask = attention_mask[:1, :]
         self.batch_size = 1
 
         # first forward pass
-        outputs = model(input_ids, use_cache=True)
-
-        output, past_key_values = outputs
+        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
 
-        output_from_no_past = model(next_input_ids)[0]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)[0]
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
+        output_from_past = model(
+            next_tokens, attention_mask=next_attention_mask, past_key_values=outputs.past_key_values
+        )[0]
 
         self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
 
@@ -235,7 +237,6 @@ class TFT5ModelTester:
             "input_ids": input_ids,
             "decoder_input_ids": input_ids,
             "decoder_attention_mask": input_mask,
-            "use_cache": tf.convert_to_tensor([False]),
         }
         return config, inputs_dict
 
@@ -246,6 +247,7 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFT5ModelTester(self)
@@ -281,18 +283,32 @@ class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_t5_decoder_model_past_large_inputs(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model = TFT5Model.from_pretrained("t5-small")
         self.assertIsNotNone(model)
-
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        pass
-
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        pass
 
 
 class TFT5EncoderOnlyModelTester:
@@ -399,7 +415,9 @@ class TFT5EncoderOnlyModelTester:
 
 
 class TFT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
+    is_encoder_decoder = False
     all_model_classes = (TFT5EncoderModel,) if is_tf_available() else ()
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFT5EncoderOnlyModelTester(self)

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 BARThez
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -29,8 +41,8 @@ The Authors' code can be found `here <https://github.com/moussaKam/BARThez>`__.
 Examples
 _______________________________________________________________________________________________________________________
 
-- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check: `examples/seq2seq/
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- BARThez can be fine-tuned on sequence-to-sequence tasks in a similar way as BART, check:
+  :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
 
 
 BarthezTokenizer
@@ -39,3 +51,9 @@ BarthezTokenizer
 .. autoclass:: transformers.BarthezTokenizer
     :members:
 
+
+BarthezTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.BarthezTokenizerFast
+    :members:

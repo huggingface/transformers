@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ if is_tf_available():
 
     from transformers.models.ctrl.modeling_tf_ctrl import (
         TF_CTRL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFCTRLForSequenceClassification,
         TFCTRLLMHeadModel,
         TFCTRLModel,
     )
@@ -61,6 +62,7 @@ class TFCTRLModelTester(object):
         self.num_labels = 3
         self.num_choices = 4
         self.scope = None
+        self.pad_token_id = self.vocab_size - 1
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -98,6 +100,7 @@ class TFCTRLModelTester(object):
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
+            pad_token_id=self.pad_token_id,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
@@ -132,6 +135,20 @@ class TFCTRLModelTester(object):
         result = model(inputs)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_ctrl_for_sequence_classification(
+        self, config, input_ids, input_mask, head_mask, token_type_ids, *args
+    ):
+        config.num_labels = self.num_labels
+        sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+        inputs = {
+            "input_ids": input_ids,
+            "token_type_ids": token_type_ids,
+            "labels": sequence_labels,
+        }
+        model = TFCTRLForSequenceClassification(config)
+        result = model(inputs)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
@@ -154,8 +171,10 @@ class TFCTRLModelTester(object):
 @require_tf
 class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel) if is_tf_available() else ()
+    all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
     all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
+    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFCTRLModelTester(self)
@@ -171,6 +190,37 @@ class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_ctrl_lm_head(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_ctrl_lm_head(*config_and_inputs)
+
+    def test_ctrl_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_ctrl_for_sequence_classification(*config_and_inputs)
+
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFCTRLLMHeadModel]
+        list_other_models_with_output_ebd = [TFCTRLForSequenceClassification]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in list_lm_models:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            elif model_class in list_other_models_with_output_ebd:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
     @slow
     def test_model_from_pretrained(self):

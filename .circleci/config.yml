@@ -3,29 +3,6 @@ orbs:
     gcp-gke: circleci/gcp-gke@1.0.4
     go: circleci/go@1.3.0
 
-commands:
-  skip-job-on-doc-only-changes:
-    description: "Do not continue this job and exit with success for PRs with only doc changes"
-    steps:
-
-      - run:
-          name: docs-only changes skip check
-          command: |
-            # pipeline.git.base_revision is not always defined, so only proceed if all external vars are defined
-            if test -n "<< pipeline.git.base_revision >>" && test -n "<< pipeline.git.revision >>" && test -n "$(git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >>)"
-            then
-                git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> 
-                if git diff --name-only << pipeline.git.base_revision >>...<< pipeline.git.revision >> | egrep -qv '\.(md|rst)$'
-                then
-                    echo "Non-docs were modified in this PR, proceeding normally"
-                else
-                    echo "Only docs were modified in this PR, quitting this job"
-                    # disable skipping for now, as circleCI's base_revision is inconsistent leading to invalid ranges
-                    # circleci step halt
-                fi
-            else
-                echo "Can't perform skipping check w/o base_revision defined, continuing the job"
-            fi
 
 # TPU REFERENCES
 references:
@@ -96,13 +73,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
@@ -123,13 +100,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -150,7 +127,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
@@ -177,7 +153,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
@@ -204,13 +179,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -231,7 +206,6 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-tf-{{ checksum "setup.py" }}
@@ -256,7 +230,6 @@ jobs:
             RUN_CUSTOM_TOKENIZERS: yes
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -284,14 +257,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - skip-job-on-doc-only-changes
             - restore_cache:
                   keys:
                       - v0.4-torch_examples-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing]
-            - run: pip install -r examples/requirements.txt
+            - run: pip install -r examples/_tests_requirements.txt
             - save_cache:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
@@ -301,6 +273,22 @@ jobs:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
+
+    run_tests_git_lfs:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.7
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - run: sudo apt-get install git-lfs
+            - run: |
+                git config --global user.email "ci@dummy.com"
+                git config --global user.name "ci"
+            - run: pip install --upgrade pip
+            - run: pip install .[testing]
+            - run: RUN_GIT_LFS_TESTS=1 python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
 
     build_doc:
         working_directory: ~/transformers
@@ -318,7 +306,7 @@ jobs:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: cd docs && make html SPHINXOPTS="-W"
+            - run: cd docs && make html SPHINXOPTS="-W -j 4"
             - store_artifacts:
                 path: ./docs/_build
 
@@ -366,6 +354,7 @@ jobs:
             - run: flake8 examples tests src utils
             - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
             - run: python utils/check_copies.py
+            - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
 
@@ -429,17 +418,18 @@ workflows:
             - run_tests_flax
             - run_tests_pipelines_torch
             - run_tests_pipelines_tf
+            - run_tests_git_lfs
             - build_doc
             - deploy_doc: *workflow_filters
-    tpu_testing_jobs:
-        triggers:
-            - schedule:
-                # Set to run at the first minute of every hour.
-                cron: "0 8 * * *"
-                filters:
-                    branches:
-                        only:
-                            - master
-        jobs:
-            - cleanup-gke-jobs
-            - run_examples_tpu
+#    tpu_testing_jobs:
+#        triggers:
+#            - schedule:
+#                # Set to run at the first minute of every hour.
+#                cron: "0 8 * * *"
+#                filters:
+#                    branches:
+#                        only:
+#                            - master
+#        jobs:
+#            - cleanup-gke-jobs
+#            - run_examples_tpu

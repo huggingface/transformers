@@ -1,4 +1,18 @@
+#!/usr/bin/env python
 # coding=utf-8
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """ Fine-tuning the library models for sequence classification."""
 
 
@@ -233,18 +247,10 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
         result = trainer.evaluate()
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
-
-            for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
-
-            results.update(result)
+        trainer.log_metrics("eval", result)
+        trainer.save_metrics("eval", result)
+        results.update(result)
 
     return results
 

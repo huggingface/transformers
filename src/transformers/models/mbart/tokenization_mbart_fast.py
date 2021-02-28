@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from contextlib import contextmanager
 from typing import List, Optional
 
 from tokenizers import processors
 
-from ...file_utils import add_start_docstrings, is_sentencepiece_available
+from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils import BatchEncoding
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
 from ...utils import logging
 from ..xlm_roberta.tokenization_xlm_roberta_fast import XLMRobertaTokenizerFast
 
@@ -70,15 +70,9 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     Construct a "fast" MBART tokenizer (backed by HuggingFace's `tokenizers` library). Based on `BPE
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=BPE#models>`__.
 
-    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast` and adds
-    a new :meth:`~transformers.MBartTokenizerFast.prepare_seq2seq_batch`.
-
-    Refer to superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning
-    the initialization parameters and other methods.
-
-    .. warning::
-        ``prepare_seq2seq_batch`` should be used to encode inputs. Other tokenizer methods like ``encode`` do not work
-        properly.
+    :class:`~transformers.MBartTokenizerFast` is a subclass of :class:`~transformers.XLMRobertaTokenizerFast`. Refer to
+    superclass :class:`~transformers.XLMRobertaTokenizerFast` for usage examples and documentation concerning the
+    initialization parameters and other methods.
 
     The tokenization method is ``<tokens> <eos> <language code>`` for source language documents, and ``<language code>
     <tokens> <eos>``` for target language documents.
@@ -86,12 +80,13 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     Examples::
 
         >>> from transformers import MBartTokenizerFast
-        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro')
+        >>> tokenizer = MBartTokenizerFast.from_pretrained('facebook/mbart-large-en-ro', src_lang="en_XX", tgt_lang="ro_RO")
         >>> example_english_phrase = " UN Chief Says There Is No Military Solution in Syria"
         >>> expected_translation_romanian = "Şeful ONU declară că nu există o soluţie militară în Siria"
-        >>> batch: dict = tokenizer.prepare_seq2seq_batch(
-        ...     example_english_phrase, src_lang="en_XX", tgt_lang="ro_RO", tgt_texts=expected_translation_romanian, return_tensors="pt"
-        ... )
+        >>> inputs = tokenizer(example_english_phrase, return_tensors="pt)
+        >>> with tokenizer.as_target_tokenizer():
+        ...     labels = tokenizer(expected_translation_romanian, return_tensors="pt")
+        >>> inputs["labels"] = labels["input_ids"]
     """
 
     vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
@@ -102,13 +97,24 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
 
-    def __init__(self, *args, tokenizer_file=None, **kwargs):
-        super().__init__(*args, tokenizer_file=tokenizer_file, **kwargs)
-
-        self.cur_lang_code = self.convert_tokens_to_ids("en_XX")
-        self.set_src_lang_special_tokens(kwargs.get("src_lang", "en_XX"))
+    def __init__(self, *args, tokenizer_file=None, src_lang=None, tgt_lang=None, **kwargs):
+        super().__init__(*args, tokenizer_file=tokenizer_file, src_lang=src_lang, tgt_lang=tgt_lang, **kwargs)
 
         self.add_special_tokens({"additional_special_tokens": FAIRSEQ_LANGUAGE_CODES})
+
+        self._src_lang = src_lang if src_lang is not None else "en_XX"
+        self.cur_lang_code = self.convert_tokens_to_ids(self._src_lang)
+        self.tgt_lang = tgt_lang
+        self.set_src_lang_special_tokens(self._src_lang)
+
+    @property
+    def src_lang(self) -> str:
+        return self._src_lang
+
+    @src_lang.setter
+    def src_lang(self, new_src_lang: str) -> None:
+        self._src_lang = new_src_lang
+        self.set_src_lang_special_tokens(self._src_lang)
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -171,51 +177,27 @@ class MBartTokenizerFast(XLMRobertaTokenizerFast):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return self.prefix_tokens + token_ids_0 + token_ids_1 + self.suffix_tokens
 
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
     def prepare_seq2seq_batch(
         self,
         src_texts: List[str],
         src_lang: str = "en_XX",
         tgt_texts: Optional[List[str]] = None,
         tgt_lang: str = "ro_RO",
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        truncation: bool = True,
-        padding: str = "longest",
-        return_tensors: str = None,
         **kwargs,
     ) -> BatchEncoding:
-        if max_length is None:
-            max_length = self.model_max_length
-        self.set_src_lang_special_tokens(src_lang)
-        model_inputs: BatchEncoding = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        self.set_tgt_lang_special_tokens(tgt_lang)
+        self.src_lang = src_lang
+        self.tgt_lang = tgt_lang
+        return super().prepare_seq2seq_batch(src_texts, tgt_texts, **kwargs)
 
-        labels = self(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=True,
-            **kwargs,
-        )["input_ids"]
-        model_inputs["labels"] = labels
-        self.set_src_lang_special_tokens(src_lang)  # sets to src_lang
-        return model_inputs
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
+        self.set_tgt_lang_special_tokens(self.tgt_lang)
+        yield
+        self.set_src_lang_special_tokens(self.src_lang)
 
     def set_src_lang_special_tokens(self, src_lang) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""

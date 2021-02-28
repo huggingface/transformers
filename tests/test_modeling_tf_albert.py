@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
+    from transformers import TF_MODEL_FOR_PRETRAINING_MAPPING
     from transformers.models.albert.modeling_tf_albert import (
         TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFAlbertForMaskedLM,
@@ -240,6 +241,18 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
+    test_onnx = False
+
+    # special case for ForPreTraining model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class in TF_MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["sentence_order_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = TFAlbertModelTester(self)
@@ -272,8 +285,52 @@ class TFAlbertModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_albert_for_question_answering(*config_and_inputs)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFAlbertForPreTraining, TFAlbertForMaskedLM]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in list_lm_models:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFAlbertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_tf
+class TFAlbertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TFAlbertForPreTraining.from_pretrained("albert-base-v2")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = [1, 6, 30000]
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = tf.constant(
+            [
+                [
+                    [4.595668, 0.74462754, -1.818147],
+                    [4.5954347, 0.7454184, -1.8188258],
+                    [4.5954905, 0.7448235, -1.8182316],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)

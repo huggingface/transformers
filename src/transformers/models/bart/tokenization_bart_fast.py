@@ -13,11 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List, Optional
-
-from transformers import add_start_docstrings
-
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 from ...utils import logging
 from ..roberta.tokenization_roberta_fast import RobertaTokenizerFast
 from .tokenization_bart import BartTokenizer
@@ -42,6 +37,13 @@ _all_bart_models = [
 
 
 class BartTokenizerFast(RobertaTokenizerFast):
+    r"""
+    Construct a "fast" BART tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.BartTokenizerFast` is identical to :class:`~transformers.RobertaTokenizerFast`. Refer to
+    superclass :class:`~transformers.RobertaTokenizerFast` for usage examples and documentation concerning the
+    initialization parameters and other methods.
+    """
     # merges and vocab same as Roberta
     max_model_input_sizes = {m: 1024 for m in _all_bart_models}
     pretrained_vocab_files_map = {
@@ -50,43 +52,3 @@ class BartTokenizerFast(RobertaTokenizerFast):
         "tokenizer_file": {m: tokenizer_url for m in _all_bart_models},
     }
     slow_tokenizer_class = BartTokenizer
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: Optional[str] = None,
-        truncation=True,
-        **kwargs,
-    ) -> BatchEncoding:
-        if max_length is None:
-            max_length = self.model_max_length
-        model_inputs: BatchEncoding = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        labels = self(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=truncation,
-            **kwargs,
-        )["input_ids"]
-        model_inputs["labels"] = labels
-        return model_inputs

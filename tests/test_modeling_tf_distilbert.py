@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -183,6 +183,8 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else None
     )
+    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFDistilBertModelTester(self)
@@ -220,3 +222,26 @@ class TFDistilBertModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in list(TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]):
             model = TFDistilBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_tf
+class TFDistilBertModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_masked_lm(self):
+        model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
+        input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
+        output = model(input_ids)[0]
+
+        expected_shape = [1, 6, 768]
+        self.assertEqual(output.shape, expected_shape)
+
+        expected_slice = tf.constant(
+            [
+                [
+                    [0.19261885, -0.13732955, 0.4119799],
+                    [0.22150156, -0.07422661, 0.39037204],
+                    [0.22756018, -0.0896414, 0.3701467],
+                ]
+            ]
+        )
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-4)
