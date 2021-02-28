@@ -101,13 +101,13 @@ def get_last_checkpoint(folder):
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
 
 
-class EvaluationStrategy(ExplicitEnum):
+class IntervalStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
     EPOCH = "epoch"
 
 
-class LoggingStrategy(ExplicitEnum):
+class EvaluationStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
     EPOCH = "epoch"
