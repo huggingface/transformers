@@ -21,6 +21,7 @@ General terms
 - CLM: causal language modeling, a pretraining task where the model reads the texts in order and has to predict the
   next word. It's usually done by reading the whole sentence but using a mask inside the model to hide the future
   tokens at a certain timestep.
+- deep learning: machine learning algorithms which uses neural networks with several layers.
 - MLM: masked language modeling, a pretraining task where the model sees a corrupted version of the texts, usually done
   by masking some tokens randomly, and has to predict the original text.
 - multimodal: a task that combines texts with another kind of inputs (for instance images).
@@ -33,10 +34,12 @@ General terms
   involve a self-supervised objective, which can be reading the text and trying to predict the next word (see CLM) or
   masking some words and trying to predict them (see MLM).
 - RNN: recurrent neural network, a type of model that uses a loop over a layer to process texts.
+- self-attention: each element of the input finds out which other elements of the input they should attend to.
 - seq2seq or sequence-to-sequence: models that generate a new sequence from an input, like translation models, or
   summarization models (such as :doc:`Bart </model_doc/bart>` or :doc:`T5 </model_doc/t5>`).
 - token: a part of a sentence, usually a word, but can also be a subword (non-common words are often split in subwords)
   or a punctuation symbol.
+- transformer: self-attention based deep learning model architecture.
 
 Model inputs
 -----------------------------------------------------------------------------------------------------------------------
