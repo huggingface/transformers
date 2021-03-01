@@ -1178,15 +1178,6 @@ if is_tf_available():
             "TFXLMRobertaModel",
         ]
     )
-    _import_structure["models.layoutlm"].extend(
-        [
-            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFLayoutLMForMaskedLM",
-            "TFLayoutLMForSequenceClassification",
-            "TFLayoutLMForTokenClassification",
-            "TFLayoutLMModel",
-        ]
-    )
     _import_structure["models.xlnet"].extend(
         [
             "TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1198,6 +1189,15 @@ if is_tf_available():
             "TFXLNetMainLayer",
             "TFXLNetModel",
             "TFXLNetPreTrainedModel",
+        ]
+    )
+    _import_structure["models.layoutlm"].extend(
+        [
+            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLayoutLMForMaskedLM",
+            "TFLayoutLMForSequenceClassification",
+            "TFLayoutLMForTokenClassification",
+            "TFLayoutLMModel",
         ]
     )
     _import_structure["optimization_tf"] = ["AdamWeightDecay", "GradientAccumulator", "WarmUp", "create_optimizer"]
@@ -1344,129 +1344,6 @@ if TYPE_CHECKING:
         DPRQuestionEncoderTokenizer,
         DPRReaderOutput,
         DPRReaderTokenizer,
-        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFDPRContextEncoder,
-        TFDPRPretrainedContextEncoder,
-        TFDPRPretrainedQuestionEncoder,
-        TFDPRPretrainedReader,
-        TFDPRQuestionEncoder,
-        TFDPRReader,
-    )
-    from .models.electra import (
-        TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFElectraForMaskedLM,
-        TFElectraForMultipleChoice,
-        TFElectraForPreTraining,
-        TFElectraForQuestionAnswering,
-        TFElectraForSequenceClassification,
-        TFElectraForTokenClassification,
-        TFElectraModel,
-        TFElectraPreTrainedModel,
-    )
-    from .models.flaubert import (
-        TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFFlaubertForMultipleChoice,
-        TFFlaubertForQuestionAnsweringSimple,
-        TFFlaubertForSequenceClassification,
-        TFFlaubertForTokenClassification,
-        TFFlaubertModel,
-        TFFlaubertWithLMHeadModel,
-    )
-    from .models.funnel import (
-        TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFFunnelBaseModel,
-        TFFunnelForMaskedLM,
-        TFFunnelForMultipleChoice,
-        TFFunnelForPreTraining,
-        TFFunnelForQuestionAnswering,
-        TFFunnelForSequenceClassification,
-        TFFunnelForTokenClassification,
-        TFFunnelModel,
-    )
-    from .models.gpt2 import (
-        TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFGPT2DoubleHeadsModel,
-        TFGPT2ForSequenceClassification,
-        TFGPT2LMHeadModel,
-        TFGPT2MainLayer,
-        TFGPT2Model,
-        TFGPT2PreTrainedModel,
-    )
-    from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
-    from .models.longformer import (
-        TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFLongformerForMaskedLM,
-        TFLongformerForMultipleChoice,
-        TFLongformerForQuestionAnswering,
-        TFLongformerForSequenceClassification,
-        TFLongformerForTokenClassification,
-        TFLongformerModel,
-        TFLongformerSelfAttention,
-    )
-    from .models.lxmert import (
-        TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFLxmertForPreTraining,
-        TFLxmertMainLayer,
-        TFLxmertModel,
-        TFLxmertPreTrainedModel,
-        TFLxmertVisualFeatureEncoder,
-    )
-    from .models.marian import TFMarianMTModel
-    from .models.mbart import TFMBartForConditionalGeneration
-    from .models.mobilebert import (
-        TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFMobileBertForMaskedLM,
-        TFMobileBertForMultipleChoice,
-        TFMobileBertForNextSentencePrediction,
-        TFMobileBertForPreTraining,
-        TFMobileBertForQuestionAnswering,
-        TFMobileBertForSequenceClassification,
-        TFMobileBertForTokenClassification,
-        TFMobileBertMainLayer,
-        TFMobileBertModel,
-        TFMobileBertPreTrainedModel,
-    )
-    from .models.mpnet import (
-        TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFMPNetForMaskedLM,
-        TFMPNetForMultipleChoice,
-        TFMPNetForQuestionAnswering,
-        TFMPNetForSequenceClassification,
-        TFMPNetForTokenClassification,
-        TFMPNetMainLayer,
-        TFMPNetModel,
-        TFMPNetPreTrainedModel,
-    )
-    from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
-    from .models.openai import (
-        TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFOpenAIGPTDoubleHeadsModel,
-        TFOpenAIGPTForSequenceClassification,
-        TFOpenAIGPTLMHeadModel,
-        TFOpenAIGPTMainLayer,
-        TFOpenAIGPTModel,
-        TFOpenAIGPTPreTrainedModel,
-    )
-    from .models.pegasus import TFPegasusForConditionalGeneration
-    from .models.roberta import (
-        TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFRobertaForMaskedLM,
-        TFRobertaForMultipleChoice,
-        TFRobertaForQuestionAnswering,
-        TFRobertaForSequenceClassification,
-        TFRobertaForTokenClassification,
-        TFRobertaMainLayer,
-        TFRobertaModel,
-        TFRobertaPreTrainedModel,
-    )
-    from .models.t5 import (
-        TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TFT5EncoderModel,
-        TFT5ForConditionalGeneration,
-        TFT5Model,
-        TFT5PreTrainedModel,
     )
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
@@ -2231,6 +2108,13 @@ if TYPE_CHECKING:
             TFGPT2Model,
             TFGPT2PreTrainedModel,
         )
+        from .models.layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMModel,
+        )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
         from .models.longformer import (
             TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2344,15 +2228,6 @@ if TYPE_CHECKING:
             TFXLNetMainLayer,
             TFXLNetModel,
             TFXLNetPreTrainedModel,
-        )
-        from .modeling_tf_layoutlm import (
-            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFLayoutLMForMaskedLM,
-            TFLayoutLMForTokenClassification,
-            TFLayoutLMForSequenceClassification,
-            TFLayoutLMMainLayer,
-            TFLayoutLMModel,
-            TFLayoutLMPreTrainedModel,
         )
 
         # Optimization
