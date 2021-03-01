@@ -47,7 +47,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
             improve the performance for some models, *e.g.*, `wav2vec2-lv60
             <https://huggingface.co/models?search=lv60>`__.
         return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not :meth:`~transformers.Wav2Vec2Tokenizer.__call__` should return :obj:`attention_mask`.
+            Whether or not :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` should return :obj:`attention_mask`.
 
             .. note::
 
@@ -89,6 +89,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         **kwargs
@@ -158,6 +159,10 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
+        return_attention_mask = (
+            return_attention_mask if return_attention_mask is not None else self.return_attention_mask
+        )
+
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
@@ -185,7 +190,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=self.return_attention_mask,
+            return_attention_mask=return_attention_mask,
             return_tensors=return_tensors,
         )
 
