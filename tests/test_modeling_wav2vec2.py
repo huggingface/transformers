@@ -182,6 +182,7 @@ class Wav2Vec2ModelTester:
         self.parent.assertTrue(abs(labels.shape[0] * labels.shape[1] * mean_loss.item() - sum_loss.item()) < 1e-3)
 
     def check_training(self, config, input_values, *args):
+        config.ctc_zero_infinity = True
         model = Wav2Vec2ForCTC(config=config)
         model.to(torch_device)
         model.train()
