@@ -101,6 +101,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             do_upper_case=do_upper_case,
+            tgt_lang=tgt_lang,
+            lang_codes=lang_codes,
             **kwargs,
         )
         self.do_upper_case = do_upper_case
@@ -113,7 +115,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         if lang_codes is not None:
             self.lang_codes = lang_codes
             self.langs = LANGUAGES[lang_codes]
-            self.lang_tokens = [self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs]
+            self.lang_tokens = [f"<lang:{lang}>" for lang in self.langs]
             self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
 
             self._additional_special_tokens = self.lang_tokens
@@ -176,7 +178,6 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
         state["sp_model"] = None
-        state["lang_codes"] = self.lang_codes
         return state
 
     def __setstate__(self, d: Dict) -> None:
