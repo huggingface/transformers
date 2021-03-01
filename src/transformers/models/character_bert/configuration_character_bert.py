@@ -41,10 +41,6 @@ class CharacterBertConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 262):
-            Size of the character vocabulary (256 + special characters)
-        mlm_vocab_size (:obj:`int`, `optional`, defaults to 100000):
-            Size of the output vocabulary for MLM.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -66,6 +62,8 @@ class CharacterBertConfig(PretrainedConfig):
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.CharacterBertModel` or
             :class:`~transformers.TFCharacterBertModel`.
+        mlm_vocab_size (:obj:`int`, `optional`, defaults to 100000):
+            Size of the output vocabulary for MLM.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -89,8 +87,6 @@ class CharacterBertConfig(PretrainedConfig):
     model_type = "character_bert"
     def __init__(
         self,
-        vocab_size=262,
-        mlm_vocab_size=100000,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -100,27 +96,32 @@ class CharacterBertConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=2,
+        mlm_vocab_size=100000,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         is_encoder_decoder=False,
         use_cache=True,
         **kwargs
     ):
+        tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
+        if tie_word_embeddings:
+            raise ValueError(
+                "Cannot tie word embeddings in CharacterBERT. Please set "
+                "`config.tie_word_embeddings=False`."
+            )
         super().__init__(
             type_vocab_size=type_vocab_size,
             layer_norm_eps=layer_norm_eps,
             use_cache=use_cache,
-            tie_word_embeddings=False,  # can't tie wordpiece embeddings in CharacterBERT
+            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        self.vocab_size=vocab_size
-        self.mlm_vocab_size=mlm_vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.mlm_vocab_size = mlm_vocab_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob

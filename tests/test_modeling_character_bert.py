@@ -297,7 +297,7 @@ class CharacterBertModelTester:
         next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-2)
         next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
         output_from_no_past = model(
@@ -399,7 +399,7 @@ class CharacterBertModelTester:
         model = CharacterBertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
-        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
+        multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1, 50).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         result = model(
@@ -410,23 +410,36 @@ class CharacterBertModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
-        return config, inputs_dict
+#     def prepare_config_and_inputs_for_common(self):
+#         config_and_inputs = self.prepare_config_and_inputs()
+#         (
+#             config,
+#             input_ids,
+#             token_type_ids,
+#             input_mask,
+#             sequence_labels,
+#             token_labels,
+#             choice_labels,
+#         ) = config_and_inputs
+#         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+#         return config, inputs_dict
+
+
+class CharacterBertConfigTester(ConfigTester):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        # NOTE: CharacterBERT does not rely on a wordpiece vocabulary
+        #self.parent.assertTrue(hasattr(config, "vocab_size"))
+        self.parent.assertTrue(hasattr(config, "hidden_size"))
+        self.parent.assertTrue(hasattr(config, "num_attention_heads"))
+        self.parent.assertTrue(hasattr(config, "num_hidden_layers"))
 
 
 @require_torch
-class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
+class CharacterBertModelTest(unittest.TestCase):
 
     all_model_classes = (
         (
@@ -447,7 +460,7 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CharacterBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CharacterBertConfig, hidden_size=37)
+        self.config_tester = CharacterBertConfigTester(self, config_class=CharacterBertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -461,30 +474,6 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_lm(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_multiple_choice(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
-
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
-    def test_for_question_answering(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def test_for_sequence_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
-
-    def test_for_token_classification(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     def test_model_as_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
@@ -517,6 +506,46 @@ class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
             encoder_hidden_states,
             encoder_attention_mask,
         )
+
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
+    def test_for_masked_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_for_causal_lm_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_for_multiple_choice(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
+
+    def test_for_next_sequence_prediction(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_next_sequence_prediction(*config_and_inputs)
+
+    def test_for_pretraining(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
+
+    def test_for_question_answering(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
+
+    def test_for_sequence_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(*config_and_inputs)
+
+    def test_for_token_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
@@ -556,5 +585,3 @@ class CharacterBertModelIntegrationTest(unittest.TestCase):
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
-
-
