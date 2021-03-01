@@ -186,6 +186,9 @@ class Wav2Vec2ModelTester:
         model.to(torch_device)
         model.train()
 
+        # freeze feature encoder
+        model.freeze_feature_extractor()
+
         input_values = input_values[:3]
         attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
 
