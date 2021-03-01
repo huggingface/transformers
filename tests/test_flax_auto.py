@@ -62,7 +62,9 @@ class FlaxAutoModelTest(unittest.TestCase):
             def eval(**kwargs):
                 return model(**kwargs)
 
-            eval(**tokens).block_until_ready()
+            encoder, pooled = eval(**tokens)
+            encoder.block_until_ready()
+            pooled.block_until_ready()
 
     @slow
     def test_roberta_jax_jit(self):
@@ -75,4 +77,6 @@ class FlaxAutoModelTest(unittest.TestCase):
             def eval(**kwargs):
                 return model(**kwargs)
 
-            eval(**tokens).block_until_ready()
+            encoder, pooled = eval(**tokens)
+            encoder.block_until_ready()
+            pooled.block_until_ready()
