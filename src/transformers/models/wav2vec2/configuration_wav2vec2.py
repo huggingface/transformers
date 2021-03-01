@@ -92,6 +92,33 @@ class Wav2Vec2Config(PretrainedConfig):
             Whether do apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
             True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
             False`` corresponds to applying layer norm after the attention layer.
+        freeze_feat_extract_train (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to freeze the weights of the feature extractor when training.
+        apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
+            `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
+            <https://arxiv.org/abs/1904.08779>`__.
+        mask_time_prob (:obj:`float`, `optional`, defaults to 0.05):
+            Propability of each feature vector along the time axis to be chosen as the start of the vector span to be
+            masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature vectors will be
+            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+        mask_time_length (:obj:`int`, `optional`, defaults to 10):
+            Length of vector span along the time axis.
+        mask_feature_prob (:obj:`float`, `optional`, defaults to 0.0):
+            Propability of each feature vector along the feature axis to be chosen as the start of the vector span to
+            be masked. Approximately ``mask_time_prob * hidden_size // mask_time_length`` feature vectors will be
+            masked along the time axis. This is only relevant if ``apply_spec_augment is True``.
+        mask_feature_length (:obj:`int`, `optional`, defaults to 10):
+            Length of vector span along the feature axis.
+        ctc_loss_reduction (:obj:`str`, `optional`, defaults to :obj:`"sum"`):
+            Specifies the reduction to apply to the output of ``torch.nn.CTCLoss``. Only relevant when training an
+            instance of :class:`~transformers.Wav2Vec2ForCTC`.
+        ctc_zero_infinity (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to zero infinite losses and the associated gradients of ``torch.nn.CTCLoss``. Infinite losses
+            mainly occur when the inputs are too short to be aligned to the targets. Only relevant when training an
+            instance of :class:`~transformers.Wav2Vec2ForCTC`.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
     Example::
 
@@ -116,12 +143,15 @@ class Wav2Vec2Config(PretrainedConfig):
         num_attention_heads=12,
         intermediate_size=3072,
         hidden_act="gelu",
-        hidden_dropout_prob=0.1,  # TODO(PVP) this is most likely not correctly set yet - correct when adding train
-        attention_probs_dropout_prob=0.1,  # TODO(PVP) this is most likely not correctly set yet - correct when adding train
+        hidden_dropout=0.1,
+        activation_dropout=0.1,
+        attention_dropout=0.1,
+        feat_proj_dropout=0.1,
+        final_dropout=0.1,
+        layerdrop=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         feat_extract_norm="group",
-        feat_extract_dropout=0.0,
         feat_extract_activation="gelu",
         conv_dim=(512, 512, 512, 512, 512, 512, 512),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
@@ -130,6 +160,15 @@ class Wav2Vec2Config(PretrainedConfig):
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         do_stable_layer_norm=False,
+        freeze_feat_extract_train=True,
+        apply_spec_augment=True,
+        mask_time_prob=0.05,
+        mask_time_length=10,
+        mask_feature_prob=0.0,
+        mask_feature_length=10,
+        ctc_loss_reduction="sum",
+        ctc_zero_infinity=False,
+        gradient_checkpointing=False,
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
@@ -138,7 +177,6 @@ class Wav2Vec2Config(PretrainedConfig):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
         self.hidden_size = hidden_size
         self.feat_extract_norm = feat_extract_norm
-        self.feat_extract_dropout = feat_extract_dropout
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = list(conv_dim)
         self.conv_stride = list(conv_stride)
@@ -151,12 +189,18 @@ class Wav2Vec2Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.num_attention_heads = num_attention_heads
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.hidden_dropout = hidden_dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.feat_proj_dropout = feat_proj_dropout
+        self.final_dropout = final_dropout
+        self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
+        self.freeze_feat_extract_train = freeze_feat_extract_train
+        self.gradient_checkpointing = gradient_checkpointing
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -169,3 +213,14 @@ class Wav2Vec2Config(PretrainedConfig):
                 f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride)"
                 f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
+
+        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+
+        # ctc loss
+        self.ctc_loss_reduction = ctc_loss_reduction
+        self.ctc_zero_infinity = ctc_zero_infinity

@@ -115,6 +115,16 @@ class Wav2Vec2Processor:
         """
         return self.current_processor(*args, **kwargs)
 
+    def pad(self, *args, **kwargs):
+        """
+        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
+        :meth:`~transformers.Wav2Vec2FeatureExtractor.pad` and returns its output. If used in the context
+        :meth:`~transformers.Wav2Vec2Processor.as_target_processor` this method forwards all its arguments to
+        Wav2Vec2CTCTokenizer's :meth:`~transformers.Wav2Vec2CTCTokenizer.pad`. Please refer to the docstring of the
+        above two methods for more information.
+        """
+        return self.current_processor.pad(*args, **kwargs)
+
     def batch_decode(self, *args, **kwargs):
         """
         This method forwards all its arguments to Wav2Vec2CTCTokenizer's

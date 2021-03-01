@@ -452,16 +452,23 @@ class LengthGroupedSampler(Sampler):
     keeping a bit of randomness.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int, lengths: Optional[List[int]] = None):
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int,
+        lengths: Optional[List[int]] = None,
+        model_input_name: Optional[str] = None,
+    ):
         self.dataset = dataset
         self.batch_size = batch_size
+        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+            if not isinstance(dataset[0], dict) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    "'input_ids' key."
+                    f"'{self.model_input_name}' key."
                 )
-            lengths = [len(feature["input_ids"]) for feature in dataset]
+            lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
 
     def __len__(self):
@@ -487,6 +494,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         seed: int = 0,
         drop_last: bool = False,
         lengths: Optional[List[int]] = None,
+        model_input_name: Optional[str] = None,
     ):
         if num_replicas is None:
             if not dist.is_available():
@@ -513,14 +521,15 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
         self.total_size = self.num_samples * self.num_replicas
         self.seed = seed
+        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
-            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    "'input_ids' key."
+                    f"'{self.model_input_name}' key."
                 )
-            lengths = [len(feature["input_ids"]) for feature in dataset]
+            lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
 
     def __iter__(self) -> Iterator:
