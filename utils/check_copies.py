@@ -93,6 +93,16 @@ def blackify(code):
             return result[len("class Bla:\n") :] if has_indent else result
 
 
+def get_indent(code):
+    lines = code.split("\n")
+    idx = 0
+    while idx < len(lines) and len(lines[idx]) == 0:
+        idx += 1
+    if idx < len(lines):
+        return re.search(r"^(\s*)\S", lines[idx]).groups()[0]
+    return 0
+
+
 def is_copy_consistent(filename, overwrite=False):
     """
     Check if the code commented as a copy in `filename` matches the original.
@@ -113,7 +123,7 @@ def is_copy_consistent(filename, overwrite=False):
         # There is some copied code here, let's retrieve the original.
         indent, object_name, replace_pattern = search.groups()
         theoretical_code = find_code_in_transformers(object_name)
-        theoretical_indent = re.search(r"^(\s*)\S", theoretical_code).groups()[0]
+        theoretical_indent = get_indent(theoretical_code)
 
         start_index = line_index + 1 if indent == theoretical_indent else line_index + 2
         indent = theoretical_indent

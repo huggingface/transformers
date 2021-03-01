@@ -1291,6 +1291,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1393,6 +1394,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing
 class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
