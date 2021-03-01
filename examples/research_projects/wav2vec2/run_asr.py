@@ -234,13 +234,13 @@ def main():
 
     train_dataset = train_dataset.map(
         prepare_dataset,
-        batch_size=model_args.per_device_train_batch_size,
+        batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
     )
     val_dataset = val_dataset.map(
         prepare_dataset,
-        batch_size=model_args.per_device_train_batch_size,
+        batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
     )
@@ -257,7 +257,7 @@ def main():
         # we do not want to group tokens when computing the metrics
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
 
-        wer = wer_metric(predictions=pred_str, references=label_str)
+        wer = wer_metric.compute(predictions=pred_str, references=label_str)
 
         return {"wer": wer}
 
