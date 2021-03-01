@@ -450,10 +450,11 @@ class DebertaV2Encoder(nn.Module):
         else:
             next_kv = hidden_states
         rel_embeddings = self.get_rel_embedding()
+        output_states = next_kv
         for i, layer_module in enumerate(self.layer):
 
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (next_kv,)
+                all_hidden_states = all_hidden_states + (output_states,)
 
             output_states = layer_module(
                 next_kv,
@@ -480,7 +481,7 @@ class DebertaV2Encoder(nn.Module):
                 all_attentions = all_attentions + (att_m,)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (next_kv,)
+            all_hidden_states = all_hidden_states + (output_states,)
 
         if not return_dict:
             return tuple(v for v in [output_states, all_hidden_states, all_attentions] if v is not None)
