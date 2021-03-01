@@ -183,6 +183,7 @@ class Wav2Vec2ModelTester:
 
     def check_training(self, config, input_values, *args):
         model = Wav2Vec2ForCTC(config=config)
+        model.config.ctc_loss_reduction = "mean"
         model.to(torch_device)
         model.train()
 
