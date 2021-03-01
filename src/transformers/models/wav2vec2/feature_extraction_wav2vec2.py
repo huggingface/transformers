@@ -159,10 +159,6 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
 
-        return_attention_mask = (
-            return_attention_mask if return_attention_mask is not None else self.return_attention_mask
-        )
-
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
