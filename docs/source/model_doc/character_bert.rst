@@ -16,7 +16,7 @@ CharacterBERT
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The CharacterBERT model was proposed in `"CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters" https://www.aclweb.org/anthology/2020.coling-main.609/`__  by Hicham EL BOUKKOURI, Olivier FERRET, Thomas LAVERGNE, Hiroshi NOJI, Pierre ZWEIGENBAUM and Junichi TSUJII. In short, it is a variant of BERT that uses a Character-CNN module instead of WordPieces to achieve a word-level, open-vocabulary model that is more convenient to use as well as more robust to noisy (misspellings) inputs.
+The CharacterBERT model was proposed in `CharacterBERT: Reconciling ELMo and BERT for Word-Level Open-Vocabulary Representations From Characters <https://www.aclweb.org/anthology/2020.coling-main.609>`__  by Hicham EL BOUKKOURI, Olivier FERRET, Thomas LAVERGNE, Hiroshi NOJI, Pierre ZWEIGENBAUM and Junichi TSUJII. In short, it is a variant of BERT that uses a Character-CNN module instead of WordPieces to achieve a word-level, open-vocabulary model that is more convenient to use as well as more robust to noisy (misspellings) inputs.
 
 The abstract from the paper is the following:
 
