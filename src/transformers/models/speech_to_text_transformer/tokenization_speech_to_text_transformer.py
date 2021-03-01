@@ -43,6 +43,10 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
+MUSTC_LANGS = ["pt", "fr", "ru", "nl", "ro", "it", "es", "de"]
+
+LANGUAGES = {"mustc": MUSTC_LANGS}
+
 
 class Speech2TextTokenizer(PreTrainedTokenizer):
     """
@@ -76,6 +80,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     model_input_names = ["input_ids", "attention_mask"]
 
+    prefix_tokens: List[int] = []
+
     def __init__(
         self,
         vocab_file,
@@ -85,6 +91,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         unk_token="<unk>",
         do_upper_case=False,
+        tgt_lang=None,
+        lang_codes=None,
         **kwargs,
     ):
         super().__init__(
@@ -101,6 +109,20 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.spm_file = spm_file
         self.sp_model = load_spm(spm_file)
+
+        if lang_codes is not None:
+            self.lang_codes = self.lang_codes
+            self.langs = LANGUAGES[lang_codes]
+            self.lang_tokens = [self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs]
+            self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
+
+            self._additional_special_tokens = self.lang_tokens
+            self.tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
+
+            self.prefix_tokens = [self.eos_token_id, self.lang_code_to_id[self.tgt_lang]]
+        else:
+            self.lang_code_to_id = {}
+            self.prefix_tokens = [self.eos_token_id]
 
     @property
     def vocab_size(self) -> int:
@@ -127,9 +149,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
-            return token_ids_0 + [self.eos_token_id]
+            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
-        return token_ids_0 + token_ids_1 + [self.eos_token_id]
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def get_vocab(self) -> Dict:
         vocab = self.encoder.copy()
