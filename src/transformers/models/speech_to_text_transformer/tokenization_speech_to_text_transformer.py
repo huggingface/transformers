@@ -117,9 +117,9 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
 
             self._additional_special_tokens = self.lang_tokens
-            self.tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
+            self._tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
 
-            self.prefix_tokens = [self.eos_token_id, self.lang_code_to_id[self.tgt_lang]]
+            self.set_tgt_lang_special_tokens(self._tgt_lang)
         else:
             self.lang_code_to_id = {}
             self.prefix_tokens = [self.eos_token_id]
@@ -127,6 +127,21 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
+
+    @property
+    def tgt_lang(self) -> str:
+        return self._tgt_lang
+
+    @tgt_lang.setter
+    def tgt_lang(self, new_tgt_lang) -> None:
+        self._tgt_lang = new_tgt_lang
+        self.set_tgt_lang_special_tokens(new_tgt_lang)
+
+    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
+        """Reset the special tokens to the target language setting. prefix=[eos, tgt_lang_code] and suffix=[eos]."""
+        lang_code_id = self.lang_code_to_id[tgt_lang]
+        self.prefix_tokens = [self.eos_token_id, lang_code_id]
+        self.suffix_tokens = [self.eos_token_id]
 
     def _tokenize(self, text: str) -> List[str]:
         return self.sp_model.EncodeAsPieces(text)
