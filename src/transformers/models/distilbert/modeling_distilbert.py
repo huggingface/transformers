@@ -443,7 +443,6 @@ class DistilBertModel(DistilBertPreTrainedModel):
         output_type=BaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint=_CHECKPOINT_FOR_DOC)
     def forward(
         self,
         input_ids=None,
