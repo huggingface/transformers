@@ -176,6 +176,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
     def __getstate__(self) -> Dict:
         state = self.__dict__.copy()
         state["sp_model"] = None
+        state["lang_codes"] = self.lang_codes
         return state
 
     def __setstate__(self, d: Dict) -> None:
