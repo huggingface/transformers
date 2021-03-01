@@ -183,7 +183,6 @@ class Wav2Vec2ModelTester:
 
     def check_training(self, config, input_values, *args):
         model = Wav2Vec2ForCTC(config=config)
-        model.config.ctc_loss_reduction = "mean"
         model.to(torch_device)
         model.train()
 
@@ -191,7 +190,6 @@ class Wav2Vec2ModelTester:
         model.freeze_feature_extractor()
 
         input_values = input_values[:3]
-        attention_mask = torch.ones(input_values.shape, device=torch_device, dtype=torch.bool)
 
         input_lengths = [input_values.shape[-1] // i for i in [4, 2, 1]]
         max_length_labels = model._get_feat_extract_output_lengths(torch.tensor(input_lengths))
@@ -200,14 +198,13 @@ class Wav2Vec2ModelTester:
         # pad input
         for i in range(len(input_lengths)):
             input_values[i, input_lengths[i] :] = 0.0
-            attention_mask[i, input_lengths[i] :] = 0.0
 
             if max_length_labels[i] < labels.shape[-1]:
                 # it's important that we make sure that target lenghts are at least
                 # one shorter than logit lenghts to prevent -inf
                 labels[i, max_length_labels[i] - 1 :] = -100
 
-        loss = model(input_values, attention_mask=attention_mask, labels=labels).loss
+        loss = model(input_values, labels=labels).loss
         self.parent.assertFalse(torch.isinf(loss).item())
 
         loss.backward()
@@ -222,6 +219,7 @@ class Wav2Vec2ModelTester:
 class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
+            Wav2Vec2ForCTC,
             Wav2Vec2Model,
             Wav2Vec2ForMaskedLM,
         )
@@ -270,6 +268,46 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        # set layer drop to 0
+        model.config.layerdrop = 0.0
+
+        input_values = inputs_dict["input_values"]
+
+        input_lengths = torch.tensor(
+            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+        )
+        output_lengths = model._get_feat_extract_output_lengths(input_lengths)
+
+        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
+        inputs_dict["labels"] = labels
+
+        outputs = model(**inputs_dict)
+
+        output = outputs[0]
+
+        # Encoder-/Decoder-only models
+        hidden_states = outputs.hidden_states[0]
+        attentions = outputs.attentions[0]
+
+        hidden_states.retain_grad()
+        attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+        self.assertIsNotNone(attentions.grad)
+
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -298,7 +336,7 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForCTC) if is_torch_available() else ()
+    all_model_classes = (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -346,6 +384,46 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     # is not implemented
     def test_model_common_attributes(self):
         pass
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        # set layer drop to 0
+        model.config.layerdrop = 0.0
+
+        input_values = inputs_dict["input_values"]
+
+        input_lengths = torch.tensor(
+            [input_values.shape[1] for _ in range(input_values.shape[0])], dtype=torch.long, device=torch_device
+        )
+        output_lengths = model._get_feat_extract_output_lengths(input_lengths)
+
+        labels = ids_tensor((input_values.shape[0], output_lengths[0] - 2), self.model_tester.vocab_size)
+        inputs_dict["attention_mask"] = torch.ones_like(inputs_dict["attention_mask"])
+        inputs_dict["labels"] = labels
+
+        outputs = model(**inputs_dict)
+
+        output = outputs[0]
+
+        # Encoder-/Decoder-only models
+        hidden_states = outputs.hidden_states[0]
+        attentions = outputs.attentions[0]
+
+        hidden_states.retain_grad()
+        attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(hidden_states.grad)
+        self.assertIsNotNone(attentions.grad)
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
