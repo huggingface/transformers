@@ -16,6 +16,59 @@ def tf_top_k_top_p_filtering(*args, **kwargs):
     requires_tf(tf_top_k_top_p_filtering)
 
 
+TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFLayoutLMForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLayoutLMForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLayoutLMForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLayoutLMMainLayer:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLayoutLMModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFLayoutLMPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
 class TFPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_tf(self)

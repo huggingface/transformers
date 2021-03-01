@@ -139,7 +139,9 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        assert not (
+            input_ids is None and inputs_embeds is None
+        ), "The `input_ids` and `inputs_emneds` arguments  can not both be None"
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
@@ -609,7 +611,6 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
 
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
-
         if inputs["bbox"] is None:
             inputs["bbox"] = tf.fill(dims=input_shape + [4], value=0)
 

@@ -254,6 +254,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (PegasusConfig, TFPegasusModel),
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
+        (LayoutLMConfig, TFLayoutLMModel),
     ]
 )
 
@@ -281,6 +282,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForPreTraining),
         (FunnelConfig, TFFunnelForPreTraining),
         (MPNetConfig, TFMPNetForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
     ]
 )
 
@@ -311,6 +313,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
         (MPNetConfig, TFMPNetForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
     ]
 )
 
@@ -348,6 +351,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
         (MPNetConfig, TFMPNetForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
     ]
 )
 
@@ -390,6 +394,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
         (TransfoXLConfig, TFTransfoXLForSequenceClassification),
         (CTRLConfig, TFCTRLForSequenceClassification),
+        (LayoutLMConfig, TFLayoutLMForSequenceClassification),
     ]
 )
 
@@ -433,6 +438,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForTokenClassification),
         (FunnelConfig, TFFunnelForTokenClassification),
         (MPNetConfig, TFMPNetForTokenClassification),
+        (LayoutLMConfig, TFLayoutLMForTokenClassification),
     ]
 )
 
