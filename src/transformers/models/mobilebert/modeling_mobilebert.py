@@ -1205,13 +1205,15 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
 class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+
         self.mobilebert = MobileBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, self.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1254,7 +1256,9 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         pooled_output = outputs[1]
+
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 

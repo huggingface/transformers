@@ -73,7 +73,7 @@ def find_code_in_transformers(object_name):
 
 
 _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)\s*($|\S.*$)")
-_re_replace_pattern = re.compile(r"with\s+(\S+)->(\S+)(?:\s|$)")
+_re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 
 
 def blackify(code):
@@ -138,10 +138,16 @@ def is_copy_consistent(filename, overwrite=False):
 
         # Before comparing, use the `replace_pattern` on the original code.
         if len(replace_pattern) > 0:
-            search_patterns = _re_replace_pattern.search(replace_pattern)
-            if search_patterns is not None:
-                obj1, obj2 = search_patterns.groups()
+            patterns = replace_pattern.replace("with", "").split(",")
+            patterns = [_re_replace_pattern.search(p) for p in patterns]
+            for pattern in patterns:
+                if pattern is None:
+                    continue
+                obj1, obj2, option = pattern.groups()
                 theoretical_code = re.sub(obj1, obj2, theoretical_code)
+                if option.strip() == "all-casing":
+                    theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
+                    theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
