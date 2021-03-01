@@ -617,6 +617,16 @@ class Trainer:
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
+        self.create_optimizer()
+        self.create_scheduler(num_training_steps)
+
+    def create_optimizer(self):
+        """
+        Setup the optimizer.
+
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
+        """
         if self.optimizer is None:
             no_decay = ["bias", "LayerNorm.weight"]
             optimizer_grouped_parameters = [
@@ -649,6 +659,7 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
+    def create_scheduler(self, num_training_steps: int):
         if self.lr_scheduler is None:
             warmup_steps = (
                 self.args.warmup_steps

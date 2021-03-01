@@ -319,22 +319,8 @@ def init_deepspeed(trainer, num_training_steps):
         # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
         # But trainer uses AdamW by default.
         # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+        trainer.create_optimizer()
 
-        optimizer_configs = {
-            "AdamW": {
-                "lr": args.learning_rate,
-                "betas": [args.adam_beta1, args.adam_beta2],
-                "eps": args.adam_epsilon,
-                "weight_decay": args.weight_decay,
-            }
-        }
-        optimizer = "AdamW"
-
-        config["zero_allow_untested_optimizer"] = True
-        config["optimizer"] = {
-            "type": optimizer,
-            "params": optimizer_configs[optimizer],
-        }
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
@@ -349,29 +335,7 @@ def init_deepspeed(trainer, num_training_steps):
             f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
-        if args.lr_scheduler_type == SchedulerType.LINEAR:
-            scheduler = "WarmupDecayLR"
-            params = {
-                "last_batch_iteration": -1,
-                "total_num_steps": num_training_steps,
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            }
-        elif args.lr_scheduler_type == SchedulerType.CONSTANT_WITH_WARMUP:
-            scheduler = "WarmupLR"
-            params = {
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            }
-        else:
-            raise ValueError(f"{args.lr_scheduler_type} scheduler type is not supported by DeepSpeed")
-
-        config["scheduler"] = {
-            "type": scheduler,
-            "params": params,
-        }
+        trainer.create_scheduler(num_training_steps=num_training_steps)
 
     # fp16
     if trainer.fp16_backend is not None:
@@ -408,6 +372,8 @@ def init_deepspeed(trainer, num_training_steps):
         model=model,
         model_parameters=model_parameters,
         config_params=config,
+        optimizer=trainer.optimizer,
+        lr_scheduler=trainer.lr_scheduler,
     )
 
     return model, optimizer, lr_scheduler
