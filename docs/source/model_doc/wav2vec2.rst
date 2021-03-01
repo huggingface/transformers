@@ -62,7 +62,7 @@ Wav2Vec2Processor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.Wav2Vec2Processor
-    :members: __call__, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
+    :members: __call__, pad, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
 
 
 Wav2Vec2Model
