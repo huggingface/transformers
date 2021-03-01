@@ -92,8 +92,6 @@ class Wav2Vec2Config(PretrainedConfig):
             Whether do apply `stable` layer norm architecture of the Transformer encoder. ``do_stable_layer_norm is
             True`` corresponds to applying layer norm before the attention layer, whereas ``do_stable_layer_norm is
             False`` corresponds to applying layer norm after the attention layer.
-        freeze_feat_extract_train (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to freeze the weights of the feature extractor when training.
         apply_spec_augment (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to apply *SpecAugment* data augmentation to the outputs of the feature extractor. For reference see
             `SpecAugment: A Simple Data Augmentation Method for Automatic Speech Recognition
@@ -160,7 +158,6 @@ class Wav2Vec2Config(PretrainedConfig):
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         do_stable_layer_norm=False,
-        freeze_feat_extract_train=True,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -199,7 +196,6 @@ class Wav2Vec2Config(PretrainedConfig):
         self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         self.do_stable_layer_norm = do_stable_layer_norm
-        self.freeze_feat_extract_train = freeze_feat_extract_train
         self.gradient_checkpointing = gradient_checkpointing
 
         if (
