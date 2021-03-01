@@ -93,7 +93,6 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         do_upper_case=False,
         tgt_lang=None,
         lang_codes=None,
-        forced_bos_token_id=None,
         **kwargs,
     ):
         super().__init__(
@@ -104,7 +103,6 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             do_upper_case=do_upper_case,
             tgt_lang=tgt_lang,
             lang_codes=lang_codes,
-            forced_bos_token_id=forced_bos_token_id,
             **kwargs,
         )
         self.do_upper_case = do_upper_case
