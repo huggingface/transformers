@@ -111,7 +111,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         self.sp_model = load_spm(spm_file)
 
         if lang_codes is not None:
-            self.lang_codes = self.lang_codes
+            self.lang_codes = lang_codes
             self.langs = LANGUAGES[lang_codes]
             self.lang_tokens = [self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs]
             self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
