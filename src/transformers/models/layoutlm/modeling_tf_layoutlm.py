@@ -16,38 +16,34 @@
 
 import math
 import warnings
-from typing import Optional, Tuple, Union, Dict
+from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFMaskedLMOutput,
-    TFTokenClassifierOutput,
     TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
-    TFPreTrainedModel,
-    TFTokenClassificationLoss,
-    TFSequenceClassificationLoss,
     TFModelInputType,
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss,
     get_initializer,
     input_processing,
     keras_serializable,
     shape_list,
 )
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-)
-
 from ...utils import logging
 from .configuration_layoutlm import LayoutLMConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -155,10 +151,10 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
 
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
-        
+
         if bbox is None:
             bbox = bbox = tf.fill(input_shape + [4], value=0)
-        
+
         try:
             left_position_embeddings = tf.gather(self.x_position_embeddings, bbox[:, :, 0])
             upper_position_embeddings = tf.gather(self.y_position_embeddings, bbox[:, :, 1])
@@ -172,16 +168,17 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
         position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
         token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
-        final_embeddings = self.embeddings_sum(inputs=[
-            inputs_embeds,
-            position_embeds,
-            token_type_embeds,
-            left_position_embeddings,
-            upper_position_embeddings,
-            right_position_embeddings,
-            lower_position_embeddings,
-            h_position_embeddings,
-            w_position_embeddings,
+        final_embeddings = self.embeddings_sum(
+            inputs=[
+                inputs_embeds,
+                position_embeds,
+                token_type_embeds,
+                left_position_embeddings,
+                upper_position_embeddings,
+                right_position_embeddings,
+                lower_position_embeddings,
+                h_position_embeddings,
+                w_position_embeddings,
             ]
         )
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
@@ -190,7 +187,6 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with TFBert->TFLayoutLM
 class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -271,8 +267,6 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with TFBert->TFLayoutLM
 class TFLayoutLMSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -291,8 +285,6 @@ class TFLayoutLMSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with TFBert->TFLayoutLM
 class TFLayoutLMAttention(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -326,8 +318,6 @@ class TFLayoutLMAttention(tf.keras.layers.Layer):
         return outputs
 
 
-
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with TFBert->TFLayoutLM
 class TFLayoutLMIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -348,7 +338,6 @@ class TFLayoutLMIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.BertSelfOutput with TFBert->TFLayoutLM
 class TFLayoutLMOutput(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -367,7 +356,6 @@ class TFLayoutLMOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with TFBert->TFLayoutLM
 class TFLayoutLMLayer(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -401,7 +389,6 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with TFBert->TFLayoutLM
 class TFLayoutLMEncoder(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -449,7 +436,6 @@ class TFLayoutLMEncoder(tf.keras.layers.Layer):
         )
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with TFBert->TFLayoutLM
 class TFLayoutLMPooler(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -470,7 +456,6 @@ class TFLayoutLMPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with TFBert->TFLayoutLM
 class TFLayoutLMPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -496,7 +481,6 @@ class TFLayoutLMPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with TFBert->TFLayoutLM
 class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -540,7 +524,6 @@ class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with TFBert->TFLayoutLM
 class TFLayoutLMMLMHead(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -553,7 +536,6 @@ class TFLayoutLMMLMHead(tf.keras.layers.Layer):
         return prediction_scores
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer with TFBert->TFLayoutLM
 @keras_serializable
 class TFLayoutLMMainLayer(tf.keras.layers.Layer):
     config_class = LayoutLMConfig
@@ -627,7 +609,7 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
 
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
-        
+
         if inputs["bbox"] is None:
             inputs["bbox"] = tf.fill(dims=input_shape + [4], value=0)
 
@@ -693,6 +675,7 @@ class TFLayoutLMMainLayer(tf.keras.layers.Layer):
             attentions=encoder_outputs.attentions,
         )
 
+
 class TFLayoutLMPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -751,6 +734,7 @@ LAYOUTLM_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         bbox (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0}, 4)`, `optional`):
             Bounding Boxes of each input sequence tokens. Selected in the range ``[0, config.max_2d_position_embeddings
+
             - 1]``.
         attention_mask (:obj:`Numpy array` or :obj:`tf.Tensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
@@ -871,6 +855,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
             attentions=attns,
         )
 
+
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top. """, LAYOUTLM_START_DOCSTRING)
 class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
@@ -985,8 +970,8 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
 
 @add_start_docstrings(
     """
-    LayoutLM Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-    output) e.g. for GLUE tasks.
+    LayoutLM Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
     """,
     LAYOUTLM_START_DOCSTRING,
 )
