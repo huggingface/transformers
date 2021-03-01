@@ -28,14 +28,13 @@ if is_tf_available():
     from transformers.models.layoutlm.modeling_tf_layoutlm import (
         TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLayoutLMForMaskedLM,
-        TFLayoutLMForTokenClassification,
         TFLayoutLMForSequenceClassification,
-        TFLayoutLMModel
+        TFLayoutLMForTokenClassification,
+        TFLayoutLMModel,
     )
 
 
 class TFLayoutLMModelTester:
-
     def __init__(
         self,
         parent,
@@ -151,7 +150,7 @@ class TFLayoutLMModelTester:
         self, config, input_ids, bbox, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         model = TFLayoutLMForMaskedLM(config=config)
-  
+
         result = model(input_ids, bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
@@ -198,7 +197,9 @@ class TFLayoutLMModelTester:
 class LayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        (TFLayoutLMModel, TFLayoutLMForMaskedLM, TFLayoutLMForTokenClassification, TFLayoutLMForSequenceClassification) if is_tf_available() else ()
+        (TFLayoutLMModel, TFLayoutLMForMaskedLM, TFLayoutLMForTokenClassification, TFLayoutLMForSequenceClassification)
+        if is_tf_available()
+        else ()
     )
     test_head_masking = False
     test_onnx = True

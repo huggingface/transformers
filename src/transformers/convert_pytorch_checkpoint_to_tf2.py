@@ -31,6 +31,7 @@ from . import (
     ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -40,7 +41,6 @@ from . import (
     XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -51,6 +51,7 @@ from . import (
     ElectraConfig,
     FlaubertConfig,
     GPT2Config,
+    LayoutLMConfig,
     LxmertConfig,
     OpenAIGPTConfig,
     RobertaConfig,
@@ -70,6 +71,7 @@ from . import (
     TFElectraForPreTraining,
     TFFlaubertWithLMHeadModel,
     TFGPT2LMHeadModel,
+    TFLayoutLMForMaskedLM,
     TFLxmertForPreTraining,
     TFLxmertVisualFeatureEncoder,
     TFOpenAIGPTLMHeadModel,
@@ -84,8 +86,6 @@ from . import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
-    LayoutLMConfig,
-    TFLayoutLMForMaskedLM,
     cached_path,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
@@ -114,6 +114,7 @@ if is_torch_available():
         ElectraForPreTraining,
         FlaubertWithLMHeadModel,
         GPT2LMHeadModel,
+        LayoutLMForMaskedLM,
         LxmertForPreTraining,
         LxmertVisualFeatureEncoder,
         OpenAIGPTLMHeadModel,
@@ -124,7 +125,6 @@ if is_torch_available():
         XLMRobertaForMaskedLM,
         XLMWithLMHeadModel,
         XLNetLMHeadModel,
-        LayoutLMForMaskedLM,
     )
 
 
@@ -215,7 +215,7 @@ MODEL_CLASSES = {
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-     "layoutlm": (
+    "layoutlm": (
         LayoutLMConfig,
         TFLayoutLMForMaskedLM,
         LayoutLMForMaskedLM,

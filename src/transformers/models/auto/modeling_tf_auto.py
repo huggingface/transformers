@@ -102,6 +102,12 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
+from ..layoutlm.modeling_tf_layoutlm import (
+    TFLayoutLMForMaskedLM,
+    TFLayoutLMForSequenceClassification,
+    TFLayoutLMForTokenClassification,
+    TFLayoutLMModel,
+)
 from ..led.modeling_tf_led import TFLEDForConditionalGeneration, TFLEDModel
 from ..longformer.modeling_tf_longformer import (
     TFLongformerForMaskedLM,
@@ -173,12 +179,6 @@ from ..xlnet.modeling_tf_xlnet import (
     TFXLNetLMHeadModel,
     TFXLNetModel,
 )
-from ..layoutlm.modeling_tf_layoutlm import (
-    TFLayoutLMForMaskedLM,
-    TFLayoutLMForTokenClassification,
-    TFLayoutLMForSequenceClassification,
-    TFLayoutLMModel,
-)
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -195,6 +195,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
     LxmertConfig,
@@ -212,7 +213,6 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
-    LayoutLMConfig,
 )
 
 
@@ -234,6 +234,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaModel),
         (LongformerConfig, TFLongformerModel),
         (RobertaConfig, TFRobertaModel),
+        (LayoutLMConfig, TFLayoutLMModel),
         (BertConfig, TFBertModel),
         (OpenAIGPTConfig, TFOpenAIGPTModel),
         (GPT2Config, TFGPT2Model),
@@ -253,8 +254,6 @@ TF_MODEL_MAPPING = OrderedDict(
         (PegasusConfig, TFPegasusModel),
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
-        (LayoutLMConfig, TFLayoutLMModel),
-
     ]
 )
 
@@ -269,6 +268,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
         (BertConfig, TFBertForPreTraining),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -281,7 +281,6 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForPreTraining),
         (FunnelConfig, TFFunnelForPreTraining),
         (MPNetConfig, TFMPNetForMaskedLM),
-        (LayoutLMConfig, TFLayoutLMForMaskedLM),
     ]
 )
 
@@ -299,6 +298,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -311,7 +311,6 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
         (MPNetConfig, TFMPNetForMaskedLM),
-        (LayoutLMConfig, TFLayoutLMForMaskedLM),
     ]
 )
 
@@ -341,6 +340,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (MobileBertConfig, TFMobileBertForMaskedLM),
         (FlaubertConfig, TFFlaubertWithLMHeadModel),
@@ -348,7 +348,6 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (ElectraConfig, TFElectraForMaskedLM),
         (FunnelConfig, TFFunnelForMaskedLM),
         (MPNetConfig, TFMPNetForMaskedLM),
-        (LayoutLMConfig, TFLayoutLMForMaskedLM),
     ]
 )
 
@@ -378,6 +377,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
         (LongformerConfig, TFLongformerForSequenceClassification),
         (RobertaConfig, TFRobertaForSequenceClassification),
+        (LayoutLMConfig, TFLayoutLMForSequenceClassification),
         (BertConfig, TFBertForSequenceClassification),
         (XLNetConfig, TFXLNetForSequenceClassification),
         (MobileBertConfig, TFMobileBertForSequenceClassification),
@@ -390,7 +390,6 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
         (TransfoXLConfig, TFTransfoXLForSequenceClassification),
         (CTRLConfig, TFCTRLForSequenceClassification),
-        (LayoutLMConfig,TFLayoutLMForSequenceClassification),
     ]
 )
 
@@ -427,13 +426,13 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForTokenClassification),
         (LongformerConfig, TFLongformerForTokenClassification),
         (RobertaConfig, TFRobertaForTokenClassification),
+        (LayoutLMConfig, TFLayoutLMForTokenClassification),
         (BertConfig, TFBertForTokenClassification),
         (MobileBertConfig, TFMobileBertForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
         (ElectraConfig, TFElectraForTokenClassification),
         (FunnelConfig, TFFunnelForTokenClassification),
         (MPNetConfig, TFMPNetForTokenClassification),
-        (LayoutLMConfig, TFLayoutLMForTokenClassification),
     ]
 )
 
