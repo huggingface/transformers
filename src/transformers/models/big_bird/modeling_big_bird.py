@@ -751,10 +751,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.final_cl = context_layer # TODO: remove this
 
         if output_attentions:
-            # attn_probs : (b,h,m//wm, wm, n)
-            # rand_attn.unsqueeze_(2)
-            # rand_attn = torch.stack([rand_attn for _ in range(m)])
-            # -> (b,h,m//wm-2,r)
+            # attn_probs : (b,h,m, n)
+            # rand_attn : (b,h,m//wm-2,r)
 
             attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device)
 
@@ -762,30 +760,30 @@ class BigBirdBlockSparseAttention(nn.Module):
             attention_probs[:, :, :wm, :] = first_attn_weights
 
             # corresponding to `second_context_layer`
-            attention_probs[:, :, wm:wm*2, :3*wn] = second_attn_weights[:, :, :, :3*wn]
-            attention_probs[:, :, wm:wm*2, -wn:] = second_attn_weights[:, :, :, 3*wn:4*wn]
+            attention_probs[:, :, wm:2*wm, :3*wn] = second_attn_weights[:, :, :, :3*wn]
+            attention_probs[:, :, wm:2*wm, -wn:] = second_attn_weights[:, :, :, 3*wn:4*wn]
             # put for gathered
-            # attention_probs[:, :, wm:wm*2, ] =  second_attn_weights[:, :, :, 4*wn:]
-
-            # for p1, i1, w1 in zip(attention_probs.view(b,h,m//wm,wm,n)[:,:,2:-2,:,1:-1], rand_attn, second_attn_weights):
-            #     for p2, i2, w2 in zip(p1, i1, w1):
-            #         for p3, i3 in zip(p2, i2):
-            #             p3[:, i3] = w2[:, 4*wn:]
+            for p1, i1, w1 in zip(range(b), rand_attn, second_attn_weights):
+                for p2, i2, w2 in zip(range(h), i1, w1):
+                    attention_probs.view(b,h,m//wm,wm,n//wn,wn)[p1,p2,1,:,i2[0]] = w2[:, 4*wn:].view(wm,r,wn)
 
             # corresponding to `context_layer`
             for q_idx in range(m//wm - 4):
-                slice = attention_probs.view(b,h,m//wm,wm,n)[:,:,2:-2,:,wn:-wn]
-                slice[:, :, q_idx, :, (q_idx)*wn:(q_idx+3)*wn] = attn_weights[:, :, q_idx, :, wn:4*wn] # inner_band_product
-            # put for gathered
-            # attention_probs[:, :, 2*wm:-2*wm, ] = attn_weights[:, :, :, ] # rand_band_product
+                slice = attention_probs.view(b,h,m//wm,wm,n//wn,wn)[:,:,2:-2,:,1:-1,:]
+                slice[:, :, q_idx, :, q_idx:q_idx+3, :] = attn_weights[:, :, q_idx, :, wn:4*wn].view(b,h,wm,3,wn) # inner_band_product
             attention_probs[:, :, 2*wm:-2*wm, :wn] = attn_weights[:, :, :, :, :wn].view(b,h,-1,wn) # first_band_product
             attention_probs[:, :, 2*wm:-2*wm, -wn:] = attn_weights[:, :, :, :, -wn:].view(b,h,-1,wn) # last_band_product
+            for p1, i1, w1 in zip(range(b), rand_attn, attn_weights):
+                for p2, i2, w2 in zip(range(h), i1, w1):
+                    for q_idx in range(1, len(i2)-1):
+                        attention_probs.view(b,h,m//wm,wm,n//wn,wn)[p1,p2,q_idx+1,:,i2[q_idx]] = w2[q_idx-1, :, 4*wn:-wn].view(wm,r,wn)
 
             # corresponding to `second_last_context_layer`
             attention_probs[:, :, -2*wm:-wm, :wn] = second_last_attn_weights[:,:,:,:wn]
             attention_probs[:, :, -2*wm:-wm, -3*wn:] = second_last_attn_weights[:,:,:,wn:4*wn]
-            # put for gathered
-            # attention_probs[:, :, ] =  second_last_attn_weights[:, :, :, ]
+            for p1, i1, w1 in zip(range(b), rand_attn, second_last_attn_weights):
+                for p2, i2, w2 in zip(range(h), i1, w1):
+                    attention_probs.view(b,h,m//wm,wm,n//wn,wn)[p1,p2,-2,:,i2[-1]] = w2[:, 4*wn:].view(wm,r,wn)
 
             # corresponding to `last_context_layer`
             attention_probs[:, :, -wm:, :] = last_attn_weights
