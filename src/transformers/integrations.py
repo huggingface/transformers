@@ -24,7 +24,6 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from .trainer_utils import SchedulerType
 from .utils import logging
 
 
@@ -285,8 +284,13 @@ def init_deepspeed(trainer, num_training_steps):
     ds_config_file = args.deepspeed
     model = trainer.model
 
-    with io.open(ds_config_file, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    if isinstance(args.deepspeed, dict):
+        config = args.deepspeed
+    elif isinstance(args.deepspeed, str):
+        with io.open(ds_config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    else:
+        raise ValueError("expecting either a path to a config file or a pre-populated dict")
 
     # The following code translates relevant trainer's cl args into the DS config
 
