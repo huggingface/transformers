@@ -13,9 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the PyTorch CharacterBERT model. """
-
-
 import unittest
+import copy
 
 from tests.test_modeling_common import floats_tensor
 from transformers import is_torch_available
@@ -30,6 +29,14 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
+        MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_MASKED_LM_MAPPING,
+        MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         CharacterBertConfig,
         CharacterBertForMaskedLM,
         CharacterBertForMultipleChoice,
@@ -410,19 +417,19 @@ class CharacterBertModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
-#     def prepare_config_and_inputs_for_common(self):
-#         config_and_inputs = self.prepare_config_and_inputs()
-#         (
-#             config,
-#             input_ids,
-#             token_type_ids,
-#             input_mask,
-#             sequence_labels,
-#             token_labels,
-#             choice_labels,
-#         ) = config_and_inputs
-#         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
-#         return config, inputs_dict
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        return config, inputs_dict
 
 
 class CharacterBertConfigTester(ConfigTester):
@@ -438,8 +445,15 @@ class CharacterBertConfigTester(ConfigTester):
         self.parent.assertTrue(hasattr(config, "num_hidden_layers"))
 
 
+def _config_zero_init(config):
+    configs_no_init = copy.deepcopy(config)
+    for key in configs_no_init.__dict__.keys():
+        if "_range" in key or "_std" in key or "initializer_factor" in key:
+            setattr(configs_no_init, key, 1e-10)
+    return configs_no_init
+
 @require_torch
-class CharacterBertModelTest(unittest.TestCase):
+class CharacterBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
@@ -457,6 +471,128 @@ class CharacterBertModelTest(unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (CharacterBertLMHeadModel,) if is_torch_available() else ()
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+        if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+            for k, v in inputs_dict.items():
+                if isinstance(v, torch.Tensor) and v.ndim > 1:
+                    if k == "input_ids":
+                        inputs_dict[k] = v.unsqueeze(1).expand(
+                            -1, self.model_tester.num_choices, -1, 50).contiguous()
+                    else:
+                        inputs_dict[k] = v.unsqueeze(1).expand(
+                            -1, self.model_tester.num_choices, -1).contiguous()
+                else:
+                    inputs_dict[k] = v
+        if return_labels:
+            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
+            elif model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values(),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in [
+                *MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.values(),
+                *MODEL_FOR_CAUSAL_LM_MAPPING.values(),
+                *MODEL_FOR_MASKED_LM_MAPPING.values(),
+                *MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.values(),
+            ]:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+            elif model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+                inputs_dict["next_sentence_label"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+        return inputs_dict
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                if 'embeddings.word_embeddings' in name:
+                    # NOTE: as of this version, the initializer range in config
+                    # does not affect the CharacterCnn parameters which are initialized
+                    # using the default PyTorch intialization
+                    continue
+                if param.requires_grad:
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                    )
+
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
+
+            if not self.is_encoder_decoder:
+                input_ids = inputs["input_ids"]
+                del inputs["input_ids"]
+            else:
+                encoder_input_ids = inputs["input_ids"]
+                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
+                del inputs["input_ids"]
+                inputs.pop("decoder_input_ids", None)
+
+            wte = model.get_input_embeddings()
+            if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                # (bs, n_choices, seq_length, 50) -> (bs * n_choices, seq_length, 50)
+                num_choices = input_ids.shape[1]
+                input_ids = input_ids.view(-1, input_ids.size(-2), input_ids.size(-1))
+            if not self.is_encoder_decoder:
+                inputs_embeds = wte(input_ids)
+                if model_class in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.values():
+                    # (bs * n_choices, seq_length, hidden_size) -> (bs, n_choices, seq_length, hidden_size)
+                    inputs_embeds = inputs_embeds.view(-1, num_choices, inputs_embeds.size(-2), inputs_embeds.size(-1))
+                inputs["inputs_embeds"] = inputs_embeds
+            else:
+                inputs["inputs_embeds"] = wte(encoder_input_ids)
+                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
+
+            with torch.no_grad():
+                model(**inputs)[0]
+
+    def test_resize_embeddings_untied(self):
+        # NOTE: CharacterBERT does not have a wordpiece embedding matrix nor
+        # a wordpiece vocabulary. This means we cannot resize embeddings
+        # according to a new target vocabulary which may be larger.
+        return
+    
+    def test_resize_tokens_embeddings(self):
+        # NOTE: CharacterBERT does not have a wordpiece embedding matrix nor
+        # a wordpiece vocabulary. This means we cannot resize embeddings
+        # according to a new target vocabulary which may be larger.
+        return
+
+    def test_tie_model_weights(self):
+        # NOTE: CharacterBERT cannot tie it's input embeddings to its output
+        # layer for Masked Language Modeling as it does not have an input
+        # embedding matrix but relied on a CharacterCNN instead.
+        return
 
     def setUp(self):
         self.model_tester = CharacterBertModelTester(self)
