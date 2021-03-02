@@ -318,6 +318,7 @@ def init_deepspeed(trainer, num_training_steps):
     else:  # override only if the ds config doesn't already have this section
         config["gradient_clipping"] = args.max_grad_norm
 
+    optimizer = None
     if "optimizer" in config:
         logger.info(
             f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
@@ -327,7 +328,7 @@ def init_deepspeed(trainer, num_training_steps):
         # But trainer uses AdamW by default.
         # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
         trainer.create_optimizer()
-
+        optimizer = trainer.optimizer
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
@@ -337,12 +338,14 @@ def init_deepspeed(trainer, num_training_steps):
     # OneCycle     | na                   | na                                | 1CLR
     # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
+    lr_scheduler = None
     if "scheduler" in config:
         logger.info(
             f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
         trainer.create_scheduler(num_training_steps=num_training_steps)
+        lr_scheduler = trainer.lr_scheduler
 
     # fp16
     if trainer.fp16_backend is not None:
@@ -379,8 +382,8 @@ def init_deepspeed(trainer, num_training_steps):
         model=model,
         model_parameters=model_parameters,
         config_params=config,
-        optimizer=trainer.optimizer,
-        lr_scheduler=trainer.lr_scheduler,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
     )
 
     return model, optimizer, lr_scheduler

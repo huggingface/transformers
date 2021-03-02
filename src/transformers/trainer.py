@@ -667,6 +667,12 @@ class Trainer:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
     def create_scheduler(self, num_training_steps: int):
+        """
+        Setup the scheduler. The optmizer of the trainer must have been set up.
+
+        Args:
+            num_training_steps (int): The number of training steps to do.
+        """
         if self.lr_scheduler is None:
             warmup_steps = (
                 self.args.warmup_steps
