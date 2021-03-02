@@ -16,6 +16,7 @@
 
 
 import copy
+import inspect
 import tempfile
 import unittest
 
@@ -25,7 +26,7 @@ from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -45,17 +46,18 @@ if is_torch_available():
 
 def prepare_speech_to_text_transformer_inputs_dict(
     config,
-    input_ids,
+    input_features,
     decoder_input_ids,
     attention_mask=None,
     decoder_attention_mask=None,
 ):
     if attention_mask is None:
-        attention_mask = input_ids.ne(config.pad_token_id)
+        attention_mask = input_features.ne(0)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     return {
-        "input_ids": input_ids,
+        # "input_ids": input_features,
+        "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
         "decoder_attention_mask": attention_mask,
@@ -76,10 +78,17 @@ class Speech2TextTransformerModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=4,
-        hidden_act="gelu",
+        num_conv_layers=2,
+        conv_kernel_sizes=(5, 5),
+        conv_channels=32,
+        input_feat_per_channel=24,
+        input_channels=1,
+        hidden_act="relu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
+        max_source_positions=20,
+        max_target_positions=20,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -94,21 +103,27 @@ class Speech2TextTransformerModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.num_conv_layers = num_conv_layers
+        self.conv_kernel_sizes = conv_kernel_sizes
+        self.conv_channels = conv_channels
+        self.input_feat_per_channel = input_feat_per_channel
+        self.input_channels = input_channels
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.max_position_embeddings = max_position_embeddings
+        self.max_source_positions = max_source_positions
+        self.max_target_positions = max_target_positions
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
+        input_features = floats_tensor(
+            [self.batch_size, self.seq_length, self.input_feat_per_channel], self.vocab_size
         )
-        input_ids[:, -1] = self.eos_token_id  # Eos Token
-
+        attention_mask = ids_tensor([self.batch_size, self.seq_length], 2)
+        attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = Speech2TextConfig(
@@ -120,24 +135,46 @@ class Speech2TextTransformerModelTester:
             decoder_attention_heads=self.num_attention_heads,
             encoder_ffn_dim=self.intermediate_size,
             decoder_ffn_dim=self.intermediate_size,
+            num_conv_layers=self.num_conv_layers,
+            conv_kernel_sizes=self.conv_kernel_sizes,
+            conv_channels=self.conv_channels,
+            input_feat_per_channel=self.input_feat_per_channel,
+            input_channels=self.input_channels,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
             max_position_embeddings=self.max_position_embeddings,
+            max_source_positions=self.max_source_positions,
+            max_target_positions=self.max_target_positions,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_speech_to_text_transformer_inputs_dict(config, input_ids, decoder_input_ids)
+        inputs_dict = prepare_speech_to_text_transformer_inputs_dict(
+            config,
+            input_features=input_features,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+        )
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
+    def get_subsampled_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        for i in range(self.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
+
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = Speech2TextTransformerModel(config=config).get_decoder().to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = inputs_dict["attention_mask"]
+        input_ids = inputs_dict["decoder_input_ids"]
+        attention_mask = inputs_dict["decoder_attention_mask"]
 
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
@@ -179,9 +216,9 @@ class Speech2TextTransformerModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = Speech2TextTransformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        encoder_last_hidden_state_2 = encoder(
+            inputs_dict["input_features"], attention_mask=inputs_dict["attention_mask"]
+        )[0]
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
@@ -210,10 +247,14 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torchscript = False
+
+    input_name = "input_features"
 
     def setUp(self):
         self.model_tester = Speech2TextTransformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
+        self.maxDiff = 3000
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -237,43 +278,348 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
     def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in (Speech2TextTransformerModel, Speech2TextTransformerForConditionalGeneration):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = wte(input_ids)
-            else:
-                inputs["inputs_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
+        pass
 
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
+        input_ids = input_dict["input_features"]
+        attention_mask = input_dict["attention_mask"]
         model = Speech2TextTransformerForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
             model.half()
         model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(input_ids, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "input_features",
+                "attention_mask",
+                "decoder_input_ids",
+                "decoder_attention_mask",
+            ]
+            expected_arg_names.extend(
+                ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                if "head_mask" and "decoder_head_mask" in arg_names
+                else ["encoder_outputs"]
+            )
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+            subsampled_seq_length = model._get_subsampled_output_lengths(seq_length)
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [subsampled_seq_length, self.model_tester.hidden_size],
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            subsampled_encoder_seq_length = model._get_subsampled_output_lengths(encoder_seq_length)
+            subsampled_encoder_key_length = model._get_subsampled_output_lengths(encoder_key_length)
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+            )
+            out_len = len(outputs)
+
+            correct_outlen = 5
+
+            # loss is at first position
+            if "labels" in inputs_dict:
+                correct_outlen += 1  # loss is added to beginning
+            if "past_key_values" in outputs:
+                correct_outlen += 1  # past_key_values have been returned
+
+            self.assertEqual(out_len, correct_outlen)
+
+            # decoder attentions
+            decoder_attentions = outputs.decoder_attentions
+            self.assertIsInstance(decoder_attentions, (list, tuple))
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+            )
+
+            # cross attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertIsInstance(cross_attentions, (list, tuple))
+            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(cross_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
+            )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = 2
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
+            )
+
+    def test_resize_tokens_embeddings(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config)
+            model.to(torch_device)
+
+            if self.model_tester.is_training is False:
+                model.eval()
+
+            model_vocab_size = config.vocab_size
+            # Retrieve the embeddings and clone theme
+            model_embed = model.resize_token_embeddings(model_vocab_size)
+            cloned_embeddings = model_embed.weight.clone()
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model_embed = model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            self.assertEqual(model_embed.weight.shape[0], cloned_embeddings.shape[0] - 15)
+
+            # make sure that decoder_input_ids are resized
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that adding and removing tokens has not modified the first part of the embedding matrix.
+            models_equal = True
+            for p1, p2 in zip(cloned_embeddings, model_embed.weight):
+                if p1.data.ne(p2.data).sum() > 0:
+                    models_equal = False
+
+            self.assertTrue(models_equal)
+
+    def test_resize_embeddings_untied(self):
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        if not self.test_resize_embeddings:
+            return
+
+        original_config.tie_word_embeddings = False
+
+        # if model cannot untied embeddings -> leave test
+        if original_config.tie_word_embeddings:
+            return
+
+        for model_class in self.all_model_classes:
+            config = copy.deepcopy(original_config)
+            model = model_class(config).to(torch_device)
+
+            # if no output embeddings -> leave test
+            if model.get_output_embeddings() is None:
+                continue
+
+            # Check that resizing the token embeddings with a larger vocab size increases the model's vocab size
+            model_vocab_size = config.vocab_size
+            model.resize_token_embeddings(model_vocab_size + 10)
+            self.assertEqual(model.config.vocab_size, model_vocab_size + 10)
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size + 10)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size + 10)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+            # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
+            model.resize_token_embeddings(model_vocab_size - 15)
+            self.assertEqual(model.config.vocab_size, model_vocab_size - 15)
+            # Check that it actually resizes the embeddings matrix
+            output_embeds = model.get_output_embeddings()
+            self.assertEqual(output_embeds.weight.shape[0], model_vocab_size - 15)
+            # Check bias if present
+            if output_embeds.bias is not None:
+                self.assertEqual(output_embeds.bias.shape[0], model_vocab_size - 15)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
+            # Check that the model can still do a forward pass successfully (every parameter should be resized)
+            model(**self._prepare_for_class(inputs_dict, model_class))
+
+    def test_generate_without_input_ids(self):
+        pass
+
+    @staticmethod
+    def _get_encoder_outputs(
+        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
+    ):
+        encoder = model.get_encoder()
+        encoder_outputs = encoder(
+            input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+        encoder_outputs["last_hidden_state"] = encoder_outputs.last_hidden_state.repeat_interleave(
+            num_interleave, dim=0
+        )
+        input_ids = input_ids[:, :, 0]
+        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + model._get_decoder_start_token_id()
+        attention_mask = None
+        return encoder_outputs, input_ids, attention_mask
+
+    def _check_outputs(self, output, input_ids, config, use_cache=False, num_return_sequences=1):
+        batch_size, seq_length = input_ids.shape[:2]
+        subsampled_seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
+        num_sequences_in_output = batch_size * num_return_sequences
+        gen_len = (
+            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
+        )
+
+        # scores
+        self._check_scores(num_sequences_in_output, output.scores, length=gen_len, config=config)
+
+        # Attentions
+        # encoder
+        self._check_encoder_attention_for_generate(
+            output.encoder_attentions, batch_size, config, subsampled_seq_length
+        )
+        # decoder
+        self._check_attentions_for_generate(
+            num_sequences_in_output,
+            output.decoder_attentions,
+            min_length=1,
+            max_length=output.sequences.shape[-1],
+            config=config,
+            use_cache=use_cache,
+        )
+
+        # Hidden States
+        # encoder
+        self._check_encoder_hidden_states_for_generate(
+            output.encoder_hidden_states, batch_size, config, subsampled_seq_length
+        )
+
+        # decoder
+        self._check_hidden_states_for_generate(
+            num_sequences_in_output,
+            output.decoder_hidden_states,
+            min_length=1,
+            max_length=output.sequences.shape[-1],
+            config=config,
+            use_cache=use_cache,
+        )
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -289,7 +635,11 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
         if a.numel() > 100:
             msg = f"tensor values are {pct_different:.1%} percent different."
         else:
-            msg = f"{a} != {b}"
+            # msg = f"{a} != {b}"
+            print(a.shape)
+            print(b.shape)
+            msg = "not qual"
+            print("not equal")
         if prefix:
             msg = prefix + ": " + msg
         raise AssertionError(msg)
