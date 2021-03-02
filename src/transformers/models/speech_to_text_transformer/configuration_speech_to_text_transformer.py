@@ -125,7 +125,7 @@ class Speech2TextConfig(PretrainedConfig):
         max_source_positions=6000,
         max_target_positions=1024,
         num_conv_layers=2,
-        conv_kernel_sizes=(5, 5),
+        conv_kernel_sizes=[5, 5],
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
