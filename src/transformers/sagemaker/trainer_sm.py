@@ -73,8 +73,6 @@ class SageMakerTrainer(Trainer):
     def __init__(self, args=None, **kwargs):
         self.is_model_parallel_enabled = is_smdistributed_available() and args.mp_parameters != ""
         super().__init__(args=args, **kwargs)
-        if self.is_model_parallel_enabled and self.args.gradient_accumulation_steps != 1:
-            raise ValueError("Gradient accumulation is not supported when model parallel is enabled.")
 
     def is_world_process_zero(self) -> bool:
         """
@@ -108,7 +106,7 @@ class SageMakerTrainer(Trainer):
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
                 return self.model_wrapped
-            return smp.DistributedModel(model)
+            return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
         else:
             return super()._wrap_model(model)
 
