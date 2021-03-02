@@ -49,8 +49,6 @@ from ...modeling_utils import (
     PreTrainedModel,
     SequenceSummary,
     apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
 )
 from ...utils import logging
 from .configuration_big_bird import BigBirdConfig
@@ -1123,28 +1121,10 @@ class BigBirdAttention(nn.Module):
         elif config.attention_type == "block_sparse":
             self.self = BigBirdBlockSparseAttention(config, seed)
         else:
-            raise ValueError(f"attention_type can either be original_full or block_sparse")
+            raise ValueError("attention_type can either be original_full or block_sparse")
 
         self.output = BigBirdSelfOutput(config)
         self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
         self,
@@ -1611,6 +1591,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+
 # Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput
 @dataclass
 class BigBirdForPreTrainingOutput(ModelOutput):
@@ -1695,14 +1676,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
