@@ -104,7 +104,7 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get install libsndfile libsndfile-dev
+            - run: sudo apt-get install libsndfile1 libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,speech]
             - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
