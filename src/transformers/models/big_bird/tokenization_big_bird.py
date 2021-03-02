@@ -27,10 +27,10 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "gpt2.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/bigbird-base": "https://huggingface.co/google/bigbird-base/resolve/main/gpt2.model"}
+    "vocab_file": {"google/bigbird-base": "https://huggingface.co/google/bigbird-base/resolve/main/spiece.model"}
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -73,20 +73,29 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         bos_token="</s>",
         eos_token="<s>",
         pad_token="<pad>",
-        sep_token="<::::>",  # TODO: confirm this
+        sep_token="[SEP]",
+        mask_token="[MASK]",
+        cls_token="[CLS]",
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
             pad_token=pad_token,
             sep_token=sep_token,
+            mask_token=mask_token,
+            cls_token=cls_token,
             **kwargs,
         )
 
@@ -148,6 +157,31 @@ class BigBirdTokenizer(PreTrainedTokenizer):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
+
+    def build_inputs_with_special_tokens(
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+    ) -> List[int]:
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A Big Bird sequence has the following format:
+
+        - single sequence: ``[CLS] X [SEP]``
+        - pair of sequences: ``[CLS] A [SEP] B [SEP]``
+
+        Args:
+            token_ids_0 (:obj:`List[int]`):
+                List of IDs to which the special tokens will be added.
+            token_ids_1 (:obj:`List[int]`, `optional`):
+                Optional second list of IDs for sequence pairs.
+
+        Returns:
+            :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
+        """
+        if token_ids_1 is None:
+            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
+        cls = [self.cls_token_id]
+        sep = [self.sep_token_id]
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     # TODO: next 4 methods not there in bertgeneration
     # def build_inputs_with_special_tokens(

@@ -99,6 +99,7 @@ from .configuration_auto import (
     XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
+    BigBirdConfig,
     replace_list_option_in_docstrings,
 )
 
@@ -107,6 +108,7 @@ if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
     from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
+    from ..big_bird.tokenization_big_bird import BigBirdTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
@@ -121,6 +123,7 @@ else:
     AlbertTokenizer = None
     BarthezTokenizer = None
     BertGenerationTokenizer = None
+    BigBirdTokenizer = None
     CamembertTokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
@@ -241,6 +244,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
+        (BigBirdConfig, (BigBirdTokenizer, None)),
     ]
 )
 

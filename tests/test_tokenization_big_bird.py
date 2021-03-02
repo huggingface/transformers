@@ -209,3 +209,26 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         with torch.no_grad():
             model(**encoded_sequence)
             model(**batch_encoded_sequence)
+
+    @slow
+    def test_special_tokens(self):
+        """
+        To reproduce:
+
+        $ wget https://github.com/google-research/bigbird/blob/master/bigbird/vocab/gpt2.model?raw=true
+        $ mv gpt2.model?raw=true gpt2.model
+
+        ```
+        import tensorflow_text as tft
+        import tensorflow as tf
+
+        vocab_model_file = "./gpt2.model"
+        tokenizer = tft.SentencepieceTokenizer(model=tf.io.gfile.GFile(vocab_model_file, "rb").read()))
+        ids = tokenizer.tokenize("Paris is the [MASK].")
+        ids = tf.concat([tf.constant([65]), ids, tf.constant([66])], axis=0)
+        detokenized = tokenizer.detokenize(ids)  # should give [CLS] Paris is the [MASK].[SEP]
+        """
+        tokenizer = BigBirdTokenizer.from_pretrained("vasudevgupta/bigbird-roberta-base")
+        decoded_text = tokenizer.decode(tokenizer("Paris is the [MASK].").input_ids)
+
+        self.assertTrue(decoded_text == "[CLS] Paris is the [MASK].[SEP]")

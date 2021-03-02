@@ -17,7 +17,7 @@
 
 import argparse
 
-from transformers import BigBirdConfig, BigBirdForMaskedLM, load_tf_weights_in_big_bird
+from transformers import BigBirdConfig, BigBirdForPreTraining, BigBirdModel, load_tf_weights_in_big_bird
 from transformers.utils import logging
 
 
@@ -28,7 +28,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, p
     # Initialise PyTorch model
     config = BigBirdConfig.from_json_file(big_bird_config_file)
     print("Building PyTorch model from configuration: {}".format(str(config)))
-    model = BigBirdForMaskedLM(config)
+    model = BigBirdForPreTraining(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_big_bird(model, tf_checkpoint_path)

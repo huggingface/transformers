@@ -50,10 +50,13 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
     def __init__(
         self,
         vocab_file,
-        merges_file,
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
+        unk_token="<unk>",
+        bos_token="</s>",
+        eos_token="<s>",
+        pad_token="<pad>",
+        sep_token="[SEP]",
+        mask_token="[MASK]",
+        cls_token="[CLS]",
         add_prefix_space=False,
         trim_offsets=True,
         **kwargs
@@ -61,7 +64,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         super().__init__(
             ByteLevelBPETokenizer(
                 vocab_file=vocab_file,
-                merges_file=merges_file,
                 add_prefix_space=add_prefix_space,
                 trim_offsets=trim_offsets,
             ),

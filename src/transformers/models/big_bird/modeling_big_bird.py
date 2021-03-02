@@ -80,6 +80,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
 
@@ -139,7 +140,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
                     pointer = getattr(pointer, scope_names[0])
                     pt_name.append(f"{scope_names[0]}")
                 except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
+                    logger.info("Skipping {}".format(m_name))
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
