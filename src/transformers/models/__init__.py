@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    big_bird,
     albert,
     auto,
     bart,
@@ -26,6 +25,7 @@ from . import (
     bert_generation,
     bert_japanese,
     bertweet,
+    big_bird,
     blenderbot,
     blenderbot_small,
     camembert,

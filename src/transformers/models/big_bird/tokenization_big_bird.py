@@ -29,11 +29,14 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "gpt2.model"}
 
-PRETRAINED_VOCAB_FILES_MAP = {"vocab_file": {"google/bigbird-base": "https://huggingface.co/google/bigbird-base/resolve/main/gpt2.model"}}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"google/bigbird-base": "https://huggingface.co/google/bigbird-base/resolve/main/gpt2.model"}
+}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/bigbird-base": 4096,
 }
+
 
 class BigBirdTokenizer(PreTrainedTokenizer):
     """
@@ -64,14 +67,14 @@ class BigBirdTokenizer(PreTrainedTokenizer):
     prefix_tokens: List[int] = []
 
     def __init__(
-            self,
-            vocab_file,
-            unk_token="<unk>",
-            bos_token="</s>",
-            eos_token="<s>",
-            pad_token="<pad>",
-            sep_token="<::::>", # TODO: confirm this
-            **kwargs
+        self,
+        vocab_file,
+        unk_token="<unk>",
+        bos_token="</s>",
+        eos_token="<s>",
+        pad_token="<pad>",
+        sep_token="<::::>",  # TODO: confirm this
+        **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -79,12 +82,13 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
         super().__init__(
-            bos_token=bos_token, 
-            eos_token=eos_token, 
-            unk_token=unk_token, 
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
             pad_token=pad_token,
             sep_token=sep_token,
-            **kwargs)
+            **kwargs,
+        )
 
         self.vocab_file = vocab_file
 
@@ -150,22 +154,17 @@ class BigBirdTokenizer(PreTrainedTokenizer):
     #         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     # ) -> List[int]:
     #     """
-    #     Build model inputs from a sequence or a pair of sequence for sequence classification tasks
-    #     by concatenating and adding special tokens.
-    #     A BigBird sequence has the following format:
+    # Build model inputs from a sequence or a pair of sequence for sequence classification tasks # by concatenating and
+    adding special tokens. # A BigBird sequence has the following format:
 
-    #     - single sequence: ``<s> X </s>``
-    #     - pair of sequences: ``<s> A </s></s> B </s>``
+    # - single sequence: ``<s> X </s>`` # - pair of sequences: ``<s> A </s></s> B </s>``
 
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs to which the special tokens will be added.
-    #         token_ids_1 (:obj:`List[int]`, `optional`):
-    #             Optional second list of IDs for sequence pairs.
+    # Args: # token_ids_0 (:obj:`List[int]`): # List of IDs to which the special tokens will be added. # token_ids_1
+    (:obj:`List[int]`, `optional`): # Optional second list of IDs for sequence pairs.
 
-    #     Returns:
-    #         :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special tokens.
-    #     """
+    # Returns: # :obj:`List[int]`: List of `input IDs <../glossary.html#input-ids>`__ with the appropriate special
+    tokens. #
+    """
     #     if token_ids_1 is None:
     #         return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
     #     cls = [self.cls_token_id]
@@ -176,20 +175,16 @@ class BigBirdTokenizer(PreTrainedTokenizer):
     #         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     # ) -> List[int]:
     #     """
-    #     Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-    #     special tokens using the tokenizer ``prepare_for_model`` method.
+    # Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding #
+    special tokens using the tokenizer ``prepare_for_model`` method.
 
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs.
-    #         token_ids_1 (:obj:`List[int]`, `optional`):
-    #             Optional second list of IDs for sequence pairs.
-    #         already_has_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
-    #             Whether or not the token list is already formatted with special tokens for the model.
+    # Args: # token_ids_0 (:obj:`List[int]`): # List of IDs. # token_ids_1 (:obj:`List[int]`, `optional`): # Optional
+    second list of IDs for sequence pairs. # already_has_special_tokens (:obj:`bool`, `optional`, defaults to
+    :obj:`False`): # Whether or not the token list is already formatted with special tokens for the model.
 
-    #     Returns:
-    #         :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-    #     """
+    # Returns: # :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence
+    token. #
+    """
     #     if already_has_special_tokens:
     #         if token_ids_1 is not None:
     #             raise ValueError(
@@ -206,18 +201,14 @@ class BigBirdTokenizer(PreTrainedTokenizer):
     #         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     # ) -> List[int]:
     #     """
-    #     Create a mask from the two sequences passed to be used in a sequence-pair classification task.
-    #     BigBird does not make use of token type ids, therefore a list of zeros is returned.
+    # Create a mask from the two sequences passed to be used in a sequence-pair classification task. # BigBird does not
+    make use of token type ids, therefore a list of zeros is returned.
 
-    #     Args:
-    #         token_ids_0 (:obj:`List[int]`):
-    #             List of IDs.
-    #         token_ids_1 (:obj:`List[int]`, `optional`):
-    #             Optional second list of IDs for sequence pairs.
+    # Args: # token_ids_0 (:obj:`List[int]`): # List of IDs. # token_ids_1 (:obj:`List[int]`, `optional`): # Optional
+    second list of IDs for sequence pairs.
 
-    #     Returns:
-    #         :obj:`List[int]`:  List of zeros.
-    #     """
+    # Returns: # :obj:`List[int]`: List of zeros. #
+    """
     #     sep = [self.sep_token_id]
     #     cls = [self.cls_token_id]
 

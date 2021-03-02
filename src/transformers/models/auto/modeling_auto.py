@@ -21,18 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-from ..big_bird.modeling_big_bird import (
-    BigBirdForMaskedLM,
-    BigBirdForCausalLM,
-    BigBirdForMultipleChoice,
-    BigBirdForQuestionAnswering,
-    BigBirdForSequenceClassification,
-    BigBirdForTokenClassification,
-    BigBirdModel,
-    BigBirdForPreTraining,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -61,6 +49,19 @@ from ..bert.modeling_bert import (
     BertModel,
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
+
+# Add modeling imports here
+# Add modeling imports here
+from ..big_bird.modeling_big_bird import (
+    BigBirdForCausalLM,
+    BigBirdForMaskedLM,
+    BigBirdForMultipleChoice,
+    BigBirdForPreTraining,
+    BigBirdForQuestionAnswering,
+    BigBirdForSequenceClassification,
+    BigBirdForTokenClassification,
+    BigBirdModel,
+)
 from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
 from ..blenderbot_small.modeling_blenderbot_small import (
     BlenderbotSmallForCausalLM,
@@ -75,18 +76,6 @@ from ..camembert.modeling_camembert import (
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
-)
-
-# Add modeling imports here
-from ..big_bird.modeling_big_bird import (
-    BigBirdForMaskedLM,
-    BigBirdForCausalLM,
-    BigBirdForMultipleChoice,
-    BigBirdForQuestionAnswering,
-    BigBirdForSequenceClassification,
-    BigBirdForTokenClassification,
-    BigBirdModel,
-    BigBirdForPreTraining,
 )
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
@@ -263,12 +252,12 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
-    BigBirdConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BigBirdConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -399,7 +388,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(BigBirdConfig, BigBirdForMaskedLM),
+        (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
@@ -468,7 +457,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(BigBirdConfig, BigBirdForMaskedLM),
+        (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -586,7 +575,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(BigBirdConfig, BigBirdForTokenClassification),
+        (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
@@ -612,7 +601,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(BigBirdConfig, BigBirdForMultipleChoice),
+        (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),

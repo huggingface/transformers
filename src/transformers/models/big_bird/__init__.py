@@ -16,7 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _BaseLazyModule, is_torch_available, is_tokenizers_available
+
+from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
     "configuration_big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig"],
     "tokenization_big_bird": ["BigBirdTokenizer"],
@@ -42,8 +45,6 @@ if is_torch_available():
     ]
 
 
-
-
 if TYPE_CHECKING:
     from .configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
     from .tokenization_big_bird import BigBirdTokenizer
@@ -54,15 +55,15 @@ if TYPE_CHECKING:
     if is_torch_available():
         from .modeling_big_bird import (
             BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigBirdForMaskedLM,
             BigBirdForCausalLM,
+            BigBirdForMaskedLM,
             BigBirdForMultipleChoice,
+            BigBirdForPreTraining,
             BigBirdForQuestionAnswering,
             BigBirdForSequenceClassification,
             BigBirdForTokenClassification,
             BigBirdLayer,
             BigBirdModel,
-            BigBirdForPreTraining,
             BigBirdPreTrainedModel,
             load_tf_weights_in_big_bird,
         )

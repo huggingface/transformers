@@ -28,23 +28,21 @@ BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BigBirdConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BigBirdModel`.
-    It is used to instantiate an BigBird model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BigBird `google/bigbird-base <https://huggingface.co/google/bigbird-base>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BigBirdModel`. It is used to
+    instantiate an BigBird model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the BigBird `google/bigbird-base
+    <https://huggingface.co/google/bigbird-base>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
             Vocabulary size of the BigBird model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdModel` or
-            :class:`~transformers.TFBigBirdModel`.
-            Vocabulary size of the  model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BigBirdModel`.
+            :class:`~transformers.TFBigBirdModel`. Vocabulary size of the model. Defines the different tokens that can
+            be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BigBirdModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -54,15 +52,15 @@ class BigBirdConfig(PretrainedConfig):
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler.
-            If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string,
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
         max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
-            The maximum sequence length that this model might ever be used with.
-            Typically set this to something large just in case (e.g., 512 or 1024 or 2048).
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.BigBirdModel` or
             :class:`~transformers.TFBigBirdModel`.
@@ -74,8 +72,8 @@ class BigBirdConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`block_sparse`)
-            Whether to set attention to block sparse attention (with n time) as introduced in paper or original attention layer (with n^2 time). 
-            Possible values are `original_full` & `block_sparse`.
+            Whether to set attention to block sparse attention (with n time) as introduced in paper or original
+            attention layer (with n^2 time). Possible values are `original_full` & `block_sparse`.
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to use bias in query, key, value
         rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)
@@ -83,9 +81,11 @@ class BigBirdConfig(PretrainedConfig):
         block_size (:obj:`int`, `optional`, defaults to :obj:`64`)
             Size of each block. Useful only when `attention_type` is `block_sparse`
         num_random_blocks (:obj:`int`, `optional`, defaults to :obj:`3`)
-            Each query is going to attend these many number of random blocks. Useful only when `attention_type` is `block_sparse`
+            Each query is going to attend these many number of random blocks. Useful only when `attention_type` is
+            `block_sparse`
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+
         Example::
 
         >>> from transformers import BigBirdModel, BigBirdConfig
@@ -100,6 +100,7 @@ class BigBirdConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "big_bird"
+
     def __init__(
         self,
         vocab_size=50358,
@@ -122,18 +123,13 @@ class BigBirdConfig(PretrainedConfig):
         attention_type="block_sparse",
         use_bias=True,
         rescale_embeddings=False,
-        norm_type="postnorm", # "prenorm"
+        norm_type="postnorm",  # "prenorm"
         block_size=64,
         num_random_blocks=3,
         position_embedding_type="absolute",
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

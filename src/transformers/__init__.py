@@ -1275,7 +1275,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1295,6 +1294,7 @@ if TYPE_CHECKING:
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
+    from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1423,11 +1423,11 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.big_bird import BigBirdTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
+        from .models.big_bird import BigBirdTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
@@ -1462,21 +1462,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.big_bird import (
-            BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigBirdForMaskedLM,
-            BigBirdForCausalLM,
-            BigBirdForMultipleChoice,
-            BigBirdForQuestionAnswering,
-            BigBirdForSequenceClassification,
-            BigBirdForTokenClassification,
-            BigBirdLayer,
-            BigBirdModel,
-            BigBirdForPreTraining,
-            BigBirdPreTrainedModel,
-            load_tf_weights_in_big_bird,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1587,6 +1572,20 @@ if TYPE_CHECKING:
             BertGenerationDecoder,
             BertGenerationEncoder,
             load_tf_weights_in_bert_generation,
+        )
+        from .models.big_bird import (
+            BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BigBirdForCausalLM,
+            BigBirdForMaskedLM,
+            BigBirdForMultipleChoice,
+            BigBirdForPreTraining,
+            BigBirdForQuestionAnswering,
+            BigBirdForSequenceClassification,
+            BigBirdForTokenClassification,
+            BigBirdLayer,
+            BigBirdModel,
+            BigBirdPreTrainedModel,
+            load_tf_weights_in_big_bird,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,

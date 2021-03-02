@@ -17,24 +17,23 @@
 
 import math
 import os
-
-import numpy as np
-import torch
-import torch.utils.checkpoint
-from torch import nn
-import torch.nn.functional as F
-from torch.nn import CrossEntropyLoss, MSELoss
-
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
+import numpy as np
+import torch
+import torch.nn.functional as F
+import torch.utils.checkpoint
+from torch import nn
+from torch.nn import CrossEntropyLoss, MSELoss
+
 from ...activations import ACT2FN
 from ...file_utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
-    ModelOutput
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -160,7 +159,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        pt_weight_name = '.'.join(pt_name)
+        pt_weight_name = ".".join(pt_name)
         logger.info("Initialize PyTorch weight {} from {}".format(pt_weight_name, txt_name))
         pointer.data = torch.from_numpy(array)
         tf_weights.pop(txt_name, None)
@@ -243,7 +242,9 @@ class BigBirdSelfAttention(nn.Module):
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size) # TODO: check it 
+            self.distance_embedding = nn.Embedding(
+                2 * config.max_position_embeddings - 1, self.attention_head_size
+            )  # TODO: check it
 
         self.is_decoder = config.is_decoder
 
@@ -265,7 +266,7 @@ class BigBirdSelfAttention(nn.Module):
         from_mask=None,
         to_mask=None,
         from_blocked_mask=None,
-        to_blocked_mask=None
+        to_blocked_mask=None,
     ):
         # no use of band_mask, from_mask, to_mask, from_block_mask, to_block_mask
 
@@ -295,7 +296,7 @@ class BigBirdSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-        
+
         # TODO
         # print("query", query_layer.shape, end="\n\n")
         # print("key:", key_layer.shape, end="\n\n")
@@ -303,7 +304,7 @@ class BigBirdSelfAttention(nn.Module):
         self.q = query_layer
         self.k = key_layer
         self.v = value_layer
-        # 
+        #
 
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -342,7 +343,7 @@ class BigBirdSelfAttention(nn.Module):
         # TODO:
         # print("attn_scores", attention_scores.shape)
         self.attn_sc = attention_scores
-        # 
+        #
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -353,7 +354,7 @@ class BigBirdSelfAttention(nn.Module):
 
         # TODO:
         self.attn_p = attention_probs
-        # 
+        #
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -364,10 +365,10 @@ class BigBirdSelfAttention(nn.Module):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
-        # TODO 
+        # TODO
         # print(context_layer.shape)
         # self.attn_o = context_layer.view(2,128,12,64)
-        # 
+        #
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
         if self.is_decoder:
@@ -420,11 +421,11 @@ class BigBirdBlockSparseAttention(nn.Module):
         from_mask=None,
         to_mask=None,
         from_blocked_mask=None,
-        to_blocked_mask=None
-        ):
+        to_blocked_mask=None,
+    ):
         """
-            Useless arguments are `attention_mask`, `head_mask`, `encoder_hidden_states`, `encoder_attention_mask`, `past_key_value`
-            Currently this `class` can't be used in decoder.
+        Useless arguments are `attention_mask`, `head_mask`, `encoder_hidden_states`, `encoder_attention_mask`,
+        `past_key_value` Currently this `class` can't be used in decoder.
         """
 
         # TODO: remove this
@@ -434,7 +435,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         self.tm = to_mask
         self.fbm = from_blocked_mask
         self.tbm = to_blocked_mask
-        # 
+        #
 
         batch_size, seqlen, _ = hidden_states.size()
         to_seq_length = from_seq_length = seqlen
@@ -448,13 +449,27 @@ class BigBirdBlockSparseAttention(nn.Module):
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         context_layer, attention_probs = self.bigbird_block_sparse_attention(
-                                                query_layer, key_layer, value_layer, band_mask,
-                                                from_mask, to_mask, from_blocked_mask, to_blocked_mask,
-                                                self.num_attention_heads, self.num_random_blocks, self.attention_head_size,
-                                                from_block_size, to_block_size, batch_size, from_seq_length,
-                                                to_seq_length, seed=self.seed, plan_from_length=None,
-                                                plan_num_rand_blocks=None, output_attentions=output_attentions
-                                                )
+            query_layer,
+            key_layer,
+            value_layer,
+            band_mask,
+            from_mask,
+            to_mask,
+            from_blocked_mask,
+            to_blocked_mask,
+            self.num_attention_heads,
+            self.num_random_blocks,
+            self.attention_head_size,
+            from_block_size,
+            to_block_size,
+            batch_size,
+            from_seq_length,
+            to_seq_length,
+            seed=self.seed,
+            plan_from_length=None,
+            plan_num_rand_blocks=None,
+            output_attentions=output_attentions,
+        )
 
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
 
@@ -483,20 +498,16 @@ class BigBirdBlockSparseAttention(nn.Module):
         plan_from_length=None,
         plan_num_rand_blocks=None,
         output_attentions=None,
-        ):
-        """BigBird Block sparse attention as suggested in paper
-
-        ITC:
-            global tokens : 2 x block_size
-            window tokens : 3 x block_size
-            random tokens : num_rand_tokens x block_size
-
-        ETC:
-            global tokens : extra_globals_tokens + 2 x block_size
-            window tokens : 3 x block_size
-            random tokens : num_rand_tokens x block_size
+    ):
         """
-        assert from_seq_length//from_block_size == to_seq_length//to_block_size
+        BigBird Block sparse attention as suggested in paper
+
+        ITC: global tokens : 2 x block_size window tokens : 3 x block_size random tokens : num_rand_tokens x block_size
+
+        ETC: global tokens : extra_globals_tokens + 2 x block_size window tokens : 3 x block_size random tokens :
+        num_rand_tokens x block_size
+        """
+        assert from_seq_length // from_block_size == to_seq_length // to_block_size
 
         # Define shorthands
         h = num_attention_heads
@@ -520,16 +531,14 @@ class BigBirdBlockSparseAttention(nn.Module):
         np.random.seed(seed)
         if from_seq_length in [1024, 3072, 4096]:  # old plans used in paper
             rand_attn = [
-                self._bigbird_block_rand_mask(
-                    self.max_seqlen, self.max_seqlen,
-                    wm, wn, r,
-                    last_idx=1024)[:(from_seq_length // wm - 2)]
+                self._bigbird_block_rand_mask(self.max_seqlen, self.max_seqlen, wm, wn, r, last_idx=1024)[
+                    : (from_seq_length // wm - 2)
+                ]
                 for _ in range(h)
             ]
         else:
             if plan_from_length is None:
-                plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(
-                    from_seq_length, wm, r)
+                plan_from_length, plan_num_rand_blocks = self._get_rand_attn_plan(from_seq_length, wm, r)
 
             rand_attn = self._bigbird_block_rand_mask_with_head(
                 from_seq_length=from_seq_length,
@@ -538,7 +547,8 @@ class BigBirdBlockSparseAttention(nn.Module):
                 to_block_size=wn,
                 num_heads=h,
                 plan_from_length=plan_from_length,
-                plan_num_rand_blocks=plan_num_rand_blocks)
+                plan_num_rand_blocks=plan_num_rand_blocks,
+            )
 
         rand_attn = np.stack(rand_attn, axis=0)
         rand_attn = torch.tensor(rand_attn, device=device).long()
@@ -546,13 +556,11 @@ class BigBirdBlockSparseAttention(nn.Module):
         rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
         # -> (b, h, n/wn-2, r)
 
-        self.ran = rand_attn # TODO: remove this
+        self.ran = rand_attn  # TODO: remove this
 
-        rand_mask = self._create_rand_mask_from_inputs(
-            from_blocked_mask, to_blocked_mask, rand_attn, h, r, b, m, wm
-            )
+        rand_mask = self._create_rand_mask_from_inputs(from_blocked_mask, to_blocked_mask, rand_attn, h, r, b, m, wm)
 
-        self.rand_mask = rand_mask # TODO: remove this
+        self.rand_mask = rand_mask  # TODO: remove this
 
         blocked_query_matrix = query_layer.view(b, h, m // wm, wm, -1)
         blocked_key_matrix = key_layer.view(b, h, n // wn, wn, -1)
@@ -564,67 +572,88 @@ class BigBirdBlockSparseAttention(nn.Module):
         gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
         gathered_value = gathered_value.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
 
-        self.gk = gathered_key # TODO: remove this
+        self.gk = gathered_key  # TODO: remove this
 
         """
-            1st block is global
-            q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
+            1st block is global q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
         """
         first_product = torch.einsum(
-            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 0],
-            key_layer)  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
-        first_product = first_product*(1.0 / math.sqrt(d))
+            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 0], key_layer
+        )  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
+        first_product = first_product * (1.0 / math.sqrt(d))
         first_product += (1.0 - to_mask) * -10000.0
         first_attn_weights = F.softmax(first_product, dim=-1)  # [b, h, wm, n]
         first_context_layer = torch.einsum(
-            "bhqk,bhkd->bhqd", first_attn_weights,
-            value_layer)  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
+            "bhqk,bhkd->bhqd", first_attn_weights, value_layer
+        )  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
         first_context_layer.unsqueeze_(2)
 
-        self.fcl = first_context_layer # TODO: remove this
+        self.fcl = first_context_layer  # TODO: remove this
 
         """
             q[1] x (sliding_keys, random_keys, global_keys)
         """
 
-        second_key_mat = torch.cat([
-            blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, 1],
-            blocked_key_matrix[:, :, 2], blocked_key_matrix[:, :, -1],
-            gathered_key[:, :, 0]], dim=2)  # [b, h, (4+r)*wn, -1]
-        second_value_mat = torch.cat([
-            blocked_value_matrix[:, :, 0], blocked_value_matrix[:, :, 1],
-            blocked_value_matrix[:, :, 2], blocked_value_matrix[:, :, -1],
-            gathered_value[:, :, 0]], dim=2)  # [b, h, (4+r)*wn, -1]
+        second_key_mat = torch.cat(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, 1],
+                blocked_key_matrix[:, :, 2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, 0],
+            ],
+            dim=2,
+        )  # [b, h, (4+r)*wn, -1]
+        second_value_mat = torch.cat(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, 1],
+                blocked_value_matrix[:, :, 2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, 0],
+            ],
+            dim=2,
+        )  # [b, h, (4+r)*wn, -1]
         second_product = torch.einsum(
             "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, 1], second_key_mat
         )  # [b, h, wm, -1] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, (4+r)*wn]
-        second_seq_pad = torch.cat([
-            to_mask[:, :, :, :3 * wn], to_mask[:, :, :, -wn:],
-            torch.ones(b, 1, 1, r * wn).float()], dim=3)
+        second_seq_pad = torch.cat(
+            [
+                to_mask[:, :, :, : 3 * wn],
+                to_mask[:, :, :, -wn:],
+                torch.ones(b, 1, 1, r * wn, device=first_context_layer.device, dtype=first_context_layer.dtype),
+            ],
+            dim=3,
+        )
         second_rand_pad = torch.cat(
-            [torch.ones(b, h, wm, 4 * wn).float(), rand_mask[:, :, 0]], dim=3)
-        second_product = second_product*(1.0 / math.sqrt(d))
-        second_product += (1.0 -
-                            torch.minimum(second_seq_pad, second_rand_pad)) * -10000.0
+            [
+                torch.ones(b, h, wm, 4 * wn, device=first_context_layer.device, dtype=first_context_layer.dtype),
+                rand_mask[:, :, 0],
+            ],
+            dim=3,
+        )
+        second_product = second_product * (1.0 / math.sqrt(d))
+        second_product += (1.0 - torch.minimum(second_seq_pad, second_rand_pad)) * -10000.0
         second_attn_weights = F.softmax(second_product, dim=-1)  # [b , h, wm, (4+r)*wn]
         second_context_layer = torch.einsum(
             "bhqk,bhkd->bhqd", second_attn_weights, second_value_mat
         )  # [b, h, wm, (4+r)*wn] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, -1]
         second_context_layer.unsqueeze_(2)
 
-        self.scl = second_context_layer # TODO: remove this
+        self.scl = second_context_layer  # TODO: remove this
 
         """
             q[-2:2] x (sliding_keys, random_keys, global_keys)
         """
 
         # initialize q,k,v->q,k,v[-2:2]
-        exp_blocked_key_matrix = torch.cat([
-            blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2],
-            blocked_key_matrix[:, :, 3:-1]], dim=3)  # [b, h, m//wm-4, 3*wn, -1]
-        exp_blocked_value_matrix = torch.cat([
-            blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2],
-            blocked_value_matrix[:, :, 3:-1]], dim=3)  # [b, h, m//wm-4, 3*wn, -1]
+        exp_blocked_key_matrix = torch.cat(
+            [blocked_key_matrix[:, :, 1:-3], blocked_key_matrix[:, :, 2:-2], blocked_key_matrix[:, :, 3:-1]], dim=3
+        )  # [b, h, m//wm-4, 3*wn, -1]
+        exp_blocked_value_matrix = torch.cat(
+            [blocked_value_matrix[:, :, 1:-3], blocked_value_matrix[:, :, 2:-2], blocked_value_matrix[:, :, 3:-1]],
+            dim=3,
+        )  # [b, h, m//wm-4, 3*wn, -1]
         middle_query_matrix = blocked_query_matrix[:, :, 2:-2]
 
         # sliding attention scores for q[-2:2]
@@ -632,123 +661,136 @@ class BigBirdBlockSparseAttention(nn.Module):
             "bhlqd,bhlkd->bhlqk", middle_query_matrix, exp_blocked_key_matrix
         )  # [b, h, m//wm-4, wm, -1] x [b, h, m//wm-4, 3*wn, -1]
         #     ==> [b, h, m//wm-4, wm, 3*wn]
-        inner_band_product = inner_band_product*(1.0 / math.sqrt(d))
+        inner_band_product = inner_band_product * (1.0 / math.sqrt(d))
 
         # randn attention scores for q[-2:2]
         rand_band_product = torch.einsum(
             "bhlqd,bhlkd->bhlqk", middle_query_matrix, gathered_key[:, :, 1:-1]
         )  # [b, h, m//wm-4, wm, -1] x [b, h, m//wm-4, r*wn, -1]
         #     ==> [b, h, m//wm-4, wm, r*wn]
-        rand_band_product = rand_band_product*(1.0 / math.sqrt(d))
+        rand_band_product = rand_band_product * (1.0 / math.sqrt(d))
 
         # 1st block is global
         first_band_product = torch.einsum(
             "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, 0]
         )  # [b, h, m//wm-4, wm, -1] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, wn]
-        first_band_product = first_band_product*(1.0 / math.sqrt(d))
+        first_band_product = first_band_product * (1.0 / math.sqrt(d))
 
         # last block is global
         last_band_product = torch.einsum(
             "bhlqd,bhkd->bhlqk", middle_query_matrix, blocked_key_matrix[:, :, -1]
         )  # [b, h, m//wm-4, wm, -1] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, wn]
-        last_band_product = last_band_product*(1.0 / math.sqrt(d))
+        last_band_product = last_band_product * (1.0 / math.sqrt(d))
 
         # masking padded tokens
         inner_band_product += (1.0 - band_mask) * -10000.0
-        first_band_product += (
-            1.0 - to_mask[:, :, :, :wn].unsqueeze(3)) * -10000.0
-        last_band_product += (
-            1.0 - to_mask[:, :, :, -wn:].unsqueeze(3)) * -10000.0
+        first_band_product += (1.0 - to_mask[:, :, :, :wn].unsqueeze(3)) * -10000.0
+        last_band_product += (1.0 - to_mask[:, :, :, -wn:].unsqueeze(3)) * -10000.0
         rand_band_product += (1.0 - rand_mask[:, :, 1:-1]) * -10000.0
-        
+
         # completing attention scores matrix for all q[-2:2]
-        band_product = torch.cat([
-            first_band_product, inner_band_product, rand_band_product,
-            last_band_product], dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
+        band_product = torch.cat(
+            [first_band_product, inner_band_product, rand_band_product, last_band_product], dim=-1
+        )  # [b, h, m//wm-4, wm, (5+r)*wn]
 
         # safely doing softmax since attention matrix is completed
         attn_weights = F.softmax(band_product, dim=-1)  # [b, h, m//wm-4, wm, (5+r)*wn]
 
         # contibution of sliding keys
         context_layer = torch.einsum(
-            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, wn: 4*wn],
-            exp_blocked_value_matrix
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, wn : 4 * wn], exp_blocked_value_matrix
         )  # [b, h, m//wm-4, wm, 3*wn] x [b, h, m//wm-4, 3*wn, -1]
         #     ==> [b, h, m//wm-4, wm, -1]
-    
+
         # adding contribution of random keys
         context_layer += torch.einsum(
-            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, 4*wn:-wn],
-            gathered_value[:, :, 1:-1]
+            "bhlqk,bhlkd->bhlqd", attn_weights[:, :, :, :, 4 * wn : -wn], gathered_value[:, :, 1:-1]
         )  # [b, h, m//wm-4, wm, r*wn] x [b, h, m//wm-4, r*wn, -1]
         #     ==> [b, h, m//wm-4, wm, -1]
 
         # adding contribution of global keys
         context_layer += torch.einsum(
-            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :wn],
-            blocked_value_matrix[:, :, 0]
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, :wn], blocked_value_matrix[:, :, 0]
         )  # [b, h, m//wm-4, wm, wn] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, -1]
         context_layer += torch.einsum(
-            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -wn:],
-            blocked_value_matrix[:, :, -1]
+            "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -wn:], blocked_value_matrix[:, :, -1]
         )  # [b, h, m//wm-4, wm, wn] x [b, h, wn, -1] ==> [b, h, m//wm-4, wm, -1]
 
-        self.cl = context_layer # TODO: remove this
+        self.cl = context_layer  # TODO: remove this
 
         """
             q[-2] x (sliding_keys, random_keys, global_keys)
         """
 
-        second_last_key_mat = torch.cat([
-            blocked_key_matrix[:, :, 0], blocked_key_matrix[:, :, -3],
-            blocked_key_matrix[:, :, -2], blocked_key_matrix[:, :, -1],
-            gathered_key[:, :, -1]], dim=2)  # [b, h, (4+r)*wn, -1]
-        second_last_value_mat = torch.cat([
-            blocked_value_matrix[:, :, 0], blocked_value_matrix[:, :, -3],
-            blocked_value_matrix[:, :, -2], blocked_value_matrix[:, :, -1],
-            gathered_value[:, :, -1]], dim=2)  # [b, h, (4+r)*wn, -1]
+        second_last_key_mat = torch.cat(
+            [
+                blocked_key_matrix[:, :, 0],
+                blocked_key_matrix[:, :, -3],
+                blocked_key_matrix[:, :, -2],
+                blocked_key_matrix[:, :, -1],
+                gathered_key[:, :, -1],
+            ],
+            dim=2,
+        )  # [b, h, (4+r)*wn, -1]
+        second_last_value_mat = torch.cat(
+            [
+                blocked_value_matrix[:, :, 0],
+                blocked_value_matrix[:, :, -3],
+                blocked_value_matrix[:, :, -2],
+                blocked_value_matrix[:, :, -1],
+                gathered_value[:, :, -1],
+            ],
+            dim=2,
+        )  # [b, h, (4+r)*wn, -1]
         second_last_product = torch.einsum(
             "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -2], second_last_key_mat
         )  # [b, h, wm, -1] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, (4+r)*wn]
-        second_last_seq_pad = torch.cat([
-            to_mask[:, :, :, :wn], to_mask[:, :, :, -3 * wn:],
-            torch.ones([b, 1, 1, r * wn]).float()], dim=3)
+        second_last_seq_pad = torch.cat(
+            [
+                to_mask[:, :, :, :wn],
+                to_mask[:, :, :, -3 * wn :],
+                torch.ones([b, 1, 1, r * wn], device=context_layer.device, dtype=context_layer.dtype),
+            ],
+            dim=3,
+        )
         second_last_rand_pad = torch.cat(
-            [torch.ones([b, h, wm, 4 * wn]).float(), rand_mask[:, :, -1]], dim=3)
-        second_last_product = second_last_product*(1.0 / math.sqrt(d))
-        second_last_product += (
-            1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * -10000.0
-        second_last_attn_weights = F.softmax(
-            second_last_product, dim=-1)  # [b, h, wm, (4+r)*wn]
+            [
+                torch.ones([b, h, wm, 4 * wn], device=context_layer.device, dtype=context_layer.dtype),
+                rand_mask[:, :, -1],
+            ],
+            dim=3,
+        )
+        second_last_product = second_last_product * (1.0 / math.sqrt(d))
+        second_last_product += (1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * -10000.0
+        second_last_attn_weights = F.softmax(second_last_product, dim=-1)  # [b, h, wm, (4+r)*wn]
         second_last_context_layer = torch.einsum(
             "bhqk,bhkd->bhqd", second_last_attn_weights, second_last_value_mat
         )  # [b, h, wm, (4+r)*wn] x [b, h, (4+r)*wn, -1] ==> [b, h, wm, -1]
         second_last_context_layer.unsqueeze_(2)
 
-        self.slcl = second_last_context_layer # TODO: remove this
+        self.slcl = second_last_context_layer  # TODO: remove this
 
         """
-            last block is global
-            q[-1] x (k[0], k[1], k[2], k[3], .... )
-        """    
+            last block is global q[-1] x (k[0], k[1], k[2], k[3], .... )
+        """
         last_product = torch.einsum(
-            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -1],
-            key_layer)  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
-        last_product = last_product*(1.0 / math.sqrt(d))
+            "bhqd,bhkd->bhqk", blocked_query_matrix[:, :, -1], key_layer
+        )  # [b, h, wm, -1] x [b, h, n, -1] ==> [b, h, wm, n]
+        last_product = last_product * (1.0 / math.sqrt(d))
         last_product += (1.0 - to_mask) * -10000.0
         last_attn_weights = F.softmax(last_product, dim=-1)  # [b, h, wm, n]
         last_context_layer = torch.einsum(
-            "bhqk,bhkd->bhqd", last_attn_weights,
-            value_layer)  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
+            "bhqk,bhkd->bhqd", last_attn_weights, value_layer
+        )  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
         last_context_layer.unsqueeze_(2)
-        context_layer = torch.cat([
-            first_context_layer, second_context_layer, context_layer,
-            second_last_context_layer, last_context_layer
-        ], dim=2)
+        context_layer = torch.cat(
+            [first_context_layer, second_context_layer, context_layer, second_last_context_layer, last_context_layer],
+            dim=2,
+        )
         context_layer = context_layer.view((b, h, m, -1)) * from_mask
         context_layer = torch.transpose(context_layer, 1, 2)
 
-        self.final_cl = context_layer # TODO: remove this
+        self.final_cl = context_layer  # TODO: remove this
 
         if output_attentions:
             # attn_probs : (b,h,m, n)
@@ -760,45 +802,55 @@ class BigBirdBlockSparseAttention(nn.Module):
             attention_probs[:, :, :wm, :] = first_attn_weights
 
             # corresponding to `second_context_layer`
-            attention_probs[:, :, wm:2*wm, :3*wn] = second_attn_weights[:, :, :, :3*wn]
-            attention_probs[:, :, wm:2*wm, -wn:] = second_attn_weights[:, :, :, 3*wn:4*wn]
+            attention_probs[:, :, wm : 2 * wm, : 3 * wn] = second_attn_weights[:, :, :, : 3 * wn]
+            attention_probs[:, :, wm : 2 * wm, -wn:] = second_attn_weights[:, :, :, 3 * wn : 4 * wn]
             # put for gathered
             for p1, i1, w1 in zip(range(b), rand_attn, second_attn_weights):
                 for p2, i2, w2 in zip(range(h), i1, w1):
-                    attention_probs.view(b,h,m//wm,wm,n//wn,wn)[p1,p2,1,:,i2[0]] = w2[:, 4*wn:].view(wm,r,wn)
+                    attention_probs.view(b, h, m // wm, wm, n // wn, wn)[p1, p2, 1, :, i2[0]] = w2[:, 4 * wn :].view(
+                        wm, r, wn
+                    )
 
             # corresponding to `context_layer`
-            for q_idx in range(m//wm - 4):
-                slice = attention_probs.view(b,h,m//wm,wm,n//wn,wn)[:,:,2:-2,:,1:-1,:]
-                slice[:, :, q_idx, :, q_idx:q_idx+3, :] = attn_weights[:, :, q_idx, :, wn:4*wn].view(b,h,wm,3,wn) # inner_band_product
-            attention_probs[:, :, 2*wm:-2*wm, :wn] = attn_weights[:, :, :, :, :wn].view(b,h,-1,wn) # first_band_product
-            attention_probs[:, :, 2*wm:-2*wm, -wn:] = attn_weights[:, :, :, :, -wn:].view(b,h,-1,wn) # last_band_product
+            for q_idx in range(m // wm - 4):
+                slice = attention_probs.view(b, h, m // wm, wm, n // wn, wn)[:, :, 2:-2, :, 1:-1, :]
+                slice[:, :, q_idx, :, q_idx : q_idx + 3, :] = attn_weights[:, :, q_idx, :, wn : 4 * wn].view(
+                    b, h, wm, 3, wn
+                )  # inner_band_product
+            attention_probs[:, :, 2 * wm : -2 * wm, :wn] = attn_weights[:, :, :, :, :wn].view(
+                b, h, -1, wn
+            )  # first_band_product
+            attention_probs[:, :, 2 * wm : -2 * wm, -wn:] = attn_weights[:, :, :, :, -wn:].view(
+                b, h, -1, wn
+            )  # last_band_product
             for p1, i1, w1 in zip(range(b), rand_attn, attn_weights):
                 for p2, i2, w2 in zip(range(h), i1, w1):
-                    for q_idx in range(1, len(i2)-1):
-                        attention_probs.view(b,h,m//wm,wm,n//wn,wn)[p1,p2,q_idx+1,:,i2[q_idx]] = w2[q_idx-1, :, 4*wn:-wn].view(wm,r,wn)
+                    for q_idx in range(1, len(i2) - 1):
+                        attention_probs.view(b, h, m // wm, wm, n // wn, wn)[p1, p2, q_idx + 1, :, i2[q_idx]] = w2[
+                            q_idx - 1, :, 4 * wn : -wn
+                        ].view(wm, r, wn)
 
             # corresponding to `second_last_context_layer`
-            attention_probs[:, :, -2*wm:-wm, :wn] = second_last_attn_weights[:,:,:,:wn]
-            attention_probs[:, :, -2*wm:-wm, -3*wn:] = second_last_attn_weights[:,:,:,wn:4*wn]
+            attention_probs[:, :, -2 * wm : -wm, :wn] = second_last_attn_weights[:, :, :, :wn]
+            attention_probs[:, :, -2 * wm : -wm, -3 * wn :] = second_last_attn_weights[:, :, :, wn : 4 * wn]
             for p1, i1, w1 in zip(range(b), rand_attn, second_last_attn_weights):
                 for p2, i2, w2 in zip(range(h), i1, w1):
-                    attention_probs.view(b,h,m//wm,wm,n//wn,wn)[p1,p2,-2,:,i2[-1]] = w2[:, 4*wn:].view(wm,r,wn)
+                    attention_probs.view(b, h, m // wm, wm, n // wn, wn)[p1, p2, -2, :, i2[-1]] = w2[:, 4 * wn :].view(
+                        wm, r, wn
+                    )
 
             # corresponding to `last_context_layer`
             attention_probs[:, :, -wm:, :] = last_attn_weights
 
             # TODO: remove this
             self.ap = attention_probs
-            self.my_cl = torch.einsum(
-                            "bhqk,bhkd->bhqd", attention_probs,
-                            value_layer)
-            # 
+            self.my_cl = torch.einsum("bhqk,bhkd->bhqd", attention_probs, value_layer)
+            #
         else:
             attention_probs = None
 
         # TODO: confirm if torch.einsum is fast enough
-        return  context_layer, attention_probs
+        return context_layer, attention_probs
 
     @staticmethod
     def torch_gather_b2(params, indices):
@@ -806,29 +858,28 @@ class BigBirdBlockSparseAttention(nn.Module):
         assert params.shape[:batch_dims] == indices.shape[:batch_dims]
 
         out = torch.stack(
-            [torch.stack(
-                [p2[i2.flatten()] for p2, i2 in zip(p1, i1)]
-            ) for p1, i1 in zip(params, indices)]
+            [torch.stack([p2[i2.flatten()] for p2, i2 in zip(p1, i1)]) for p1, i1 in zip(params, indices)]
         )
         return out
 
-    def _create_rand_mask_from_inputs(self,
-                                    from_blocked_mask,
-                                    to_blocked_mask,
-                                    rand_attn,
-                                    num_attention_heads,
-                                    num_rand_blocks,
-                                    batch_size,
-                                    from_seq_length,
-                                    from_block_size):
+    def _create_rand_mask_from_inputs(
+        self,
+        from_blocked_mask,
+        to_blocked_mask,
+        rand_attn,
+        num_attention_heads,
+        num_rand_blocks,
+        batch_size,
+        from_seq_length,
+        from_block_size,
+    ):
 
         num_windows = from_seq_length // from_block_size - 2
         rand_mask = torch.stack([p1[i1.flatten()] for p1, i1 in zip(to_blocked_mask, rand_attn)])
         # print("rm b", rand_mask.shape)
         rand_mask = rand_mask.view(batch_size, num_attention_heads, num_windows, num_rand_blocks * from_block_size)
         # print("rm a", rand_mask.shape)
-        rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1],
-                                rand_mask)
+        rand_mask = torch.einsum("blq,bhlk->bhlqk", from_blocked_mask[:, 1:-1], rand_mask)
         return rand_mask
 
     def _get_rand_attn_plan(self, from_seq_length, from_block_size, num_rand_blocks):
@@ -836,16 +887,16 @@ class BigBirdBlockSparseAttention(nn.Module):
         # general plan
         plan_from_length = []
         plan_num_rand_blocks = []
-        if (2*num_rand_blocks + 5) < (from_seq_length // from_block_size):
-            plan_from_length.append(int((2*num_rand_blocks + 5)*from_block_size))
+        if (2 * num_rand_blocks + 5) < (from_seq_length // from_block_size):
+            plan_from_length.append(int((2 * num_rand_blocks + 5) * from_block_size))
             plan_num_rand_blocks.append(num_rand_blocks)
             plan_from_length.append(from_seq_length)
             plan_num_rand_blocks.append(0)
         elif (num_rand_blocks + 5) < (from_seq_length // from_block_size):
-            plan_from_length.append(int((num_rand_blocks + 5)*from_block_size))
-            plan_num_rand_blocks.append(num_rand_blocks//2)
+            plan_from_length.append(int((num_rand_blocks + 5) * from_block_size))
+            plan_num_rand_blocks.append(num_rand_blocks // 2)
             plan_from_length.append(from_seq_length)
-            plan_num_rand_blocks.append(num_rand_blocks - (num_rand_blocks//2))
+            plan_num_rand_blocks.append(num_rand_blocks - (num_rand_blocks // 2))
         else:
             plan_from_length.append(from_seq_length)
             plan_num_rand_blocks.append(num_rand_blocks)
@@ -853,84 +904,83 @@ class BigBirdBlockSparseAttention(nn.Module):
         return plan_from_length, plan_num_rand_blocks
 
     def _bigbird_block_rand_mask(
-                            self, 
-                            from_seq_length,
-                            to_seq_length,
-                            from_block_size,
-                            to_block_size,
-                            num_rand_blocks,
-                            last_idx=-1
-                            ):
+        self, from_seq_length, to_seq_length, from_block_size, to_block_size, num_rand_blocks, last_idx=-1
+    ):
 
-        assert from_seq_length//from_block_size == to_seq_length//to_block_size, \
-            "Error the number of blocks needs to be same!"
+        assert (
+            from_seq_length // from_block_size == to_seq_length // to_block_size
+        ), "Error the number of blocks needs to be same!"
 
-        rand_attn = np.zeros(
-            (from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
+        rand_attn = np.zeros((from_seq_length // from_block_size - 2, num_rand_blocks), dtype=np.int32)
         middle_seq = np.arange(1, to_seq_length // to_block_size - 1, dtype=np.int32)
         last = to_seq_length // to_block_size - 1
         if last_idx > (2 * to_block_size):
             last = (last_idx // to_block_size) - 1
 
         r = num_rand_blocks  # shorthand
-        for i in range(1, from_seq_length // from_block_size-1):
-            start = i-2
+        for i in range(1, from_seq_length // from_block_size - 1):
+            start = i - 2
             end = i
             if i == 1:
-                rand_attn[i-1, :] = np.random.permutation(middle_seq[2:last])[:r]
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[2:last])[:r]
             elif i == 2:
-                rand_attn[i-1, :] = np.random.permutation(middle_seq[3:last])[:r]
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[3:last])[:r]
             elif i == from_seq_length // from_block_size - 3:
-                rand_attn[i-1, :] = np.random.permutation(middle_seq[:last])[:r]
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
             # Missing -3: should have been sliced till last-3
             elif i == from_seq_length // from_block_size - 2:
-                rand_attn[i-1, :] = np.random.permutation(middle_seq[:last])[:r]
+                rand_attn[i - 1, :] = np.random.permutation(middle_seq[:last])[:r]
             # Missing -4: should have been sliced till last-4
             else:
                 if start > last:
                     start = last
-                    rand_attn[i-1, :] = np.random.permutation(middle_seq[:start])[:r]
-                elif (end+1) == last:
-                    rand_attn[i-1, :] = np.random.permutation(middle_seq[:start])[:r]
+                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
+                elif (end + 1) == last:
+                    rand_attn[i - 1, :] = np.random.permutation(middle_seq[:start])[:r]
                 else:
-                    rand_attn[i-1, :] = np.random.permutation(
-                        np.concatenate((middle_seq[:start], middle_seq[end+1:last])))[:r]
+                    rand_attn[i - 1, :] = np.random.permutation(
+                        np.concatenate((middle_seq[:start], middle_seq[end + 1 : last]))
+                    )[:r]
         return rand_attn
 
-    def _bigbird_block_rand_mask_with_head(self, from_seq_length,
-                                        to_seq_length,
-                                        from_block_size,
-                                        to_block_size,
-                                        num_heads,
-                                        plan_from_length,
-                                        plan_num_rand_blocks,
-                                        window_block_left=1,
-                                        window_block_right=1,
-                                        global_block_top=1,
-                                        global_block_bottom=1,
-                                        global_block_left=1,
-                                        global_block_right=1):
+    def _bigbird_block_rand_mask_with_head(
+        self,
+        from_seq_length,
+        to_seq_length,
+        from_block_size,
+        to_block_size,
+        num_heads,
+        plan_from_length,
+        plan_num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_top=1,
+        global_block_bottom=1,
+        global_block_left=1,
+        global_block_right=1,
+    ):
 
-        assert from_seq_length//from_block_size == to_seq_length//to_block_size, \
-            "Error the number of blocks needs to be same!"
+        assert (
+            from_seq_length // from_block_size == to_seq_length // to_block_size
+        ), "Error the number of blocks needs to be same!"
 
-        assert from_seq_length in plan_from_length, \
-            "Error from sequence length not in plan!"
+        assert from_seq_length in plan_from_length, "Error from sequence length not in plan!"
 
         # Total number of blocks in the mmask
-        num_blocks = from_seq_length//from_block_size
+        num_blocks = from_seq_length // from_block_size
         # Number of blocks per plan
         plan_block_length = np.array(plan_from_length) // from_block_size
         # till when to follow plan
         max_plan_idx = plan_from_length.index(from_seq_length)
         # Random Attention adjajency list
-        rand_attn = [np.zeros((num_blocks,
-                                np.sum(plan_num_rand_blocks[:max_plan_idx+1])),
-                                dtype=np.int32) for i in range(num_heads)]
+        rand_attn = [
+            np.zeros((num_blocks, np.sum(plan_num_rand_blocks[: max_plan_idx + 1])), dtype=np.int32)
+            for i in range(num_heads)
+        ]
 
         # We will go iteratively over the plan blocks and pick random number of
         # Attention blocks from the legally allowed blocks
-        for plan_idx in range(max_plan_idx+1):
+        for plan_idx in range(max_plan_idx + 1):
             rnd_r_cnt = 0
             if plan_idx > 0:
                 # set the row for all from_blocks starting from 0 to
@@ -939,106 +989,102 @@ class BigBirdBlockSparseAttention(nn.Module):
                 # plan_block_length[plan_idx]
                 if plan_num_rand_blocks[plan_idx] > 0:
                     rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
-                    curr_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx+1]))
-                    for blk_rw_idx in range(global_block_top,
-                                            plan_block_length[plan_idx-1]):
+                    curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
+                    for blk_rw_idx in range(global_block_top, plan_block_length[plan_idx - 1]):
                         for h in range(num_heads):
                             # print("head", h, "blk_rw_idx", blk_rw_idx)
-                            rand_attn[h][blk_rw_idx,
-                                        rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
-                                            block_id=blk_rw_idx,
-                                            to_start_block_id=plan_block_length[plan_idx - 1],
-                                            to_end_block_id=plan_block_length[plan_idx],
-                                            num_rand_blocks=plan_num_rand_blocks[plan_idx],
-                                            window_block_left=window_block_left,
-                                            window_block_right=window_block_right,
-                                            global_block_left=global_block_left,
-                                            global_block_right=global_block_right)
+                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                                block_id=blk_rw_idx,
+                                to_start_block_id=plan_block_length[plan_idx - 1],
+                                to_end_block_id=plan_block_length[plan_idx],
+                                num_rand_blocks=plan_num_rand_blocks[plan_idx],
+                                window_block_left=window_block_left,
+                                window_block_right=window_block_right,
+                                global_block_left=global_block_left,
+                                global_block_right=global_block_right,
+                            )
 
                 for pl_id in range(plan_idx):
                     if plan_num_rand_blocks[pl_id] == 0:
                         continue
-                    for blk_rw_idx in range(plan_block_length[plan_idx-1],
-                                            plan_block_length[plan_idx]):
+                    for blk_rw_idx in range(plan_block_length[plan_idx - 1], plan_block_length[plan_idx]):
                         rnd_r_cnt = 0
                         to_start_block_id = 0
                         if pl_id > 0:
                             rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:pl_id]))
-                            to_start_block_id = plan_block_length[pl_id-1]
-                        curr_r_cnt = int(np.sum(plan_num_rand_blocks[:pl_id+1]))
+                            to_start_block_id = plan_block_length[pl_id - 1]
+                        curr_r_cnt = int(np.sum(plan_num_rand_blocks[: pl_id + 1]))
                         for h in range(num_heads):
                             # print("head", h, "blk_rw_idx", blk_rw_idx)
-                            rand_attn[h][blk_rw_idx,
-                                        rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
-                                            block_id=blk_rw_idx,
-                                            to_start_block_id=to_start_block_id,
-                                            to_end_block_id=plan_block_length[pl_id],
-                                            num_rand_blocks=plan_num_rand_blocks[pl_id],
-                                            window_block_left=window_block_left,
-                                            window_block_right=window_block_right,
-                                            global_block_left=global_block_left,
-                                            global_block_right=global_block_right)
+                            rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                                block_id=blk_rw_idx,
+                                to_start_block_id=to_start_block_id,
+                                to_end_block_id=plan_block_length[pl_id],
+                                num_rand_blocks=plan_num_rand_blocks[pl_id],
+                                window_block_left=window_block_left,
+                                window_block_right=window_block_right,
+                                global_block_left=global_block_left,
+                                global_block_right=global_block_right,
+                            )
 
             if plan_num_rand_blocks[plan_idx] == 0:
                 continue
             # print("Start from here")
-            curr_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx+1]))
+            curr_r_cnt = int(np.sum(plan_num_rand_blocks[: plan_idx + 1]))
             from_start_block_id = global_block_top
             to_start_block_id = 0
             if plan_idx > 0:
                 rnd_r_cnt = int(np.sum(plan_num_rand_blocks[:plan_idx]))
-                from_start_block_id = plan_block_length[plan_idx-1]
-                to_start_block_id = plan_block_length[plan_idx-1]
+                from_start_block_id = plan_block_length[plan_idx - 1]
+                to_start_block_id = plan_block_length[plan_idx - 1]
 
             for blk_rw_idx in range(from_start_block_id, plan_block_length[plan_idx]):
                 for h in range(num_heads):
                     # print("head", h, "blk_rw_idx", blk_rw_idx)
-                    rand_attn[h][blk_rw_idx,
-                                rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
-                                    block_id=blk_rw_idx,
-                                    to_start_block_id=to_start_block_id,
-                                    to_end_block_id=plan_block_length[plan_idx],
-                                    num_rand_blocks=plan_num_rand_blocks[plan_idx],
-                                    window_block_left=window_block_left,
-                                    window_block_right=window_block_right,
-                                    global_block_left=global_block_left,
-                                    global_block_right=global_block_right)
+                    rand_attn[h][blk_rw_idx, rnd_r_cnt:curr_r_cnt] = self._get_single_block_row_attention(
+                        block_id=blk_rw_idx,
+                        to_start_block_id=to_start_block_id,
+                        to_end_block_id=plan_block_length[plan_idx],
+                        num_rand_blocks=plan_num_rand_blocks[plan_idx],
+                        window_block_left=window_block_left,
+                        window_block_right=window_block_right,
+                        global_block_left=global_block_left,
+                        global_block_right=global_block_right,
+                    )
 
         for nh in range(num_heads):
-            rand_attn[nh] = rand_attn[nh][global_block_top:num_blocks -
-                                        global_block_bottom, :]
+            rand_attn[nh] = rand_attn[nh][global_block_top : num_blocks - global_block_bottom, :]
 
         return rand_attn
 
-    def _get_single_block_row_attention(self,
-                                    block_id,
-                                    to_start_block_id,
-                                    to_end_block_id,
-                                    num_rand_blocks,
-                                    window_block_left=1,
-                                    window_block_right=1,
-                                    global_block_left=1,
-                                    global_block_right=1):
+    def _get_single_block_row_attention(
+        self,
+        block_id,
+        to_start_block_id,
+        to_end_block_id,
+        num_rand_blocks,
+        window_block_left=1,
+        window_block_right=1,
+        global_block_left=1,
+        global_block_right=1,
+    ):
 
         # list of to_blocks from which to choose random attention
-        to_block_list = np.arange(to_start_block_id, to_end_block_id,
-                                    dtype=np.int32)
+        to_block_list = np.arange(to_start_block_id, to_end_block_id, dtype=np.int32)
         # permute the blocks
         perm_block = np.random.permutation(to_block_list)
         # print(perm_block)
 
         # illegal blocks for the current block id, using window
-        illegal_blocks = list(
-            range(block_id - window_block_left, block_id + window_block_right + 1))
+        illegal_blocks = list(range(block_id - window_block_left, block_id + window_block_right + 1))
 
         # Add blocks at the start and at the end
         illegal_blocks.extend(list(range(global_block_left)))
-        illegal_blocks.extend(
-            list(range(to_end_block_id - global_block_right, to_end_block_id)))
+        illegal_blocks.extend(list(range(to_end_block_id - global_block_right, to_end_block_id)))
 
         # The second from_block cannot choose random attention on second last to_block
         if block_id == 1:
-            illegal_blocks.append(to_end_block_id-2)
+            illegal_blocks.append(to_end_block_id - 2)
 
         # The second last from_block cannot choose random attention on second to_block
         if block_id == to_end_block_id - 2:
@@ -1129,7 +1175,7 @@ class BigBirdAttention(nn.Module):
             from_mask,
             to_mask,
             from_blocked_mask,
-            to_blocked_mask
+            to_blocked_mask,
         )
 
         attention_output = self.output(self_outputs[0], hidden_states)
@@ -1164,6 +1210,7 @@ class BigBirdOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
+
 
 # TODO: add support to prenorm
 class BigBirdLayer(nn.Module):
@@ -1214,7 +1261,7 @@ class BigBirdLayer(nn.Module):
 
         # TODO:
         self.attn_proj_o = attention_output
-        # 
+        #
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
@@ -1253,7 +1300,7 @@ class BigBirdLayer(nn.Module):
 
         # TODO
         self.l_o = layer_output
-        # 
+        #
 
         outputs = (layer_output,) + outputs
 
@@ -1276,7 +1323,9 @@ class BigBirdEncoder(nn.Module):
 
         self.norm_type = config.norm_type
 
-        self.layer = nn.ModuleList([BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList(
+            [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         # extra compared to orig-bert
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -1344,7 +1393,7 @@ class BigBirdEncoder(nn.Module):
                 if self.layer[0] == layer_module:
                     self.l1_layer_input = hidden_states
                     self.l1_attention_mask = attention_mask
-                # 
+                #
 
                 layer_outputs = layer_module(
                     hidden_states,
@@ -1357,7 +1406,7 @@ class BigBirdEncoder(nn.Module):
                     band_mask,
                     from_mask,
                     to_mask,
-                    blocked_encoder_mask
+                    blocked_encoder_mask,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1475,8 +1524,8 @@ class BigBirdPreTrainingHeads(nn.Module):
 
 class BigBirdPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = BigBirdConfig
@@ -1498,14 +1547,15 @@ class BigBirdPreTrainedModel(PreTrainedModel):
 
 
 BIG_BIRD_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.BigBirdConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 BIG_BIRD_INPUTS_DOCSTRING = r"""
@@ -1513,37 +1563,40 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.BigBirdTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.BigBirdTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-            
+
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-            
+
             `What are attention masks? <../glossary.html#attention-mask>`__
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
-            
+
+
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
-            
+
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-            
+
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-            
+
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -1600,24 +1653,24 @@ class BigBirdForPreTrainingOutput(ModelOutput):
 class BigBirdModel(BigBirdPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
+    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
+    input to the forward pass.
     """
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
 
         if config.attention_type != "original_full" and config.add_cross_attention:
-            logger.warning("When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`")
+            logger.warning(
+                "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`"
+            )
             config.attention_type = "original_full"
 
         self.config = config
@@ -1644,9 +1697,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -1676,12 +1729,11 @@ class BigBirdModel(BigBirdPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -1728,7 +1780,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         if self.attention_type == "block_sparse":
             block_size = self.block_size
-            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(attention_mask, block_size)
+            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
+                attention_mask, block_size
+            )
             extended_attention_mask = None
 
         elif self.attention_type == "original_full":
@@ -1738,7 +1792,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
             to_mask = None
             # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
             # ourselves in which case we just need to make it broadcastable to all heads.
-            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+            extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
+                attention_mask, input_shape, device
+            )
         else:
             raise ValueError("attention_type can either be original_full or block_sparse")
 
@@ -1767,8 +1823,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
-        self.input_ids = input_ids # TODO: remove
-        self.word_embeddings = embedding_output # TODO: remove
+        self.input_ids = input_ids  # TODO: remove
+        self.word_embeddings = embedding_output  # TODO: remove
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -1802,13 +1858,14 @@ class BigBirdModel(BigBirdPreTrainedModel):
         )
 
     @staticmethod
-    def create_masks_for_block_sparse_attn(attention_mask:torch.Tensor, block_size:int):
+    def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
         assert seq_length % block_size == 0, "Sequence length must be multiple of block size"
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
-            """Create 3D attention mask from a 2D tensor mask.
+            """
+            Create 3D attention mask from a 2D tensor mask.
 
             Args:
                 from_blocked_mask: 2D Tensor of shape [batch_size,
@@ -1817,25 +1874,24 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 to_seq_length//to_block_size, to_block_size].
 
             Returns:
-                float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4,
-                                    from_block_size,  3*to_block_size].
+                float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4, from_block_size,
+                3*to_block_size].
             """
             exp_blocked_to_pad = torch.cat(
-                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2],
-                to_blocked_mask[:, 3:-1]], dim=2)
-            band_mask = torch.einsum("blq,blk->blqk",
-                                from_blocked_mask[:, 2:-2].float(),
-                                exp_blocked_to_pad.float())
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], dim=2
+            )
+            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2].float(), exp_blocked_to_pad.float())
             band_mask.unsqueeze_(1)
             return band_mask
-    
-        blocked_encoder_mask = attention_mask.view(batch_size, seq_length//block_size, block_size)
+
+        blocked_encoder_mask = attention_mask.view(batch_size, seq_length // block_size, block_size)
         band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
-            
+
         from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
         to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
 
         return blocked_encoder_mask, band_mask, from_mask, to_mask
+
 
 # Copied from transformers.models.bert.modeling_bert.BertForPreTraining
 @add_start_docstrings(
@@ -1925,7 +1981,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         # TODO:
         self.sequence_output = sequence_output
         self.pooler_output = pooled_output
-        # 
+        #
 
         prediction_scores, seq_relationship_score = self.cls(sequence_output, pooled_output)
 
@@ -1997,10 +2053,9 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2079,21 +2134,21 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -2193,7 +2248,9 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
 
 
@@ -2219,8 +2276,10 @@ class BigBirdClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    BigBird Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     BIG_BIRD_START_DOCSTRING,
 )
 class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
@@ -2240,23 +2299,22 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2299,8 +2357,10 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
 
 
 @add_start_docstrings(
-    """BigBird Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    BigBird Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     BIG_BIRD_START_DOCSTRING,
 )
 class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
@@ -2313,7 +2373,9 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="google/bigbird-base",
@@ -2321,23 +2383,23 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -2388,8 +2450,10 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
 
 
 @add_start_docstrings(
-    """BigBird Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    BigBird Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     BIG_BIRD_START_DOCSTRING,
 )
 class BigBirdForTokenClassification(BigBirdPreTrainedModel):
@@ -2425,8 +2489,8 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2474,8 +2538,10 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
 
 
 @add_start_docstrings(
-    """BigBird Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    BigBird Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     BIG_BIRD_START_DOCSTRING,
 )
 class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
@@ -2514,12 +2580,12 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
