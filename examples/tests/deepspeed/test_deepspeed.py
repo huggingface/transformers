@@ -12,10 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import io
 import json
 import os
 import sys
 import unittest
+from copy import deepcopy
 
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
@@ -67,16 +69,40 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
             MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
         self.ds_config_file = f"{self.test_file_dir_str}/ds_config.json"
+        with io.open(self.ds_config_file, "r", encoding="utf-8") as f:
+            self.ds_config_dict = json.load(f)
 
     def test_fake_notebook_no_launcher(self):
-
         # this setup emulates a notebook where a launcher needs to be emulated by hand
-
         with CaptureStd() as cs:
             with mockenv_context(**self.dist_env_1_gpu):
                 trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file)
                 trainer.train()
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+
+    def test_hf_native_optimizer(self):
+        # this setup emulates a notebook where a launcher needs to be emulated by hand
+        a = 0
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_dict = deepcopy(self.ds_config_dict)
+            del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
+            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+            trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
+            trainer.train()
+        new_a = trainer.model.a.item()
+        self.assertNotEqual(new_a, a)
+
+    def test_hf_native_scheduler(self):
+        # this setup emulates a notebook where a launcher needs to be emulated by hand
+        a = 0
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_dict = deepcopy(self.ds_config_dict)
+            del ds_config_dict["scheduler"]  # force default HF Trainer scheduler
+            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+            trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
+            trainer.train()
+        new_a = trainer.model.a.item()
+        self.assertNotEqual(new_a, a)
 
     def test_early_get_last_lr(self):
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
