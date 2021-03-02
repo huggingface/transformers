@@ -779,7 +779,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
-        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignment methods.
     """
 
     def __init__(
