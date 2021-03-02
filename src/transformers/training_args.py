@@ -478,7 +478,7 @@ class TrainingArguments:
             "like this: zero_dp_2 offload` or `zero_dp_3 offload`",
         },
     )
-    deepspeed: Optional[Union[str, dict]] = field(
+    deepspeed: Optional[str] = field(
         default=None,
         metadata={
             "help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already loaded json file as a dict"
