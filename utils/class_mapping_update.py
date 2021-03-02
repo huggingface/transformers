@@ -28,7 +28,7 @@ git_repo_path = abspath(join(dirname(dirname(__file__)), "src"))
 sys.path.insert(1, git_repo_path)
 
 src = "src/transformers/models/auto/modeling_auto.py"
-dst = "src/transformers/modeling_auto_mapping.py"
+dst = "src/transformers/utils/modeling_auto_mapping.py"
 
 if os.path.exists(dst) and os.path.getmtime(src) < os.path.getmtime(dst):
     # speed things up by only running this script if the src is newer than dst

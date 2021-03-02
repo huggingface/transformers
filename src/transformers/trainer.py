@@ -60,7 +60,6 @@ from .file_utils import (
     is_sagemaker_distributed_available,
     is_torch_tpu_available,
 )
-from .modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 from .modeling_utils import PreTrainedModel
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -104,6 +103,7 @@ from .trainer_utils import (
 )
 from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
+from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
 _is_native_amp_available = False
