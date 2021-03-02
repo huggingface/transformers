@@ -80,8 +80,25 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
                 trainer.train()
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
-    def test_hf_native_optimizer(self):
-        # this setup emulates a notebook where a launcher needs to be emulated by hand
+    # Test various combos
+    # 1. DS scheduler + DS optimizer: this is already tested by most other tests
+    # 2. HF scheduler + HF optimizer:
+    # 3. DS scheduler + HF optimizer:
+    # 4. HF scheduler + DS optimizer:
+
+    def test_hf_scheduler_hf_optimizer(self):
+        a = 0
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_dict = deepcopy(self.ds_config_dict)
+            del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
+            del ds_config_dict["scheduler"]  # force default HF Trainer scheduler
+            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+            trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
+            trainer.train()
+        new_a = trainer.model.a.item()
+        self.assertNotEqual(new_a, a)
+
+    def test_ds_scheduler_hf_optimizer(self):
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = deepcopy(self.ds_config_dict)
@@ -92,8 +109,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
         new_a = trainer.model.a.item()
         self.assertNotEqual(new_a, a)
 
-    def test_hf_native_scheduler(self):
-        # this setup emulates a notebook where a launcher needs to be emulated by hand
+    def test_hf_scheduler_ds_optimizer(self):
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = deepcopy(self.ds_config_dict)
