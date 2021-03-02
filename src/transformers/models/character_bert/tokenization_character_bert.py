@@ -54,6 +54,9 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
     Users should refer to this superclass for more information regarding those methods.
 
     Args:
+        max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
+            The maximum token length in characters (actually, in bytes as any
+            non-ascii characters will be converted to a sequence of utf-8 bytes).
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to lowercase the input when tokenizing.
         do_basic_tokenize (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -82,12 +85,14 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for :obj:`lowercase` (as in the original BERT).    """
 
+
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
+        max_word_length=50,
         do_lower_case=True,
         do_basic_tokenize=True,
         never_split=None,
@@ -101,6 +106,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
+            max_word_length=max_word_length,
             do_lower_case=do_lower_case,
             do_basic_tokenize=do_basic_tokenize,
             never_split=never_split,
@@ -123,7 +129,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
                 strip_accents=strip_accents,
             )
         # This is responsible for converting tokens into character ids
-        self._mapper = CharacterMapper()
+        self._mapper = CharacterMapper(max_word_length=max_word_length)
 
     @property
     def do_lower_case(self):
@@ -131,12 +137,10 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
 
     @property
     def vocab_size(self):
-        # CharacterBERT has no token vocabulary
-        raise NotImplementedError
+        raise NotImplementedError("CharacterBERT does not have a token vocabulary.")
 
     def get_vocab(self):
-        # CharacterBERT has no token vocabulary
-        raise NotImplementedError
+        raise NotImplementedError("CharacterBERT does not have a token vocabulary.")
 
     def _tokenize(self, text):
         split_tokens = []
@@ -250,8 +254,17 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        # NOTE: CharacterBERT has no token vocabulary
-        raise NotImplementedError
+        # NOTE: CharacterBERT has no token vocabulary, this is just to allow
+        # saving tokenizer configuration via CharacterBertTokenizer.save_pretrained
+        if os.path.isdir(save_directory):
+            vocab_file = os.path.join(
+                save_directory, (filename_prefix + "-" if filename_prefix else "") + 'vocab.txt'
+            )
+        else:
+            vocab_file = (filename_prefix + "-" if filename_prefix else "") + save_directory
+        with open(vocab_file, "w", encoding="utf-8") as writer:
+            pass
+        return (vocab_file,)
 
 
 class BasicTokenizer(object):
@@ -427,8 +440,6 @@ class CharacterMapper:
     character ids with `tokens_to_add`.
     """
 
-    max_word_length = 50
-
     # char ids 0-255 come from utf-8 encoding bytes
     # assign 256-300 to special chars
     beginning_of_sentence_character = 256  # <begin sentence>
@@ -438,66 +449,70 @@ class CharacterMapper:
     padding_character = 260  # <padding> | short tokens are padded using this + 1
     mask_character = 261  # <mask>
 
-    beginning_of_sentence_characters = _make_bos_eos(
-        beginning_of_sentence_character,
-        padding_character,
-        beginning_of_word_character,
-        end_of_word_character,
-        max_word_length,
-    )
-    end_of_sentence_characters = _make_bos_eos(
-        end_of_sentence_character,
-        padding_character,
-        beginning_of_word_character,
-        end_of_word_character,
-        max_word_length,
-    )
-    mask_characters = _make_bos_eos(
-        mask_character,
-        padding_character,
-        beginning_of_word_character,
-        end_of_word_character,
-        max_word_length,
-    )
-    # This is the character id sequence for the pad token (i.e. [PAD])
-    pad_characters = [PAD_TOKEN_CHAR_ID - 1] * max_word_length
-
     bos_token = "[CLS]"  # previously: bos_token = "<S>"
     eos_token = "[SEP]"  # previously: eos_token = "</S>"
     pad_token = "[PAD]"
     mask_token = "[MASK]"
 
-    def __init__(self, tokens_to_add: Dict[str, int] = None) -> None:
+    def __init__(self,
+            max_word_length: int = 50,
+            tokens_to_add: Dict[str, int] = None
+        ) -> None:
         self.tokens_to_add = tokens_to_add or {}
+        self.max_word_length = max_word_length
+        self.beginning_of_sentence_characters = _make_bos_eos(
+            self.beginning_of_sentence_character,
+            self.padding_character,
+            self.beginning_of_word_character,
+            self.end_of_word_character,
+            self.max_word_length,
+        )
+        self.end_of_sentence_characters = _make_bos_eos(
+            self.end_of_sentence_character,
+            self.padding_character,
+            self.beginning_of_word_character,
+            self.end_of_word_character,
+            self.max_word_length,
+        )
+        self.mask_characters = _make_bos_eos(
+            self.mask_character,
+            self.padding_character,
+            self.beginning_of_word_character,
+            self.end_of_word_character,
+            self.max_word_length,
+        )
+        # This is the character id sequence for the pad token (i.e. [PAD]).
+        # We remove 1 because we will add 1 later on and it will be equal to 0.
+        self.pad_characters = [PAD_TOKEN_CHAR_ID - 1] * self.max_word_length
 
     def convert_word_to_char_ids(self, word: str) -> List[int]:
         if word in self.tokens_to_add:
-            char_ids = [CharacterMapper.padding_character] * CharacterMapper.max_word_length
-            char_ids[0] = CharacterMapper.beginning_of_word_character
+            char_ids = [self.padding_character] * self.max_word_length
+            char_ids[0] = self.beginning_of_word_character
             char_ids[1] = self.tokens_to_add[word]
-            char_ids[2] = CharacterMapper.end_of_word_character
-        elif word == CharacterMapper.bos_token:
-            char_ids = CharacterMapper.beginning_of_sentence_characters
-        elif word == CharacterMapper.eos_token:
-            char_ids = CharacterMapper.end_of_sentence_characters
-        elif word == CharacterMapper.mask_token:
-            char_ids = CharacterMapper.mask_characters
-        elif word == CharacterMapper.pad_token:
-            char_ids = CharacterMapper.pad_characters
+            char_ids[2] = self.end_of_word_character
+        elif word == self.bos_token:
+            char_ids = self.beginning_of_sentence_characters
+        elif word == self.eos_token:
+            char_ids = self.end_of_sentence_characters
+        elif word == self.mask_token:
+            char_ids = self.mask_characters
+        elif word == self.pad_token:
+            char_ids = self.pad_characters
         else:
             # Convert characters to indices
             word_encoded = word.encode("utf-8", "ignore")[
-                : (CharacterMapper.max_word_length - 2)
+                : (self.max_word_length - 2)
             ]
             # Initialize character_ids with padding
-            char_ids = [CharacterMapper.padding_character] * CharacterMapper.max_word_length
+            char_ids = [self.padding_character] * self.max_word_length
             # First character is BeginningOfWord
-            char_ids[0] = CharacterMapper.beginning_of_word_character
+            char_ids[0] = self.beginning_of_word_character
             # Populate character_ids with computed indices
             for k, chr_id in enumerate(word_encoded, start=1):
                 char_ids[k] = chr_id
             # Last character is EndOfWord
-            char_ids[len(word_encoded) + 1] = CharacterMapper.end_of_word_character
+            char_ids[len(word_encoded) + 1] = self.end_of_word_character
 
         # +1 one for masking so that character padding == 0
         # char_ids domain is therefore: (1, 256) for actual characters
