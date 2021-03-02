@@ -680,6 +680,31 @@ to achieve the same configuration as provided by the longer json file in the fir
 When you execute the program, DeepSpeed will log the configuration it received from the :class:`~transformers.Trainer`
 to the console, so you can see exactly what the final configuration was passed to it.
 
+
+Passing Configuration
+=======================================================================================================================
+
+As discussed in this document normally the DeepSpeed configuration is passed as a path to a json file, but if you're
+not using the command line interface to configure the training, and instead instantiate the Trainer via
+:class:`~transformers.TrainingArguments` then for the ``deepspeed`` argument you can pass a nested ``dict``. This
+allows you to create the configuration on the fly and doesn't require you to write it to the file system before passing
+it to :class:`~transformers.TrainingArguments`.
+
+To summarize you can do:
+
+.. code-block:: python
+
+    TrainingArguments(..., deespeed="/path/to/ds_config.json")
+
+or:
+
+.. code-block:: python
+
+    ds_config_dict=dict(scheduler=scheduler_params, optimizer=optimizer_params)
+    TrainingArguments(..., deespeed=ds_config_dict)
+
+
+
 Shared Configuration
 =======================================================================================================================
 
