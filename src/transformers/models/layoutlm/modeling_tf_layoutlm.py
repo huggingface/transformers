@@ -875,7 +875,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
                 "bi-directional self-attention."
             )
 
-        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=False, name="layoutlm")
+        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=True, name="layoutlm")
         self.mlm = TFLayoutLMMLMHead(config, input_embeddings=self.layoutlm.embeddings, name="mlm___cls")
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -1098,7 +1098,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
 
         self.num_labels = config.num_labels
 
-        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=False, name="layoutlm")
+        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=True, name="layoutlm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
