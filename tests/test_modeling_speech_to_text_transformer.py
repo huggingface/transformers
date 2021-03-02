@@ -665,7 +665,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
         input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
 
         generated_ids = model.generate(input_features)
-        generated_transcript = processor.batch_decode(generated_ids)
+        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = ["a man said to the universe sir i exist"]
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
@@ -683,7 +683,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
         attention_mask = inputs.attention_mask.to(torch_device)
 
         generated_ids = model.generate(input_features, attention_mask=attention_mask)
-        generated_transcripts = processor.batch_decode(generated_ids)
+        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
 
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
