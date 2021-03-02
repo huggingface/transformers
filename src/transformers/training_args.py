@@ -17,7 +17,7 @@ import os
 import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from .file_utils import (
     cached_property,
