@@ -1193,7 +1193,6 @@ class BigBirdOutput(nn.Module):
         return hidden_states
 
 
-# TODO: add support to prenorm
 class BigBirdLayer(nn.Module):
     def __init__(self, config, seed=None):
         super().__init__()
@@ -1302,8 +1301,6 @@ class BigBirdEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.norm_type = config.norm_type
-
         self.layer = nn.ModuleList(
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
@@ -1334,8 +1331,7 @@ class BigBirdEncoder(nn.Module):
 
         next_decoder_cache = () if use_cache else None
 
-        if self.norm_type == "postnorm":
-            hidden_states = self.LayerNorm(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1406,8 +1402,8 @@ class BigBirdEncoder(nn.Module):
                 self.last_layer_output = hidden_states
             #
 
-        if self.norm_type == "prenorm":
-            hidden_states = self.LayerNorm(hidden_states)
+        # if self.norm_type == "prenorm":
+        #     hidden_states = self.LayerNorm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)

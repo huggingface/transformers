@@ -123,7 +123,6 @@ class BigBirdConfig(PretrainedConfig):
         attention_type="block_sparse",
         use_bias=True,
         rescale_embeddings=False,
-        norm_type="postnorm",  # "prenorm"
         block_size=64,
         num_random_blocks=3,
         position_embedding_type="absolute",
@@ -149,7 +148,6 @@ class BigBirdConfig(PretrainedConfig):
         self.rescale_embeddings = rescale_embeddings
         self.attention_type = attention_type
         self.use_bias = use_bias
-        self.norm_type = norm_type
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
         self.position_embedding_type = position_embedding_type

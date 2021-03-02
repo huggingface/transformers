@@ -17,7 +17,7 @@
 
 import argparse
 
-from transformers import BigBirdConfig, BigBirdForPreTraining, BigBirdModel, load_tf_weights_in_big_bird
+from transformers import BigBirdConfig, BigBirdForPreTraining, load_tf_weights_in_big_bird
 from transformers.utils import logging
 
 
