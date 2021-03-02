@@ -1063,6 +1063,9 @@ class CharacterBertModel(CharacterBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    def resize_token_embeddings(self, *args, **kwargs):
+        raise NotImplementedError("Cannot resize CharacterBERT's token embeddings.")
+
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.
         heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
@@ -1927,7 +1930,7 @@ class CharacterBertForTokenClassification(CharacterBertPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -2028,7 +2031,7 @@ class CharacterBertForQuestionAnswering(CharacterBertPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
+            output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
