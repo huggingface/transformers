@@ -840,6 +840,10 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
 
 @add_start_docstrings("""LayoutLM Model with a `language modeling` head on top. """, LAYOUTLM_START_DOCSTRING)
 class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
+
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1080,6 +1084,9 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
     LAYOUTLM_START_DOCSTRING,
 )
 class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
+
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+    
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
