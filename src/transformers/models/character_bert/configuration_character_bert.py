@@ -41,6 +41,18 @@ class CharacterBertConfig(PretrainedConfig):
 
 
     Args:
+        character_embeddings_dim (:obj:`int`, `optional`, defaults to :obj:`16`):
+            The size of the character embeddings.
+        cnn_activation (:obj:`str`, `optional`, defaults to :obj:`"relu"`):
+            The activation function to apply to the cnn representations.
+        cnn_filters (:obj:`list(list(int))`, `optional`, defaults to :obj:`[
+           [1, 32], [2, 32], [3, 64], [4, 128], [5, 256], [6, 512], [7, 1024]]`):
+            The list of CNN filters to use in the CharacterCNN module.
+        num_highway_layers (:obj:`int`, `optional`, defaults to :obj:`2`):
+            The number of Highway layers to apply to the CNNs output.
+        max_word_length (:obj:`int`, `optional`, defaults to :obj:`50`):
+            The maximum token length in characters (actually, in bytes as any
+            non-ascii characters will be converted to a sequence of utf-8 bytes).
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -87,6 +99,19 @@ class CharacterBertConfig(PretrainedConfig):
     model_type = "character_bert"
     def __init__(
         self,
+        character_embeddings_dim=16,
+        cnn_activation="relu",
+        cnn_filters=[
+           [1, 32],
+           [2, 32],
+           [3, 64],
+           [4, 128],
+           [5, 256],
+           [6, 512],
+           [7, 1024]
+        ],
+        num_highway_layers=2,
+        max_word_length=50,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -116,7 +141,11 @@ class CharacterBertConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        self.max_position_embeddings = max_position_embeddings
+        self.character_embeddings_dim = character_embeddings_dim
+        self.cnn_activation = cnn_activation
+        self.cnn_filters = cnn_filters
+        self.num_highway_layers = num_highway_layers
+        self.max_word_length = max_word_length
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -125,4 +154,5 @@ class CharacterBertConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range

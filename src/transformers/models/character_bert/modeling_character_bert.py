@@ -212,46 +212,23 @@ class CharacterCnn(torch.nn.Module):
     to [CLS] and [SEP], the beginning and end of sentence tokens (as in BERT).
     Note: this is a lower level class useful for advanced usage.  Most users should
     use `CharacterBertTokenEmbedder` or `utils.character_bert.token_embedder` instead.
-    # Parameters
-    output_dim : `int`, optional, (default = `768`)
-        The CharacterCNN representations dimension.
-    requires_grad : `bool`, optional, (default = `True`).
-        If True, compute gradient of the CharacterCNN params during fine tuning.
     """
-    def __init__(
-            self,
-            output_dim: Optional[int] = 768,
-            requires_grad: Optional[bool] = True
-        ) -> None:
+    def __init__(self, config):
         super().__init__()
-
-        self.output_dim = output_dim
-        self.requires_grad = requires_grad
-
-        # Default configuration of the CharacterCNN
-        self._options = {
-            'char_cnn': {
-                'activation': 'relu',
-                'filters': [
-                    [1, 32],
-                    [2, 32],
-                    [3, 64],
-                    [4, 128],
-                    [5, 256],
-                    [6, 512],
-                    [7, 1024]
-                    ],
-                'n_highway': 2,
-                'embedding': {'dim': 16},
-                'n_characters': 262,
-                'max_characters_per_token': 50
-            }
-        }
-
+        self.character_embeddings_dim = config.character_embeddings_dim
+        self.cnn_activation = config.cnn_activation
+        self.cnn_filters = config.cnn_filters
+        self.num_highway_layers = config.num_highway_layers
+        self.max_word_length = config.max_word_length
+        self.hidden_size = config.hidden_size
+        # NOTE: this is the 256 possible utf-8 bytes + special slots for the
+        # [CLS]/[SEP]/[PAD]/[MASK] characters as well as beginning/end of
+        # word symbols and character padding for short words -> total of 263
+        self.character_vocab_size = 263
         self._init_weights()
 
     def get_output_dim(self):
-        return self.output_dim
+        return self.hidden_size
 
     def _init_weights(self):
         self._init_char_embedding()
@@ -260,55 +237,45 @@ class CharacterCnn(torch.nn.Module):
         self._init_projection()
 
     def _init_char_embedding(self):
-        weights = np.zeros(
-            (
-                self._options["char_cnn"]["n_characters"] + 1,
-                self._options["char_cnn"]["embedding"]["dim"]
-            ),
+        weights = np.zeros((
+                self.character_vocab_size,
+                self.character_embeddings_dim),
             dtype="float32")
         weights[-1, :] *= 0.  # padding
         self._char_embedding_weights = torch.nn.Parameter(
             torch.FloatTensor(weights),
-            requires_grad=self.requires_grad
-        )
+            requires_grad=True)
 
     def _init_cnn_weights(self):
-        cnn_options = self._options["char_cnn"]
-        filters = cnn_options["filters"]
-        char_embed_dim = cnn_options["embedding"]["dim"]
-
         convolutions = []
-        for i, (width, num) in enumerate(filters):
+        for i, (width, num) in enumerate(self.cnn_filters):
             conv = torch.nn.Conv1d(
-                in_channels=char_embed_dim, out_channels=num,
-                kernel_size=width, bias=True)
-            conv.weight.requires_grad = self.requires_grad
-            conv.bias.requires_grad = self.requires_grad
+                in_channels=self.character_embeddings_dim,
+                out_channels=num, kernel_size=width, bias=True)
+            conv.weight.requires_grad = True
+            conv.bias.requires_grad = True
             convolutions.append(conv)
             self.add_module("char_conv_{}".format(i), conv)
         self._convolutions = convolutions
 
     def _init_highway(self):
         # the highway layers have same dimensionality as the number of cnn filters
-        cnn_options = self._options["char_cnn"]
-        filters = cnn_options["filters"]
-        n_filters = sum(f[1] for f in filters)
-        n_highway = cnn_options["n_highway"]
-
-        self._highways = Highway(n_filters, n_highway, activation=torch.nn.functional.relu)
-        for k in range(n_highway):
+        n_filters = sum(f[1] for f in self.cnn_filters)
+        self._highways = Highway(
+            n_filters,
+            self.num_highway_layers,
+            activation=nn.functional.relu)
+        for k in range(self.num_highway_layers):
             # The AllenNLP highway is one matrix multplication with concatenation of
             # transform and carry weights.
-            self._highways._layers[k].weight.requires_grad = self.requires_grad
-            self._highways._layers[k].bias.requires_grad = self.requires_grad
+            self._highways._layers[k].weight.requires_grad = True
+            self._highways._layers[k].bias.requires_grad = True
 
     def _init_projection(self):
-        cnn_options = self._options["char_cnn"]
-        filters = cnn_options["filters"]
-        n_filters = sum(f[1] for f in filters)
-        self._projection = torch.nn.Linear(n_filters, self.output_dim, bias=True)
-        self._projection.weight.requires_grad = self.requires_grad
-        self._projection.bias.requires_grad = self.requires_grad
+        n_filters = sum(f[1] for f in self.cnn_filters)
+        self._projection = torch.nn.Linear(n_filters, self.hidden_size, bias=True)
+        self._projection.weight.requires_grad = True
+        self._projection.bias.requires_grad = True
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
@@ -324,21 +291,19 @@ class CharacterCnn(torch.nn.Module):
         """
 
         # character embeddings
-        # (batch_size * sequence_length, max_chars_per_token, embed_dim)
-        max_chars_per_token = self._options["char_cnn"]["max_characters_per_token"]
+        # (batch_size * sequence_length, max_word_length, embed_dim)
         character_embedding = torch.nn.functional.embedding(
-            inputs.view(-1, max_chars_per_token), self._char_embedding_weights)
+            inputs.view(-1, self.max_word_length), self._char_embedding_weights)
 
         # CNN representations
-        cnn_options = self._options["char_cnn"]
-        if cnn_options["activation"] == "tanh":
+        if self.cnn_activation == "tanh":
             activation = torch.tanh
-        elif cnn_options["activation"] == "relu":
+        elif self.cnn_activation == "relu":
             activation = torch.nn.functional.relu
         else:
-            raise ConfigurationError("Unknown activation")
+            raise Exception("ConfigurationError: Unknown activation")
 
-        # (batch_size * sequence_length, embed_dim, max_chars_per_token)
+        # (batch_size * sequence_length, embed_dim, max_word_length)
         character_embedding = torch.transpose(character_embedding, 1, 2)
         convs = []
         for i in range(len(self._convolutions)):
@@ -370,7 +335,7 @@ class CharacterBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = CharacterCnn(output_dim=config.hidden_size)
+        self.word_embeddings = CharacterCnn(config)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
@@ -1268,11 +1233,11 @@ class CharacterBertForPreTraining(CharacterBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import CharacterTokenizer, CharacterForPreTraining
+            >>> from transformers import CharacterBertTokenizer, CharacterBertForPreTraining
             >>> import torch
 
-            >>> tokenizer = CharacterTokenizer()
-            >>> model = CharacterForPreTraining.from_pretrained('helboukkouri/character-bert')
+            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert')
+            >>> model = CharacterBertForPreTraining.from_pretrained('helboukkouri/character-bert')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1395,7 +1360,7 @@ class CharacterBertLMHeadModel(CharacterBertPreTrainedModel):
             >>> from transformers import CharacterBertTokenizer, CharacterBertLMHeadModel, CharacterBertConfig
             >>> import torch
 
-            >>> tokenizer = CharacterBertTokenizer()
+            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert')
             >>> config = CharacterBertConfig.from_pretrained("helboukkouri/character-bert")
             >>> config.is_decoder = True
             >>> model = CharacterBertLMHeadModel.from_pretrained('helboukkouri/character-bert', config=config)
@@ -1622,7 +1587,7 @@ class CharacterBertForNextSentencePrediction(CharacterBertPreTrainedModel):
             >>> from transformers import CharacterBertTokenizer, CharacterBertForNextSentencePrediction
             >>> import torch
 
-            >>> tokenizer = CharacterBertTokenizer()
+            >>> tokenizer = CharacterBertTokenizer.from_pretrained('helboukkouri/character-bert')
             >>> model = CharacterBertForNextSentencePrediction.from_pretrained('helboukkouri/character-bert')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
