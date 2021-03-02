@@ -55,13 +55,13 @@ class BigBirdModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu_fast",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=4096,
+        max_position_embeddings=256,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,
@@ -397,6 +397,8 @@ class BigBirdModelTester:
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
 
+    # head masking is currently not supported for big bird
+    test_head_masking = False
     all_model_classes = (
         (
             BigBirdModel,

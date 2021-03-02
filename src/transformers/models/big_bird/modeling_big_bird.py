@@ -2082,7 +2082,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
@@ -2220,7 +2220,7 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
@@ -2345,7 +2345,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -2438,7 +2438,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -2526,7 +2526,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -2626,7 +2626,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
+            output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(
