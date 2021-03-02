@@ -1466,6 +1466,9 @@ class BlenderbotSmallForCausalLM(BlenderbotSmallPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None:
+            input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
         outputs = self.model.decoder(
             input_ids=input_ids,
