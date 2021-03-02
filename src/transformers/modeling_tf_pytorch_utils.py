@@ -324,8 +324,6 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     # Build a map from potential PyTorch weight names to TF 2.0 Variables
     tf_weights_map = {}
-    print(pt_model)
-    print(tf_weights)
     for tf_weight in tf_weights:
         pt_name, transpose = convert_tf_weight_name_to_pt_weight_name(
             tf_weight.name, start_prefix_to_remove=start_prefix_to_remove
@@ -335,7 +333,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     all_tf_weights = set(list(tf_weights_map.keys()))
     loaded_pt_weights_data_ptr = {}
     missing_keys_pt = []
-    
+
     for pt_weight_name, pt_weight in current_pt_params_dict.items():
         # Handle PyTorch shared weight ()not duplicated in TF 2.0
         if pt_weight.data_ptr() in loaded_pt_weights_data_ptr:
@@ -347,7 +345,7 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
             if allow_missing_keys:
                 missing_keys_pt.append(pt_weight_name)
                 continue
-            
+
             raise AttributeError("{} not found in TF 2.0 model".format(pt_weight_name))
 
         array, transpose = tf_weights_map[pt_weight_name]
