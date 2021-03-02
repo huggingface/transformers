@@ -438,6 +438,7 @@ TensorFlow and/or Flax.
     model_doc/reformer
     model_doc/retribert
     model_doc/roberta
+    model_doc/speech_to_text_transformer
     model_doc/squeezebert
     model_doc/t5
     model_doc/tapas
