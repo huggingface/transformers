@@ -37,9 +37,10 @@ if is_smdistributed_available():
     import smdistributed.modelparallel.torch as smp
 
     @smp.step()
-    def forward_backward(model, inputs):
+    def forward_backward(model, inputs, gradient_accumulation_steps=1):
         outputs = model(**inputs)
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        loss /= gradient_accumulation_steps
         model.backward(loss)
         return loss
 
@@ -119,7 +120,7 @@ class SageMakerTrainer(Trainer):
         if self.is_model_parallel_enabled:
             model.train()
             inputs = self._prepare_inputs(inputs)
-            loss_mb = forward_backward(model, inputs)
+            loss_mb = forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
         else:
             return super().training_step(model, inputs)
