@@ -60,7 +60,7 @@ _CONFIG_FOR_DOC = "BigBirdConfig"
 _TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
 BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/bigbird-base",
+    "vasudevgupta/bigbird-roberta-base",
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 ]
 

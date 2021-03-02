@@ -114,12 +114,12 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def big_tokenizer(self):
-        return BigBirdTokenizer.from_pretrained("google/bigbird-base")
+        return BigBirdTokenizer.from_pretrained("vasudevgupta/bigbird-roberta-base")
 
     @slow
     def test_tokenization_base_easy_symbols(self):
         symbols = "Hello World!"
-        original_tokenizer_encodings = [18536, 2260, 101]
+        original_tokenizer_encodings = [65, 18536, 2260, 101, 66]
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
 
@@ -127,6 +127,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_tokenization_base_hard_symbols(self):
         symbols = 'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth'
         original_tokenizer_encodings = [
+            65,
             871,
             419,
             358,
@@ -182,6 +183,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             3200,
             3129,
             1172,
+            66
         ]
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
@@ -201,7 +203,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             [sequence + " " + sequence], return_tensors="pt", return_token_type_ids=False
         )
 
-        config = BigBirdConfig()
+        config = BigBirdConfig(attention_type="original_full")
         model = BigBirdModel(config)
 
         assert model.get_input_embeddings().weight.shape[0] >= self.big_tokenizer.vocab_size
