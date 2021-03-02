@@ -30,7 +30,9 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model"}
+    "vocab_file": {
+        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model"
+    }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {

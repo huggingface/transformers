@@ -60,6 +60,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BigBirdConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -99,7 +100,6 @@ from .configuration_auto import (
     XLMProphetNetConfig,
     XLMRobertaConfig,
     XLNetConfig,
-    BigBirdConfig,
     replace_list_option_in_docstrings,
 )
 

@@ -183,7 +183,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             3200,
             3129,
             1172,
-            66
+            66,
         ]
 
         self.assertListEqual(original_tokenizer_encodings, self.big_tokenizer.encode(symbols))
