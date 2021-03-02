@@ -13,7 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# this script remaps classes to class strings
+# this script remaps classes to class strings so that it's quick to load such maps and not require
+# loading all possible modeling files
+#
+# it can be extended to auto-generate other dicts that are needed at runtime
 
 
 import os
