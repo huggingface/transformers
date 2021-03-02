@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils_base import to_py_obj
 
 
 vocab_files_names = {
@@ -159,7 +160,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.encoder.get(token, self.encoder[self.unk_token])
 
     def remove_language_code(self, text: str):
-        """Remove language codes like <<fr>> before sentencepiece"""
+        """Remove language codes like >>fr<< before sentencepiece"""
         match = self.language_code_re.match(text)
         code: list = [match.group(0)] if match else []
         return code, self.language_code_re.sub("", text)
@@ -170,12 +171,65 @@ class MarianTokenizer(PreTrainedTokenizer):
         return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the encoder."""
+        """Converts an index (integer) in a token (str) using the decoder."""
         return self.decoder.get(index, self.unk_token)
 
+    # Copied from tokenization_utils_base.py
+    def batch_decode(
+        self,
+        sequences,
+        skip_special_tokens=False,
+        clean_up_tokenization_spaces=True,
+        use_source_tokenizer=False,
+        **kwargs
+    ):
+        """
+        Additional arg:
+         use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether or not to use
+        the source tokenizer to decode sequences (only applicable in sequence-to-sequence problems).
+        """
+        return [
+            self.decode(
+                seq,
+                skip_special_tokens=skip_special_tokens,
+                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                use_source_tokenizer=use_source_tokenizer,
+                **kwargs,
+            )
+            for seq in sequences
+        ]
+
+    # Copied from tokenization_utils_base.py
+    def decode(
+        self,
+        token_ids,
+        skip_special_tokens=False,
+        clean_up_tokenization_spaces=True,
+        use_source_tokenizer=False,
+        **kwargs
+    ):
+        """
+        Additional arg:
+         use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether or not to use
+        the source tokenizer to decode sequences (only applicable in sequence-to-sequence problems).
+        """
+        # Convert inputs to python lists
+        token_ids = to_py_obj(token_ids)
+
+        return self._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            use_source_tokenizer=use_source_tokenizer,
+            **kwargs,
+        )
+
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Uses target language sentencepiece model"""
-        return self.spm_target.DecodePieces(tokens)
+        """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise """
+        if self._decode_use_source_tokenizer:
+            return self.spm_source.DecodePieces(tokens)
+        else:
+            return self.spm_target.DecodePieces(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
