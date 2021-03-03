@@ -35,6 +35,7 @@ before importing the extractor or processor.
 - ASR
 
 .. code-block::
+
         >>> import torch
         >>> from transformers import Speech2TextProcessor, Speech2TextTransformerForConditionalGeneration
         >>> from datasets import load_dataset
