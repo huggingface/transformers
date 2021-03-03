@@ -1039,7 +1039,7 @@ class Trainer:
                 if (
                     ((step + 1) % self.args.gradient_accumulation_steps != 0)
                     and self.args.local_rank != -1
-                    and not self.args.deepspeed
+                    and self.args._no_sync_in_gradient_accumulation
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():

@@ -737,6 +737,13 @@ class TrainingArguments:
         """
         return True
 
+    @property
+    def _no_sync_in_gradient_accumulation(self):
+        """
+        Whether or not to use no_sync for the gradients when doing gradient accumulation.
+        """
+        return not self.deepspeed
+
     def to_dict(self):
         """
         Serializes this instance while replace `Enum` by their values (for JSON serialization support).
