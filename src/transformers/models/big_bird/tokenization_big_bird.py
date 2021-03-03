@@ -31,12 +31,14 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model"
+        "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
+        "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model"
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/bigbird-roberta-base": 4096,
+    "google/bigbird-roberta-large": 4096,
 }
 
 
@@ -60,6 +62,17 @@ class BigBirdTokenizer(PreTrainedTokenizer):
             token instead.
         pad_token (:obj:`str`, `optional`, defaults to :obj:`"<pad>"`):
             The token used for padding, for example when batching sequences of different lengths.
+        sep_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
+            The separator token, which is used when building a sequence from multiple sequences, e.g. two sequences for
+            sequence classification or for a text and a question for question answering. It is also used as the last
+            token of a sequence built with special tokens.
+        cls_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
+            The classifier token which is used when doing sequence classification (classification of the whole sequence
+            instead of per-token classification). It is the first token of the sequence when built with special tokens.
+        mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
+            The token used for masking values. This is the token used when training this model with masked language
+            modeling. This is the token which the model will try to predict.
+
     """
 
     vocab_files_names = VOCAB_FILES_NAMES

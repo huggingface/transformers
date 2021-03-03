@@ -56,7 +56,8 @@ _CONFIG_FOR_DOC = "BigBirdConfig"
 _TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
 BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vasudevgupta/bigbird-roberta-base",
+    "google/bigbird-roberta-base",
+    "google/bigbird-roberta-large",
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 ]
 
@@ -1617,7 +1618,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base",
+        checkpoint="google/bigbird-roberta-base",
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1848,7 +1849,7 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         next_sentence_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-            Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
+            Labels for computing the next sequence prediction (classification) loss. If specified, nsp loss will be added to masked_lm loss. Input should be a sequence pair
             (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``:
 
             - 0 indicates sequence B is a continuation of sequence A,
@@ -1863,8 +1864,8 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
             >>> from transformers import BigBirdTokenizer, BigBirdForPreTraining
             >>> import torch
 
-            >>> tokenizer = BigBirdTokenizer.from_pretrained('bigbird-base')
-            >>> model = BigBirdForPreTraining.from_pretrained('bigbird-base')
+            >>> tokenizer = BigBirdTokenizer.from_pretrained('bigbird-roberta-base')
+            >>> model = BigBirdForPreTraining.from_pretrained('bigbird-roberta-base')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1942,7 +1943,7 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base",
+        checkpoint="google/bigbird-roberta-base",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2090,10 +2091,10 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel):
             >>> from transformers import BigBirdTokenizer, BigBirdForCausalLM, BigBirdConfig
             >>> import torch
 
-            >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-base')
+            >>> tokenizer = BigBirdTokenizer.from_pretrained('google/bigbird-roberta-base')
             >>> config = BigBirdConfig.from_pretrained("google/bigbird-base")
             >>> config.is_decoder = True
-            >>> model = BigBirdForCausalLM.from_pretrained('google/bigbird-base', config=config)
+            >>> model = BigBirdForCausalLM.from_pretrained('google/bigbird-roberta-base', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -2204,7 +2205,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base",
+        checkpoint="google/bigbird-roberta-base",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2288,7 +2289,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base",
+        checkpoint="google/bigbird-roberta-base",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2380,7 +2381,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base",
+        checkpoint="google/bigbird-roberta-base",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2469,7 +2470,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-base",
+        checkpoint="google/bigbird-roberta-base",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

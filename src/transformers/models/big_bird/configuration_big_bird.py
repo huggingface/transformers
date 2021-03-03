@@ -21,7 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/bigbird-base": "https://huggingface.co/google/bigbird-base/resolve/main/config.json",
+    "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/config.json",
+    "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/config.json",
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 }
 
@@ -30,15 +31,15 @@ class BigBirdConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.BigBirdModel`. It is used to
     instantiate an BigBird model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the BigBird `google/bigbird-base
-    <https://huggingface.co/google/bigbird-base>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the BigBird `google/bigbird-roberta-base
+    <https://huggingface.co/google/bigbird-roberta-base>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+        vocab_size (:obj:`int`, `optional`, defaults to 50358):
             Vocabulary size of the BigBird model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdModel` or
             :class:`~transformers.TFBigBirdModel`. Vocabulary size of the model. Defines the different tokens that can
@@ -51,16 +52,16 @@ class BigBirdConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_fast"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"gelu_fast"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
         hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            just in case (e.g., 1024 or 2048 or 4096).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
             The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.BigBirdModel` or
             :class:`~transformers.TFBigBirdModel`.
@@ -72,17 +73,17 @@ class BigBirdConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`block_sparse`)
-            Whether to set attention to block sparse attention (with n time) as introduced in paper or original
+            Whether to use block sparse attention (with n time) as introduced in paper or original
             attention layer (with n^2 time). Possible values are `original_full` & `block_sparse`.
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
-            Whether to use bias in query, key, value
+            Whether to use bias in query, key, value.
         rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)
-            Whether to rescale embedding with (hidden_size ** 0.5)
+            Whether to rescale embeddings with (hidden_size ** 0.5)
         block_size (:obj:`int`, `optional`, defaults to :obj:`64`)
-            Size of each block. Useful only when `attention_type` is `block_sparse`
+            Size of each block. Useful only when `attention_type` is `block_sparse`.
         num_random_blocks (:obj:`int`, `optional`, defaults to :obj:`3`)
             Each query is going to attend these many number of random blocks. Useful only when `attention_type` is
-            `block_sparse`
+            `block_sparse`.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
@@ -90,10 +91,10 @@ class BigBirdConfig(PretrainedConfig):
 
         >>> from transformers import BigBirdModel, BigBirdConfig
 
-        >>> # Initializing a BigBird google/bigbird-base style configuration
+        >>> # Initializing a BigBird google/bigbird-roberta-base style configuration
         >>> configuration = BigBirdConfig()
 
-        >>> # Initializing a model from the google/bigbird-base style configuration
+        >>> # Initializing a model from the google/bigbird-roberta-base style configuration
         >>> model = BigBirdModel(configuration)
 
         >>> # Accessing the model configuration
@@ -117,8 +118,8 @@ class BigBirdConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         use_cache=True,
         is_encoder_decoder=False,
-        pad_token_id=1,
-        bos_token_id=0,
+        pad_token_id=0,
+        bos_token_id=1,
         eos_token_id=2,
         attention_type="block_sparse",
         use_bias=True,
@@ -126,6 +127,7 @@ class BigBirdConfig(PretrainedConfig):
         block_size=64,
         num_random_blocks=3,
         position_embedding_type="absolute",
+        gradient_checkpointing=False,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
@@ -144,6 +146,7 @@ class BigBirdConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
+        self.gradient_checkpointing = gradient_checkpointing
 
         self.rescale_embeddings = rescale_embeddings
         self.attention_type = attention_type
@@ -151,6 +154,3 @@ class BigBirdConfig(PretrainedConfig):
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
         self.position_embedding_type = position_embedding_type
-
-        # TODO: check use_cache working
-        # TODO: check gradient_checkpointing

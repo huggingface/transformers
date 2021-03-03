@@ -16,16 +16,36 @@ BigBird
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The BigBird model was proposed in `<INSERT PAPER NAME HERE> <<INSERT PAPER LINK HERE>>`__ by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The BigBird model was proposed in `Big Bird: Transformers for Longer Sequences <https://arxiv.org/abs/2007.14062>`__ by
+Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon,
+Santiago and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a sparse-attention
+based transformer which extends Transformer based models, such as BERT to much longer sequences. Moreover, BigBird
+comes along with a theoretical understanding of the capabilities of a complete transformer that the sparse model can
+handle. As a consequence of the capability to handle longer context, BigBird drastically improves performance on
+various NLP tasks such as question answering and summarization.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*Transformers-based models, such as BERT, have been one of the most successful deep learning models for NLP.
+Unfortunately, one of their core limitations is the quadratic dependency (mainly in terms of memory) on the sequence
+length due to their full attention mechanism. To remedy this, we propose, BigBird, a sparse attention mechanism that
+reduces this quadratic dependency to linear. We show that BigBird is a universal approximator of sequence functions and
+is Turing complete, thereby preserving these properties of the quadratic, full attention model. Along the way, our
+theoretical analysis reveals some of the benefits of having O(1) global tokens (such as CLS), that attend to the entire
+sequence as part of the sparse attention mechanism. The proposed sparse attention can handle sequences of length up to
+8x of what was previously possible using similar hardware. As a consequence of the capability to handle longer context,
+BigBird drastically improves performance on various NLP tasks such as question answering and summarization. We also
+propose novel applications to genomics data.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- BigBird comes with 2 implementations: **original_full** & **block_sparse**. For the sequene length < 1024, using
+  **original_full** is advised as there is no benefit in using **block_sparse** attention.
+- The code currently uses window size of 3 blocks and 2 global blocks.
+- Sequence length must be divisible by block size.
+- Current code only supports absolute position embeddings when working with **block_sparse** attention.
+
+The original code can be found `here <https://github.com/google-research/bigbird>`__.
 
 BigBirdConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -48,6 +68,13 @@ BigBirdTokenizerFast
 .. autoclass:: transformers.BigBirdTokenizerFast
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
         create_token_type_ids_from_sequences, save_vocabulary
+
+
+BigBird specific outputs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.models.big_bird.modeling_big_bird.BigBirdForPreTrainingOutput
+    :members:
 
 
 BigBirdModel
