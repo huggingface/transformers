@@ -221,7 +221,7 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         else:
             if isinstance(images, np.ndarray):
                 images = [Image.fromarray(images)]
-            elif isinstance(images, torch.Tensor)
+            elif isinstance(images, torch.Tensor):
                 images = [T.ToPILImage()(images).convert("RGB")]
             else:
                 images = [images]
