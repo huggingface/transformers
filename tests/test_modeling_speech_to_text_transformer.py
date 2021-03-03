@@ -129,9 +129,8 @@ class Speech2TextTransformerModelTester:
         input_features = floats_tensor(
             [self.batch_size, self.seq_length, self.input_feat_per_channel], self.vocab_size
         )
-        attention_mask = ids_tensor([self.batch_size, self.seq_length], 2)
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
 
         config = Speech2TextConfig(
             vocab_size=self.vocab_size,
@@ -189,7 +188,7 @@ class Speech2TextTransformerModelTester:
         output, past_key_values = outputs.to_tuple()
 
         # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size).clamp(2)
         next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
         # append to next input_ids and
