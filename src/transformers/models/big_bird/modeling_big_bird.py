@@ -61,6 +61,18 @@ BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 ]
 
+MAPPING = {
+    "big_bird_attention": "attention/self",
+    "output_layer_norm": "output/LayerNorm",
+    "attention_output": "attention/output/dense",
+    "output": "output/dense",
+    "self_attention_layer_norm": "attention/output/LayerNorm",
+    "intermediate": "intermediate/dense",
+    "word_embeddings": "bert/embeddings/word_embeddings",
+    "position_embeddings": "bert/embeddings/position_embeddings",
+    "token_type_embeddings": "bert/embeddings/token_type_embeddings",
+}
+
 
 def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
@@ -79,19 +91,45 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
 
     # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
+    tf_model = tf.saved_model.load(tf_path)
+    variables = tf_model.variables
+    #    init_vars = tf.train.list_variables(tf_path)
 
-    assert len(init_vars) > 0, "Loaded trained variables cannot be empty."
+    #    assert len(init_vars) > 0, "Loaded trained variables cannot be empty."
 
     names = []
     tf_weights = {}
     pt_names = list(model.state_dict().keys())
 
-    for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-        array = tf.train.load_variable(tf_path, name)
+    #    for name, shape in init_vars:
+    #        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+    #        array = tf.train.load_variable(tf_path, name)
+    #        names.append(name)
+    #        tf_weights[name] = array
+
+    for var in variables:
+        name_items = var.name.split("/")
+
+        if "transformer_scaffold" in name_items[0]:
+            layer_name_items = name_items[0].split("_")
+            if len(layer_name_items) < 3:
+                layer_name_items += [0]
+
+            name_items[0] = "bert/encoder/layer_" + str(layer_name_items[2])
+
+        name = "/".join([MAPPING[x] if x in MAPPING else x for x in name_items])[:-2]  # remove last :0 in variable
+
+        if "self/attention/output" in name:
+            name = name.replace("self/attention/output", "output")
+
+        logger.info("Loading TF weight {} with shape {}".format(name, var.shape))
+        array = var.value().numpy()
         names.append(name)
         tf_weights[name] = array
+
+    import ipdb
+
+    ipdb.set_trace()
 
     for txt_name in names:
         array = tf_weights[txt_name]
@@ -1849,8 +1887,9 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
         next_sentence_label (``torch.LongTensor`` of shape ``(batch_size,)``, `optional`):
-            Labels for computing the next sequence prediction (classification) loss. If specified, nsp loss will be added to masked_lm loss. Input should be a sequence pair
-            (see :obj:`input_ids` docstring) Indices should be in ``[0, 1]``:
+            Labels for computing the next sequence prediction (classification) loss. If specified, nsp loss will be
+            added to masked_lm loss. Input should be a sequence pair (see :obj:`input_ids` docstring) Indices should be
+            in ``[0, 1]``:
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.

@@ -31,8 +31,8 @@ class BigBirdConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.BigBirdModel`. It is used to
     instantiate an BigBird model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the BigBird `google/bigbird-roberta-base
-    <https://huggingface.co/google/bigbird-roberta-base>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the BigBird
+    `google/bigbird-roberta-base <https://huggingface.co/google/bigbird-roberta-base>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -73,8 +73,8 @@ class BigBirdConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`block_sparse`)
-            Whether to use block sparse attention (with n time) as introduced in paper or original
-            attention layer (with n^2 time). Possible values are `original_full` & `block_sparse`.
+            Whether to use block sparse attention (with n time) as introduced in paper or original attention layer
+            (with n^2 time). Possible values are `original_full` & `block_sparse`.
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to use bias in query, key, value.
         rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)

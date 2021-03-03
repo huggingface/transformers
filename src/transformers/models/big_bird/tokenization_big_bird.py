@@ -32,7 +32,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
-        "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model"
+        "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model",
     }
 }
 
