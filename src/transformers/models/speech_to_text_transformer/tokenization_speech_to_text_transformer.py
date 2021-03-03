@@ -75,6 +75,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             The token used for padding, for example when batching sequences of different lengths.
         do_upper_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
            Whether or not to uppercase the output when decoding.
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to lowercase the input when tokenizing.
 
         **kwargs
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
@@ -96,6 +98,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         unk_token="<unk>",
         do_upper_case=False,
+        do_lower_case=False,
         tgt_lang=None,
         lang_codes=None,
         **kwargs,
@@ -106,11 +109,13 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
             unk_token=unk_token,
             pad_token=pad_token,
             do_upper_case=do_upper_case,
+            do_lower_case=do_lower_case,
             tgt_lang=tgt_lang,
             lang_codes=lang_codes,
             **kwargs,
         )
         self.do_upper_case = do_upper_case
+        self.do_lower_case = do_lower_case
 
         self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
