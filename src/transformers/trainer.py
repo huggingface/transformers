@@ -1494,7 +1494,8 @@ class Trainer:
         else:
             if self.is_world_process_zero():
                 self._save(output_dir)
-            dist.barrier()
+            if self.args.local_rank != -1:
+                dist.barrier()
 
         # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
         # SM_MODEL_DIR for easy deployment.
