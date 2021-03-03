@@ -171,9 +171,9 @@ class ViTEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, images):
-        batch_size = images.shape[0]
-        embeddings = self.patch_embeddings(images)
+    def forward(self, pixel_values):
+        batch_size = pixel_values.shape[0]
+        embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
@@ -871,7 +871,8 @@ class ViTModel(ViTPreTrainedModel):
     )
     def forward(
         self,
-        images=None,
+        pixel_values=None,
+        pixel_mask=None,
         input_ids=None,
         attention_mask=None,
         token_type_ids=None,
@@ -962,7 +963,7 @@ class ViTModel(ViTPreTrainedModel):
         # head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            images,
+            pixel_values,
         )
 
         encoder_outputs = self.encoder(
@@ -1038,7 +1039,8 @@ class ViTForImageClassification(ViTPreTrainedModel):
     # )
     def forward(
             self,
-            images=None,
+            pixel_values=None,
+            pixel_mask=None,
             input_ids=None,
             attention_mask=None,
             token_type_ids=None,
@@ -1060,7 +1062,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vit(
-            images,
+            pixel_values,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,

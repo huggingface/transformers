@@ -238,8 +238,8 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         # step 3: apply transformations to images
         transformed_images = [transforms(image) for image in images]
 
-        # step 4: TO DO: replace by self.pad (which is defined in image_processor_utils.py), which takes
-        # care of padding + creating pixel mask
+        # step 4: TO DO: replace by self.pad (which is defined in image_processor_utils.py), which should 
+        # take care of padding + creating pixel mask
         samples = nested_tensor_from_tensor_list(transformed_images)
 
         # return as BatchImages
