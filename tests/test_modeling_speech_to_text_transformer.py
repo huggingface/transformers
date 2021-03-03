@@ -289,13 +289,14 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
 
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
-        input_ids = input_dict["input_features"]
+        input_features = input_dict["input_features"]
         attention_mask = input_dict["attention_mask"]
         model = Speech2TextTransformerForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
+            input_features.to(torch.float16)
             model.half()
-        model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(input_ids, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+        model.generate(input_features, attention_mask=attention_mask)
+        model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
