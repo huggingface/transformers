@@ -44,7 +44,7 @@ else:
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-# this is used to supress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
 try:
     from torch.optim.lr_scheduler import SAVE_STATE_WARNING
 except ImportError:
