@@ -890,7 +890,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # saved states are stored with shape (batch_size, num_attn_heads, seq_len, head_dim)
         if saved_state is not None:
             prev_main_key_states = saved_state["prev_key_states"].view(
-                ngram_batch_size * self.num_attn_heads, -1, self.head_dim
+                batch_size * self.num_attn_heads, -1, self.head_dim
             )
             main_key_states = torch.cat((prev_main_key_states, main_key_states), dim=1)
             prev_main_value_states = saved_state["prev_value_states"].view(
@@ -1007,7 +1007,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # input hidden_states [T,B,C], input attn_weights [T*head,T,S], input position_ids [B,T] or [1,1]
 
         if main_relative_position_buckets is None:
-            raise ValueError("Error - I think this is never reached, so delete it!!!")
             batch_size, sequence_length = hidden_states.shape[:2]
             relative_positions = (
                 torch.arange(1, attn_weights.shape[-1] + 1)
@@ -1441,12 +1440,12 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         # prepare attention mask
         if past_key_values is not None:
             assert (
-                hidden_states.size(0) == 1
+                hidden_states.size(1) == 1
             ), "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
 
             ngram_hidden_states = [
                 #                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, batch_size, 1)
-                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).repeat(1, batch_size, 1)
+                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).repeat(batch_size, 1, 1)
                 for ngram in range(self.ngram)
             ]
             extended_attention_mask = None
@@ -1493,10 +1492,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             if output_hidden_states:
                 # grad cannot be kept because tensor is sliced
                 #                all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
-                all_main_stream_hidden_states += (hidden_states[:sequence_length],)
+                all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
                 if self.config.ngram > 0:
                     #                    all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
-                    all_ngram_stream_hidden_states += (hidden_states[sequence_length:],)
+                    all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
             layer_state = past_key_values[idx] if past_key_values is not None else None
             (
@@ -1529,10 +1528,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         if output_hidden_states:
             #            all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
-            all_main_stream_hidden_states += (hidden_states[:sequence_length],)
+            all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
             if self.config.ngram > 0:
                 #                all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
-                all_ngram_stream_hidden_states += (hidden_states[sequence_length:],)
+                all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
         # split last_hidden_state for return
         #        last_hidden_state = hidden_states[:sequence_length].transpose(0, 1)
