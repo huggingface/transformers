@@ -132,6 +132,96 @@ class SageMakerTrainer(Trainer):
         else:
             return super()._gather_and_numpify(tensors, name)
 
+    def save_model(self, output_dir: Optional[str] = None):
+        """
+        Will save the model, so you can reload it using :obj:`from_pretrained()`.
+
+        Will only save from the world_master process (unless in TPUs).
+        """
+        if self.is_model_parallel_enabled:
+            self._save_smp(output_dir)
+        elif is_torch_tpu_available():
+            self._save_tpu(output_dir)
+        elif self.is_world_process_zero():
+            self._save(output_dir)
+
+        # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
+        # SM_MODEL_DIR for easy deployment.
+        if output_dir is None and os.getenv("SM_MODEL_DIR") is not None:
+            self.save_model(output_dir=os.getenv("SM_MODEL_DIR"))
+
+    def _save_smp(self, output_dir: Optional[str] = None):
+        if smp.dp_rank() != 0:
+            return
+        output_dir = output_dir if output_dir is not None else self.args.output_dir
+        os.makedirs(output_dir, exist_ok=True)
+        logger.info("Saving model checkpoint to %s", output_dir)
+        # Save a trained model and configuration using `save_pretrained()`.
+        # They can then be reloaded using `from_pretrained()`
+        if not isinstance(self.model, PreTrainedModel):
+            if isinstance(_model_unwrap(self.model), PreTrainedModel):
+                _model_unwrap(self.model).config.save_pretrained(output_dir)
+            else:
+                logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
+            # Consolidate state_dict on all dp_rank 0 processes
+            state_dict = self.model.state_dict()
+            if self.is_world_process_zero():
+                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+        else:
+            self.model.save_pretrained(output_dir)
+        if self.tokenizer is not None and self.is_world_process_zero():
+            self.tokenizer.save_pretrained(output_dir)
+
+        # Good practice: save your training arguments together with the trained model
+        torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+
+    def _save_checkpoint(self, model, trial, metrics=None):
+        if self.is_model_parallel_enabled:
+            if smp.dp_rank() != 0:
+                return
+
+            checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
+
+            run_dir = self.args.output_dir
+            self.store_flos()
+
+            output_dir = os.path.join(run_dir, checkpoint_folder)
+            self.save_model(output_dir)
+            # Consolidate the state dict on all processed of dp_rank 0
+            opt_state_dict = self.optimizer.state_dict()
+            # Save it and the scheduler on the main process
+            if self.is_world_process_zero():
+                torch.save(opt_state_dict.state_dict(), os.path.join(output_dir, "optimizer.pt"))
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                reissue_pt_warnings(caught_warnings)
+
+            # Determine the new best metric / best model checkpoint
+            if metrics is not None and self.args.metric_for_best_model is not None:
+                metric_to_check = self.args.metric_for_best_model
+                if not metric_to_check.startswith("eval_"):
+                    metric_to_check = f"eval_{metric_to_check}"
+                metric_value = metrics[metric_to_check]
+
+                operator = np.greater if self.args.greater_is_better else np.less
+                if (
+                    self.state.best_metric is None
+                    or self.state.best_model_checkpoint is None
+                    or operator(metric_value, self.state.best_metric)
+                ):
+                    self.state.best_metric = metric_value
+                    self.state.best_model_checkpoint = output_dir
+
+            # Save the Trainer state
+            if self.is_world_process_zero():
+                self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
+
+            # Maybe delete some older checkpoints.
+            if self.is_world_process_zero():
+                self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
+        else:
+            super()._save_checkpoint(self, model, trial, metrics=metrics)
+
     def prediction_step(
         self,
         model: nn.Module,
