@@ -61,7 +61,6 @@ from .file_utils import (
     is_torch_tpu_available,
 )
 from .modeling_utils import PreTrainedModel, unwrap_model
-from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -104,6 +103,7 @@ from .trainer_utils import (
 )
 from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
+from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
 _is_native_amp_available = False
@@ -408,7 +408,7 @@ class Trainer:
         self.use_tune_checkpoints = False
         default_label_names = (
             ["start_positions", "end_positions"]
-            if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
+            if type(self.model).__name__ in MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES.values()
             else ["labels"]
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
@@ -1027,7 +1027,7 @@ class Trainer:
                 if (
                     ((step + 1) % self.args.gradient_accumulation_steps != 0)
                     and self.args.local_rank != -1
-                    and not self.args.deepspeed
+                    and self.args._no_sync_in_gradient_accumulation
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
