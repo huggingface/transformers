@@ -27,6 +27,7 @@ extra_quality_checks: deps_table_update
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/style_doc.py src/transformers docs/source --max_len 119
+	python utils/class_mapping_update.py
 
 # this target runs checks on all files
 quality:
