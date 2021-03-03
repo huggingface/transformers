@@ -638,7 +638,7 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
 class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
-        return Speech2TextProcessor.from_pretrained("valhalla/s2t_librispeech_small")
+        return Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
@@ -657,7 +657,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
         return ds["speech"][:num_samples]
 
     def test_generation_librispeech(self):
-        model = Speech2TextTransformerForConditionalGeneration.from_pretrained("valhalla/s2t_librispeech_small")
+        model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         model.to(torch_device)
         processor = self.default_processor
 
@@ -672,7 +672,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
-        model = Speech2TextTransformerForConditionalGeneration.from_pretrained("valhalla/s2t_librispeech_small")
+        model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         model.to(torch_device)
         processor = self.default_processor
 
