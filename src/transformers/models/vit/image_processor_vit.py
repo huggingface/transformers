@@ -115,7 +115,7 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to :obj:`224`):
-            Resize the input image to the given size. Only has an effect if :obj:`resize` is set to :obj:`True`.
+            Resize the input to the given size. Only has an effect if :obj:`resize` is set to :obj:`True`.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -205,7 +205,7 @@ class ViTImageProcessor(PreTrainedImageProcessor):
             )
         ), (
             "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
-            "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]`(batch of examples)."
+            "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
         )
 
         is_batched = bool(
@@ -215,12 +215,12 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         # step 1: make images a list of PIL images no matter what
         if is_batched:
             if isinstance(images[0], np.ndarray):
-                images = [Image.fromarray(image) for image in images]
+                images = [Image.fromarray(image).convert("RGB") for image in images]
             elif isinstance(images[0], torch.Tensor):
                 images = [T.ToPILImage()(image).convert("RGB") for image in images]
         else:
             if isinstance(images, np.ndarray):
-                images = [Image.fromarray(images)]
+                images = [Image.fromarray(images).convert("RGB")]
             elif isinstance(images, torch.Tensor):
                 images = [T.ToPILImage()(images).convert("RGB")]
             else:
