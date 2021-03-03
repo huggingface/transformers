@@ -145,8 +145,8 @@ class Conv1dSubsampler(nn.Module):
             for i, k in enumerate(self.kernel_sizes)
         )
 
-    def forward(self, input_values):
-        hidden_states = input_values.transpose(1, 2).contiguous()  # -> B x (C x D) x T
+    def forward(self, input_features):
+        hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x (C x D) x T
         for conv in self.conv_layers:
             hidden_states = conv(hidden_states)
             hidden_states = nn.functional.glu(hidden_states, dim=1)
