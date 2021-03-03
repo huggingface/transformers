@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -20,13 +20,73 @@ The Speech2TextTransformer model was proposed in `fairseq S2T: Fast Speech-to-Te
 <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
 
 
-The abstract from the paper is the following:
+Inference
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-*<INSERT PAPER ABSTRACT HERE>*
+`Speech2TextTransformer` is a speech model that accepts a float tensor of log-mel filter-bank features extracted from
+the speech signal. It's a transformer based seq2seq model, so the transcripts/translations are generated
+autoregressively. The `generate` method can be used for inference.
 
-Tips:
+The :class:`transformers.Speech2TextFeatureExtractor` class is responsible for extracting the log-mel filter-bank
+features. The :class:`transformers.Speech2Textprocessor` wraps the processor and tokenizer objects and is used to
+extract the features and decode the text. The feature extractor depends on `torchaudio` so make sure to install it
+before importing the extractor or processor.
 
-<INSERT TIPS ABOUT MODEL HERE>
+- ASR
+
+.. code-block::
+        >>> import torch
+        >>> from transformers import Speech2TextProcessor, Speech2TextTransformerForConditionalGeneration
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_small")
+        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t_librispeech_small")
+
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
+        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
+        >>> generated_ids = model.generate(input_ids=input_features)
+
+        >>> transcription = processor.batch_decode(generated_ids)
+
+
+- Multilingual speech translation
+
+    For multilingual speech translation models, :obj:`eos_token_id` is used as the :obj:`decoder_start_token_id` and
+    the target language id is forced as the first generated token. To force the target language id as the first
+    generated token, pass the `forced_bos_token_id` parameter to the `generate` method. The following example shows how
+    to transate English speech to French text using the `facebook/s2t_mustc_multilingual_medium` checkpoint.
+
+.. code-block::
+
+        >>> import torch
+        >>> from transformers import Speech2TextProcessor, Speech2TextTransformerForConditionalGeneration
+        >>> from datasets import load_dataset
+        >>> import soundfile as sf
+
+        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_mustc_multilingual_medium")
+        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t_mustc_multilingual_medium")
+
+        >>> def map_to_array(batch):
+        ...     speech, _ = sf.read(batch["file"])
+        ...     batch["speech"] = speech
+        ...     return batch
+
+        >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
+        >>> generated_ids = model.generate(input_ids=input_features, forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"])
+
+        >>> translation = processor.batch_decode(generated_ids)
+
 
 Speech2TextConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -1247,7 +1247,7 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
             >>> import soundfile as sf
 
             >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_small")
-            >>> tokenizer = Speech2TextTokenizer.from_pretrained("facebook/s2t_librispeech_small")
+            >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t_librispeech_small")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])
