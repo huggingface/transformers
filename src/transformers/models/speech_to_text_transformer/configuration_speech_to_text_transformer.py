@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "s2t_transformer_s": "https://huggingface.co/s2t_transformer_s/resolve/main/config.json",
+    "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/config.json",
     # See all Speech2TextTransformer models at https://huggingface.co/models?filter=speech_to_text_transformer
 }
 
@@ -31,7 +31,8 @@ class Speech2TextConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextTransformerModel`.
     It is used to instantiate an Speech2TextTransformer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    Speech2TextTransformer `s2t_transformer_s <https://huggingface.co/s2t_transformer_s>`__ architecture.
+    Speech2TextTransformer `facebook/s2t-small-librispeech-asr
+    <https://huggingface.co/facebook/s2t-small-librispeech-asr>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.

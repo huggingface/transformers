@@ -49,7 +49,7 @@ _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
 
 
 SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "s2t_transformer_s",
+    "facebook/s2t-small-librispeech-asr",
     # See all Speech2TextTransformer models at https://huggingface.co/models?filter=speech_to_text_transformer
 ]
 
@@ -1246,8 +1246,8 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_small")
-            >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t_librispeech_small")
+            >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+            >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
             >>> def map_to_array(batch):
             >>>     speech, _ = sf.read(batch["file"])

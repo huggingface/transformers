@@ -40,8 +40,8 @@ before importing the extractor or processor.
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_librispeech_small")
-        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t_librispeech_small")
+        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
@@ -62,7 +62,7 @@ before importing the extractor or processor.
     For multilingual speech translation models, :obj:`eos_token_id` is used as the :obj:`decoder_start_token_id` and
     the target language id is forced as the first generated token. To force the target language id as the first
     generated token, pass the `forced_bos_token_id` parameter to the `generate` method. The following example shows how
-    to transate English speech to French text using the `facebook/s2t_mustc_multilingual_medium` checkpoint.
+    to transate English speech to French text using the `facebook/s2t-medium-mustc-multilingual-st` checkpoint.
 
 .. code-block::
 
@@ -71,8 +71,8 @@ before importing the extractor or processor.
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t_mustc_multilingual_medium")
-        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t_mustc_multilingual_medium")
+        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
