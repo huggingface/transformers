@@ -23,7 +23,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import sentencepiece
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import to_py_obj
 
 
 vocab_files_names = {
@@ -174,55 +173,52 @@ class MarianTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the decoder."""
         return self.decoder.get(index, self.unk_token)
 
-    # Copied from tokenization_utils_base.py
-    def batch_decode(
-        self,
-        sequences,
-        skip_special_tokens=False,
-        clean_up_tokenization_spaces=True,
-        use_source_tokenizer=False,
-        **kwargs
-    ):
+    def batch_decode(self, sequences, **kwargs):
         """
-        Additional arg:
-         use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether or not to use
-        the source tokenizer to decode sequences (only applicable in sequence-to-sequence problems).
-        """
-        return [
-            self.decode(
-                seq,
-                skip_special_tokens=skip_special_tokens,
-                clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-                use_source_tokenizer=use_source_tokenizer,
-                **kwargs,
-            )
-            for seq in sequences
-        ]
+        Convert a list of lists of token ids into a list of strings by calling decode.
 
-    # Copied from tokenization_utils_base.py
-    def decode(
-        self,
-        token_ids,
-        skip_special_tokens=False,
-        clean_up_tokenization_spaces=True,
-        use_source_tokenizer=False,
-        **kwargs
-    ):
-        """
-        Additional arg:
-         use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`): Whether or not to use
-        the source tokenizer to decode sequences (only applicable in sequence-to-sequence problems).
-        """
-        # Convert inputs to python lists
-        token_ids = to_py_obj(token_ids)
+        Args:
+            sequences (:obj:`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the ``__call__`` method.
+            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to clean up the tokenization spaces.
+            use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
+                problems).
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
 
-        return self._decode(
-            token_ids=token_ids,
-            skip_special_tokens=skip_special_tokens,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            use_source_tokenizer=use_source_tokenizer,
-            **kwargs,
-        )
+        Returns:
+            :obj:`List[str]`: The list of decoded sentences.
+        """
+        return super().batch_decode(sequences, **kwargs)
+
+    def decode(self, token_ids, **kwargs):
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
+
+        Args:
+            token_ids (:obj:`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the ``__call__`` method.
+            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to clean up the tokenization spaces.
+            use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
+                problems).
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            :obj:`str`: The decoded sentence.
+        """
+        return super().decode(token_ids, **kwargs)
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise """
