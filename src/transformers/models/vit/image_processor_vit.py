@@ -219,13 +219,17 @@ class ViTImageProcessor(PreTrainedImageProcessor):
             elif isinstance(images[0], torch.Tensor):
                 images = [T.ToPILImage()(image).convert("RGB") for image in images]
         else:
-            if isinstance(images, PIL.Image.Image):
+            if isinstance(images, np.ndarray):
+                images = [Image.fromarray(images)]
+            elif isinstance(images, torch.Tensor)
+                images = [T.ToPILImage()(images).convert("RGB")]
+            else:
                 images = [images]
 
         # step 2: define transformations (resizing + normalization)
         transformations = []
         if self.do_resize and self.size is not None:
-            transformations.append(T.Resize(size=self.size))
+            transformations.append(T.Resize(size=(self.size, self.size)))
         if self.do_normalize:
             normalization = T.Compose([T.ToTensor(), T.Normalize(self.image_mean, self.image_std)])
             transformations.append(normalization)
