@@ -21,6 +21,8 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -207,8 +209,6 @@ from ..roberta.modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-
-# Add modeling imports here
 from ..speech_to_text_transformer.modeling_speech_to_text_transformer import (
     Speech2TextTransformerForConditionalGeneration,
     Speech2TextTransformerModel,
