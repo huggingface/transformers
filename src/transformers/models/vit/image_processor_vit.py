@@ -218,13 +218,9 @@ class ViTImageProcessor(PreTrainedImageProcessor):
                 images = [Image.fromarray(image) for image in images]
             elif isinstance(images[0], torch.Tensor):
                 images = [T.ToPILImage()(image).convert("RGB") for image in images]
-            if annotations is not None:
-                assert len(images) == len(annotations)
         else:
             if isinstance(images, PIL.Image.Image):
                 images = [images]
-            if annotations is not None:
-                annotations = [annotations]
 
         # step 2: define transformations (resizing + normalization)
         transformations = []
