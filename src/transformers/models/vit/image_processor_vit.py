@@ -21,7 +21,7 @@ import torchvision
 import torchvision.transforms.functional as F
 from torchvision import transforms as T
 
-from typing import Optional, Union
+from typing import Optional, Union, List
 
 from ...file_utils import PaddingStrategy, TensorType
 from ...image_processor_utils import BatchImages, PreTrainedImageProcessor
