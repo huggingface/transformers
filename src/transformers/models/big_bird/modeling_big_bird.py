@@ -1342,8 +1342,6 @@ class BigBirdEncoder(nn.Module):
 
         next_decoder_cache = () if use_cache else None
 
-        hidden_states = self.LayerNorm(hidden_states)
-
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1837,7 +1835,9 @@ class BigBirdModel(BigBirdPreTrainedModel):
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
-        assert seq_length % block_size == 0, "Sequence length must be multiple of block size"
+        assert (
+            seq_length % block_size == 0
+        ), "Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
@@ -2506,13 +2506,27 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         )
 
 
+class BigBirdNoResidualOutput(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
 class BigBirdForQuestionAnsweringHead(nn.Module):
     """Head for question answering tasks."""
 
     def __init__(self, config):
         super().__init__()
         self.intermediate = BigBirdIntermediate(config)
-        self.output = BigBirdOutput(config)
+        self.output = BigBirdNoResidualOutput(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, hidden_states, **kwargs):
