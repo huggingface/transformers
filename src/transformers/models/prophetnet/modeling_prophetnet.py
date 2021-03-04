@@ -667,15 +667,10 @@ class ProphetNetAttention(nn.Module):
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (
-                key_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
-                value_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
-            )
+            past_key_value = (key_states, value_states)
 
+        # project states into the correct shape
         proj_shape = (batch_size * self.num_attn_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
@@ -883,6 +878,8 @@ class ProphetNetNgramSelfAttention(nn.Module):
         main_attn_probs = F.dropout(main_attn_probs, p=self.attention_dropout, training=self.training)
         # project to attn_output
         main_attn_output = torch.bmm(main_attn_probs, main_value_states)
+
+        # reshape so that num_heads dim is merged into last `head_dim` axis
         main_attn_output = (
             main_attn_output.view(batch_size, self.num_attn_heads, sequence_length, self.head_dim)
             .transpose(1, 2)
@@ -933,6 +930,8 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # project to attention output
         # [ngram, B*head, T, c]
         predict_attn_output = torch.einsum("nbts,nbsc->nbtc", (predict_attn_probs, predict_value_states))
+
+        # reshape so that num_heads dim is merged into last `head_dim` axis
         # [ngram, B, T, C]
         predict_attn_output = (
             predict_attn_output.view(self.ngram, batch_size, self.num_attn_heads, sequence_length, self.head_dim)
@@ -951,6 +950,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         ).transpose(0, 1)
 
         attn_output = F.dropout(attn_output, p=self.dropout, training=self.training)
+
         return attn_output, main_attn_probs, predict_attn_probs, past_key_value
 
     def get_main_relative_pos_embeddings(
@@ -1104,14 +1104,14 @@ class ProphetNetDecoderLayer(nn.Module):
     def forward(
         self,
         hidden_states,
+        attention_mask=None,
         encoder_hidden_states=None,
         encoder_attn_mask=None,
-        past_key_value=None,
-        attention_mask=None,
         extended_predict_attention_mask=None,
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
         position_ids=None,
+        past_key_value=None,
         use_cache: bool = True,
         output_attentions: bool = False,
     ):
@@ -1255,9 +1255,24 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
             if output_hidden_states:
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
-            layer_outputs = encoder_layer(
-                hidden_states, attention_mask=extended_attention_mask, output_attentions=output_attentions
-            )
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        return module(*inputs, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(encoder_layer),
+                    hidden_states,
+                    extended_attention_mask,
+                )
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states, attention_mask=extended_attention_mask, output_attentions=output_attentions
+                )
+
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1451,19 +1466,49 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            layer_outputs = decoder_layer(
-                hidden_states,
-                encoder_hidden_states=encoder_hidden_states,
-                encoder_attn_mask=extended_encoder_attention_mask,
-                past_key_value=past_key_value,
-                attention_mask=extended_attention_mask,
-                extended_predict_attention_mask=extended_predict_attention_mask,
-                main_relative_position_buckets=main_relative_position_buckets,
-                predict_relative_position_buckets=predict_relative_position_buckets,
-                position_ids=position_ids,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                if use_cache:
+                    logger.warn(
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
+                    )
+                    use_cache = False
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, use_cache, output_attentions)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
+                    hidden_states,
+                    extended_attention_mask,
+                    encoder_hidden_states,
+                    extended_encoder_attention_mask,
+                    extended_predict_attention_mask,
+                    main_relative_position_buckets,
+                    predict_relative_position_buckets,
+                    position_ids,
+                    None,
+                )
+            else:
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=extended_attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attn_mask=extended_encoder_attention_mask,
+                    extended_predict_attention_mask=extended_predict_attention_mask,
+                    main_relative_position_buckets=main_relative_position_buckets,
+                    predict_relative_position_buckets=predict_relative_position_buckets,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    use_cache=use_cache,
+                    output_attentions=output_attentions,
+                )
+
             hidden_states = layer_outputs[0]
 
             if use_cache:
@@ -1874,10 +1919,14 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         return self._shift_right(labels)
 
     @staticmethod
+    # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past),)
+            # cached cross_attention states don't have to be reordered -> they are always the same
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
 
     def get_encoder(self):
@@ -2087,6 +2136,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         }
 
     @staticmethod
+    # Copied from transformers.models.bart.modeling_bart.BartForCausalLM._reorder_cache
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
         for layer_past in past:
