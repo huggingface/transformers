@@ -224,6 +224,7 @@ MULTIPLE_CHOICE_DUMMY_INPUTS = [
 ] * 2  # Needs to have 0s and 1s only since XLM uses it for langs too.
 DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
+HF_SM_ID = str(uuid4())
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
@@ -1169,6 +1170,7 @@ def cached_path(
 
     return output_path
 
+
 def define_sagemaker_information():
     try:
         instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
@@ -1184,15 +1186,15 @@ def define_sagemaker_information():
     account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
 
     sagemaker_object = {
-        "id": str(uuid4()),
-        "framework": os.getenv("SM_FRAMEWORK_MODULE", None),
-        "region": os.getenv("AWS_REGION", None),
-        "number_gpu": os.getenv("SM_NUM_GPUS", 0),
-        "number_cpu": os.getenv("SM_NUM_CPUS", 0),
-        "distributed_training": runs_distributed_training,
-        "deep_learning_container": dlc_container_used,
-        "deep_learning_container_tag": dlc_tag,
-        "account_id": account_id,
+        "sm_id": HF_SM_ID,
+        "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
+        "sm_region": os.getenv("AWS_REGION", None),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_distributed_training": runs_distributed_training,
+        "sm_deep_learning_container": dlc_container_used,
+        "sm_deep_learning_container_tag": dlc_tag,
+        "sm_account_id": account_id,
     }
     # return {k: v for k, v in payload.items() if v is not None}
     return sagemaker_object
