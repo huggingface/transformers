@@ -26,12 +26,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "helboukkouri/character-bert": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+    }
+}
+
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "helboukkouri/character-bert": 512,
 }
 
 PRETRAINED_INIT_CONFIGURATION = {
-    "helboukkouri/character-bert": {"do_lower_case": True},
+    "helboukkouri/character-bert": {"max_word_length": 50, "do_lower_case": True},
 }
 
 PAD_TOKEN_CHAR_ID = 0
@@ -86,6 +92,7 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
             value for :obj:`lowercase` (as in the original BERT).    """
 
 
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
