@@ -75,7 +75,7 @@ class ViTImageProcessorTester(unittest.TestCase):
         image_inputs = torch.randn((self.batch_size, *input_size))
 
         return image_inputs
-    
+
     def prepare_inputs_pytorch_for_common(self, equal_resolution=False):
         input_size = (self.num_channels, self.image_size, self.image_size)
         image_inputs = torch.randn((self.batch_size, *input_size))
@@ -124,7 +124,7 @@ class ViTImageProcessorTest(ImageProcessorMixin, unittest.TestCase):
         encoded_images_2 = image_processor(np_image_inputs, return_tensors="pt").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_images_1, encoded_images_2):
             self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-    
+
     def test_normalization(self):
         pass
 

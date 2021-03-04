@@ -16,7 +16,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _BaseLazyModule, is_torch_available, is_tokenizers_available
+
+from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
     "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "image_processor_vit": ["ViTImageProcessor"],

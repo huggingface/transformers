@@ -14,13 +14,13 @@
 # limitations under the License.
 """Image processor class for ViT."""
 
+from typing import List, Optional, Union
+
 import numpy as np
 import PIL
 import torch
 import torchvision
 from torchvision import transforms as T
-
-from typing import Optional, Union, List
 
 from ...file_utils import PaddingStrategy, TensorType
 from ...image_processor_utils import BatchImages, PreTrainedImageProcessor
@@ -237,7 +237,7 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         # step 3: apply transformations to images
         transformed_images = [transforms(image) for image in images]
 
-        # step 4: TO DO: replace by self.pad (which is defined in image_processor_utils.py), which should 
+        # step 4: TO DO: replace by self.pad (which is defined in image_processor_utils.py), which should
         # take care of padding, creation of attention mask, return_tensors type
         samples = nested_tensor_from_tensor_list(transformed_images)
 

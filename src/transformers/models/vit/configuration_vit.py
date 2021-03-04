@@ -96,6 +96,7 @@ class ViTConfig(PretrainedConfig):
         >>> configuration = model.config
     """
     model_type = "vit"
+
     def __init__(
         self,
         vocab_size=30522,
@@ -120,12 +121,7 @@ class ViTConfig(PretrainedConfig):
         num_channels=3,
         **kwargs
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
+        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -144,4 +140,3 @@ class ViTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
-        

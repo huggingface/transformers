@@ -17,52 +17,46 @@
 
 import unittest
 
-from PIL import Image
-import requests
 import torchvision.transforms as T
+from PIL import Image
 
+import requests
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask, floats_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
     import torch
 
-    from transformers import (
-        ViTConfig,
-        ViTForImageClassification,
-        ViTModel,
-    )
-    from transformers.models.vit.modeling_vit import (
-        VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-    )
+    from transformers import ViTConfig, ViTForImageClassification, ViTModel
+    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 class ViTModelTester:
     def __init__(
-            self,
-            parent,
-            batch_size=13,
-            image_size=30,
-            patch_size=2,
-            num_channels=3,
-            is_training=True,
-            use_input_mask=True,
-            use_labels=True,
-            hidden_size=32,
-            num_hidden_layers=5,
-            num_attention_heads=4,
-            intermediate_size=37,
-            hidden_act="gelu",
-            hidden_dropout_prob=0.1,
-            attention_probs_dropout_prob=0.1,
-            type_sequence_label_size=10,
-            initializer_range=0.02,
-            num_labels=3,
-            scope=None,
+        self,
+        parent,
+        batch_size=13,
+        image_size=30,
+        patch_size=2,
+        num_channels=3,
+        is_training=True,
+        use_input_mask=True,
+        use_labels=True,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        type_sequence_label_size=10,
+        initializer_range=0.02,
+        num_labels=3,
+        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -112,9 +106,7 @@ class ViTModelTester:
 
         return config, pixel_values, input_mask, image_labels
 
-    def create_and_check_model(
-            self, config, pixel_values, input_mask, image_labels
-    ):
+    def create_and_check_model(self, config, pixel_values, input_mask, image_labels):
         model = ViTModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -122,9 +114,7 @@ class ViTModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_image_classification(
-            self, config, pixel_values, input_mask, image_labels
-    ):
+    def create_and_check_for_image_classification(self, config, pixel_values, input_mask, image_labels):
         config.num_labels = self.num_labels
         model = ViTForImageClassification(config)
         model.to(torch_device)
@@ -186,15 +176,17 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 # We will verify our results on an image of cute cats
 # TODO: use VitImageProcessor in the future
 def prepare_img(image_resolution):
-    url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
 
     # standard PyTorch mean-std input image normalization
-    transform = T.Compose([
-        T.Resize((image_resolution,image_resolution)),
-        T.ToTensor(),
-        T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
+    transform = T.Compose(
+        [
+            T.Resize((image_resolution, image_resolution)),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ]
+    )
 
     # mean-std normalize the input image (batch-size: 1)
     img = transform(im).unsqueeze(0)
@@ -217,8 +209,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [-0.7332,  0.7286, -0.4020]
-        ).to(torch_device)
+        expected_slice = torch.tensor([-0.7332, 0.7286, -0.4020]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

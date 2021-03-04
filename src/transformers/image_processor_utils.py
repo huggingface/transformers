@@ -15,8 +15,8 @@
 """
  Image processor common class for python image processors.
 
- Based on https://github.com/huggingface/transformers/blob/master/src/transformers/feature_extraction_utils.py,
- but PreTrainedFeatureExtractor -> PreTrainedImageProcessor, BatchFeature -> BatchImages, and so on. 
+ Based on https://github.com/huggingface/transformers/blob/master/src/transformers/feature_extraction_utils.py, but
+ PreTrainedFeatureExtractor -> PreTrainedImageProcessor, BatchFeature -> BatchImages, and so on.
 """
 import copy
 import json
@@ -58,7 +58,8 @@ if TYPE_CHECKING:
 
 class BatchImages(UserDict):
     r"""
-    Holds the output of the :meth:`~transformers.PreTrainedImageProcessor.pad` and image processor specific ``__call__`` methods.
+    Holds the output of the :meth:`~transformers.PreTrainedImageProcessor.pad` and image processor specific
+    ``__call__`` methods.
 
     This class is derived from a python dictionary and can be used as a dictionary.
 
@@ -78,8 +79,8 @@ class BatchImages(UserDict):
 
     def __getitem__(self, item: str) -> Union[Any]:
         """
-        If the key is a string, returns the value of the dict associated to :obj:`key` ('pixel_values',
-        'pixel_mask', etc.).
+        If the key is a string, returns the value of the dict associated to :obj:`key` ('pixel_values', 'pixel_mask',
+        etc.).
         """
         if isinstance(item, str):
             return self.data[item]
@@ -559,8 +560,8 @@ class PreTrainedImageProcessor:
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 >= 7.5 (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
             return_pixel_mask (:obj:`bool`, `optional`):
-                Whether to return the pixel mask. If left to the default, will return the pixel mask according
-                to the specific image_processor's default.
+                Whether to return the pixel mask. If left to the default, will return the pixel mask according to the
+                specific image_processor's default.
 
                 `What are pixel masks? <../glossary.html#attention-mask>`__
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
@@ -586,9 +587,7 @@ class PreTrainedImageProcessor:
             )
 
         required_input = processed_images[self.model_input_names[0]]
-        return_pixel_mask = (
-            return_pixel_mask if return_pixel_mask is not None else self.return_pixel_mask
-        )
+        return_pixel_mask = return_pixel_mask if return_pixel_mask is not None else self.return_pixel_mask
 
         if not required_input:
             if return_pixel_mask:
