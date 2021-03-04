@@ -35,6 +35,7 @@ from .configuration_bert_generation import BertGenerationConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/bert_for_seq_generation_L-24_bbc_encoder"
 _CONFIG_FOR_DOC = "BertGenerationConfig"
 _TOKENIZER_FOR_DOC = "BertGenerationTokenizer"
 
