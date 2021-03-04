@@ -70,6 +70,7 @@ class ImageProcessorMixin:
         self.assertIsNotNone(image_processor)
 
     def test_batch_images_numpy(self):
+        # Define the images + initialize image_processor
         image_inputs = self.image_processor_tester.prepare_inputs_numpy_for_common()
         image_processor = self.image_processor_class(**self.image_processor_dict)
         input_name = image_processor.model_input_names[0]

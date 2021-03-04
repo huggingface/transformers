@@ -32,12 +32,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
 from ...modeling_utils import (
     PreTrainedModel,
@@ -83,7 +78,12 @@ to_2tuple = _ntuple(2)
 
 
 class ViTEmbeddings(nn.Module):
-    """Construct the cls token, position and patch embeddings."""
+    """Construct the cls token, position and patch embeddings.
+    
+    Based on timm implementation, which can be found here: 
+    https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+    
+    """
 
     def __init__(self, config):
         super().__init__()

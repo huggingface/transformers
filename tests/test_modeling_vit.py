@@ -120,7 +120,6 @@ class ViTModelTester:
         model.eval()
         result = model(pixel_values, attention_mask=input_mask)
         result = model(pixel_values)
-        result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_image_classification(
@@ -223,5 +222,3 @@ class ViTModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-
