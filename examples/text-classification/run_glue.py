@@ -73,7 +73,7 @@ class DataTrainingArguments:
         metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
     )
     max_seq_length: int = field(
-        default=128,
+        default=512,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
