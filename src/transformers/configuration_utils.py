@@ -246,7 +246,6 @@ class PretrainedConfig(object):
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
         # TPU arguments
-        self.xla_device = kwargs.pop("xla_device", None)
         if kwargs.pop("xla_device", None) is not None:
             logger.warn(
                 "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
