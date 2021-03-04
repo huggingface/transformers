@@ -410,9 +410,8 @@ class Adafactor(Optimizer):
 
         Example::
 
-            Adafactor(model.parameters(), lr=1e-3, relative_step=False, warmup_init=True)
+            Adafactor(model.parameters(), relative_step=True, warmup_init=True)  # lr is by default None
 
-        - Alternatively, relative_step with warmup_init can be used.
         - Training without LR warmup or clip threshold is not recommended. Additional optimizer operations like
           gradient clipping should not be used alongside Adafactor.
 
