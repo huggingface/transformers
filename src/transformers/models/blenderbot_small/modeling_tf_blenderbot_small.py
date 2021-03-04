@@ -52,6 +52,7 @@ from .configuration_blenderbot_small import BlenderbotSmallConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "facebook/blenderbot_small-90M"
 _CONFIG_FOR_DOC = "BlenderbotSmallConfig"
 _TOKENIZER_FOR_DOC = "BlenderbotSmallTokenizer"
 
@@ -1174,7 +1175,7 @@ class TFBlenderbotSmallModel(TFBlenderbotSmallPreTrainedModel):
     @add_start_docstrings_to_model_forward(BLENDERBOT_SMALL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/blenderbot_small-90M",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
