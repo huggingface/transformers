@@ -22,8 +22,8 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 
 from ..file_utils import WEIGHTS_NAME, is_torch_tpu_available
-from ..modeling_utils import PreTrainedModel
-from ..trainer import Trainer, _model_unwrap
+from ..modeling_utils import PreTrainedModel, unwrap_model
+from ..trainer import Trainer
 from ..trainer_pt_utils import (
     DistributedLengthGroupedSampler,
     SequentialDistributedSampler,
@@ -162,24 +162,25 @@ class SageMakerTrainer(Trainer):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info("Saving model checkpoint to %s", output_dir)
-        # Save a trained model and configuration using `save_pretrained()`.
-        # They can then be reloaded using `from_pretrained()`
-        if not isinstance(self.model, PreTrainedModel):
-            if isinstance(_model_unwrap(self.model), PreTrainedModel):
-                _model_unwrap(self.model).config.save_pretrained(output_dir)
+        # Calling the state_dict needs to be done on the wrapped model
+        state_dict = self.model_wrapped.state_dict()
+
+        # Rest of the save is done for the main process only
+        if self.is_world_process_zero():
+            model = self.model
+            if not isinstance(model, PreTrainedModel):
+                model = unwrap_model(model)
+            if isinstance(model, PreTrainedModel):
+                model.save_pretrained(output_dir, state_dict=state_dict)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            # Consolidate state_dict on all dp_rank 0 processes
-            state_dict = self.model.state_dict()
-            if self.is_world_process_zero():
                 torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
-        else:
-            self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None and self.is_world_process_zero():
-            self.tokenizer.save_pretrained(output_dir)
 
-        # Good practice: save your training arguments together with the trained model
-        torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+            if self.tokenizer is not None:
+                self.tokenizer.save_pretrained(output_dir)
+
+            # Good practice: save your training arguments together with the trained model
+            torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
     def _save_checkpoint(self, model, trial, metrics=None):
         if self.is_model_parallel_enabled:
