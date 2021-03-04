@@ -19,6 +19,7 @@ import random
 import unittest
 
 import numpy as np
+import torch
 
 from transformers import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, ViTConfig, ViTImageProcessor
 from transformers.testing_utils import slow
@@ -48,8 +49,10 @@ class ViTImageProcessorTester(unittest.TestCase):
         self,
         parent,
         batch_size=7,
-        min_resolution=400,
-        max_resolution=2000,
+        num_channels=3,
+        image_size=224,
+        min_resolution=30,
+        max_resolution=400,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.5, 0.5, 0.5],
         padding_value=0.0,
@@ -60,6 +63,8 @@ class ViTImageProcessorTester(unittest.TestCase):
     ):
         self.parent = parent
         self.batch_size = batch_size
+        self.num_channels = num_channels
+        self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
         self.image_mean = image_mean
@@ -81,20 +86,30 @@ class ViTImageProcessorTester(unittest.TestCase):
             "size": self.size,
         }
 
-    def prepare_inputs_for_common(self, equal_resolution=False, numpify=False):
+    def prepare_numpy_inputs_for_common(self, equal_resolution=False):
         def _flatten(list_of_lists):
             return list(itertools.chain(*list_of_lists))
 
         if equal_resolution:
-            image_inputs = floats_list((self.batch_size, self.max_seq_length))
+            image_inputs = floats_list((self.batch_size, self.num_channels, self.image_size, self.image_size))
         else:
             image_inputs = [
                 _flatten(floats_list((x, self.feature_size)))
-                for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
+                for x in range(self.min_resolution, self.max_resolution, self.seq_length_diff)
             ]
 
-        if numpify:
-            image_inputs = [np.asarray(x) for x in image_inputs]
+        image_inputs = [np.asarray(x) for x in image_inputs]
+
+        return image_inputs
+
+    def prepare_pytorch_inputs_for_common(self, equal_resolution=False):
+
+        if equal_resolution:
+            input_size = (self.num_channels, self.image_size, self.image_size)
+            image_inputs = torch.randn((self.batch_size, *input_size))
+        
+        else:
+            
 
         return image_inputs
 
@@ -106,24 +121,41 @@ class ViTImageProcessorTest(ImageProcessorMixin, unittest.TestCase):
     def setUp(self):
         self.image_processor_tester = VitImageProcessorTester(self)
 
-    def test_call(self):
-        # Tests that all call wrap to encode_plus and batch_encode_plus
+    def test_call_numpy(self):
+        # Initialize image_processor
         image_processor = self.image_processor_class(**self.image_processor_tester.prepare_image_processor_dict())
         # create three inputs of resolution 800, 1000, and 1200
         image_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_image_inputs = [np.asarray(speech_input) for speech_input in image_inputs]
 
         # Test not batched input
-        encoded_sequences_1 = image_processor(image_inputs[0], return_tensors="np").input_values
-        encoded_sequences_2 = image_processor(np_image_inputs[0], return_tensors="np").input_values
-        self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=1e-3))
+        encoded_images_1 = image_processor(image_inputs[0], return_tensors="np").input_values
+        encoded_images_2 = image_processor(np_image_inputs[0], return_tensors="np").input_values
+        self.assertTrue(np.allclose(encoded_images_1, encoded_images_2, atol=1e-3))
 
         # Test batched
-        encoded_sequences_1 = image_processor(image_inputs, return_tensors="np").input_values
-        encoded_sequences_2 = image_processor(np_image_inputs, return_tensors="np").input_values
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
+        encoded_images_1 = image_processor(image_inputs, return_tensors="np").input_values
+        encoded_images_2 = image_processor(np_image_inputs, return_tensors="np").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_images_1, encoded_images_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_pytorch(self):
+        # Initialize image_processor
+        image_processor = self.image_processor_class(**self.image_processor_tester.prepare_image_processor_dict())
+        # create three inputs of resolution 800, 1000, and 1200
+        image_inputs = None
+
+        # Test not batched input
+        encoded_images_1 = image_processor(image_inputs[0], return_tensors="pt").input_values
+        encoded_images_2 = image_processor(np_image_inputs[0], return_tensors="pt").input_values
+        self.assertTrue(np.allclose(encoded_images_1, encoded_images_2, atol=1e-3))
+
+        # Test batched
+        encoded_images_1 = image_processor(image_inputs, return_tensors="pt").input_values
+        encoded_images_2 = image_processor(np_image_inputs, return_tensors="pt").input_values
+        for enc_seq_1, enc_seq_2 in zip(encoded_images_1, encoded_images_2):
+            self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+    
     def test_normalization(self):
         pass
 

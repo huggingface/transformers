@@ -75,11 +75,11 @@ class ViTConfig(PretrainedConfig):
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
-        img_size (:obj:`int`, `optional`, defaults to :obj:`224`):
+        image_size (:obj:`int`, `optional`, defaults to :obj:`224`):
             The size (resolution) of each image.
         patch_size (:obj:`int`, `optional`, defaults to :obj:`16`):
             The size (resolution) of each patch.
-        in_chans (:obj:`int`, `optional`, defaults to :obj:`3`):
+        num_channels (:obj:`int`, `optional`, defaults to :obj:`3`):
             The number of input channels.
 
         Example::
@@ -115,9 +115,9 @@ class ViTConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        img_size=224,
+        image_size=224,
         patch_size=16,
-        in_chans=3,
+        num_channels=3,
         **kwargs
     ):
         super().__init__(
@@ -141,7 +141,7 @@ class ViTConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
 
-        self.img_size = img_size
+        self.image_size = image_size
         self.patch_size = patch_size
-        self.in_chans = in_chans
+        self.num_channels = num_channels
         

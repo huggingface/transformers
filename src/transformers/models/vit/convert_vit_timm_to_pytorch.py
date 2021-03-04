@@ -146,10 +146,10 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
         config.patch_size = 32
         config.num_labels=1000
     elif vit_name == "vit_base_patch16_384":
-        config.img_size = 384
+        config.image_size = 384
         config.num_labels=1000
     elif vit_name == "vit_base_patch32_384":
-        config.img_size = 384
+        config.image_size = 384
         config.patch_size = 32
         config.num_labels=1000
 
@@ -170,7 +170,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
     model.load_state_dict(state_dict)
 
     # Check logits on an image
-    img = prepare_img(config.img_size)
+    img = prepare_img(config.image_size)
     logits = vit(img)
     outputs = model(img)
 
@@ -188,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--vit_name", default='vit_base_patch16_224', type=str, help="Name of the ViT timm model you'd like to convert, currently supports ViT base models."
     )
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory.")
     parser.add_argument("--base_model", default=False, action="store_true", help="Whether to just load the base model without any head.")
     args = parser.parse_args()
     convert_vit_checkpoint(args.vit_name, args.pytorch_dump_folder_path)

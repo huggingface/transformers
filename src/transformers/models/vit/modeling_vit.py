@@ -61,84 +61,6 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-def load_tf_weights_in_vit(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info("Skipping {}".format("/".join(name)))
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info("Initialize PyTorch weight {}".format(name))
-        pointer.data = torch.from_numpy(array)
-    return model
-
-
-def mish(x):
-    return x * torch.tanh(nn.functional.softplus(x))
-
-
 """ Layer/Module Helpers
 Hacked together by / Copyright 2020 Ross Wightman
 """
@@ -146,6 +68,8 @@ from itertools import repeat
 import collections.abc
 
 
+# Copied from 
+# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
 # From PyTorch internals
 def _ntuple(n):
     def parse(x):
@@ -166,7 +90,8 @@ class ViTEmbeddings(nn.Module):
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = PatchEmbeddings(
-                img_size=config.img_size, patch_size=config.patch_size, in_chans=config.in_chans, embed_dim=config.hidden_size)
+                image_size=config.image_size, patch_size=config.patch_size, num_channels=config.num_channels, 
+                embed_dim=config.hidden_size)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -183,24 +108,23 @@ class ViTEmbeddings(nn.Module):
 
 
 class PatchEmbeddings(nn.Module):
-    """ Image to Patch Embedding.
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768):
+    """ Image to Patch Embedding."""
+    def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
         super().__init__()
-        img_size = to_2tuple(img_size)
+        image_size = to_2tuple(image_size)
         patch_size = to_2tuple(patch_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
-        self.img_size = img_size
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, x):
         B, C, H, W = x.shape
         # FIXME look at relaxing size constraints
-        assert H == self.img_size[0] and W == self.img_size[1], \
-            f"Input image size ({H}*{W}) doesn't match model ({self.img_size[0]}*{self.img_size[1]})."
+        assert H == self.image_size[0] and W == self.image_size[1], \
+            f"Input image size ({H}*{W}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
         x = self.projection(x).flatten(2).transpose(1, 2)
         return x
 
@@ -281,43 +205,30 @@ class ViTSelfAttention(nn.Module):
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
-
-        # print("Hidden states before self-attention:")
-        # print(hidden_states[0,:3,:3])
-        
-        # print("Queries:")
-        # print(query_layer[0,0,:3,:3])
-
-        # print("Keys:")
-        # print(key_layer[0,0,:3,:3])
         
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+        # if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
+        #     seq_length = hidden_states.size()[1]
+        #     position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
+        #     position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
+        #     distance = position_ids_l - position_ids_r
+        #     positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
+        #     positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
+        #     if self.position_embedding_type == "relative_key":
+        #         relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+        #         attention_scores = attention_scores + relative_position_scores
+        #     elif self.position_embedding_type == "relative_key_query":
+        #         relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
+        #         relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
+        #         attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in ViTModel forward() function)
             attention_scores = attention_scores + attention_mask
-
-        # OK
-        # print("Attention scores before softmax:")
-        # print(attention_scores[0,:3,:3])
         
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -326,19 +237,11 @@ class ViTSelfAttention(nn.Module):
         # seem a bit unusual, but is taken from the original Transformer paper.
         attention_probs = self.dropout(attention_probs)
 
-        # OK
-        # print("Attention after dropout:")
-        # print(attention_probs[0,:3,:3])
-
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
 
         context_layer = torch.matmul(attention_probs, value_layer)
-
-        #print("Hidden states after self-attention:")
-        #print(context_layer.shape)
-        #print(context_layer[0,:3,:3,:3])
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -358,17 +261,12 @@ class ViTSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        #self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        #hidden_states = self.LayerNorm(hidden_states + input_tensor)
-
-        #print("Hidden states after dense + dropout:")
-        #print(hidden_states[0,:3,:3])
 
         # first residual connection
         #hidden_states = hidden_states + input_tensor
@@ -421,9 +319,6 @@ class ViTAttention(nn.Module):
             output_attentions,
         )
 
-        #print("Hidden states after self-attention:")
-        #print(hidden_states[0,:3,:3])
-
         attention_output = self.output(self_outputs[0], hidden_states)
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -441,14 +336,8 @@ class ViTIntermediate(nn.Module):
 
     def forward(self, hidden_states):
         
-        #print("Hidden states before intermediate:")
-        #print(hidden_states[0,:3,:3])
-        
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-
-        #print("Hidden states after intermediate:")
-        #print(hidden_states[0,:3,:3])
 
         return hidden_states
 
@@ -457,21 +346,13 @@ class ViTOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        #self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        #hidden_states = self.LayerNorm(hidden_states + input_tensor)
-
-        #print("Hidden states after fc2:")
-        #print(hidden_states[0,:3,:3])
 
         hidden_states = hidden_states + input_tensor
-
-        #print("Hidden states after adding second residual connection:")
-        #print(hidden_states[0,:3,:3])
 
         return hidden_states
 
@@ -550,14 +431,8 @@ class ViTLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
         
-        #print("Hidden states before second layernorm:")
-        #print(hidden_states[0,:3,:3])
-        
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)   
-        
-        #print("Hidden states after second layer norm:")
-        #print(layer_output[0,:3,:3]) 
         
         # feedforward chunking not working for now
         # layer_output = apply_chunking_to_forward(
@@ -637,10 +512,7 @@ class ViTEncoder(nn.Module):
                     encoder_hidden_states,
                     encoder_attention_mask,
                 )
-            else:
-                #print("Hidden states before layer:", i)
-                #print(hidden_states[0,:3,:3])
-                
+            else:     
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -650,9 +522,6 @@ class ViTEncoder(nn.Module):
                     past_key_value,
                     output_attentions,
                 )
-
-                #print("Hidden states after layer:", i)
-                #print(hidden_states[0,:3,:3])
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -770,44 +639,23 @@ VIT_START_DOCSTRING = r"""
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
-            Indices of input sequence tokens in the vocabulary.
-
-            Indices can be obtained using :class:`transformers.ViTTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
-
-            `What are input IDs? <../glossary.html#input-ids>`__
-        attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
-            Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-            
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-            
+        pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it.
+            Pixel values can be obtained using :class:`~transformers.ViTImageProcessor`. See
+            :meth:`transformers.ViTImageProcessor.__call__` for details.
+        
+        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
+            - 1 for pixels that are real (i.e. **not masked**),
+            - 0 for pixels that are padding (i.e. **masked**).
             `What are attention masks? <../glossary.html#attention-mask>`__
-        token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
-            1]``:
-            
-            - 0 corresponds to a `sentence A` token,
-            - 1 corresponds to a `sentence B` token.
-            
-            `What are token type IDs? <../glossary.html#token-type-ids>`_
-        position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
 
-            `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
             
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
             
-        inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
-            This is useful if you want more control over how to convert `input_ids` indices into associated vectors
-            than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -872,13 +720,8 @@ class ViTModel(ViTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        pixel_mask=None,
-        input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
         head_mask=None,
-        inputs_embeds=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -1040,13 +883,8 @@ class ViTForImageClassification(ViTPreTrainedModel):
     def forward(
             self,
             pixel_values=None,
-            pixel_mask=None,
-            input_ids=None,
             attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
             head_mask=None,
-            inputs_embeds=None,
             labels=None,
             output_attentions=None,
             output_hidden_states=None,
@@ -1063,12 +901,8 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         outputs = self.vit(
             pixel_values,
-            input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
             head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1078,9 +912,6 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         sequence_output = self.layernorm(sequence_output[:, 0, :])
         logits = self.classifier(sequence_output)
-
-        #print("Logits:")
-        #print(logits[0,:3])
 
         loss = None
         if labels is not None:
