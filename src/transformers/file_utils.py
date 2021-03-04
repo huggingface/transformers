@@ -1167,7 +1167,6 @@ def define_sagemaker_information():
         dlc_container_used = None
         dlc_tag = None
 
-    # is distributed training used?
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
     runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
     account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
@@ -1182,7 +1181,6 @@ def define_sagemaker_information():
         "sm_deep_learning_container_tag": dlc_tag,
         "sm_account_id": account_id,
     }
-    # return {k: v for k, v in payload.items() if v is not None}
     return sagemaker_object
 
 
