@@ -43,9 +43,9 @@ def main():
         ):
             print("Closing", issue)
             # issue.create_comment(
-            #     " This issue has been automatically marked as stale because it has not had "
-            #     "recent activity. It will be closed if no further activity occurs. Thank you "
-            #     "for your contributions."
+            #     "This issue has been automatically marked as stale and been closed because it has not had "
+            #     "recent activity. Thank you for your contributions.\n\nIf you think this still needs to be addressed"
+            #     " please comment on this thread."
             # )
             # issue.add_to_labels("wontfix")
             # issue.edit(state="closed")
