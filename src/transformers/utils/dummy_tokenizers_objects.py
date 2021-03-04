@@ -38,6 +38,15 @@ class BertTokenizerFast:
         requires_tokenizers(self)
 
 
+class BigBirdTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class CamembertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)

@@ -61,7 +61,7 @@ BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 ]
 
-MAPPING = {
+TRIVIA_QA_MAPPING = {
     "big_bird_attention": "attention/self",
     "output_layer_norm": "output/LayerNorm",
     "attention_output": "attention/output/dense",
@@ -69,13 +69,64 @@ MAPPING = {
     "self_attention_layer_norm": "attention/output/LayerNorm",
     "intermediate": "intermediate/dense",
     "word_embeddings": "bert/embeddings/word_embeddings",
-    "position_embeddings": "bert/embeddings/position_embeddings",
-    "token_type_embeddings": "bert/embeddings/token_type_embeddings",
+    "position_embedding": "bert/embeddings/position_embeddings",
+    "type_embeddings": "bert/embeddings/token_type_embeddings",
+    "embeddings": "bert/embeddings",
+    "layer_normalization": "output/LayerNorm",
+    "layer_norm": "LayerNorm",
+    "trivia_qa_head": "qa_classifier",
+    "dense": "intermediate/dense",
+    "dense_1": "qa_outputs",
 }
 
 
-def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
+def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
     """Load tf checkpoints in a pytorch model."""
+
+    def load_tf_weights_bert(init_vars, tf_path):
+        names = []
+        tf_weights = {}
+
+        for name, shape in init_vars:
+            array = tf.train.load_variable(tf_path, name)
+            name = name.replace("bert/encoder/LayerNorm", "bert/embeddings/LayerNorm")
+            logger.info("Loading TF weight {} with shape {}".format(name, shape))
+            names.append(name)
+            tf_weights[name] = array
+
+        return names, tf_weights
+
+    def load_tf_weights_trivia_qa(init_vars):
+        names = []
+        tf_weights = {}
+
+        for i, var in enumerate(init_vars):
+            name_items = var.name.split("/")
+
+            if "transformer_scaffold" in name_items[0]:
+                layer_name_items = name_items[0].split("_")
+                if len(layer_name_items) < 3:
+                    layer_name_items += [0]
+
+                name_items[0] = "bert/encoder/layer_" + str(layer_name_items[2])
+
+            name = "/".join([TRIVIA_QA_MAPPING[x] if x in TRIVIA_QA_MAPPING else x for x in name_items])[
+                :-2
+            ]  # remove last :0 in variable
+
+            if "self/attention/output" in name:
+                name = name.replace("self/attention/output", "output")
+
+            if i >= len(init_vars) - 2:
+                name = name.replace("intermediate", "output")
+
+            logger.info("Loading TF weight {} with shape {}".format(name, var.shape))
+            array = var.value().numpy()
+            names.append(name)
+            tf_weights[name] = array
+
+        return names, tf_weights
+
     try:
         import re
 
@@ -91,45 +142,16 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
 
     # Load weights from TF model
-    tf_model = tf.saved_model.load(tf_path)
-    variables = tf_model.variables
-    #    init_vars = tf.train.list_variables(tf_path)
+    init_vars = tf.saved_model.load(tf_path).variables if is_trivia_qa else tf.train.list_variables(tf_path)
 
-    #    assert len(init_vars) > 0, "Loaded trained variables cannot be empty."
+    assert len(init_vars) > 0, "Loaded trained variables cannot be empty."
 
-    names = []
-    tf_weights = {}
     pt_names = list(model.state_dict().keys())
 
-    #    for name, shape in init_vars:
-    #        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-    #        array = tf.train.load_variable(tf_path, name)
-    #        names.append(name)
-    #        tf_weights[name] = array
-
-    for var in variables:
-        name_items = var.name.split("/")
-
-        if "transformer_scaffold" in name_items[0]:
-            layer_name_items = name_items[0].split("_")
-            if len(layer_name_items) < 3:
-                layer_name_items += [0]
-
-            name_items[0] = "bert/encoder/layer_" + str(layer_name_items[2])
-
-        name = "/".join([MAPPING[x] if x in MAPPING else x for x in name_items])[:-2]  # remove last :0 in variable
-
-        if "self/attention/output" in name:
-            name = name.replace("self/attention/output", "output")
-
-        logger.info("Loading TF weight {} with shape {}".format(name, var.shape))
-        array = var.value().numpy()
-        names.append(name)
-        tf_weights[name] = array
-
-    import ipdb
-
-    ipdb.set_trace()
+    if is_trivia_qa:
+        names, tf_weights = load_tf_weights_trivia_qa(init_vars)
+    else:
+        names, tf_weights = load_tf_weights_bert(init_vars, tf_path)
 
     for txt_name in names:
         array = tf_weights[txt_name]
@@ -181,15 +203,18 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
                 num = int(scope_names[1])
                 pointer = pointer[num]
                 pt_name.append(f"{num}")
-        if m_name[-11:] == "_embeddings":
+        if m_name[-11:] == "_embeddings" or m_name == "embeddings":
             pointer = getattr(pointer, "weight")
             pt_name.append("weight")
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
+            if len(array.shape) > len(pointer.shape) and math.prod(array.shape) == math.prod(pointer.shape):
+                array = array.reshape(pointer.shape)
+
             assert (
                 pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -207,20 +232,25 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path):
 class BigBirdEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
+    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
-        self.rescale_embeddings = config.rescale_embeddings
-        self.hidden_size = config.hidden_size
-
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
+        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
+        # any TensorFlow checkpoint file
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
+        # End copy
+        self.rescale_embeddings = config.rescale_embeddings
+        self.hidden_size = config.hidden_size
 
     def forward(
         self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
@@ -251,6 +281,7 @@ class BigBirdEmbeddings(nn.Module):
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
+        embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
@@ -1288,9 +1319,6 @@ class BigBirdEncoder(nn.Module):
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
-        # extra compared to orig-bert
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
     def forward(
         self,
         hidden_states,
@@ -1465,7 +1493,7 @@ class BigBirdOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->BigBird
 class BigBirdPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1568,11 +1596,10 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForPreTrainingOutput
 @dataclass
 class BigBirdForPreTrainingOutput(ModelOutput):
     """
-    Output type of :class:`~transformers.BigBirdForPreTraining`.
+    Output type of :class:`~transformers.BigBirdtForPreTraining`.
 
     Args:
         loss (`optional`, returned when ``labels`` is provided, ``torch.FloatTensor`` of shape :obj:`(1,)`):
@@ -1842,14 +1869,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
         return blocked_encoder_mask, band_mask, from_mask, to_mask
 
 
-# Copied from transformers.models.bert.modeling_bert.BertForPreTraining
-@add_start_docstrings(
-    """
-    BigBird Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
-    sentence prediction (classification)` head.
-    """,
-    BIG_BIRD_START_DOCSTRING,
-)
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2487,6 +2506,22 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         )
 
 
+class BigBirdForQuestionAnsweringHead(nn.Module):
+    """Head for question answering tasks."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.intermediate = BigBirdIntermediate(config)
+        self.output = BigBirdOutput(config)
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+
+    def forward(self, hidden_states, **kwargs):
+        hidden_states = self.intermediate(hidden_states)
+        hidden_states = self.output(hidden_states)
+        hidden_states = self.qa_outputs(hidden_states)
+        return hidden_states
+
+
 @add_start_docstrings(
     """
     BigBird Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
@@ -2501,8 +2536,8 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.bert = BigBirdModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+        self.bert = BigBirdModel(config, add_pooling_layer=False)
+        self.qa_classifier = BigBirdForQuestionAnsweringHead(config)
 
         self.init_weights()
 
@@ -2553,7 +2588,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits = self.qa_outputs(sequence_output)
+        logits = self.qa_classifier(sequence_output)
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
