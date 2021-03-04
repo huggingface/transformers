@@ -609,9 +609,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     """
 
     config_class = ViTConfig
-    load_tf_weights = load_tf_weights_in_vit
     base_model_prefix = "vit"
-    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
