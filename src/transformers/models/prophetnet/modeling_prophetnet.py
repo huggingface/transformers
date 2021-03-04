@@ -624,8 +624,6 @@ class ProphetNetAttention(nn.Module):
 
         self.out_proj = nn.Linear(hidden_size, hidden_size)
 
-    #    def _reshape(self, tensor, first_dim, batch_size):
-    #        return tensor.reshape(first_dim, batch_size * self.num_attn_heads, self.head_dim).transpose(0, 1)
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_attn_heads, self.head_dim).transpose(1, 2).contiguous()
 
@@ -655,29 +653,9 @@ class ProphetNetAttention(nn.Module):
             saved_state = layer_state.get(cache_key, None)
 
         query_states = self.query_proj(hidden_states) / (self.head_dim ** 0.5)
-        #        query_states = self._reshape(query_states, sequence_length, batch_size)
 
-        #        if not is_cross_attention:
-        # self-attention
-        #            key_states = self.key_proj(hidden_states)
-        #            key_states = self._reshape(key_states, -1, batch_size)
-        #            value_states = self.value_proj(hidden_states)
-        #            value_states = self._reshape(value_states, -1, batch_size)
-        #        elif saved_state is None:
-        # cross-attention without layer state
-        #            key_states = self.key_proj(key_value_states)
-        #            key_states = self._reshape(key_states, -1, batch_size)
-        #            value_states = self.value_proj(key_value_states)
-        #            value_states = self._reshape(value_states, -1, batch_size)
-        #        else:
-        #            key_states = saved_state["prev_key_states"].view(batch_size * self.num_attn_heads, -1, self.head_dim)
-        #            value_states = saved_state["prev_value_states"].view(batch_size * self.num_attn_heads, -1, self.head_dim)
-
-        #        if is_cross_attention and past_key_value is not None:
         if is_cross_attention and saved_state is not None:
             # reuse k,v, cross_attentions
-            #            key_states = past_key_value[0]
-            #            value_states = past_key_value[1]
             key_states = saved_state["prev_key_states"]
             value_states = saved_state["prev_value_states"]
         elif is_cross_attention:
@@ -703,12 +681,6 @@ class ProphetNetAttention(nn.Module):
                 "prev_value_states": value_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
             }
 
-        # Update cache
-        #        if is_cross_attention:
-        #            layer_state[cache_key] = {
-        #                "prev_key_states": key_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
-        #                "prev_value_states": value_states.view(batch_size, self.num_attn_heads, -1, self.head_dim),
-        #            }
         proj_shape = (batch_size * self.num_attn_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, batch_size).view(*proj_shape)
         key_states = key_states.view(*proj_shape)
@@ -824,7 +796,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
         self.onnx_trace = False
 
     def _shape(self, tensor, seq_len, batch_size):
-        #        return tensor.reshape(first_dim, batch_size * self.num_attn_heads, self.head_dim).transpose(0, 1)
         return tensor.view(batch_size, seq_len, self.num_attn_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def prepare_for_onnx_export_(self):
@@ -840,7 +811,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
         predict_relative_position_buckets=None,
         position_ids=None,
     ):
-        #        n_gram_batch_size, sequence_length, hidden_size = hidden_states.size()
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
 
         assert list(hidden_states.size()) == [
@@ -872,15 +842,11 @@ class ProphetNetNgramSelfAttention(nn.Module):
         value_states = value_states.view(*proj_shape)
 
         # chunk into main stream and predict stream
-        #        hidden_states_list = hidden_states.chunk(1 + self.ngram, dim=0)
         hidden_states_list = hidden_states.chunk(1 + self.ngram, dim=1)
 
         query_states_list = query_states.chunk(1 + self.ngram, dim=1)
         key_states_list = key_states.chunk(1 + self.ngram, dim=1)
         value_states_list = value_states.chunk(1 + self.ngram, dim=1)
-        #        query_states_list = query_states.chunk(1 + self.ngram, dim=0)
-        #        key_states_list = key_states.chunk(1 + self.ngram, dim=0)
-        #        value_states_list = value_states.chunk(1 + self.ngram, dim=0)
 
         main_hidden_states, hidden_states_predict_list = hidden_states_list[0], hidden_states_list[1:]
         main_query_states, predict_query_states_list = query_states_list[0], query_states_list[1:]
@@ -930,11 +896,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
         # project to attn_output
         main_attn_output = torch.bmm(main_attn_probs, main_value_states)
         main_attn_output = (
-            #            main_attn_output.transpose(0, 1).contiguous().view(1, main_sequence_length, batch_size, hidden_size)
             main_attn_output.view(batch_size, self.num_attn_heads, sequence_length, self.head_dim)
             .transpose(1, 2)
             .reshape(batch_size, 1, sequence_length, hidden_size)
-            #            main_attn_output.view(1, main_sequence_length, batch_size, hidden_size)
         )
         main_attn_output = self.out_proj(main_attn_output)
 
@@ -1004,7 +968,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
     def get_main_relative_pos_embeddings(
         self, hidden_states, attn_weights, position_ids, main_relative_position_buckets
     ):
-        # input hidden_states [T,B,C], input attn_weights [T*head,T,S], input position_ids [B,T] or [1,1]
+        # input hidden_states [B,T,C], input attn_weights [T*head,T,S], input position_ids [B,T] or [1,1]
 
         if main_relative_position_buckets is None:
             batch_size, sequence_length = hidden_states.shape[:2]
@@ -1022,7 +986,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 self.num_buckets, self.relative_max_distance, relative_positions, False
             )
 
-        #        hidden_states = hidden_states.transpose(0, 1)  # [B,T,C]
         rel_pos_embeddings = self.relative_pos_embeddings(hidden_states)  # [B,T,Buckets*head]
         rel_pos_embeddings = rel_pos_embeddings.view(
             rel_pos_embeddings.shape[:2] + (self.num_buckets, self.num_attn_heads)
@@ -1048,7 +1011,6 @@ class ProphetNetNgramSelfAttention(nn.Module):
         self, hidden_states, attn_weights, position_ids, predict_relative_position_buckets
     ):
         # input hidden_states [ngram, T,B,C], input attn_weights [ngram, B*head,T,S], input position_ids [B,T] or [1,1], input predict_relative_position_buckets [B,T, 2*T] or None
-
         sequence_length, batch_size = hidden_states.shape[1:3]
 
         if predict_relative_position_buckets is None:
@@ -1183,7 +1145,6 @@ class ProphetNetDecoderLayer(nn.Module):
                 output_attentions=output_attentions,
             )
             hidden_states = self.cross_attn_layer_norm(attention_output + hidden_states)
-        #            hidden_states = hidden_states.transpose(0, 1)
 
         # 3rd residual block
         feed_forward_output = self.feed_forward(hidden_states)
@@ -1284,23 +1245,20 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         hidden_states = inputs_embeds + position_embeddings
         hidden_states = self.embeddings_layer_norm(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.config.dropout, training=self.training)
-        #        hidden_states = hidden_states.transpose(0, 1)  # B x T x C -> T x B x C
 
         encoder_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for encoder_layer in self.layers:
             if output_hidden_states:
-                #                hidden_states = hidden_states.transpose(0, 1)
                 encoder_hidden_states = encoder_hidden_states + (hidden_states,)
-            #                hidden_states = hidden_states.transpose(0, 1)
+
             hidden_states, attn_probs = encoder_layer(
                 hidden_states, attention_mask=extended_attention_mask, output_attentions=output_attentions
             )
             if output_attentions:
                 all_attentions = all_attentions + (attn_probs,)
 
-        #        hidden_states = hidden_states.transpose(0, 1)
         if output_hidden_states:
             encoder_hidden_states = encoder_hidden_states + (hidden_states,)
 
@@ -1433,7 +1391,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         # add position embeddings
         hidden_states = inputs_embeds + main_stream_pos_embed
-        #        hidden_states = hidden_states.transpose(0, 1)
 
         ngram_embeddings = self.ngram_embeddings.weight
 
@@ -1444,7 +1401,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             ), "At the moment `use_cache` is only supported for `decoder_input_ids` of length 1"
 
             ngram_hidden_states = [
-                #                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1).repeat(1, batch_size, 1)
                 (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).repeat(batch_size, 1, 1)
                 for ngram in range(self.ngram)
             ]
@@ -1452,9 +1408,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             extended_predict_attention_mask = None
         else:
             ngram_hidden_states = [
-                #                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed).transpose(0, 1)
-                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed)
-                for ngram in range(self.ngram)
+                (ngram_embeddings[ngram - 1] + predicting_stream_pos_embed) for ngram in range(self.ngram)
             ]
             extended_attention_mask = self.prepare_attention_mask(hidden_states, attention_mask)
             extended_predict_attention_mask = self.prepare_predict_attention_mask(hidden_states, attention_mask)
@@ -1468,16 +1422,12 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         else:
             extended_encoder_attention_mask = None
 
-        #        hidden_states = torch.cat([hidden_states] + ngram_hidden_states, 0)
         hidden_states = torch.cat([hidden_states] + ngram_hidden_states, 1)
 
         if self.embeddings_layer_norm:
             hidden_states = self.embeddings_layer_norm(hidden_states)
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        #        if encoder_hidden_states is not None:
-        #            encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
 
         # init attentions, hidden_states and cache with empty tuples
         all_main_stream_hidden_states = () if output_hidden_states else None
@@ -1525,7 +1475,6 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     all_cross_attns += (layer_cross_attn,)
 
         if output_hidden_states:
-            #            all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
             all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
             if self.config.ngram > 0:
                 all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
