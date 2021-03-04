@@ -1829,7 +1829,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         batch_size, seq_length = attention_mask.size()
         assert (
             seq_length % block_size == 0
-        ), "Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+        ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
 
         def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
             """
