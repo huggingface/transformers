@@ -783,8 +783,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        is_main: bool = True,
-        _save_function: Callable = torch.save,
+        save_config: bool = True,
+        state_dict: Optional[dict] = None,
+        save_function: Callable = torch.save,
     ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
@@ -793,9 +794,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Arguments:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
-            is_main (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                In distributed training, whether or not the current process is the main process or not. Will only write
-                the config to disk if :obj:`True`.
+            save_config (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to save the config of the model. Useful when in distributed training like TPUs and need
+                to call this function on all processes. In this case, set :obj:`save_config=True` only on the main
+                process to avoid race conditions.
+            state_dict (nested dictionary of :obj:`torch.Tensor`):
+                The state dictionary of the model to save. Will default to :obj:`self.state_dict()`, but can be used to
+                only save parts of the model or if special precautions need to be taken when recovering the state
+                dictionary of a model (like when using model parallelism).
+            save_function (:obj:`Callable`):
+                The function to use to save the state dictionary. Useful on distributed training like TPUs when one
+                need to replace :obj:`torch.save` by another method.
         """
         if os.path.isfile(save_directory):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
@@ -809,20 +818,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
         # Save the config
-        if is_main:
+        if save_config:
             model_to_save.config.save_pretrained(save_directory)
 
         # Save the model
-        if _save_function is not None:
+        if state_dict is None:
             state_dict = model_to_save.state_dict()
 
-            # Handle the case where some state_dict keys shouldn't be saved
-            if self._keys_to_ignore_on_save is not None:
-                state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
+        # Handle the case where some state_dict keys shouldn't be saved
+        if self._keys_to_ignore_on_save is not None:
+            state_dict = {k: v for k, v in state_dict.items() if k not in self._keys_to_ignore_on_save}
 
-            # If we save using the predefined names, we can load using `from_pretrained`
-            output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
-            _save_function(state_dict, output_model_file)
+        # If we save using the predefined names, we can load using `from_pretrained`
+        output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+        save_function(state_dict, output_model_file)
 
         logger.info("Model weights saved in {}".format(output_model_file))
 

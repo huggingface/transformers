@@ -1516,14 +1516,17 @@ class Trainer:
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(unwrap_model(self.model), PreTrainedModel):
                 unwrap_model(self.model).save_pretrained(
-                    output_dir, is_main=self.is_world_process_zero(), _save_function=None
+                    output_dir,
+                    save_config=self.is_world_process_zero(),
+                    state_dict=self.model.state_dict(),
+                    save_function=xm.save,
                 )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            state_dict = self.model.state_dict()
-            xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                state_dict = self.model.state_dict()
+                xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, is_main=self.is_world_process_zero(), _save_function=xm.save)
+            self.model.save_pretrained(output_dir, save_config=self.is_world_process_zero(), save_function=xm.save)
         if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
@@ -1536,11 +1539,11 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(output_dir, _save_function=None)
+                unwrap_model(self.model).save_pretrained(output_dir, state_dict=self.model.state_dict())
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            state_dict = self.model.state_dict()
-            torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                state_dict = self.model.state_dict()
+                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir)
         if self.tokenizer is not None:
