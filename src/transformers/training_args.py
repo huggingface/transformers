@@ -288,8 +288,7 @@ class TrainingArguments:
 
     """
 
-    output_dir: Optional[str] = field(
-        default=None,
+    output_dir: str = field(
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
     overwrite_output_dir: bool = field(
@@ -508,18 +507,6 @@ class TrainingArguments:
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
-        if self.output_dir is None and os.getenv("SM_OUTPUT_DATA_DIR") is None:
-            raise ValueError(
-                "`output_dir` is only optional if it can get inferred from the environment. Please set a value for "
-                "`output_dir`."
-            )
-        elif os.getenv("SM_OUTPUT_DATA_DIR") is not None:
-            if self.output_dir is not None:
-                logger.warn(
-                    "`output_dir` is overwritten by the env variable 'SM_OUTPUT_DATA_DIR' "
-                    f"({os.getenv('SM_OUTPUT_DATA_DIR')})."
-                )
-            self.output_dir = os.getenv("SM_OUTPUT_DATA_DIR")
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
