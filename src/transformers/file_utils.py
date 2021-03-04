@@ -37,6 +37,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
+from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
@@ -353,6 +354,10 @@ def is_sagemaker_distributed_available():
         return False
     # Lastly, check if the `smdistributed` module is present.
     return importlib.util.find_spec("smdistributed") is not None
+
+
+def is_training_run_on_sagemaker():
+    return True if "SAGEMAKER_JOB_NAME" in os.environ else False
 
 
 def is_soundfile_availble():
@@ -1164,6 +1169,34 @@ def cached_path(
 
     return output_path
 
+def define_sagemaker_information():
+    try:
+        instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        dlc_container_used = instance_data["Image"]
+        dlc_tag = instance_data["Image"].split(":")[1]
+    except Exception:
+        dlc_container_used = None
+        dlc_tag = None
+
+    # is distributed training used?
+    sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
+    runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
+    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
+
+    sagemaker_object = {
+        "id": str(uuid4()),
+        "framework": os.getenv("SM_FRAMEWORK_MODULE", None),
+        "region": os.getenv("AWS_REGION", None),
+        "number_gpu": os.getenv("SM_NUM_GPUS", 0),
+        "number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "distributed_training": runs_distributed_training,
+        "deep_learning_container": dlc_container_used,
+        "deep_learning_container_tag": dlc_tag,
+        "account_id": account_id,
+    }
+    # return {k: v for k, v in payload.items() if v is not None}
+    return sagemaker_object
+
 
 def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
@@ -1174,6 +1207,8 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
         ua += f"; tensorflow/{_tf_version}"
+    if is_training_run_on_sagemaker():
+        ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in define_sagemaker_information().items())
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
     elif isinstance(user_agent, str):
