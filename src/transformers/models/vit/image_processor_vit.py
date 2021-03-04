@@ -18,7 +18,6 @@ import numpy as np
 import PIL
 import torch
 import torchvision
-import torchvision.transforms.functional as F
 from torchvision import transforms as T
 
 from typing import Optional, Union, List

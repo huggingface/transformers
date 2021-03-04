@@ -56,7 +56,7 @@ _CONFIG_FOR_DOC = "ViTConfig"
 _TOKENIZER_FOR_DOC = "ViTTokenizer"
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "vit-base-patch16-224",
+    "nielsr/vit-base-patch16-224",
     # See all ViT models at https://huggingface.co/models?filter=vit
 ]
 

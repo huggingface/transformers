@@ -69,8 +69,8 @@ class ImageProcessorMixin:
         image_processor = self.image_processor_class()
         self.assertIsNotNone(image_processor)
 
-    def test_batch_images(self):
-        image_inputs = self.image_processor_tester.prepare_inputs_for_common()
+    def test_batch_images_numpy(self):
+        image_inputs = self.image_processor_tester.prepare_inputs_numpy_for_common()
         image_processor = self.image_processor_class(**self.image_processor_dict)
         input_name = image_processor.model_input_names[0]
 
@@ -78,7 +78,7 @@ class ImageProcessorMixin:
 
         self.assertTrue(all(len(x) == len(y) for x, y in zip(image_inputs, processed_images[input_name])))
 
-        image_inputs = self.image_processor_tester.prepare_inputs_for_common(equal_length=True)
+        image_inputs = self.image_processor_tester.prepare_inputs_numpy_for_common(equal_resolution=True)
         processed_images = BatchImages({input_name: image_inputs}, tensor_type="np")
 
         batch_images_input = processed_images[input_name]
@@ -93,7 +93,7 @@ class ImageProcessorMixin:
 
     @require_torch
     def test_batch_images_pt(self):
-        image_inputs = self.image_processor_tester.prepare_inputs_for_common(equal_length=True)
+        image_inputs = self.image_processor_tester.prepare_inputs_pytorch_for_common(equal_length=True)
         image_processor = self.image_processor_class(**self.image_processor_dict)
         input_name = image_processor.model_input_names[0]
 
@@ -111,21 +111,7 @@ class ImageProcessorMixin:
 
     @require_tf
     def test_batch_images_tf(self):
-        image_inputs = self.image_processor_tester.prepare_inputs_for_common(equal_length=True)
-        image_processor = self.image_processor_class(**self.image_processor_dict)
-        input_name = image_processor.model_input_names[0]
-
-        processed_images = BatchImages({input_name: image_inputs}, tensor_type="tf")
-
-        batch_images_input = processed_images[input_name]
-
-        if len(batch_images_input.shape) < 3:
-            batch_images_input = batch_images_input[:, :, None]
-
-        # self.assertTrue(
-        #     batch_images_input.shape
-        #     == (self.image_processor_tester.batch_size, len(image_inputs[0]), self.image_processor_tester.feature_size)
-        # )
+        pass
 
     def _check_padding(self, numpify=False):
         pass
@@ -148,7 +134,7 @@ class ImageProcessorMixin:
         feat_dict = self.image_processor_dict
         feat_dict["return_attention_mask"] = True
         image_processor = self.image_processor_class(**feat_dict)
-        image_inputs = self.image_processor_tester.prepare_inputs_for_common()
+        image_inputs = self.image_processor_tester.prepare_inputs_pytorch_for_common()
         input_lenghts = [len(x) for x in image_inputs]
         input_name = image_processor.model_input_names[0]
 

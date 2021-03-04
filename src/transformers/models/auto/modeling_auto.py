@@ -23,6 +23,10 @@ from ...file_utils import add_start_docstrings
 from ...utils import logging
 
 # Add modeling imports here
+from ..vit.modeling_vit import (
+    ViTForImageClassification,
+    ViTModel,
+)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -473,6 +477,13 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianForCausalLM),
         (BlenderbotConfig, BlenderbotForCausalLM),
         (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
+    ]
+)
+
+MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
+    [
+        # Model for Image Classification mapping
+        (ViTConfig, ViTForImageClassification),
     ]
 )
 

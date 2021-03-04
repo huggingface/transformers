@@ -25,23 +25,7 @@ from transformers import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, ViTConfig, ViTImageP
 from transformers.testing_utils import slow
 
 from .test_image_processor_common import ImageProcessorMixin
-
-
-global_rng = random.Random()
-
-
-def floats_list(shape, scale=1.0, rng=None, name=None):
-    """Creates a random float32 tensor"""
-    if rng is None:
-        rng = global_rng
-
-    values = []
-    for batch_idx in range(shape[0]):
-        values.append([])
-        for _ in range(shape[1]):
-            values[-1].append(rng.random() * scale)
-
-    return values
+from .test_modeling_common import floats_tensor
 
 
 class ViTImageProcessorTester(unittest.TestCase):
@@ -86,7 +70,13 @@ class ViTImageProcessorTester(unittest.TestCase):
             "size": self.size,
         }
 
-    def prepare_inputs_for_common(self):
+    def prepare_inputs_numpy_for_common(self, equal_resolution=False):
+        input_size = (self.num_channels, self.image_size, self.image_size)
+        image_inputs = torch.randn((self.batch_size, *input_size))
+
+        return image_inputs
+    
+    def prepare_inputs_pytorch_for_common(self, equal_resolution=False):
         input_size = (self.num_channels, self.image_size, self.image_size)
         image_inputs = torch.randn((self.batch_size, *input_size))
 
@@ -122,7 +112,7 @@ class ViTImageProcessorTest(ImageProcessorMixin, unittest.TestCase):
         # Initialize image_processor
         image_processor = self.image_processor_class(**self.image_processor_tester.prepare_image_processor_dict())
         # create three inputs of resolution 800, 1000, and 1200
-        image_inputs = None
+        image_inputs = floats_tensor()
 
         # Test not batched input
         encoded_images_1 = image_processor(image_inputs[0], return_tensors="pt").input_values

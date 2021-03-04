@@ -14,6 +14,9 @@
 # limitations under the License.
 """
  Image processor common class for python image processors.
+
+ Based on https://github.com/huggingface/transformers/blob/master/src/transformers/feature_extraction_utils.py,
+ but PreTrainedFeatureExtractor -> PreTrainedImageProcessor, BatchFeature -> BatchImages, and so on. 
 """
 import copy
 import json
@@ -55,7 +58,7 @@ if TYPE_CHECKING:
 
 class BatchImages(UserDict):
     r"""
-    Holds the output of the :meth:`~transformers.ImageProcessor.pad` and image processor specific ``__call__`` methods.
+    Holds the output of the :meth:`~transformers.PreTrainedImageProcessor.pad` and image processor specific ``__call__`` methods.
 
     This class is derived from a python dictionary and can be used as a dictionary.
 
