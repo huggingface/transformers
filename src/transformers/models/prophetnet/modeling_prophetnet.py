@@ -567,6 +567,7 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
     """
 
     def __init__(self, config: ProphetNetConfig):
+        self.max_length = config.max_position_embeddings
         super().__init__(config.max_position_embeddings, config.hidden_size, config.pad_token_id)
 
     def forward(self, inputs_shape, device, attention_mask=None, past_key_values=None, position_ids=None):
@@ -591,6 +592,9 @@ class ProphetNetPositionalEmbeddings(nn.Embedding):
                 position_ids = (
                     torch.cumsum(attention_mask, dim=1).type_as(attention_mask) * attention_mask
                 ).long() + self.padding_idx
+
+                # make sure position_ids are not bigger then max_length
+                position_ids = position_ids.clamp(0, self.max_length - 1)
 
         return super().forward(position_ids), position_ids
 
@@ -919,7 +923,9 @@ class ProphetNetNgramSelfAttention(nn.Module):
         predict_attn_weights = predict_attn_weights + predict_relative_pos_embeddings
 
         if extended_predict_attention_mask is not None:
-            predict_attn_weights = predict_attn_weights + extended_predict_attention_mask
+            predict_attn_weights = predict_attn_weights + extended_predict_attention_mask.to(
+                predict_attn_weights.dtype
+            )
 
         predict_attn_probs = softmax(
             predict_attn_weights,
