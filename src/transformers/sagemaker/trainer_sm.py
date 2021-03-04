@@ -89,7 +89,7 @@ class SageMakerTrainer(Trainer):
         if self.is_model_parallel_enabled:
             return smp.rank() == 0 and smp.local_rank() == 0 and smp.mp_rank() == 0 and smp.dp_rank() == 0
         else:
-            return super.is_world_process_zero()
+            return super().is_world_process_zero()
 
     def _get_train_sampler(self):
         if self.is_model_parallel_enabled:
