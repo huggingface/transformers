@@ -75,8 +75,6 @@ class PretrainedConfig(object):
             heads to prune in said layer.
 
             For instance ``{1: [0, 2], 2: [2, 3]}`` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
-        xla_device (:obj:`bool`, `optional`):
-            A flag to indicate if TPU are available or not.
         chunk_size_feed_forward (:obj:`int`, `optional`, defaults to :obj:`0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of :obj:`0` means
             that the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes
@@ -248,7 +246,11 @@ class PretrainedConfig(object):
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
         # TPU arguments
-        self.xla_device = kwargs.pop("xla_device", None)
+        if kwargs.pop("xla_device", None) is not None:
+            logger.warn(
+                "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
+                "safely remove it from your `config.json` file."
+            )
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
