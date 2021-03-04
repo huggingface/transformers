@@ -56,7 +56,7 @@ class ViTImageProcessorTester(unittest.TestCase):
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.5, 0.5, 0.5],
         padding_value=0.0,
-        return_pixel_mask=True,
+        return_attention_mask=True,
         do_normalize=True,
         do_resize=True,
         size=18,
@@ -70,7 +70,7 @@ class ViTImageProcessorTester(unittest.TestCase):
         self.image_mean = image_mean
         self.image_std = image_std
         self.padding_value = padding_value
-        self.return_pixel_mask = return_pixel_mask
+        self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
@@ -80,36 +80,15 @@ class ViTImageProcessorTester(unittest.TestCase):
             "image_mean": self.image_mean,
             "image_std": self.image_std,
             "padding_value": self.padding_value,
-            "return_pixel_mask": self.return_pixel_mask,
+            "return_attention_mask": self.return_attention_mask,
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
         }
 
-    def prepare_numpy_inputs_for_common(self, equal_resolution=False):
-        def _flatten(list_of_lists):
-            return list(itertools.chain(*list_of_lists))
-
-        if equal_resolution:
-            image_inputs = floats_list((self.batch_size, self.num_channels, self.image_size, self.image_size))
-        else:
-            image_inputs = [
-                _flatten(floats_list((x, self.feature_size)))
-                for x in range(self.min_resolution, self.max_resolution, self.seq_length_diff)
-            ]
-
-        image_inputs = [np.asarray(x) for x in image_inputs]
-
-        return image_inputs
-
-    def prepare_pytorch_inputs_for_common(self, equal_resolution=False):
-
-        if equal_resolution:
-            input_size = (self.num_channels, self.image_size, self.image_size)
-            image_inputs = torch.randn((self.batch_size, *input_size))
-        
-        else:
-            
+    def prepare_inputs_for_common(self):
+        input_size = (self.num_channels, self.image_size, self.image_size)
+        image_inputs = torch.randn((self.batch_size, *input_size))
 
         return image_inputs
 

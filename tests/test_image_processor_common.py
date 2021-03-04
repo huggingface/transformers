@@ -144,9 +144,9 @@ class ImageProcessorMixin:
     def test_padding_accepts_tensors_tf(self):
         pass
 
-    def test_pixel_mask(self):
+    def test_attention_mask(self):
         feat_dict = self.image_processor_dict
-        feat_dict["return_pixel_mask"] = True
+        feat_dict["return_attention_mask"] = True
         image_processor = self.image_processor_class(**feat_dict)
         image_inputs = self.image_processor_tester.prepare_inputs_for_common()
         input_lenghts = [len(x) for x in image_inputs]
@@ -155,6 +155,6 @@ class ImageProcessorMixin:
         processed = BatchImages({input_name: image_inputs})
 
         processed = image_processor.pad(processed, padding="biggest", return_tensors="np")
-        self.assertIn("pixel_mask", processed)
+        self.assertIn("attention_mask", processed)
         self.assertListEqual(list(processed.attention_mask.shape), list(processed[input_name].shape[:2]))
         self.assertListEqual(processed.attention_mask.sum(-1).tolist(), input_lenghts)

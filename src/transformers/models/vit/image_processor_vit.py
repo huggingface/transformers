@@ -108,8 +108,8 @@ class ViTImageProcessor(PreTrainedImageProcessor):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         padding_value (:obj:`float`, defaults to 0.0):
             The value that is used to fill the padding values.
-        return_pixel_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not :meth:`~transformers.DetrImageProcessor.__call__` should return :obj:`pixel_mask`.
+        return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not :meth:`~transformers.ViTImageProcessor.__call__` should return :obj:`attention_mask`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
@@ -118,21 +118,21 @@ class ViTImageProcessor(PreTrainedImageProcessor):
             Resize the input to the given size. Only has an effect if :obj:`resize` is set to :obj:`True`.
     """
 
-    model_input_names = ["pixel_values", "pixel_mask"]
+    model_input_names = ["pixel_values", "attention_mask"]
 
     def __init__(
         self,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
         padding_value=0.0,
-        return_pixel_mask=True,
+        return_attention_mask=True,
         do_normalize=True,
         do_resize=True,
         size=224,
         **kwargs
     ):
         super().__init__(image_mean=image_mean, image_std=image_std, padding_value=padding_value, **kwargs)
-        self.return_pixel_mask = return_pixel_mask
+        self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
@@ -146,7 +146,7 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         max_resolution: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        return_pixel_mask: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
         verbose: bool = True,
         **kwargs
     ) -> BatchImages:
@@ -173,7 +173,7 @@ class ViTImageProcessor(PreTrainedImageProcessor):
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_pixel_mask (:obj:`bool`, `optional`):
+            return_attention_mask (:obj:`bool`, `optional`):
                 Whether to return the pixel mask. If left to the default, will return the pixel mask according
                 to the specific image processor's default.
                 `What are pixel masks? <../glossary.html#attention-mask>`__
@@ -239,11 +239,11 @@ class ViTImageProcessor(PreTrainedImageProcessor):
         transformed_images = [transforms(image) for image in images]
 
         # step 4: TO DO: replace by self.pad (which is defined in image_processor_utils.py), which should 
-        # take care of padding + creating pixel mask
+        # take care of padding, creation of attention mask, return_tensors type
         samples = nested_tensor_from_tensor_list(transformed_images)
 
         # return as BatchImages
-        data = {"pixel_values": samples.tensors, "pixel_mask": samples.mask}
+        data = {"pixel_values": samples.tensors, "attention_mask": samples.mask}
 
         encoded_inputs = BatchImages(data=data)
 
