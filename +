@@ -1491,8 +1491,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 # grad cannot be kept because tensor is sliced
+                #                all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
                 all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
                 if self.config.ngram > 0:
+                    #                    all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
                     all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
@@ -1528,11 +1530,15 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
             #            all_main_stream_hidden_states += (hidden_states[:sequence_length].transpose(0, 1),)
             all_main_stream_hidden_states += (hidden_states[:, :sequence_length],)
             if self.config.ngram > 0:
+                #                all_ngram_stream_hidden_states += (hidden_states[sequence_length:].transpose(0, 1),)
                 all_ngram_stream_hidden_states += (hidden_states[:, sequence_length:],)
 
         # split last_hidden_state for return
+        #        last_hidden_state = hidden_states[:sequence_length].transpose(0, 1)
+        #        last_hidden_state_ngram = hidden_states[sequence_length:].transpose(0, 1) if self.config.ngram > 0 else None
         last_hidden_state = hidden_states[:, :sequence_length]
         last_hidden_state_ngram = hidden_states[:, sequence_length:] if self.config.ngram > 0 else None
+        #        encoder_hidden_states = encoder_hidden_states.transpose(0, 1) if encoder_hidden_states is not None else None
 
         if not return_dict:
             return tuple(
@@ -1583,6 +1589,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         return main_relative_buckets, predict_relative_buckets
 
     def prepare_attention_mask(self, hidden_states, attention_mask):
+        #        seq_length, batch_size = hidden_states.shape[:2]
         batch_size, seq_length = hidden_states.shape[:2]
 
         # get causal mask
@@ -1601,6 +1608,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         return extended_attention_mask.repeat(self.config.num_decoder_attention_heads, 1, 1).to(hidden_states.dtype)
 
     def prepare_predict_attention_mask(self, hidden_states, attention_mask):
+        #        seq_length, batch_size = hidden_states.shape[:2]
         batch_size, seq_length = hidden_states.shape[:2]
 
         # get causal mask
