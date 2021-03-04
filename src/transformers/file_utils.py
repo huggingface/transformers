@@ -37,7 +37,6 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
-from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
@@ -224,7 +223,6 @@ MULTIPLE_CHOICE_DUMMY_INPUTS = [
 ] * 2  # Needs to have 0s and 1s only since XLM uses it for langs too.
 DUMMY_INPUTS = [[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]]
 DUMMY_MASK = [[1, 1, 1, 1, 1], [1, 1, 1, 0, 0], [0, 0, 0, 1, 1]]
-HF_SM_ID = str(uuid4())
 
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
@@ -1175,7 +1173,6 @@ def define_sagemaker_information():
     account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
 
     sagemaker_object = {
-        "sm_id": HF_SM_ID,
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
         "sm_region": os.getenv("AWS_REGION", None),
         "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
