@@ -281,8 +281,8 @@ class BigBirdEmbeddings(nn.Module):
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
-        embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
+        embeddings = self.LayerNorm(embeddings)
         return embeddings
 
 
@@ -1342,7 +1342,7 @@ class BigBirdEncoder(nn.Module):
 
         next_decoder_cache = () if use_cache else None
 
-        hidden_states = self.LayerNorm(hidden_states)
+        self.l = [] # TODO: remove this
 
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
@@ -1376,12 +1376,6 @@ class BigBirdEncoder(nn.Module):
                 )
             else:
 
-                # TODO: remove this
-                if self.layer[0] == layer_module:
-                    self.l1_layer_input = hidden_states
-                    self.l1_attention_mask = attention_mask
-                #
-
                 layer_outputs = layer_module(
                     hidden_states,
                     attention_mask,
@@ -1405,11 +1399,7 @@ class BigBirdEncoder(nn.Module):
                     all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
             # TODO
-            if self.layer[0] == layer_module:
-                self.l1_layer_output = hidden_states
-
-            if self.layer[-1] == layer_module:
-                self.last_layer_output = hidden_states
+            self.l.append(hidden_states)
             #
 
         if output_hidden_states:
