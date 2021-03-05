@@ -886,7 +886,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
         self._register_load_state_dict_pre_hook(self._pre_load_hook)
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights."""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
