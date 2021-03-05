@@ -12,32 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import socket
-import unittest
-from unittest.mock import patch
+import subprocess
+import sys
 
-from transformers import BertConfig, BertModel, BertTokenizer
-from transformers.testing_utils import mockenv_context
+from transformers.testing_utils import TestCasePlus
 
 
-class OfflineTests(unittest.TestCase):
+class OfflineTests(TestCasePlus):
     def test_offline_mode(self):
-        def experiment():
-            mname = "lysandre/tiny-bert-random"
-            _ = BertConfig.from_pretrained(mname)
-            _ = BertModel.from_pretrained(mname)
-            _ = BertTokenizer.from_pretrained(mname)
+
+        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
+        # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
+        # while running an external program
+
+        # one-liner parts
+        load = "from transformers import BertConfig, BertModel, BertTokenizer;"
+        run = "mname = 'lysandre/tiny-bert-random'; BertConfig.from_pretrained(mname) and BertModel.from_pretrained(mname) and BertTokenizer.from_pretrained(mname);"
+        mock = 'import socket; exec("def offline_socket(*args, **kwargs): raise socket.error(\\"Offline mode is enabled.\\")"); socket.socket = offline_socket;'
+
+        # baseline - just load from_pretrained with normal network
 
         # should succeed
-        experiment()
+        env = self.get_env()
+        cmd = [sys.executable, "-c", f"{load} {run}"]
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
-        def offline_socket(*args, **kwargs):
-            raise socket.error("Offline mode is enabled.")
+        # next we emulate no network
 
-        with patch("socket.socket", offline_socket):
-            # should fail
-            self.assertRaises(ValueError, experiment)
+        # should normally fail as it fails to lookup the model files
+        env["TRANSFORMERS_OFFLINE"] = "0"
+        cmd = [sys.executable, "-c", f"{load} {mock} {run}"]
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
 
-            with mockenv_context(TRANSFORMERS_OFFLINE="1"):
-                # should succeed
-                experiment()
+        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        cmd = [sys.executable, "-c", f"{load} {mock} {run}"]
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
