@@ -234,7 +234,7 @@ PRESET_MIRROR_DICT = {
 }
 
 
-_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0") in ["1", "ON", "YES"] else False
+_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
 
 
 def is_offline_mode():
