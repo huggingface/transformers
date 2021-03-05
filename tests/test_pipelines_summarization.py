@@ -52,7 +52,7 @@ class SimpleSummarizationPipelineTests(unittest.TestCase):
         # Bias output towards L
         V, C = model.lm_head.weight.shape
 
-        bias = torch.zeros(V, requires_grad=True)
+        bias = torch.zeros(V)
         bias[76] = 10
 
         model.lm_head.bias = torch.nn.Parameter(bias)
