@@ -159,7 +159,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
 class FunnelEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
@@ -779,6 +779,8 @@ class FunnelPreTrainedModel(PreTrainedModel):
         elif classname == "FunnelEmbeddings":
             std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
             nn.init.normal_(module.word_embeddings.weight, std=std)
+            if module.word_embeddings.padding_idx is not None:
+                module.word_embeddings.weight.data[module.padding_idx].zero_()
 
 
 class FunnelClassificationHead(nn.Module):

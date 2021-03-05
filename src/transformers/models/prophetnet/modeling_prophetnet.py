@@ -1182,7 +1182,9 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
         super().__init__(config)
 
         self.word_embeddings = (
-            word_embeddings if word_embeddings is not None else nn.Embedding(config.vocab_size, config.hidden_size)
+            word_embeddings
+            if word_embeddings is not None
+            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
         self.embeddings_layer_norm = LayerNorm(config.hidden_size)
@@ -1313,7 +1315,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
 
         self.word_embeddings = (
-            word_embeddings if word_embeddings is not None else nn.Embedding(config.vocab_size, config.hidden_size)
+            word_embeddings
+            if word_embeddings is not None
+            else nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         )
         self.position_embeddings = ProphetNetPositionalEmbeddings(config)
 
@@ -1641,7 +1645,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 class ProphetNetModel(ProphetNetPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
 
         encoder_config = copy.deepcopy(config)
         encoder_config.is_encoder_decoder = False
