@@ -47,6 +47,7 @@ from .configuration_led import LEDConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
 _TOKENIZER_FOR_DOC = "LEDTokenizer"
 
@@ -2228,7 +2229,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/led-base-16384",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLEDSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

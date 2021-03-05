@@ -43,6 +43,7 @@ from .modeling_tf_transfo_xl_utilities import TFAdaptiveSoftmaxMask
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 
@@ -883,7 +884,7 @@ class TFTransfoXLModel(TFTransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -975,7 +976,7 @@ class TFTransfoXLLMHeadModel(TFTransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTransfoXLLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1091,7 +1092,7 @@ class TFTransfoXLForSequenceClassification(TFTransfoXLPreTrainedModel, TFSequenc
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTransfoXLSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
