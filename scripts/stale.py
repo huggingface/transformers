@@ -49,6 +49,19 @@ def main():
             # )
             # issue.add_to_labels("wontfix")
             # issue.edit(state="closed")
+        elif (
+            len(issue.assignees) > 0
+            and (dt.utcnow() - issue.updated_at).days > 21
+            and (dt.utcnow() - issue.created_at).days >= 30
+            and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
+        ):
+            for assignee in issue.assignees:
+                print(f"Issue {issue.number}. Pinging {assignee.name} with message")
+                print(f"Hey @{assignee.login}, could you take a second look at this issue?")
+
+            # issue.create_comment(
+            #    f"Hey @{assignee.login}, could you take a second look at this issue?"
+            # )
 
 
 if __name__ == "__main__":
