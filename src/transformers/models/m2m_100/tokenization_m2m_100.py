@@ -134,6 +134,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         self.lang_token_to_id = {
             self.get_lang_token(lang_code): self.encoder_size + i for i, lang_code in enumerate(FAIRSEQ_LANGUAGE_CODES)
         }
+        self.lang_code_to_id = {lang_code: self.encoder_size + i for i, lang_code in enumerate(FAIRSEQ_LANGUAGE_CODES)}
         self.id_to_lang_token = {v: k for k, v in self.lang_token_to_id.items()}
         self._additional_special_tokens = list(self.lang_token_to_id.keys())
 
