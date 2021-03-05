@@ -289,9 +289,11 @@ class TranslationPipeline(Text2TextGenerationPipeline):
             clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not to clean up the potential extra spaces in the text output.
             src_lang (:obj:`str`, `optional`, defaults to :obj:`None`):
-                The language of the input. Might be required for multilingual models
+                The language of the input. Might be required for multilingual models. Will not have any effect
+                for single pair translation models
             tgt_lang (:obj:`str`, `optional`, defaults to :obj:`None`):
-                The language of the desired output. Might be required for multilingual models
+                The language of the desired output. Might be required for multilingual models. Will not have any effect
+                for single pair translation models
             generate_kwargs:
                 Additional keyword arguments to pass along to the generate method of the model (see the generate method
                 corresponding to your framework `here <./model.html#generative-models>`__).
