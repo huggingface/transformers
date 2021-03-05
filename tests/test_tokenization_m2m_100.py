@@ -94,7 +94,7 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 @require_sentencepiece
 @require_tokenizers
 class M2M100TokenizerIntegrationTest(unittest.TestCase):
-    checkpoint_name = "valhalla/m2m100_418M"
+    checkpoint_name = "facebook/m2m100_418M"
     src_text = [
         "In my opinion, there are two levels of response from the French government.",
         "NSA Affair Emphasizes Complete Lack of Debate on Intelligence",
