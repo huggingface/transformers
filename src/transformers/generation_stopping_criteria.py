@@ -39,9 +39,8 @@ class StoppingCriteria(ABC):
 
 class MaxLengthCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever the full generated number of tokens
-    exceeds :obj:`max_length`. Keep in mind for decoder-only type of transformers, this
-    will include the initial prompted tokens.
+    This class can be used to stop generation whenever the full generated number of tokens exceeds :obj:`max_length`.
+    Keep in mind for decoder-only type of transformers, this will include the initial prompted tokens.
 
     Args:
         max_length (:obj:`int`):
@@ -58,9 +57,9 @@ class MaxLengthCriteria(StoppingCriteria):
 
 class MaxTimeCriteria(StoppingCriteria):
     """
-    This class can be used to stop generation whenever the full generation exceeds some
-    amount of time. By default, the time will start being counted when you initialize
-    this function. You can override this by passing an :obj:`initial_time`.
+    This class can be used to stop generation whenever the full generation exceeds some amount of time. By default, the
+    time will start being counted when you initialize this function. You can override this by passing an
+    :obj:`initial_time`.
 
     Args:
         max_time (:obj:`float`):
