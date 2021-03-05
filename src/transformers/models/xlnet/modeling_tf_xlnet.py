@@ -52,6 +52,7 @@ from .configuration_xlnet import XLNetConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "xlnet-base-cased"
 _CONFIG_FOR_DOC = "XLNetConfig"
 _TOKENIZER_FOR_DOC = "XLNetTokenizer"
 
@@ -1154,7 +1155,7 @@ class TFXLNetModel(TFXLNetPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlnet-base-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1423,7 +1424,7 @@ class TFXLNetForSequenceClassification(TFXLNetPreTrainedModel, TFSequenceClassif
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlnet-base-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForSequenceClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1549,7 +1550,7 @@ class TFXLNetForMultipleChoice(TFXLNetPreTrainedModel, TFMultipleChoiceLoss):
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlnet-base-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForMultipleChoiceOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1698,7 +1699,7 @@ class TFXLNetForTokenClassification(TFXLNetPreTrainedModel, TFTokenClassificatio
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlnet-base-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForTokenClassificationOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1805,7 +1806,7 @@ class TFXLNetForQuestionAnsweringSimple(TFXLNetPreTrainedModel, TFQuestionAnswer
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlnet-base-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLNetForQuestionAnsweringSimpleOutput,
         config_class=_CONFIG_FOR_DOC,
     )

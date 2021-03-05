@@ -44,6 +44,7 @@ from .configuration_longformer import LongformerConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
@@ -1811,7 +1812,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2059,7 +2060,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2150,7 +2151,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

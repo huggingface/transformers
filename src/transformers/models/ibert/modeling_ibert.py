@@ -43,6 +43,7 @@ from .quant_modules import IntGELU, IntLayerNorm, IntSoftmax, QuantAct, QuantEmb
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "ibert-roberta-base"
 _CONFIG_FOR_DOC = "IBertConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -776,7 +777,7 @@ class IBertModel(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ibert-roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -880,7 +881,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ibert-roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
@@ -986,7 +987,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ibert-roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1069,7 +1070,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ibert-roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1163,7 +1164,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ibert-roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1272,7 +1273,7 @@ class IBertForQuestionAnswering(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ibert-roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

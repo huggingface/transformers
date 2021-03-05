@@ -57,6 +57,7 @@ from .configuration_fsmt import FSMTConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "facebook/wmt19-ru-en"
 _CONFIG_FOR_DOC = "FSMTConfig"
 _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
@@ -989,7 +990,7 @@ class FSMTModel(PretrainedFSMTModel):
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/wmt19-ru-en",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

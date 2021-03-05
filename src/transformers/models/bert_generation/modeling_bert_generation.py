@@ -35,6 +35,7 @@ from .configuration_bert_generation import BertGenerationConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/bert_for_seq_generation_L-24_bbc_encoder"
 _CONFIG_FOR_DOC = "BertGenerationConfig"
 _TOKENIZER_FOR_DOC = "BertGenerationTokenizer"
 
@@ -300,7 +301,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
     @add_start_docstrings_to_model_forward(BERT_GENERATION_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bert_for_seq_generation_L-24_bbc_encoder",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )

@@ -53,6 +53,7 @@ from .configuration_marian import MarianConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
 _TOKENIZER_FOR_DOC = "MarianTokenizer"
 
@@ -1203,7 +1204,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Helsinki-NLP/opus-mt-en-de",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
