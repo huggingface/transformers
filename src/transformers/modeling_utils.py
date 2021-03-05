@@ -965,7 +965,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
 
-        if is_offline_mode():
+        if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
 

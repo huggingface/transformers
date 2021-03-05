@@ -412,7 +412,7 @@ class PretrainedConfig(object):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
 
-        if is_offline_mode():
+        if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
             local_files_only = True
 
