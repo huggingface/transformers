@@ -45,7 +45,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 @require_torch
 @require_torchaudio
-class Speech2TextTransformerFeatureExtractionTester(unittest.TestCase):
+class Speech2TextFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -97,12 +97,12 @@ class Speech2TextTransformerFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
-class Speech2TextTransformerFeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
+class Speech2TextFeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
 
     feature_extraction_class = Speech2TextFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = Speech2TextTransformerFeatureExtractionTester(self)
+        self.feat_extract_tester = Speech2TextFeatureExtractionTester(self)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus

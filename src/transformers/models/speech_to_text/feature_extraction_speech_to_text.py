@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Feature extractor class for Speech2TextTransformer
+Feature extractor class for Speech2Text
 """
 
 from typing import List, Optional, Union
@@ -36,7 +36,7 @@ logger = logging.get_logger(__name__)
 
 class Speech2TextFeatureExtractor(PreTrainedFeatureExtractor):
     r"""
-    Constructs a Speech2TextTransformer feature extractor.
+    Constructs a Speech2Text feature extractor.
 
     This feature extractor inherits from :class:`~transformers.Speech2TextFeatureExtractor` which contains most of the
     main methods. Users should refer to this superclass for more information regarding those methods.

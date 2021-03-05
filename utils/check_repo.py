@@ -32,8 +32,8 @@ IGNORE_NON_TESTED = [
     # models to ignore for not tested
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
-    "Speech2TextTransformerEncoder",  # Building part of bigger (tested) model.
-    "Speech2TextTransformerDecoder",  # Building part of bigger (tested) model.
+    "Speech2TextEncoder",  # Building part of bigger (tested) model.
+    "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
     "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoderWrapper",  # Building part of bigger (tested) model.
@@ -79,10 +79,10 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
-    "Speech2TextTransformerEncoder",
-    "Speech2TextTransformerDecoder",
     "M2M100Encoder",
     "M2M100Decoder",
+    "Speech2TextEncoder",
+    "Speech2TextDecoder",
     "LEDEncoder",
     "LEDDecoder",
     "BartDecoder",

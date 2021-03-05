@@ -13,18 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Speech processor class for Speech2TextTransformer
+Speech processor class for Speech2Text
 """
 from contextlib import contextmanager
 
-from .feature_extraction_speech_to_text_transformer import Speech2TextFeatureExtractor
-from .tokenization_speech_to_text_transformer import Speech2TextTokenizer
+from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
+from .tokenization_speech_to_text import Speech2TextTokenizer
 
 
 class Speech2TextProcessor:
     r"""
-    Constructs a Speech2TextTransformer processor which wraps a Speech2TextTransformer feature extractor and a
-    Speech2TextTransformer tokenizer into a single processor.
+    Constructs a Speech2Text processor which wraps a Speech2Text feature extractor and a
+    Speech2Text tokenizer into a single processor.
 
     :class:`~transformers.Speech2TextProcessor` offers all the functionalities of
     :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer`. See the
@@ -55,7 +55,7 @@ class Speech2TextProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a Speech2TextTransformer feature_extractor object and Speech2TextTransformer tokenizer object to the
+        Save a Speech2Text feature_extractor object and Speech2Text tokenizer object to the
         directory ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.Speech2TextProcessor.from_pretrained` class method.
 
@@ -77,7 +77,7 @@ class Speech2TextProcessor:
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
-        Instantiate a :class:`~transformers.Speech2TextProcessor` from a pretrained Speech2TextTransformer processor.
+        Instantiate a :class:`~transformers.Speech2TextProcessor` from a pretrained Speech2Text processor.
 
         .. note::
 
@@ -137,7 +137,7 @@ class Speech2TextProcessor:
     def as_target_processor(self):
         """
         Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
-        Speech2TextTransformer.
+        Speech2Text.
         """
         self.current_processor = self.tokenizer
         yield

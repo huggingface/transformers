@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Speech2TextTransformer model. """
+""" PyTorch Speech2Text model. """
 
 
 import math
@@ -39,7 +39,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
-from .configuration_speech_to_text_transformer import Speech2TextConfig
+from .configuration_speech_to_text import Speech2TextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -48,9 +48,9 @@ _CONFIG_FOR_DOC = "Speech2TextConfig"
 _TOKENIZER_FOR_DOC = "Speech2TextTokenizer"
 
 
-SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
+SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/s2t-small-librispeech-asr",
-    # See all Speech2TextTransformer models at https://huggingface.co/models?filter=speech_to_text_transformer
+    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
 ]
 
 
@@ -154,7 +154,7 @@ class Conv1dSubsampler(nn.Module):
         return hidden_states
 
 
-class Speech2TextTransformerSinusoidalPositionalEmbedding(nn.Module):
+class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -200,8 +200,8 @@ class Speech2TextTransformerSinusoidalPositionalEmbedding(nn.Module):
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2TextTransformer
-class Speech2TextTransformerAttention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text
+class Speech2TextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
@@ -343,11 +343,11 @@ class Speech2TextTransformerAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-class Speech2TextTransformerEncoderLayer(nn.Module):
+class Speech2TextEncoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = Speech2TextTransformerAttention(
+        self.self_attn = Speech2TextAttention(
             embed_dim=self.embed_dim,
             num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
@@ -405,12 +405,12 @@ class Speech2TextTransformerEncoderLayer(nn.Module):
         return outputs
 
 
-class Speech2TextTransformerDecoderLayer(nn.Module):
+class Speech2TextDecoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = Speech2TextTransformerAttention(
+        self.self_attn = Speech2TextAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -421,7 +421,7 @@ class Speech2TextTransformerDecoderLayer(nn.Module):
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.encoder_attn = Speech2TextTransformerAttention(
+        self.encoder_attn = Speech2TextAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
@@ -521,7 +521,7 @@ class Speech2TextTransformerDecoderLayer(nn.Module):
         return outputs
 
 
-class Speech2TextTransformerPreTrainedModel(PreTrainedModel):
+class Speech2TextPreTrainedModel(PreTrainedModel):
     config_class = Speech2TextConfig
     base_model_prefix = "model"
 
@@ -564,7 +564,7 @@ class Speech2TextTransformerPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING = r"""
+speech_to_text_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
@@ -580,7 +580,7 @@ SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING = r"""
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
+speech_to_text_INPUTS_DOCSTRING = r"""
     Args:
         input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, fbank_feature_length, num_mel_bins)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
@@ -604,7 +604,7 @@ SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
             also be used by default.
 
             If you want to change padding behavior, you should read
-            :func:`modeling_speech_to_text_transformer._prepare_decoder_inputs` and modify to your needs. See diagram 1
+            :func:`modeling_speech_to_text._prepare_decoder_inputs` and modify to your needs. See diagram 1
             in `the paper <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
@@ -651,10 +651,10 @@ SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING = r"""
 """
 
 
-class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
+class Speech2TextEncoder(Speech2TextPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`Speech2TextTransformerEncoderLayer`.
+    :class:`Speech2TextEncoderLayer`.
 
     Args:
         config: Speech2TextConfig
@@ -674,12 +674,12 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
 
         self.conv = Conv1dSubsampler(config)
 
-        self.embed_positions = Speech2TextTransformerSinusoidalPositionalEmbedding(
+        self.embed_positions = Speech2TextSinusoidalPositionalEmbedding(
             self.max_source_positions,
             embed_dim,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList([Speech2TextTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
+        self.layers = nn.ModuleList([Speech2TextEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -806,10 +806,10 @@ class Speech2TextTransformerEncoder(Speech2TextTransformerPreTrainedModel):
         )
 
 
-class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
+class Speech2TextDecoder(Speech2TextPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    :class:`Speech2TextTransformerDecoderLayer`
+    :class:`Speech2TextDecoderLayer`
 
     Args:
         config: Speech2TextConfig
@@ -826,12 +826,12 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = Speech2TextTransformerSinusoidalPositionalEmbedding(
+        self.embed_positions = Speech2TextSinusoidalPositionalEmbedding(
             self.max_target_positions,
             config.d_model,
             self.padding_idx,
         )
-        self.layers = nn.ModuleList([Speech2TextTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([Speech2TextDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.init_weights()
@@ -1071,15 +1071,15 @@ class Speech2TextTransformerDecoder(Speech2TextTransformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare Speech2TextTransformer Model outputting raw hidden-states without any specific head on top.",
-    SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING,
+    "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
+    speech_to_text_START_DOCSTRING,
 )
-class Speech2TextTransformerModel(Speech2TextTransformerPreTrainedModel):
+class Speech2TextModel(Speech2TextPreTrainedModel):
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
 
-        self.encoder = Speech2TextTransformerEncoder(config)
-        self.decoder = Speech2TextTransformerDecoder(config)
+        self.encoder = Speech2TextEncoder(config)
+        self.decoder = Speech2TextDecoder(config)
 
         self.init_weights()
 
@@ -1095,7 +1095,7 @@ class Speech2TextTransformerModel(Speech2TextTransformerPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(speech_to_text_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="s2t_transformer_s",
@@ -1174,10 +1174,10 @@ class Speech2TextTransformerModel(Speech2TextTransformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Speech2TextTransformer Model with a language modeling head. Can be used for summarization.",
-    SPEECH_TO_TEXT_TRANSFORMER_START_DOCSTRING,
+    "The Speech2Text Model with a language modeling head. Can be used for summarization.",
+    speech_to_text_START_DOCSTRING,
 )
-class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTrainedModel):
+class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         r"encoder\.version",
@@ -1187,7 +1187,7 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
 
     def __init__(self, config: Speech2TextConfig):
         super().__init__(config)
-        self.model = Speech2TextTransformerModel(config)
+        self.model = Speech2TextModel(config)
         self.lm_head = nn.Linear(config.d_model, self.config.vocab_size, bias=False)
 
         self.init_weights()
@@ -1208,7 +1208,7 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_TRANSFORMER_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(speech_to_text_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1238,11 +1238,11 @@ class Speech2TextTransformerForConditionalGeneration(Speech2TextTransformerPreTr
         Example::
 
             >>> import torch
-            >>> from transformers import Speech2TextProcessor, Speech2TextTransformerForConditionalGeneration
+            >>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
             >>> from datasets import load_dataset
             >>> import soundfile as sf
 
-            >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+            >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
             >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
             >>> def map_to_array(batch):

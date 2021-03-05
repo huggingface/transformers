@@ -27,50 +27,50 @@ from ...file_utils import (
 
 
 _import_structure = {
-    "configuration_speech_to_text_transformer": [
-        "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+    "configuration_speech_to_text": [
+        "speech_to_text_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
     ],
 }
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_speech_to_text_transformer"] = ["Speech2TextTokenizer"]
+    _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
 
 
 if is_torch_available():
-    _import_structure["modeling_speech_to_text_transformer"] = [
-        "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Speech2TextTransformerForConditionalGeneration",
-        "Speech2TextTransformerModel",
-        "Speech2TextTransformerPreTrainedModel",
+    _import_structure["modeling_speech_to_text"] = [
+        "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Speech2TextForConditionalGeneration",
+        "Speech2TextModel",
+        "Speech2TextPreTrainedModel",
     ]
 
 if is_torch_available() and is_torchaudio_available():
-    _import_structure["feature_extraction_speech_to_text_transformer"] = ["Speech2TextFeatureExtractor"]
+    _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
 
 if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
-    _import_structure["processing_speech_to_text_transformer"] = ["Speech2TextProcessor"]
+    _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
 if TYPE_CHECKING:
-    from .configuration_speech_to_text_transformer import (
-        SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    from .configuration_speech_to_text import (
+        speech_to_text_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextConfig,
     )
-    from .tokenization_speech_to_text_transformer import Speech2TextTokenizer
+    from .tokenization_speech_to_text import Speech2TextTokenizer
 
     if is_torch_available():
-        from .modeling_speech_to_text_transformer import (
-            SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Speech2TextTransformerForConditionalGeneration,
-            Speech2TextTransformerModel,
-            Speech2TextTransformerPreTrainedModel,
+        from .modeling_speech_to_text import (
+            SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speech2TextForConditionalGeneration,
+            Speech2TextModel,
+            Speech2TextPreTrainedModel,
         )
 
     if is_torch_available() and is_torchaudio_available():
-        from .feature_extraction_speech_to_text_transformer import Speech2TextFeatureExtractor
+        from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
 
     if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
-        from .processing_speech_to_text_transformer import Speech2TextProcessor
+        from .processing_speech_to_text import Speech2TextProcessor
 
 else:
     import importlib

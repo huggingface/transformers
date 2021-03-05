@@ -10,20 +10,20 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-Speech2TextTransformer
+Speech2Text
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Speech2TextTransformer model was proposed in `fairseq S2T: Fast Speech-to-Text Modeling with fairseq
+The Speech2Text model was proposed in `fairseq S2T: Fast Speech-to-Text Modeling with fairseq
 <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
 
 
 Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`Speech2TextTransformer` is a speech model that accepts a float tensor of log-mel filter-bank features extracted from
+`Speech2Text` is a speech model that accepts a float tensor of log-mel filter-bank features extracted from
 the speech signal. It's a transformer based seq2seq model, so the transcripts/translations are generated
 autoregressively. The `generate` method can be used for inference.
 
@@ -37,11 +37,11 @@ before importing the extractor or processor.
 .. code-block::
 
         >>> import torch
-        >>> from transformers import Speech2TextProcessor, Speech2TextTransformerForConditionalGeneration
+        >>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
         >>> def map_to_array(batch):
@@ -68,11 +68,11 @@ before importing the extractor or processor.
 .. code-block::
 
         >>> import torch
-        >>> from transformers import Speech2TextProcessor, Speech2TextTransformerForConditionalGeneration
+        >>> from transformers import Speech2TextProcessor, Speech2TextForConditionalGeneration
         >>> from datasets import load_dataset
         >>> import soundfile as sf
 
-        >>> model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+        >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
         >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
         >>> def map_to_array(batch):
@@ -118,15 +118,15 @@ Speech2TextProcessor
     :members: __call__, from_pretrained, save_pretrained, batch_decode, decode, as_target_processor
 
 
-Speech2TextTransformerModel
+Speech2TextModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Speech2TextTransformerModel
+.. autoclass:: transformers.Speech2TextModel
     :members: forward
 
 
-Speech2TextTransformerForConditionalGeneration
+Speech2TextForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.Speech2TextTransformerForConditionalGeneration
+.. autoclass:: transformers.Speech2TextForConditionalGeneration
     :members: forward

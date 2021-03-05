@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Speech2TextTransformer model configuration """
+""" Speech2Text model configuration """
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -20,18 +20,18 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
+SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/config.json",
-    # See all Speech2TextTransformer models at https://huggingface.co/models?filter=speech_to_text_transformer
+    # See all Speech2Text models at https://huggingface.co/models?filter=speech_to_text
 }
 
 
 class Speech2TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextTransformerModel`.
-    It is used to instantiate an Speech2TextTransformer model according to the specified arguments, defining the model
+    This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextModel`.
+    It is used to instantiate an Speech2Text model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    Speech2TextTransformer `facebook/s2t-small-librispeech-asr
+    Speech2Text `facebook/s2t-small-librispeech-asr
     <https://huggingface.co/facebook/s2t-small-librispeech-asr>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
@@ -40,8 +40,8 @@ class Speech2TextConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the Speech2TextTransformer model. Defines the number of different tokens that can be
-            represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.Speech2TextTransformerModel`
+            Vocabulary size of the Speech2Text model. Defines the number of different tokens that can be
+            represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.Speech2TextModel`
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -83,18 +83,18 @@ class Speech2TextConfig(PretrainedConfig):
 
         Example::
 
-        >>> from transformers import Speech2TextTransformerModel, Speech2TextConfig
+        >>> from transformers import Speech2TextModel, Speech2TextConfig
 
-        >>> # Initializing a Speech2TextTransformer s2t_transformer_s style configuration
+        >>> # Initializing a Speech2Text s2t_transformer_s style configuration
         >>> configuration = Speech2TextConfig()
 
         >>> # Initializing a model from the s2t_transformer_s style configuration
-        >>> model = Speech2TextTransformerModel(configuration)
+        >>> model = Speech2TextModel(configuration)
 
         >>> # Accessing the model configuration
         >>> configuration = model.config
     """
-    model_type = "speech_to_text_transformer"
+    model_type = "speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(

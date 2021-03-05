@@ -136,7 +136,7 @@ _import_structure = {
     ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
     "models.speech_to_text_transformer": [
-        "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
         "Speech2TextTokenizer",
         "Speech2TextFeatureExtractor",
@@ -384,11 +384,11 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
 
-    _import_structure["models.speech_to_text_transformer"].extend(
+    _import_structure["models.speech_to_text"].extend(
         [
-            "SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Speech2TextTransformerForConditionalGeneration",
-            "Speech2TextTransformerModel",
+            "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Speech2TextForConditionalGeneration",
+            "Speech2TextModel",
         ]
     )
 
@@ -1394,8 +1394,8 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.speech_to_text_transformer import (
-        SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    from .models.speech_to_text import (
+        speech_to_text_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Speech2TextConfig,
         Speech2TextFeatureExtractor,
         Speech2TextProcessor,
@@ -1884,10 +1884,10 @@ if TYPE_CHECKING:
             RobertaForTokenClassification,
             RobertaModel,
         )
-        from .models.speech_to_text_transformer import (
-            SPEECH_TO_TEXT_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Speech2TextTransformerForConditionalGeneration,
-            Speech2TextTransformerModel,
+        from .models.speech_to_text import (
+            SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speech2TextForConditionalGeneration,
+            Speech2TextModel,
         )
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

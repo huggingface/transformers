@@ -15,7 +15,7 @@
 import torch
 from torch import nn
 
-from transformers import Speech2TextConfig, Speech2TextTransformerForConditionalGeneration
+from transformers import Speech2TextConfig, Speech2TextForConditionalGeneration
 
 
 def remove_ignore_keys_(state_dict):
@@ -88,7 +88,7 @@ def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
         early_stopping=True,
     )
 
-    model = Speech2TextTransformerForConditionalGeneration(config)
+    model = Speech2TextForConditionalGeneration(config)
     model.model.load_state_dict(state_dict)
     if tie_embeds:
         model.lm_head = make_linear_from_emb(model.model.decoder.embed_tokens)

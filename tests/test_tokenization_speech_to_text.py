@@ -18,8 +18,8 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import SPIECE_UNDERLINE, is_sentencepiece_available
-from transformers.models.speech_to_text_transformer import Speech2TextTokenizer
-from transformers.models.speech_to_text_transformer.tokenization_speech_to_text_transformer import (
+from transformers.models.speech_to_text import Speech2TextTokenizer
+from transformers.models.speech_to_text.tokenization_speech_to_text import (
     VOCAB_FILES_NAMES,
     save_json,
 )

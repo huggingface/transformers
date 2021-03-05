@@ -209,9 +209,9 @@ from ..roberta.modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from ..speech_to_text_transformer.modeling_speech_to_text_transformer import (
-    Speech2TextTransformerForConditionalGeneration,
-    Speech2TextTransformerModel,
+from ..speech_to_text.modeling_speech_to_text import (
+    Speech2TextForConditionalGeneration,
+    Speech2TextModel,
 )
 from ..squeezebert.modeling_squeezebert import (
     SqueezeBertForMaskedLM,
@@ -318,7 +318,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
-        (Speech2TextConfig, Speech2TextTransformerModel),
+        (Speech2TextConfig, Speech2TextModel),
         (Wav2Vec2Config, Wav2Vec2Model),
         (M2M100Config, M2M100Model),
         (ConvBertConfig, ConvBertModel),
@@ -403,7 +403,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-        (Speech2TextConfig, Speech2TextTransformerForConditionalGeneration),
+        (Speech2TextConfig, Speech2TextForConditionalGeneration),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (M2M100Config, M2M100ForConditionalGeneration),
         (ConvBertConfig, ConvBertForMaskedLM),
@@ -505,7 +505,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
         (M2M100Config, M2M100ForConditionalGeneration),
-        (Speech2TextTransformerConfig, Speech2TextTransformerForConditionalGeneration),
+        (Speech2TextConfig, Speech2TextForConditionalGeneration),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),

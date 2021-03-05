@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Speech2TextTransformer model. """
+""" Testing suite for the PyTorch Speech2Text model. """
 
 
 import copy
@@ -42,16 +42,16 @@ if is_torch_available():
     from transformers import (
         Speech2TextConfig,
         Speech2TextProcessor,
-        Speech2TextTransformerForConditionalGeneration,
-        Speech2TextTransformerModel,
+        Speech2TextForConditionalGeneration,
+        Speech2TextModel,
     )
-    from transformers.models.speech_to_text_transformer.modeling_speech_to_text_transformer import (
-        Speech2TextTransformerDecoder,
-        Speech2TextTransformerEncoder,
+    from transformers.models.speech_to_text.modeling_speech_to_text import (
+        Speech2TextDecoder,
+        Speech2TextEncoder,
     )
 
 
-def prepare_speech_to_text_transformer_inputs_dict(
+def prepare_speech_to_text_inputs_dict(
     config,
     input_features,
     decoder_input_ids,
@@ -72,7 +72,7 @@ def prepare_speech_to_text_transformer_inputs_dict(
 
 
 @require_torch
-class Speech2TextTransformerModelTester:
+class Speech2TextModelTester:
     def __init__(
         self,
         parent,
@@ -155,7 +155,7 @@ class Speech2TextTransformerModelTester:
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
         )
-        inputs_dict = prepare_speech_to_text_transformer_inputs_dict(
+        inputs_dict = prepare_speech_to_text_inputs_dict(
             config,
             input_features=input_features,
             decoder_input_ids=decoder_input_ids,
@@ -178,7 +178,7 @@ class Speech2TextTransformerModelTester:
         return input_lengths
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = Speech2TextTransformerModel(config=config).get_decoder().to(torch_device).eval()
+        model = Speech2TextModel(config=config).get_decoder().to(torch_device).eval()
         input_ids = inputs_dict["decoder_input_ids"]
         attention_mask = inputs_dict["decoder_attention_mask"]
 
@@ -211,7 +211,7 @@ class Speech2TextTransformerModelTester:
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
-        model = Speech2TextTransformerModel(config=config).to(torch_device).eval()
+        model = Speech2TextModel(config=config).to(torch_device).eval()
         outputs = model(**inputs_dict)
 
         encoder_last_hidden_state = outputs.encoder_last_hidden_state
@@ -220,7 +220,7 @@ class Speech2TextTransformerModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             encoder = model.get_encoder()
             encoder.save_pretrained(tmpdirname)
-            encoder = Speech2TextTransformerEncoder.from_pretrained(tmpdirname).to(torch_device)
+            encoder = Speech2TextEncoder.from_pretrained(tmpdirname).to(torch_device)
 
         encoder_last_hidden_state_2 = encoder(
             inputs_dict["input_features"], attention_mask=inputs_dict["attention_mask"]
@@ -231,7 +231,7 @@ class Speech2TextTransformerModelTester:
         with tempfile.TemporaryDirectory() as tmpdirname:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
-            decoder = Speech2TextTransformerDecoder.from_pretrained(tmpdirname).to(torch_device)
+            decoder = Speech2TextDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
@@ -244,11 +244,11 @@ class Speech2TextTransformerModelTester:
 
 
 @require_torch
-class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Speech2TextTransformerModel, Speech2TextTransformerForConditionalGeneration) if is_torch_available() else ()
+        (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
     )
-    all_generative_model_classes = (Speech2TextTransformerForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (Speech2TextForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
@@ -258,7 +258,7 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
     input_name = "input_features"
 
     def setUp(self):
-        self.model_tester = Speech2TextTransformerModelTester(self)
+        self.model_tester = Speech2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Speech2TextConfig)
         self.maxDiff = 3000
 
@@ -290,7 +290,7 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_features = input_dict["input_features"]
         attention_mask = input_dict["attention_mask"]
-        model = Speech2TextTransformerForConditionalGeneration(config).eval().to(torch_device)
+        model = Speech2TextForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
             input_features.to(torch.float16)
             model.half()
@@ -634,7 +634,7 @@ class Speech2TextTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, u
 @require_sentencepiece
 @require_tokenizers
 @slow
-class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
+class Speech2TextModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
         return Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
@@ -656,7 +656,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
         return ds["speech"][:num_samples]
 
     def test_generation_librispeech(self):
-        model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         model.to(torch_device)
         processor = self.default_processor
 
@@ -671,7 +671,7 @@ class Speech2TextTransformerModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
 
     def test_generation_librispeech_batched(self):
-        model = Speech2TextTransformerForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
+        model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
         model.to(torch_device)
         processor = self.default_processor
 

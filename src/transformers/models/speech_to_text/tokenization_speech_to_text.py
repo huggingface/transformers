@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tokenization classes for Speech2TextTransformer."""
+"""Tokenization classes for Speech2Text."""
 
 import json
 from pathlib import Path
@@ -54,7 +54,7 @@ LANGUAGES = {"mustc": MUSTC_LANGS}
 
 class Speech2TextTokenizer(PreTrainedTokenizer):
     """
-    Construct an Speech2TextTransformer tokenizer.
+    Construct an Speech2Text tokenizer.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains some of the main methods.
     Users should refer to the superclass for more information regarding such methods.
