@@ -39,7 +39,7 @@ from .configuration_squeezebert import SqueezeBertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC= "squeezebert/squeezebert-uncased"
+_CHECKPOINT_FOR_DOC = "squeezebert/squeezebert-uncased"
 _CONFIG_FOR_DOC = "SqueezeBertConfig"
 _TOKENIZER_FOR_DOC = "SqueezeBertTokenizer"
 

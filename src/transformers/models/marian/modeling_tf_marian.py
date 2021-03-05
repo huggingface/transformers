@@ -53,7 +53,7 @@ from .configuration_marian import MarianConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC= "Helsinki-NLP/opus-mt-en-de"
+_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
 _TOKENIZER_FOR_DOC = "MarianTokenizer"
 

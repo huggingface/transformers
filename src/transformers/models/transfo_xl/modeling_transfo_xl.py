@@ -39,7 +39,7 @@ from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC= "transfo-xl-wt103"
+_CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 

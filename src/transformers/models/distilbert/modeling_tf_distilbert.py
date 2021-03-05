@@ -53,7 +53,7 @@ from .configuration_distilbert import DistilBertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC="distilbert-base-uncased"
+_CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 

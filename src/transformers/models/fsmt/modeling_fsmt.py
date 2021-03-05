@@ -57,7 +57,7 @@ from .configuration_fsmt import FSMTConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC="facebook/wmt19-ru-en"
+_CHECKPOINT_FOR_DOC = "facebook/wmt19-ru-en"
 _CONFIG_FOR_DOC = "FSMTConfig"
 _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 

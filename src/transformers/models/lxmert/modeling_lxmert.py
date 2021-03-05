@@ -40,7 +40,7 @@ from .configuration_lxmert import LxmertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC= "unc-nlp/lxmert-base-uncased"
+_CHECKPOINT_FOR_DOC = "unc-nlp/lxmert-base-uncased"
 _CONFIG_FOR_DOC = "LxmertConfig"
 _TOKENIZER_FOR_DOC = "LxmertTokenizer"
 

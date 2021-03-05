@@ -57,7 +57,7 @@ from .configuration_electra import ElectraConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC="google/electra-small-discriminator"
+_CHECKPOINT_FOR_DOC = "google/electra-small-discriminator"
 _CONFIG_FOR_DOC = "ElectraConfig"
 _TOKENIZER_FOR_DOC = "ElectraTokenizer"
 

@@ -45,7 +45,7 @@ from .configuration_reformer import ReformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC= "google/reformer-crime-and-punishment"
+_CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
 _TOKENIZER_FOR_DOC = "ReformerTokenizer"
 

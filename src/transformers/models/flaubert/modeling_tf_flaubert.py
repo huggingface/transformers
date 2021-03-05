@@ -52,7 +52,7 @@ from .configuration_flaubert import FlaubertConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC="flaubert/flaubert_base_cased"
+_CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 _TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
