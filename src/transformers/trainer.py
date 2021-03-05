@@ -60,8 +60,7 @@ from .file_utils import (
     is_sagemaker_distributed_available,
     is_torch_tpu_available,
 )
-from .modeling_utils import PreTrainedModel
-from .models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
+from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -104,6 +103,7 @@ from .trainer_utils import (
 )
 from .training_args import ParallelMode, TrainingArguments
 from .utils import logging
+from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
 _is_native_amp_available = False
@@ -152,14 +152,6 @@ if TYPE_CHECKING:
     import optuna
 
 logger = logging.get_logger(__name__)
-
-
-def _model_unwrap(model: nn.Module) -> nn.Module:
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return _model_unwrap(model.module)
-    else:
-        return model
 
 
 class Trainer:
@@ -231,7 +223,7 @@ class Trainer:
 
     """
 
-    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics
+    from .trainer_pt_utils import _get_learning_rate, log_metrics, metrics_format, save_metrics, save_state
 
     def __init__(
         self,
@@ -359,10 +351,6 @@ class Trainer:
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
-        if is_torch_tpu_available() and isinstance(self.model, PreTrainedModel):
-            # Set an xla_device flag on the model's config.
-            # We'll find a more elegant and not need to do this in the future.
-            self.model.config.xla_device = True
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
@@ -420,7 +408,7 @@ class Trainer:
         self.use_tune_checkpoints = False
         default_label_names = (
             ["start_positions", "end_positions"]
-            if type(self.model) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values()
+            if type(self.model).__name__ in MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES.values()
             else ["labels"]
         )
         self.label_names = default_label_names if self.args.label_names is None else self.args.label_names
@@ -509,11 +497,18 @@ class Trainer:
 
         # Build the sampler.
         if self.args.group_by_length:
+            model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if num_processes <= 1:
-                return LengthGroupedSampler(self.train_dataset, self.args.train_batch_size)
+                return LengthGroupedSampler(
+                    self.train_dataset, self.args.train_batch_size, model_input_name=model_input_name
+                )
             else:
                 return DistributedLengthGroupedSampler(
-                    self.train_dataset, self.args.train_batch_size, num_replicas=num_processes, rank=process_index
+                    self.train_dataset,
+                    self.args.train_batch_size,
+                    num_replicas=num_processes,
+                    rank=process_index,
+                    model_input_name=model_input_name,
                 )
 
         else:
@@ -707,7 +702,7 @@ class Trainer:
         elif self.hp_search_backend == HPSearchBackend.RAY:
             from ray import tune
 
-            if self.state.global_step % self.args.save_steps == 0:
+            if self.control.should_save:
                 self._tune_save_checkpoint()
             tune.report(objective=self.objective, **metrics)
 
@@ -717,8 +712,7 @@ class Trainer:
         if not self.use_tune_checkpoints:
             return
         with tune.checkpoint_dir(step=self.state.global_step) as checkpoint_dir:
-            self.args.output_dir = checkpoint_dir
-            output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
+            output_dir = os.path.join(checkpoint_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             self.save_model(output_dir)
             if self.is_world_process_zero():
                 self.state.save_to_json(os.path.join(output_dir, "trainer_state.json"))
@@ -1033,7 +1027,7 @@ class Trainer:
                 if (
                     ((step + 1) % self.args.gradient_accumulation_steps != 0)
                     and self.args.local_rank != -1
-                    and not self.args.deepspeed
+                    and self.args._no_sync_in_gradient_accumulation
                 ):
                     # Avoid unnecessary DDP synchronization since there will be no backward pass on this example.
                     with model.no_sync():
@@ -1188,7 +1182,7 @@ class Trainer:
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
-        # assert _model_unwrap(model) is self.model, "internal model should be a reference to self.model"
+        # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
 
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
@@ -1201,12 +1195,12 @@ class Trainer:
 
                 run_id = tune.get_trial_id()
             run_name = self.hp_name(trial) if self.hp_name is not None else f"run-{run_id}"
-            output_dir = os.path.join(self.args.output_dir, run_name, checkpoint_folder)
+            run_dir = os.path.join(self.args.output_dir, run_name)
         else:
-            output_dir = os.path.join(self.args.output_dir, checkpoint_folder)
-
+            run_dir = self.args.output_dir
             self.store_flos()
 
+        output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
         if self.deepspeed:
             self.deepspeed.save_checkpoint(output_dir)
@@ -1250,7 +1244,7 @@ class Trainer:
 
         # Maybe delete some older checkpoints.
         if self.is_world_process_zero():
-            self._rotate_checkpoints(use_mtime=True)
+            self._rotate_checkpoints(use_mtime=True, output_dir=run_dir)
 
     def _load_optimizer_and_scheduler(self, checkpoint):
         """If optimizer and scheduler states exist, load them."""
@@ -1493,18 +1487,15 @@ class Trainer:
         """
         Will save the model, so you can reload it using :obj:`from_pretrained()`.
 
-        Will only save from the world_master process (unless in TPUs).
+        Will only save from the main process.
         """
-
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
-        elif self.is_world_process_zero():
-            self._save(output_dir)
-
-        # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
-        # SM_MODEL_DIR for easy deployment.
-        if output_dir is None and os.getenv("SM_MODEL_DIR") is not None:
-            self.save_model(output_dir=os.getenv("SM_MODEL_DIR"))
+        else:
+            if self.is_world_process_zero():
+                self._save(output_dir)
+            if self.args.local_rank != -1:
+                dist.barrier()
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1518,34 +1509,39 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
-            if isinstance(_model_unwrap(self.model), PreTrainedModel):
-                if xm.is_master_ordinal():
-                    _model_unwrap(self.model).config.save_pretrained(output_dir)
+            if isinstance(unwrap_model(self.model), PreTrainedModel):
+                unwrap_model(self.model).save_pretrained(
+                    output_dir,
+                    save_config=self.is_world_process_zero(),
+                    state_dict=self.model.state_dict(),
+                    save_function=xm.save,
+                )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            state_dict = self.model.state_dict()
-            xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                state_dict = self.model.state_dict()
+                xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir)
+            self.model.save_pretrained(output_dir, save_config=self.is_world_process_zero(), save_function=xm.save)
         if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
     def _save(self, output_dir: Optional[str] = None):
+        # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info("Saving model checkpoint to %s", output_dir)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
-            if isinstance(_model_unwrap(self.model), PreTrainedModel):
-                _model_unwrap(self.model).config.save_pretrained(output_dir)
+            if isinstance(unwrap_model(self.model), PreTrainedModel):
+                unwrap_model(self.model).save_pretrained(output_dir, state_dict=self.model.state_dict())
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            state_dict = self.model.state_dict()
-            torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                state_dict = self.model.state_dict()
+                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
             self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None and self.is_world_process_zero():
+        if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
@@ -1559,10 +1555,12 @@ class Trainer:
             else:
                 self.state.total_flos = self._total_flos
 
-    def _sorted_checkpoints(self, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False) -> List[str]:
+    def _sorted_checkpoints(
+        self, output_dir=None, checkpoint_prefix=PREFIX_CHECKPOINT_DIR, use_mtime=False
+    ) -> List[str]:
         ordering_and_checkpoint_path = []
 
-        glob_checkpoints = [str(x) for x in Path(self.args.output_dir).glob(f"{checkpoint_prefix}-*")]
+        glob_checkpoints = [str(x) for x in Path(output_dir).glob(f"{checkpoint_prefix}-*")]
 
         for path in glob_checkpoints:
             if use_mtime:
@@ -1583,12 +1581,12 @@ class Trainer:
             )
         return checkpoints_sorted
 
-    def _rotate_checkpoints(self, use_mtime=False) -> None:
+    def _rotate_checkpoints(self, use_mtime=False, output_dir=None) -> None:
         if self.args.save_total_limit is None or self.args.save_total_limit <= 0:
             return
 
         # Check if we should delete older checkpoint(s)
-        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime)
+        checkpoints_sorted = self._sorted_checkpoints(use_mtime=use_mtime, output_dir=output_dir)
         if len(checkpoints_sorted) <= self.args.save_total_limit:
             return
 

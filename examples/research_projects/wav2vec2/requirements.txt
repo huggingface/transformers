@@ -1,0 +1,4 @@
+transformers
+datasets
+torch >= 1.5.0
+jiwer

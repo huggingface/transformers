@@ -169,7 +169,7 @@ class QuantAct(nn.Module):
     ):
 
         x_act = x if identity is None else identity + x
-        # collect runnng stats if traiing
+        # collect running stats if training
         if self.training:
             assert not self.percentile, "percentile mode is not currently supported for activation."
             assert not self.per_channel, "per-channel mode is not currently supported for activation."
@@ -746,7 +746,7 @@ def batch_frexp(inputs, max_bit=31):
 
 class FixedPointMul(Function):
     """
-    Function to perform fixed-point arthmetic that can match integer arthmetic on hardware.
+    Function to perform fixed-point arithmetic that can match integer arithmetic on hardware.
 
     Args:
         pre_act (:obj:`torch.Tensor`):

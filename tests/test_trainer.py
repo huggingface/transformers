@@ -21,12 +21,13 @@ import unittest
 
 import numpy as np
 
-from transformers import AutoTokenizer, EvaluationStrategy, PretrainedConfig, TrainingArguments, is_torch_available
+from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
     get_tests_dir,
     require_datasets,
     require_optuna,
+    require_ray,
     require_sentencepiece,
     require_tokenizers,
     require_torch,
@@ -56,7 +57,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from transformers.trainer import _model_unwrap
+    from transformers.modeling_utils import unwrap_model
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -78,6 +79,12 @@ class RegressionDataset:
         result = {name: y[i] for name, y in zip(self.label_names, self.ys)}
         result["input_x"] = self.x[i]
         return result
+
+
+@dataclasses.dataclass
+class RegressionTrainingArguments(TrainingArguments):
+    a: float = 0.0
+    b: float = 0.0
 
 
 class RepeatDataset:
@@ -200,7 +207,8 @@ if is_torch_available():
         optimizers = kwargs.pop("optimizers", (None, None))
         output_dir = kwargs.pop("output_dir", "./regression")
         model_init = kwargs.pop("model_init", None)
-        args = TrainingArguments(output_dir, **kwargs)
+
+        args = RegressionTrainingArguments(output_dir, a=a, b=b, **kwargs)
         return Trainer(
             model,
             args,
@@ -844,7 +852,7 @@ class TrainerIntegrationTest(unittest.TestCase):
                 gradient_accumulation_steps=1,
                 per_device_train_batch_size=16,
                 load_best_model_at_end=True,
-                evaluation_strategy=EvaluationStrategy.EPOCH,
+                evaluation_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
             )
@@ -859,7 +867,7 @@ class TrainerIntegrationTest(unittest.TestCase):
                 num_train_epochs=20,
                 gradient_accumulation_steps=1,
                 per_device_train_batch_size=16,
-                evaluation_strategy=EvaluationStrategy.EPOCH,
+                evaluation_strategy=IntervalStrategy.EPOCH,
                 compute_metrics=AlmostAccuracy(),
                 metric_for_best_model="accuracy",
             )
@@ -874,8 +882,8 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(learning_rate=0.1)
 
         def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, _model_unwrap(wrapped_model_to_check))
-            self.assertGreaterEqual(getattr(_model_unwrap(wrapped_model_to_check).config, "total_flos", 0), 0)
+            self.assertEqual(trainer.model, unwrap_model(wrapped_model_to_check))
+            self.assertGreaterEqual(getattr(unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0)
 
         # with plain model
         assert_flos_extraction(trainer, trainer.model)
@@ -973,7 +981,7 @@ class TrainerIntegrationTest(unittest.TestCase):
 
 @require_torch
 @require_optuna
-class TrainerHyperParameterIntegrationTest(unittest.TestCase):
+class TrainerHyperParameterOptunaIntegrationTest(unittest.TestCase):
     def setUp(self):
         args = TrainingArguments(".")
         self.n_epochs = args.num_train_epochs
@@ -1005,7 +1013,7 @@ class TrainerHyperParameterIntegrationTest(unittest.TestCase):
                 output_dir=tmp_dir,
                 learning_rate=0.1,
                 logging_steps=1,
-                evaluation_strategy=EvaluationStrategy.EPOCH,
+                evaluation_strategy=IntervalStrategy.EPOCH,
                 num_train_epochs=4,
                 disable_tqdm=True,
                 load_best_model_at_end=True,
@@ -1014,3 +1022,49 @@ class TrainerHyperParameterIntegrationTest(unittest.TestCase):
                 model_init=model_init,
             )
             trainer.hyperparameter_search(direction="minimize", hp_space=hp_space, hp_name=hp_name, n_trials=4)
+
+
+@require_torch
+@require_ray
+class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+
+    def test_hyperparameter_search(self):
+        class MyTrialShortNamer(TrialShortNamer):
+            DEFAULTS = {"a": 0, "b": 0}
+
+        def hp_space(trial):
+            from ray import tune
+
+            return {
+                "a": tune.randint(-4, 4),
+                "b": tune.randint(-4, 4),
+            }
+
+        def model_init(config):
+            model_config = RegressionModelConfig(a=config["a"], b=config["b"], double_output=False)
+
+            return RegressionPreTrainedModel(model_config)
+
+        def hp_name(params):
+            return MyTrialShortNamer.shortname(params)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                learning_rate=0.1,
+                logging_steps=1,
+                evaluation_strategy=IntervalStrategy.EPOCH,
+                num_train_epochs=4,
+                disable_tqdm=True,
+                load_best_model_at_end=True,
+                logging_dir="runs",
+                run_name="test",
+                model_init=model_init,
+            )
+            trainer.hyperparameter_search(
+                direction="minimize", hp_space=hp_space, hp_name=hp_name, backend="ray", n_trials=4
+            )

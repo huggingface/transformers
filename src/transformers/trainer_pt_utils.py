@@ -44,7 +44,7 @@ else:
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-# this is used to supress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
 try:
     from torch.optim.lr_scheduler import SAVE_STATE_WARNING
 except ImportError:
@@ -452,16 +452,23 @@ class LengthGroupedSampler(Sampler):
     keeping a bit of randomness.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int, lengths: Optional[List[int]] = None):
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int,
+        lengths: Optional[List[int]] = None,
+        model_input_name: Optional[str] = None,
+    ):
         self.dataset = dataset
         self.batch_size = batch_size
+        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+            if not isinstance(dataset[0], dict) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    "'input_ids' key."
+                    f"'{self.model_input_name}' key."
                 )
-            lengths = [len(feature["input_ids"]) for feature in dataset]
+            lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
 
     def __len__(self):
@@ -487,6 +494,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         seed: int = 0,
         drop_last: bool = False,
         lengths: Optional[List[int]] = None,
+        model_input_name: Optional[str] = None,
     ):
         if num_replicas is None:
             if not dist.is_available():
@@ -513,14 +521,15 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
         self.total_size = self.num_samples * self.num_replicas
         self.seed = seed
+        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
-            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    "'input_ids' key."
+                    f"'{self.model_input_name}' key."
                 )
-            lengths = [len(feature["input_ids"]) for feature in dataset]
+            lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
 
     def __iter__(self) -> Iterator:
@@ -599,12 +608,16 @@ def log_metrics(self, split, metrics):
     """
     Log metrics in a specially formatted way
 
+    Under distributed environment this is done only for a process with rank 0.
+
     Args:
         split (:obj:`str`):
             Mode/split name: one of ``train``, ``eval``, ``test``
         metrics (:obj:`Dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
     """
+    if not self.is_world_process_zero():
+        return
 
     logger.info(f"***** {split} metrics *****")
     metrics_formatted = self.metrics_format(metrics)
@@ -614,16 +627,48 @@ def log_metrics(self, split, metrics):
         logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
 
 
-def save_metrics(self, split, metrics):
+def save_metrics(self, split, metrics, combined=True):
     """
     Save metrics into a json file for that split, e.g. ``train_results.json``.
+
+    Under distributed environment this is done only for a process with rank 0.
 
     Args:
         split (:obj:`str`):
             Mode/split name: one of ``train``, ``eval``, ``test``, ``all``
         metrics (:obj:`Dict[str, float]`):
             The metrics returned from train/evaluate/predict
+        combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Creates combined metrics by updating ``all_results.json`` with metrics of this call
     """
+    if not self.is_world_process_zero():
+        return
+
     path = os.path.join(self.args.output_dir, f"{split}_results.json")
     with open(path, "w") as f:
         json.dump(metrics, f, indent=4, sort_keys=True)
+
+    if combined:
+        path = os.path.join(self.args.output_dir, "all_results.json")
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                all_metrics = json.load(f)
+        else:
+            all_metrics = {}
+
+        all_metrics.update(metrics)
+        with open(path, "w") as f:
+            json.dump(all_metrics, f, indent=4, sort_keys=True)
+
+
+def save_state(self):
+    """
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
+
+    Under distributed environment this is done only for a process with rank 0.
+    """
+    if not self.is_world_process_zero():
+        return
+
+    path = os.path.join(self.args.output_dir, "trainer_state.json")
+    self.state.save_to_json(path)
