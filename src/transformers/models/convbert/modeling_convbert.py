@@ -187,7 +187,7 @@ class ConvBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, pad_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
 
