@@ -157,15 +157,15 @@ faster, and cheaper. Feel free to contact us privately if you need any help.
 
 ### Offline mode
 
-It's possible to run `transformers` in a firewalled or a no-network environment.
+It's possible to run 🤗 Transformers in a firewalled or a no-network environment.
 
-Setting environment variable `TRANSFORMERS_OFFLINE=1` will tell `transformers` to use local files only and will not try to look things up.
+Setting environment variable `TRANSFORMERS_OFFLINE=1` will tell 🤗 Transformers to use local files only and will not try to look things up.
 
-Most likely you may want to couple this with `HF_DATASETS_OFFLINE=1` that performs the same for `datasets` if you're using the latter.
+Most likely you may want to couple this with `HF_DATASETS_OFFLINE=1` that performs the same for 🤗 Datasets if you're using the latter.
 
 Here is an example of how this can be used on a filesystem that is shared between a normally networked and a firewalled to the external world instances.
 
-On the instance with the normal network run your program which will download and cache models (and optionally datasets if you use `datasets`). For example:
+On the instance with the normal network run your program which will download and cache models (and optionally datasets if you use 🤗 Datasets). For example:
 
 ```
 python examples/seq2seq/run_seq2seq.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
