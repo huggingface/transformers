@@ -68,15 +68,15 @@ class TranslationNewFormatPipelineTests(unittest.TestCase):
             translator("This is a test")
 
         outputs = translator("This is a test", src_lang="en_XX", tgt_lang="ar_AR")
-        self.assertEqual(outputs, [{"translation_text": "یہ ایک امتحان ہے"}])
+        self.assertEqual(outputs, [{"translation_text": "هذا إختبار"}])
 
         outputs = translator("This is a test", src_lang="en_XX", tgt_lang="hi_IN")
-        self.assertEqual(outputs, [{"translation_text": "This is a test."}])
+        self.assertEqual(outputs, [{"translation_text": "यह एक परीक्षण है"}])
 
-        # src_lang, tgt_lang can be defined at call time
+        # src_lang, tgt_lang can be defined at pipeline call time
         translator = pipeline(task="translation", model=model, tokenizer=tokenizer, src_lang="en_XX", tgt_lang="ar_AR")
         outputs = translator("This is a test")
-        self.assertEqual(outputs, [{"translation_text": "یہ ایک امتحان ہے"}])
+        self.assertEqual(outputs, [{"translation_text": "هذا إختبار"}])
 
     @require_torch
     def test_translation_on_odd_language(self):

@@ -125,9 +125,9 @@ class Text2TextGenerationPipeline(Pipeline):
         max_length = generate_kwargs.get("max_length", self.model.config.max_length)
         self.check_inputs(input_length, min_length, max_length)
 
+        generate_kwargs.update(inputs)
+
         generations = self.model.generate(
-            inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
             **generate_kwargs,
         )
         results = []

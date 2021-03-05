@@ -279,10 +279,7 @@ class MBart50TokenizerFast(PreTrainedTokenizerFast):
         self.src_lang = src_lang
         inputs = self(raw_inputs, add_special_tokens=True, return_tensors="pt", truncation=truncation)
         tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
-        import torch
-
-        inputs["decoder_input_ids"] = torch.LongTensor([self.bos_token_id, tgt_lang_id])
-        print(inputs)
+        inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
