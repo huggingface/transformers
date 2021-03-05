@@ -19,13 +19,13 @@ import math
 import os
 import random
 
-from torch.utils.data.dataloader import DataLoader
-
 import datasets
+from datasets import load_dataset, load_metric
+from torch.utils.data.dataloader import DataLoader
+from tqdm.auto import tqdm
+
 import transformers
 from accelerate import Accelerator
-from datasets import load_dataset, load_metric
-from tqdm.auto import tqdm
 from transformers import (
     AdamW,
     AutoConfig,
