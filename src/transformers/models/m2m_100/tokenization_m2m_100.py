@@ -80,7 +80,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
     Examples::
 
         >>> from transformers import M2M100Tokenizer
-        >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M, src_lang="en_XX", tgt_lang="ro_RO")
+        >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M, src_lang="en", tgt_lang="ro")
         >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
         >>> tgt_text =  "Şeful ONU declară că nu există o soluţie militară în Siria"
         >>> model_inputs = tokenizer(src_text, return_tensors="pt")

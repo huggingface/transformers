@@ -41,7 +41,6 @@ class M2M100Config(PretrainedConfig):
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the M2M100 model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.M2M100Model` or
-            :class:`~transformers.TFM2M100Model`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -80,19 +79,21 @@ class M2M100Config(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
         Example::
 
-        >>> from transformers import M2M100Model, M2M100Config
+            >>> from transformers import M2M100Model, M2M100Config
 
-        >>> # Initializing a M2M100 m2m_100_418M style configuration
-        >>> configuration = M2M100Config()
+            >>> # Initializing a M2M100 m2m_100_418M style configuration
+            >>> configuration = M2M100Config()
 
-        >>> # Initializing a model from the m2m_100_418M style configuration
-        >>> model = M2M100Model(configuration)
+            >>> # Initializing a model from the m2m_100_418M style configuration
+            >>> model = M2M100Model(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+            >>> # Accessing the model configuration
+            >>> configuration = model.config
     """
     model_type = "m2m_100"
     keys_to_ignore_at_inference = ["past_key_values"]
