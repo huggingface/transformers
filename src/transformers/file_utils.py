@@ -206,6 +206,7 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+IS_CLOUD_ENV = os.getenv("IS_CLOUD_ENV",True)
 
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -349,7 +350,7 @@ def is_sagemaker_distributed_available():
 
 
 def is_training_run_on_sagemaker():
-    return True if "SAGEMAKER_JOB_NAME" in os.environ else False
+    return True if "SAGEMAKER_JOB_NAME" in os.environ and os.environ["IS_CLOUD_ENV"] is True else False
 
 
 def is_soundfile_availble():
