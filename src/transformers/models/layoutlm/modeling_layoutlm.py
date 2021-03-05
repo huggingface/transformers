@@ -60,7 +60,7 @@ class LayoutLMEmbeddings(nn.Module):
 
     def __init__(self, config):
         super(LayoutLMEmbeddings, self).__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)
         self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size)

@@ -260,7 +260,7 @@ class TapasEmbeddings(nn.Module):
         super().__init__()
         # we do not include config.disabled_features and config.disable_position_embeddings from the original implementation
         # word embeddings
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         # position embeddings
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         # token type embeddings

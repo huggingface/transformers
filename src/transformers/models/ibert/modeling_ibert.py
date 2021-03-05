@@ -70,7 +70,6 @@ class IBertEmbeddings(nn.Module):
         self.word_embeddings = QuantEmbedding(
             config.vocab_size,
             config.hidden_size,
-            padding_idx=config.pad_token_id,
             weight_bit=self.embedding_bit,
             quant_mode=self.quant_mode,
         )
