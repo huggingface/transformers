@@ -43,7 +43,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
     "tokenizer_config_file": {
         "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/tokenizer_config.json",
-    }
+    },
 }
 
 ALL_M2M100_MODELS = ["facebook/m2m100_418M", "facebook/m2m100_1.2B"]
