@@ -1323,7 +1323,7 @@ class Trainer:
                 more information see:
 
                 - the documentation of `optuna.create_study
-                  <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                  <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html>`__
                 - the documentation of `tune.run
                   <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
