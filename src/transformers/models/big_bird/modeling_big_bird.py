@@ -2517,11 +2517,13 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
 
     def __init__(self, config):
         super().__init__()
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.intermediate = BigBirdIntermediate(config)
         self.output = BigBirdNoResidualOutput(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, hidden_states, **kwargs):
+        hidden_states = self.dropout(hidden_states)
         hidden_states = self.intermediate(hidden_states)
         hidden_states = self.output(hidden_states)
         hidden_states = self.qa_outputs(hidden_states)
