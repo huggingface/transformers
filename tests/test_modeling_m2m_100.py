@@ -273,25 +273,6 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
 
-def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if torch.allclose(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
-        if a.numel() > 100:
-            msg = f"tensor values are {pct_different:.1%} percent different."
-        else:
-            msg = f"{a} != {b}"
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
-
-
 def _long_tensor(tok_lst):
     return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
