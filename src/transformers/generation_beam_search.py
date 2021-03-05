@@ -159,6 +159,7 @@ class BeamSearchScorer(BeamScorer):
         do_early_stopping: Optional[bool] = False,
         num_beam_hyps_to_keep: Optional[int] = 1,
         num_beam_groups: Optional[int] = 1,
+        disable_length_normalization: Optional[bool] = False,
     ):
         self.max_length = max_length
         self.num_beams = num_beams
@@ -176,6 +177,7 @@ class BeamSearchScorer(BeamScorer):
                 max_length=self.max_length,
                 length_penalty=self.length_penalty,
                 early_stopping=self.do_early_stopping,
+                disable_length_normalization=disable_length_normalization,
             )
             for _ in range(batch_size)
         ]
@@ -281,6 +283,8 @@ class BeamSearchScorer(BeamScorer):
         final_beam_indices: torch.LongTensor,
         pad_token_id: Optional[int] = None,
         eos_token_id: Optional[int] = None,
+        callback_handle: Optional = None,
+        **model_kwargs,
     ) -> Tuple[torch.LongTensor]:
         batch_size = len(self._beam_hyps)
 
@@ -305,6 +309,8 @@ class BeamSearchScorer(BeamScorer):
         # retrieve best hypotheses
         for i, beam_hyp in enumerate(self._beam_hyps):
             sorted_hyps = sorted(beam_hyp.beams, key=lambda x: x[0])
+            if callback_handle is not None:
+                callback_handle(sorted_hyps, i, **model_kwargs)
             for j in range(self.num_beam_hyps_to_keep):
                 best_hyp_tuple = sorted_hyps.pop()
                 best_score = best_hyp_tuple[0]
@@ -337,7 +343,8 @@ class BeamSearchScorer(BeamScorer):
 
 
 class BeamHypotheses:
-    def __init__(self, num_beams: int, max_length: int, length_penalty: float, early_stopping: bool):
+    def __init__(self, num_beams: int, max_length: int, length_penalty: float, early_stopping: bool,
+                 disable_length_normalization: bool = True):
         """
         Initialize n-best list of hypotheses.
         """
@@ -347,6 +354,7 @@ class BeamHypotheses:
         self.num_beams = num_beams
         self.beams = []
         self.worst_score = 1e9
+        self.disable_length_normalization = disable_length_normalization
 
     def __len__(self):
         """
@@ -358,7 +366,8 @@ class BeamHypotheses:
         """
         Add a new hypothesis to the list.
         """
-        score = sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
+        score = sum_logprobs if self.disable_length_normalization \
+            else sum_logprobs / (hyp.shape[-1] ** self.length_penalty)
         if len(self) < self.num_beams or score > self.worst_score:
             self.beams.append((score, hyp))
             if len(self) > self.num_beams:
@@ -379,6 +388,6 @@ class BeamHypotheses:
         elif self.early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
+            cur_score = best_sum_logprobs if self.disable_length_normalization else best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret

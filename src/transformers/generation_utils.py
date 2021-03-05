@@ -660,6 +660,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        disable_length_normalization: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -759,6 +760,8 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            disable_length_normalization (:obj:`bool`, `optional`, defaults to `False`):
+                Whether or not the default length normalization during decoding should be disabled
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -846,6 +849,10 @@ class GenerationMixin:
         num_return_sequences = (
             num_return_sequences if num_return_sequences is not None else self.config.num_return_sequences
         )
+        if disable_length_normalization is None:
+            # If there is a beam score callback, it is our custom code so disable length normalization
+            # TODO change ec-ml code to send in the flag directly and remove this condition
+            disable_length_normalization = model_kwargs.get("decoder_callback_beam_scores") is not None
 
         pad_token_id = pad_token_id if pad_token_id is not None else self.config.pad_token_id
         bos_token_id = bos_token_id if bos_token_id is not None else self.config.bos_token_id
@@ -999,6 +1006,7 @@ class GenerationMixin:
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
+                disable_length_normalization=disable_length_normalization,
             )
             # interleave with `num_beams`
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1013,6 +1021,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                callback_handle=model_kwargs.get("decoder_callback_beam_scores"),
                 **model_kwargs,
             )
 
@@ -1031,6 +1040,7 @@ class GenerationMixin:
                 device=self.device,
                 length_penalty=length_penalty,
                 do_early_stopping=early_stopping,
+                disable_length_normalization=disable_length_normalization,
             )
 
             # interleave with `num_beams * num_return_sequences`
@@ -1051,6 +1061,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                callback_handle=model_kwargs.get("decoder_callback_beam_scores"),
                 **model_kwargs,
             )
 
@@ -1075,6 +1086,7 @@ class GenerationMixin:
                 do_early_stopping=early_stopping,
                 num_beam_hyps_to_keep=num_return_sequences,
                 num_beam_groups=num_beam_groups,
+                disable_length_normalization=disable_length_normalization,
             )
             # interleave with `num_beams`
             input_ids, model_kwargs = self._expand_inputs_for_generation(
@@ -1089,6 +1101,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                callback_handle=model_kwargs.get("decoder_callback_beam_scores"),
                 **model_kwargs,
             )
 
@@ -1516,6 +1529,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        callback_handle: Optional = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -1550,6 +1564,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            callback_handle (:obj:`function`, `optional`, defaults to `None`):
+                Handle to a callback function if the model wants to do custom processing at each beam docoding step
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1729,7 +1745,8 @@ class GenerationMixin:
                 break
 
         sequence_outputs = beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id,
+            callback_handle=callback_handle, **model_kwargs,
         )
 
         if return_dict_in_generate:
@@ -1770,6 +1787,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        callback_handle: Optional = None,
         **model_kwargs,
     ) -> Union[BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1808,6 +1826,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            callback_handle (:obj:`function`, `optional`, defaults to `None`):
+                Handle to a callback function if the model wants to do custom processing at each beam docoding step
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1992,7 +2012,8 @@ class GenerationMixin:
                 break
 
         sequence_outputs = beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id,
+            callback_handle=callback_handle, **model_kwargs,
         )
 
         if return_dict_in_generate:
@@ -2032,6 +2053,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        callback_handle: Optional = None,
         **model_kwargs,
     ):
         r"""
@@ -2066,6 +2088,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            callback_handle (:obj:`function`, `optional`, defaults to `None`):
+                Handle to a callback function if the model wants to do custom processing at each beam docoding step
             model_kwargs:
                 Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -2293,7 +2317,8 @@ class GenerationMixin:
                 break
 
         sequence_outputs = beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
+            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id,
+            callback_handle=callback_handle, **model_kwargs,
         )
 
         if return_dict_in_generate:
