@@ -2498,20 +2498,6 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
         )
 
 
-class BigBirdNoResidualOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
 class BigBirdForQuestionAnsweringHead(nn.Module):
     """Head for question answering tasks."""
 
@@ -2519,13 +2505,13 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
         super().__init__()
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.intermediate = BigBirdIntermediate(config)
-        self.output = BigBirdNoResidualOutput(config)
+        self.output = BigBirdOutput(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, hidden_states, **kwargs):
-        hidden_states = self.dropout(hidden_states)
+    def forward(self, encoder_output, **kwargs):
+        hidden_states = self.dropout(encoder_output)
         hidden_states = self.intermediate(hidden_states)
-        hidden_states = self.output(hidden_states)
+        hidden_states = self.output(hidden_states, encoder_output)
         hidden_states = self.qa_outputs(hidden_states)
         return hidden_states
 
