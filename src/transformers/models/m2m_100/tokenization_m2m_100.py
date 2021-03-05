@@ -36,7 +36,13 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/m2m_100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/vocab.json",
+        "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/vocab.json",
+    },
+    "spm_file": {
+        "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/sentencepiece.bpe.model",
+    },
+    "tokenizer_config_file": {
+        "facebook/m2m100_418M": "https://huggingface.co/facebook/m2m100_418M/resolve/main/tokenizer_config.json",
     }
 }
 

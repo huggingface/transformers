@@ -86,10 +86,10 @@ class M2M100Config(PretrainedConfig):
 
             >>> from transformers import M2M100Model, M2M100Config
 
-            >>> # Initializing a M2M100 m2m_100_418M style configuration
+            >>> # Initializing a M2M100 facebook/m2m100_418M style configuration
             >>> configuration = M2M100Config()
 
-            >>> # Initializing a model from the m2m_100_418M style configuration
+            >>> # Initializing a model from the facebook/m2m100_418M style configuration
             >>> model = M2M100Model(configuration)
 
             >>> # Accessing the model configuration
