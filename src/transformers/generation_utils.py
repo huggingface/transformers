@@ -888,6 +888,8 @@ class GenerationMixin:
             # set input_ids as decoder_input_ids
             if "decoder_input_ids" in model_kwargs:
                 input_ids = model_kwargs.pop("decoder_input_ids")
+                if pad_token_id in input_ids and use_cache is not False:
+                    raise ValueError("`use_cache` should be False if `decoder_input_ids` include padding.")
             else:
                 input_ids = self._prepare_decoder_input_ids_for_generation(
                     input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id
@@ -1431,7 +1433,14 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            next_token_logits = outputs.logits[:, -1, :]
+            if outputs.logits.size(1) == 1:
+                mask_pad_indices = torch.zeros(
+                    [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
+                )
+            else:
+                # find first padding index
+                _, mask_pad_indices = torch.max(input_ids == pad_token_id, dim=1)
+            next_token_logits = outputs.logits[torch.arange(outputs.logits.size(0)), mask_pad_indices - 1]
 
             # pre-process distribution
             next_token_scores = logits_processor(input_ids, next_token_logits)
@@ -1464,8 +1473,10 @@ class GenerationMixin:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
 
-            # add token and increase length by one
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            # set next token before padding index and increase length by one
+            input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
+            mask_pad_indices[mask_pad_indices == 0] = -1
+            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = next_tokens
             cur_len = cur_len + 1
 
             # update sequence length
@@ -1660,7 +1671,15 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            next_token_logits = outputs.logits[:, -1, :]
+
+            if outputs.logits.size(1) == 1:
+                mask_pad_indices = torch.zeros(
+                    [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
+                )
+            else:
+                # find first padding index
+                _, mask_pad_indices = torch.max(input_ids == pad_token_id, dim=1)
+            next_token_logits = outputs.logits[torch.arange(outputs.logits.size(0)), mask_pad_indices - 1]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `F.log_softmax` operation.
@@ -1715,8 +1734,12 @@ class GenerationMixin:
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
 
-            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-
+            # set next token before padding index and increase length by one
+            input_ids = torch.cat(
+                [input_ids[beam_idx, :], input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1
+            )
+            mask_pad_indices[mask_pad_indices == 0] = -1
+            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = beam_next_tokens
             cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -1920,7 +1943,14 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            next_token_logits = outputs.logits[:, -1, :]
+            if outputs.logits.size(1) == 1:
+                mask_pad_indices = torch.zeros(
+                    [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
+                )
+            else:
+                # find first padding index
+                _, mask_pad_indices = torch.max(input_ids == pad_token_id, dim=1)
+            next_token_logits = outputs.logits[torch.arange(outputs.logits.size(0)), mask_pad_indices - 1]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
             # cannot be generated both before and after the `F.log_softmax` operation.
@@ -1979,7 +2009,12 @@ class GenerationMixin:
             beam_next_tokens = beam_outputs["next_beam_tokens"]
             beam_idx = beam_outputs["next_beam_indices"]
 
-            input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+            # set next token before padding index and increase length by one
+            input_ids = torch.cat(
+                [input_ids[beam_idx, :], input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1
+            )
+            mask_pad_indices[mask_pad_indices == 0] = -1
+            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = beam_next_tokens
             cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -2190,6 +2225,13 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+            if outputs.logits.size(1) == 1:
+                mask_pad_indices = torch.zeros(
+                    [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
+                )
+            else:
+                # find first padding index
+                _, mask_pad_indices = torch.max(input_ids == pad_token_id, dim=1)
 
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
@@ -2209,7 +2251,7 @@ class GenerationMixin:
                 group_input_ids = input_ids[batch_group_indices]
 
                 # select outputs of beams of current group only
-                next_token_logits = outputs.logits[batch_group_indices, -1, :]
+                next_token_logits = outputs.logits[batch_group_indices, mask_pad_indices[batch_group_indices] - 1]
 
                 # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
                 # cannot be generated both before and after the `F.log_softmax` operation.
@@ -2253,9 +2295,23 @@ class GenerationMixin:
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
                 beam_idx = beam_outputs["next_beam_indices"]
 
-                input_ids[batch_group_indices] = group_input_ids[beam_idx]
-                group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-                current_tokens[batch_group_indices] = group_input_ids[:, -1]
+                # input_ids[batch_group_indices] = group_input_ids[beam_idx]
+                # group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+
+                # set next token before padding index and increase length by one
+                group_input_ids = torch.cat(
+                    [
+                        group_input_ids[beam_idx, :],
+                        group_input_ids.new_full([group_input_ids.shape[0], 1], pad_token_id),
+                    ],
+                    dim=-1,
+                )
+                mask_pad_indices[mask_pad_indices == 0] = -1
+                group_input_ids[
+                    torch.arange(group_input_ids.size(0)), mask_pad_indices[batch_group_indices]
+                ] = beam_next_tokens
+                current_tokens[batch_group_indices] = beam_next_tokens
+                mask_pad_indices[mask_pad_indices == -1] = 0
 
                 # (beam_idx // group_size) -> batch_idx
                 # (beam_idx % group_size) -> offset of idx inside the group
@@ -2287,7 +2343,11 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
 
-            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+            # input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+            # set next token before padding index and increase length by one
+            input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
+            mask_pad_indices[mask_pad_indices == 0] = -1
+            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = current_tokens
             cur_len = cur_len + 1
             if beam_scorer.is_done:
                 break
