@@ -42,13 +42,13 @@ def main():
             and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
         ):
             print("Closing", issue)
-            issue.create_comment(
-                "This issue has been automatically marked as stale and been closed because it has not had "
-                "recent activity. Thank you for your contributions.\n\nIf you think this still needs to be addressed"
-                " please comment on this thread."
-            )
-            issue.add_to_labels("wontfix")
-            issue.edit(state="closed")
+            # issue.create_comment(
+            #     "This issue has been automatically marked as stale and been closed because it has not had "
+            #     "recent activity. Thank you for your contributions.\n\nIf you think this still needs to be addressed"
+            #     " please comment on this thread."
+            # )
+            # issue.add_to_labels("wontfix")
+            # issue.edit(state="closed")
         elif (
             len(issue.assignees) > 0
             and (dt.utcnow() - issue.updated_at).days > 21
@@ -58,9 +58,9 @@ def main():
                 print(f"Issue {issue.number}. Pinging {assignee.name} with message")
                 print(f"Hey @{assignee.login}, could you take a second look at this issue?")
 
-                issue.create_comment(
-                   f"Hey @{assignee.login}, could you take a second look at this issue?"
-                )
+                # issue.create_comment(
+                #    f"Hey @{assignee.login}, could you take a second look at this issue?"
+                # )
 
 
 if __name__ == "__main__":
