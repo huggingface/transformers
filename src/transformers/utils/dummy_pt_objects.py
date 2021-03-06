@@ -1593,6 +1593,27 @@ class LxmertXLayer:
         requires_pytorch(self)
 
 
+M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class M2M100ForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class M2M100Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MarianForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
