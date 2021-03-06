@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
-from tensorflow.python.ops.gen_array_ops import reverse
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
