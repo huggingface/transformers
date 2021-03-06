@@ -17,8 +17,8 @@ import sys
 
 from transformers.testing_utils import TestCasePlus, require_torch
 
-class OfflineTests(TestCasePlus):
 
+class OfflineTests(TestCasePlus):
     @require_torch
     def test_offline_mode(self):
 
