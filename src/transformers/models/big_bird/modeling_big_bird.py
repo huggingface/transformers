@@ -2529,6 +2529,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         config.num_labels = 2
         self.num_labels = config.num_labels
+        self.sep_token_id = config.sep_token_id
 
         self.bert = BigBirdModel(config, add_pooling_layer=False)
         self.qa_classifier = BigBirdForQuestionAnsweringHead(config)
@@ -2546,6 +2547,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        question_lengths=None,
         token_type_ids=None,
         position_ids=None,
         head_mask=None,
@@ -2581,8 +2583,20 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         )
 
         sequence_output = outputs[0]
+        self.encoder_out = sequence_output # TODO: remove this
 
         logits = self.qa_classifier(sequence_output)
+        self.logits = logits # TODO: remove this
+
+        seqlen = input_ids.size(1)
+        if question_lengths is None:
+            # assuming input_ids format: <cls> <question> <sep> context <sep>
+            question_lengths = torch.argmax(input_ids.eq(self.sep_token_id).int(), dim=-1) + 1
+
+        # setting lengths logits to `-infi`
+        mask = self.prepare_question_mask(question_lengths.unsqueeze(1), seqlen)
+        logits = logits - (mask.unsqueeze(2).float())*1e6
+
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
@@ -2615,3 +2629,11 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    @staticmethod
+    def prepare_question_mask(q_lengths:torch.Tensor, maxlen:int):
+        # q_lengths -> (bz, 1)
+        mask = torch.arange(0, maxlen).to(q_lengths.device)
+        mask.unsqueeze_(0) # -> (1, maxlen)
+        mask = mask < q_lengths
+        return mask
