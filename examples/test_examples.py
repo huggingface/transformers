@@ -23,7 +23,7 @@ from unittest.mock import patch
 import torch
 
 from transformers.file_utils import is_apex_available
-from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me, slow, torch_device
+from transformers.testing_utils import TestCasePlus, get_gpu_count, slow, torch_device
 
 
 SRC_DIRS = [
@@ -70,7 +70,6 @@ def is_cuda_and_apex_available():
 
 
 class ExamplesTests(TestCasePlus):
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -101,7 +100,6 @@ class ExamplesTests(TestCasePlus):
             result = run_glue.main()
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_clm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -133,7 +131,6 @@ class ExamplesTests(TestCasePlus):
             result = run_clm.main()
             self.assertLess(result["perplexity"], 100)
 
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_mlm(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -159,10 +156,12 @@ class ExamplesTests(TestCasePlus):
             result = run_mlm.main()
             self.assertLess(result["perplexity"], 42)
 
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_ner(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
+
+        # with so little data distributed training needs more epochs to get the score on par with 0/1 gpu
+        epochs = 7 if get_gpu_count() > 1 else 2
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
@@ -178,7 +177,7 @@ class ExamplesTests(TestCasePlus):
             --learning_rate=2e-4
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=2
-            --num_train_epochs=2
+            --num_train_epochs={epochs}
         """.split()
 
         if torch_device != "cuda":
@@ -190,7 +189,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_precision"], 0.75)
             self.assertLess(result["eval_loss"], 0.5)
 
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_squad(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -218,7 +216,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["f1"], 30)
             self.assertGreaterEqual(result["exact"], 30)
 
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_swag(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -244,7 +241,6 @@ class ExamplesTests(TestCasePlus):
             result = run_swag.main()
             self.assertGreaterEqual(result["eval_accuracy"], 0.8)
 
-    @require_torch_non_multi_gpu_but_fix_me
     def test_generation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -263,7 +259,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(len(result[0]), 10)
 
     @slow
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_seq2seq_summarization(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
@@ -296,7 +291,6 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_rougeLsum"], 7)
 
     @slow
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_seq2seq_translation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
