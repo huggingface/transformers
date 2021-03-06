@@ -68,7 +68,7 @@ def main():
             and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
         ):
             for assignee in issue.assignees:
-                print(f"This issue has been stale for a while, ping @{assignee.login}")
+                print(f"This issue ({issue.number}) has been stale for a while, ping @{assignee.login}")
                 # issue.create_comment(f"This issue has been stale for a while, ping @{assignee.login}")
 
 
