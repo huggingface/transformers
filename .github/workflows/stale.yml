@@ -1,6 +1,9 @@
 name: Stale Bot
 
 on:
+  push:
+     branches:
+       - stale*
   schedule:
     - cron: "0 0 * * *"
 
