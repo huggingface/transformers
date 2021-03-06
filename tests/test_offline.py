@@ -15,10 +15,11 @@
 import subprocess
 import sys
 
-from transformers.testing_utils import TestCasePlus
-
+from transformers.testing_utils import TestCasePlus, require_torch
 
 class OfflineTests(TestCasePlus):
+
+    @require_torch
     def test_offline_mode(self):
 
         # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
