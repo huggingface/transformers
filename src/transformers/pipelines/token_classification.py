@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
+from tensorflow.python.ops.gen_array_ops import reverse
 
 from ..file_utils import add_end_docstrings, is_tf_available, is_torch_available
 from ..modelcard import ModelCard
@@ -85,7 +86,8 @@ class TokenClassificationPipeline(Pipeline):
         ignore_labels=["O"],
         task: str = "",
         grouped_entities: bool = False,
-        ignore_subwords: bool = False,
+        subword_label_re_alignment: Union[bool, str] = False,
+        ignore_subwords: bool = False
     ):
         super().__init__(
             model=model,
@@ -107,6 +109,7 @@ class TokenClassificationPipeline(Pipeline):
         self._args_parser = args_parser
         self.ignore_labels = ignore_labels
         self.grouped_entities = grouped_entities
+        self.subword_label_re_alignment = subword_label_re_alignment
         self.ignore_subwords = ignore_subwords
 
         if self.ignore_subwords and not self.tokenizer.is_fast:
@@ -177,18 +180,14 @@ class TokenClassificationPipeline(Pipeline):
                         input_ids = tokens["input_ids"].cpu().numpy()[0]
 
             score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
-            labels_idx = score.argmax(axis=-1)
 
             entities = []
-            # Filter to labels not in `self.ignore_labels`
             # Filter special_tokens
             filtered_labels_idx = [
-                (idx, label_idx)
-                for idx, label_idx in enumerate(labels_idx)
-                if (self.model.config.id2label[label_idx] not in self.ignore_labels) and not special_tokens_mask[idx]
+                idx for idx in range(score.shape[0]) if not special_tokens_mask[idx]
             ]
 
-            for idx, label_idx in filtered_labels_idx:
+            for idx in filtered_labels_idx:
                 if offset_mapping is not None:
                     start_ind, end_ind = offset_mapping[idx]
                     word_ref = sentence[start_ind:end_ind]
@@ -206,17 +205,26 @@ class TokenClassificationPipeline(Pipeline):
 
                 entity = {
                     "word": word,
-                    "score": score[idx][label_idx].item(),
-                    "entity": self.model.config.id2label[label_idx],
+                    "score": score[idx],
+                    "is_subword": is_subword,
                     "index": idx,
                     "start": start_ind,
                     "end": end_ind,
                 }
 
-                if self.grouped_entities and self.ignore_subwords:
-                    entity["is_subword"] = is_subword
-
                 entities += [entity]
+
+            if self.subword_label_re_alignment:
+                self.set_subwords_label(
+                    entities,
+                    self.subword_label_re_alignment
+                )
+            else:
+                for entity in entities:
+                    label_idx = entity["score"].argmax()
+                    label = self.model.config.id2label[label_idx]
+                    entity["entity"] = label
+                    entity["score"] = entity["score"][label_idx]
 
             if self.grouped_entities:
                 answers += [self.group_entities(entities)]
@@ -227,6 +235,59 @@ class TokenClassificationPipeline(Pipeline):
         if len(answers) == 1:
             return answers[0]
         return answers
+
+    def set_subwords_label(self, entities: List[dict], strategy: str) -> dict:
+
+        def sub_words_label(sub_words: List[dict]) -> dict:
+            score = np.stack([sub["score"] for sub in sub_words])
+            if strategy == "default":
+                label_idx = score[0].argmax()
+                label = self.model.config.id2label[label_idx]
+                sub_words[0]["entity"] = label
+                for sub in sub_words[1:]:
+                    sub["entity"] = "O"
+                return sub_words
+
+            if strategy == "first":
+                # get label of first sub-word
+                label_idx = score[0].argmax()
+                label = self.model.config.id2label[label_idx]
+            elif strategy == "max":
+                max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
+                label = self.model.config.id2label[max_label_idx]
+            elif strategy == "average":
+                max_label_idx = np.mean(score, axis=0).argmax()
+                label = self.model.config.id2label[max_label_idx]
+
+            for idx, sub in enumerate(sub_words):
+                sub["entity"] = label
+                sub["score"] = score[idx][max_label_idx]
+
+            return sub_words
+
+        word_group_disagg = []
+        entities_with_label = []
+
+        for entity in reversed(entities):
+            is_subword = entity["is_subword"]
+            word_group_disagg += [entity]
+            if not is_subword:
+                begin_sub = word_group_disagg.pop(-1)
+                if len(word_group_disagg) and word_group_disagg[0]["is_subword"]:
+                    word_group_disagg.reverse()
+                    merged_entity = sub_words_label(sub_words=word_group_disagg)
+                    entities_with_label.extend(merged_entity)
+
+                label_idx = begin_sub["score"].argmax()
+                label = self.model.config.id2label[label_idx]
+                begin_sub["entity"] = label
+                begin_sub["score"] = begin_sub["score"][label_idx]
+
+                entities_with_label.append(begin_sub)
+                word_group_disagg = []
+
+        entities_with_label.reverse()
+        return entities_with_label
 
     def group_sub_entities(self, entities: List[dict]) -> dict:
         """
