@@ -234,6 +234,13 @@ PRESET_MIRROR_DICT = {
 }
 
 
+_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
+
+
+def is_offline_mode():
+    return _is_offline_mode
+
+
 def is_torch_available():
     return _torch_available
 
