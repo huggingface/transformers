@@ -71,6 +71,8 @@ def get_results(output_dir):
     if os.path.exists(path):
         with open(path, "r") as f:
             results = json.load(f)
+    else:
+        raise ValueError(f"can't find {path}")
     return results
 
 
