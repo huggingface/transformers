@@ -44,14 +44,21 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
+from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
-with FileLock(".lock") as lock:
-    nltk.download("punkt", quiet=True)
-
-
 logger = logging.getLogger(__name__)
+
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    if is_offline_mode():
+        raise LookupError(
+            "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
+        )
+    with FileLock(".lock") as lock:
+        nltk.download("punkt", quiet=True)
 
 
 @dataclass
