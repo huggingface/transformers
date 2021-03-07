@@ -625,15 +625,17 @@ class DataCollatorForPermutationLanguageModeling:
                 "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
             )
 
-        if inputs.size(1) % 2 != 0:
+        if inputs.size(1) % 2 != 0: #如果要弄perm_mask, input_length就得整除2(剛好一半)
             raise ValueError(
                 "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
             )
 
         labels = inputs.clone()
         # Creating the mask and target_mapping tensors
-        masked_indices = torch.full(labels.shape, 0, dtype=torch.bool)
-        target_mapping = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.float32)
+        masked_indices = torch.full(labels.shape, 0, dtype=torch.bool) 
+        #size = sequence, 判斷序列中哪幾個token被mask, 0=false
+        target_mapping = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.float32) 
+        #size = sequence的矩陣
 
         for i in range(labels.size(0)):
             # Start from the beginning of the sequence by setting `cur_len = 0` (number of tokens processed so far).
@@ -654,23 +656,32 @@ class DataCollatorForPermutationLanguageModeling:
             # Since we're replacing non-masked tokens with -100 in the labels tensor instead of skipping them altogether,
             # the i-th predict corresponds to the i-th token.
             target_mapping[i] = torch.eye(labels.size(1))
+            #每個batch, target_mapping的對角線都是1, 代表第i個預測的token就是第i個token
 
         special_tokens_mask = torch.tensor(
             [self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()],
             dtype=torch.bool,
         )
+        #size = sequence, true表示為special token, 如<sep>, <cls>, 但<pad>和<mask沒有>
+        
         masked_indices.masked_fill_(special_tokens_mask, value=0.0)
         if self.tokenizer._pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             masked_indices.masked_fill_(padding_mask, value=0.0)
+            
+        #被mask的地方還是會保留true, 其餘為false, 並去除<cls> <sep> <pad>被mask的情況, 將他們的位置強制改為false
 
         # Mask indicating non-functional tokens, where functional tokens are [SEP], [CLS], padding, etc.
         non_func_mask = ~(padding_mask | special_tokens_mask)
+        #size = sequence, true=非sep, cls, pad等特殊token
 
         inputs[masked_indices] = self.tokenizer.mask_token_id
+        #被mask的index位置以mask_token_id表示
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
-
+        #沒有被mask的token就以-100表示
+        
         perm_mask = torch.zeros((labels.size(0), labels.size(1), labels.size(1)), dtype=torch.float32)
+        #size = sequence的矩陣
 
         for i in range(labels.size(0)):
             # Generate permutation indices i.e. sample a random factorisation order for the sequence. This will
@@ -692,10 +703,15 @@ class DataCollatorForPermutationLanguageModeling:
             # smallest index (-1) so that:
             # (1) They can be seen by all other positions
             # (2) They cannot see masked positions, so there won't be information leak
+            
+            #把non-masked token設為-1, 代表他們可以看到其他所有的tokens資訊, 除了masked tokens之外
             perm_index.masked_fill_(~masked_indices[i] & non_func_mask[i], -1)
             # The logic for whether the i-th token can attend on the j-th token based on the factorisation order:
             # 0 (can attend): If perm_index[i] > perm_index[j] or j is neither masked nor a functional token
             # 1 (cannot attend): If perm_index[i] <= perm_index[j] and j is either masked or a functional token
+            
+            #perm的2維sequence順序沒改, 可以從perm_index看出排列, 
+            #前面的masked token看不到後面的masked token資訊, 但後面的token可以看到前面的masked token資訊, 當然自己看不到自己的token資訊
             perm_mask[i] = (
                 perm_index.reshape((labels.size(1), 1)) <= perm_index.reshape((1, labels.size(1)))
             ) & masked_indices[i]
