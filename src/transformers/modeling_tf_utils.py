@@ -36,6 +36,7 @@ from .file_utils import (
     ModelOutput,
     cached_path,
     hf_bucket_url,
+    is_offline_mode,
     is_remote_url,
 )
 from .generation_tf_utils import TFGenerationMixin
@@ -1150,6 +1151,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
