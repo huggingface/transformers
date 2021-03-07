@@ -271,15 +271,21 @@ class BigBirdEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
+        self.we = inputs_embeds # TODO
+
         if self.rescale_embeddings:
             inputs_embeds = inputs_embeds * (self.hidden_size ** 0.5)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
+        self.tte = token_type_embeddings # TODO
+
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
+
+        self.pe = position_embeddings # TODO
 
         embeddings = self.dropout(embeddings)
         embeddings = self.LayerNorm(embeddings)
@@ -1790,7 +1796,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
         self.input_ids = input_ids  # TODO: remove
-        self.word_embeddings = embedding_output  # TODO: remove
+        self.embed = embedding_output  # TODO: remove
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -2570,6 +2576,23 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        seqlen = input_ids.size(1)
+        if question_lengths is None:
+            # assuming input_ids format: <cls> <question> <sep> context <sep>
+            question_lengths = torch.argmax(input_ids.eq(self.sep_token_id).int(), dim=-1) + 1
+        
+        # setting lengths logits to `-infi`
+        logits_mask = self.prepare_question_mask(question_lengths.unsqueeze(1), seqlen)
+        if token_type_ids is None:
+            token_type_ids = (~logits_mask).long()
+        logits_mask = logits_mask.float()
+        
+        # TODO:
+        # print(token_type_ids)
+        # print(mask)
+        self.tti = token_type_ids
+        # 
+
         outputs = self.bert(
             input_ids,
             attention_mask=attention_mask,
@@ -2588,15 +2611,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         logits = self.qa_classifier(sequence_output)
         self.logits = logits # TODO: remove this
 
-        seqlen = input_ids.size(1)
-        if question_lengths is None:
-            # assuming input_ids format: <cls> <question> <sep> context <sep>
-            question_lengths = torch.argmax(input_ids.eq(self.sep_token_id).int(), dim=-1) + 1
-
-        # setting lengths logits to `-infi`
-        mask = self.prepare_question_mask(question_lengths.unsqueeze(1), seqlen)
-        logits = logits - (mask.unsqueeze(2).float())*1e6
-
+        logits = logits - (logits_mask.unsqueeze(2))*1e6
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
