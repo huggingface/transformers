@@ -1332,6 +1332,25 @@ class TFPegasusModel:
         requires_tf(self)
 
 
+class TFRagModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFRagSequenceForGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFRagTokenForGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

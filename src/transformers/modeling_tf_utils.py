@@ -447,7 +447,7 @@ def input_processing(func, config, input_ids, **kwargs):
     return output
 
 
-def load_tf_weights(model, resolved_archive_file):
+def load_tf_weights(model, resolved_archive_file, _prefix=None):
     """
     Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
 
@@ -493,6 +493,10 @@ def load_tf_weights(model, resolved_archive_file):
                 for weight_name in hdf5_format.load_attributes_from_hdf5_group(h5_layer_object, "weight_names"):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
+
+                    if _prefix is not None:
+                        name = _prefix + "/" + name
+
                     saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
                     # Add the updated name to the final list for computing missing/unexpected values
@@ -501,7 +505,14 @@ def load_tf_weights(model, resolved_archive_file):
                 # Loop over each weights from the instantiated model and compare with the weights from the H5 file
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
-                    symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
+                    if _prefix is not None:
+                        delimeter = len(_prefix.split("/"))
+                        symbolic_weight_name = "/".join(
+                            symbolic_weight.name.split("/")[:delimeter]
+                            + symbolic_weight.name.split("/")[delimeter + 1 :]
+                        )
+                    else:
+                        symbolic_weight_name = "/".join(symbolic_weight.name.split("/")[1:])
 
                     # here we check if the current weight is among the weights from the H5 file
                     # If yes, get the weight_value of the corresponding weight from the H5 file
@@ -603,6 +614,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     # a list of re pattern of tensor names to ignore from the weights when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_unexpected = None
+    _requires_load_weight_prefix = False
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -741,10 +753,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
     def get_prefix_bias_name(self) -> Union[None, str]:
         """
-        Get the concatenated prefix name of the bias from the model name to the parent layer
+        Get the concatenated _prefix name of the bias from the model name to the parent layer
 
         Return:
-            :obj:`str`: The prefix name of the bias.
+            :obj:`str`: The _prefix name of the bias.
         """
         warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
@@ -1052,7 +1064,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
-                      :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                      :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
                       this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the PyTorch model in a
@@ -1151,6 +1163,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
+        load_weight_prefix = kwargs.pop("load_weight_prefix", None)
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
@@ -1230,6 +1243,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         config.name_or_path = pretrained_model_name_or_path
 
+        # composed models, *e.g.* TFRag, require special treatment when it comes to loading
+        # pre-trained weights.
+        if cls._requires_load_weight_prefix and model_kwargs.get("name") is not None:
+            model_kwargs["load_weight_prefix"] = load_weight_prefix + "/" + model_kwargs.get("name")
+
         # Instantiate model.
         model = cls(config, *model_args, **model_kwargs)
 
@@ -1239,13 +1257,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             # Load from a PyTorch checkpoint
             return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
 
-        model(model.dummy_inputs)  # build the network with dummy inputs
+        # we might need to extend the variable scope for composite models
+        if load_weight_prefix is not None:
+            with tf.compat.v1.variable_scope(load_weight_prefix):
+                model(model.dummy_inputs)  # build the network with dummy inputs
+        else:
+            model(model.dummy_inputs)  # build the network with dummy inputs
 
         assert os.path.isfile(resolved_archive_file), "Error retrieving file {}".format(resolved_archive_file)
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file)
+            missing_keys, unexpected_keys = load_tf_weights(model, resolved_archive_file, load_weight_prefix)
         except OSError:
             raise OSError(
                 "Unable to load weights from h5 file. "
