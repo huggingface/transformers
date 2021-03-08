@@ -54,7 +54,6 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
-#          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu102.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -201,7 +200,6 @@ jobs:
           pip install --upgrade pip
           pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
           pip install git+https://github.com/huggingface/datasets
-#          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu102.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
