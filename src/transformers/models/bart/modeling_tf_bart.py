@@ -1138,6 +1138,9 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     BART_START_DOCSTRING,
 )
 class TFBartModel(TFBartPretrainedModel):
+
+    _requires_load_weight_prefix = True
+
     def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1243,6 +1246,8 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         r"model.encoder.embed_tokens.weight",
         r"model.decoder.embed_tokens.weight",
     ]
+
+    _requires_load_weight_prefix = True
 
     def __init__(self, config, load_weight_prefix=None, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)

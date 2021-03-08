@@ -614,6 +614,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
     # a list of re pattern of tensor names to ignore from the weights when loading the model weights
     # (and avoid unnecessary warnings).
     _keys_to_ignore_on_load_unexpected = None
+    _requires_load_weight_prefix = False
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -750,14 +751,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         )
         return self.get_lm_head()
 
-    def get__prefix_bias_name(self) -> Union[None, str]:
+    def get_prefix_bias_name(self) -> Union[None, str]:
         """
         Get the concatenated _prefix name of the bias from the model name to the parent layer
 
         Return:
             :obj:`str`: The _prefix name of the bias.
         """
-        warnings.warn("The method get__prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:
@@ -1063,7 +1064,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                       Valid model ids can be located at the root-level, like ``bert-base-uncased``, or namespaced under
                       a user or organization name, like ``dbmdz/bert-base-german-cased``.
                     - A path to a `directory` containing model weights saved using
-                      :func:`~transformersTF.PreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
+                      :func:`~transformers.TFPreTrainedModel.save_pretrained`, e.g., ``./my_model_directory/``.
                     - A path or url to a `PyTorch state_dict save file` (e.g, ``./pt_model/pytorch_model.bin``). In
                       this case, ``from_pt`` should be set to :obj:`True` and a configuration object should be provided
                       as ``config`` argument. This loading path is slower than converting the PyTorch model in a
@@ -1240,10 +1241,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
 
         # composed models, *e.g.* TFRag, require special treatment when it comes to loading
         # pre-trained weights.
-        if (
-            "load_weight_prefix" in inspect.signature(cls.__init__).parameters.keys()
-            and model_kwargs.get("name") is not None
-        ):
+        if cls._requires_load_weight_prefix and model_kwargs.get("name") is not None:
             model_kwargs["load_weight_prefix"] = load_weight_prefix + "/" + model_kwargs.get("name")
 
         # Instantiate model.
