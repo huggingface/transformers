@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 import os
 import sys
 import unittest
@@ -23,6 +24,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    require_torch_gpu,
     require_torch_multi_gpu,
     require_torch_non_multi_gpu,
     slow,
@@ -76,9 +78,14 @@ class TestTrainerExt(TestCasePlus):
         )
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
+
         first_step_stats = eval_metrics[0]
         if predict_with_generate:
             assert "eval_bleu" in first_step_stats
+
+        last_step_stats = eval_metrics[-1]
+        assert isinstance(last_step_stats["eval_bleu"], float)
+        assert not math.isnan(float(last_step_stats["eval_loss"])), "eval_loss must not be `nan`"
 
     @require_torch_non_multi_gpu
     def test_run_seq2seq_no_dist(self):
@@ -123,8 +130,20 @@ class TestTrainerExt(TestCasePlus):
         )
 
     @require_apex
+    @require_torch_gpu
     def test_run_seq2seq_apex(self):
-        self.run_seq2seq_quick(extra_args_str="--fp16 --fp16_backend=apex")
+        # XXX: apex breaks the trainer if it's run twice e.g. run_seq2seq.main() from the same
+        # program and it breaks other tests that run from the same pytest worker, therefore until this is
+        # sorted out it must be run only in an external program, that is distributed=True in this
+        # test and only under one or more gpus - if we want cpu will need to make a special test
+        #
+        # specifically to the problem traced it to self.optimizer.step() - if it's run 2nd time via
+        # 2nd main() call it botches the future eval.
+        #
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
+        # test 2nd time - was getting eval_loss': nan'
+        # to reproduce the problem set distributed=False
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--fp16 --fp16_backend=apex")
 
     @slow
     def test_run_seq2seq_slow(self):
