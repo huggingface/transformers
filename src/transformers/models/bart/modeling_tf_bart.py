@@ -1015,13 +1015,16 @@ class TFBartDecoder(tf.keras.layers.Layer):
 class TFBartMainLayer(tf.keras.layers.Layer):
     config_class = BartConfig
 
-    def __init__(self, config: BartConfig, **kwargs):
+    def __init__(self, config: BartConfig, load_weight_prefix=None, **kwargs):
         super().__init__(**kwargs)
-
         self.config = config
         self.shared = TFSharedEmbeddings(config.vocab_size, config.d_model, config.pad_token_id, name="model.shared")
 
-        with tf.compat.v1.variable_scope("model.shared") as shared_abs_scope_name:
+        # set tf scope correctly
+        if load_weight_prefix is None:
+            load_weight_prefix = "model.shared"
+
+        with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
             pass
 
         # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
@@ -1157,10 +1160,13 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     BART_START_DOCSTRING,
 )
 class TFBartModel(TFBartPretrainedModel):
-    def __init__(self, config: BartConfig, *inputs, **kwargs):
+
+    _requires_load_weight_prefix = True
+
+    def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.model = TFBartMainLayer(config, name="model")
+        self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
 
     def get_encoder(self):
         return self.model.encoder
@@ -1263,9 +1269,11 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         r"model.decoder.embed_tokens.weight",
     ]
 
-    def __init__(self, config, *inputs, **kwargs):
+    _requires_load_weight_prefix = True
+
+    def __init__(self, config, load_weight_prefix=None, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
-        self.model = TFBartMainLayer(config, name="model")
+        self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
         self.final_logits_bias = self.add_weight(
