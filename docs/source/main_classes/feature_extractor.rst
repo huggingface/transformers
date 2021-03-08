@@ -20,11 +20,18 @@ from sequences, *e.g.*, pre-processing audio files to Log-Mel Spectrogram featur
 tensors.
 
 
+FeatureExtractionSavingUtilsMixin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.feature_extraction_common_utils.FeatureExtractionSavingUtilsMixin
+    :members: from_pretrained, save_pretrained
+
+
 PreTrainedSequenceFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PreTrainedSequenceFeatureExtractor
-    :members: from_pretrained, save_pretrained, pad
+    :members: pad
 
 
 BatchFeature
