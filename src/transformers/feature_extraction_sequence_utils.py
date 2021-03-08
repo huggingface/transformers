@@ -35,7 +35,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
+class SequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
     """
     This is a general feature extraction class for speech recognition.
 

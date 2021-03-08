@@ -27,10 +27,10 @@ FeatureExtractionSavingUtilsMixin
     :members: from_pretrained, save_pretrained
 
 
-PreTrainedSequenceFeatureExtractor
+SequenceFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PreTrainedSequenceFeatureExtractor
+.. autoclass:: transformers.SequenceFeatureExtractor
     :members: pad
 
 

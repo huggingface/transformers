@@ -246,7 +246,7 @@ _import_structure = {
         "SpecialTokensMixin",
         "TokenSpan",
     ],
-    "feature_extraction_sequence_utils": ["PreTrainedSequenceFeatureExtractor", "BatchFeature"],
+    "feature_extraction_sequence_utils": ["SequenceFeatureExtractor", "BatchFeature"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -1250,7 +1250,7 @@ if TYPE_CHECKING:
     )
 
     # Feature Extractor
-    from .feature_extraction_common_utils import BatchFeature, PreTrainedSequenceFeatureExtractor
+    from .feature_extraction_common_utils import BatchFeature, SequenceFeatureExtractor
 
     # Files and general utilities
     from .file_utils import (
