@@ -1499,7 +1499,8 @@ class Trainer:
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
         ):
             state_dict = self.model.state_dict()
-            self._save(output_dir, state_dict=state_dict)
+            if self.is_world_process_zero():
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_world_process_zero():
             self._save(output_dir)
 
