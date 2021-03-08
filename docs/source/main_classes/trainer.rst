@@ -778,7 +778,8 @@ no equivalent command line arguments.
 Optimizer and Scheduler
 =======================================================================================================================
 
-You can mix and match DeepSpeed and HuggingFace schedulers and optimizers, with the exception of HuggingFace scheduler and DeepSpeed optimizer:
+You can mix and match DeepSpeed and HuggingFace schedulers and optimizers, with the exception of HuggingFace scheduler
+and DeepSpeed optimizer:
 
 +--------------+--------------+--------------+
 | Combos       | HF Scheduler | DS Scheduler |
