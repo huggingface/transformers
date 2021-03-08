@@ -59,7 +59,8 @@ class Wav2Vec2Processor:
 
         .. note::
 
-            This class method is simply calling :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` and
+            This class method is simply calling
+            :meth:`~transformers.PreTrainedSequenceFeatureExtractor.save_pretrained` and
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
             docstrings of the methods above for more information.
 
@@ -80,7 +81,7 @@ class Wav2Vec2Processor:
         .. note::
 
             This class method is simply calling Wav2Vec2FeatureExtractor's
-            :meth:`~transformers.PreTrainedFeatureExtractor.from_pretrained` and Wav2Vec2CTCTokenizer's
+            :meth:`~transformers.PreTrainedSequenceFeatureExtractor.from_pretrained` and Wav2Vec2CTCTokenizer's
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
             docstrings of the methods above for more information.
 
@@ -92,12 +93,13 @@ class Wav2Vec2Processor:
                   huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
                   namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a feature extractor file saved using the
-                  :meth:`~transformers.PreTrainedFeatureExtractor.save_pretrained` method, e.g.,
+                  :meth:`~transformers.PreTrainedSequenceFeatureExtractor.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
                   ``./my_model_directory/feature_extraction_config.json``.
             **kwargs
-                Additional keyword arguments passed along to both :class:`~transformers.PreTrainedFeatureExtractor` and
+                Additional keyword arguments passed along to both
+                :class:`~transformers.PreTrainedSequenceFeatureExtractor` and
                 :class:`~transformers.PreTrainedTokenizer`
         """
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)

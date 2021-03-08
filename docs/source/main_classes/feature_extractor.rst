@@ -19,15 +19,15 @@ such as processing audio files to, *e.g.*, Log-Mel Spectrogram features, but als
 conversion to Numpy, PyTorch, and TensorFlow tensors.
 
 
-PreTrainedFeatureExtractor
+PreTrainedSequenceFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PreTrainedFeatureExtractor
+.. autoclass:: transformers.PreTrainedSequenceFeatureExtractor
     :members: from_pretrained, save_pretrained, pad
 
 
-BatchFeature
+BatchSequenceFeature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BatchFeature
+.. autoclass:: transformers.BatchSequenceFeature
     :members:
