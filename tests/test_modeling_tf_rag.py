@@ -861,7 +861,7 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " the 1970s",
             " 7.1. 2",
             " 13",
-            " step by step",
+            " evolution",
             " stomach",
             " spodumene",
             " obama",
