@@ -235,7 +235,6 @@ extras["testing"] = (
     deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
     + extras["retrieval"]
     + extras["modelcreation"]
-    + extras["speech"]
 )
 extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
 extras["quality"] = deps_list("black", "isort", "flake8")
