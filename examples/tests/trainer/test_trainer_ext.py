@@ -66,7 +66,7 @@ def require_apex(test_case):
 
 
 class TestTrainerExt(TestCasePlus):
-    def run_seq2seq_quick(self, distributed=False, extra_args_str=None, evaluation=True):
+    def run_seq2seq_quick(self, distributed=False, extra_args_str=None, predict_with_generate=True):
         output_dir = self.run_trainer(
             eval_steps=1,
             max_len=12,
@@ -74,13 +74,13 @@ class TestTrainerExt(TestCasePlus):
             num_train_epochs=1,
             distributed=distributed,
             extra_args_str=extra_args_str,
-            evaluation=evaluation,
+            predict_with_generate=predict_with_generate,
         )
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
 
-        if evaluation:
-            first_step_stats = eval_metrics[0]
+        first_step_stats = eval_metrics[0]
+        if predict_with_generate:
             assert "eval_bleu" in first_step_stats
 
             last_step_stats = eval_metrics[-1]
@@ -117,13 +117,15 @@ class TestTrainerExt(TestCasePlus):
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_fully_sharded_ddp(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2", evaluation=False)
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2", predict_with_generate=False)
 
     # test --sharded_ddp zero_dp_2 w/ --fp16
     @require_torch_multi_gpu
     @require_fairscale
     def test_run_seq2seq_fully_sharded_ddp_fp16(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2 --fp16", evaluation=False)
+        self.run_seq2seq_quick(
+            distributed=True, extra_args_str="--sharded_ddp zero_dp_2 --fp16", predict_with_generate=False
+        )
 
     @require_apex
     @require_torch_gpu
@@ -176,7 +178,7 @@ class TestTrainerExt(TestCasePlus):
         learning_rate: float = 3e-3,
         distributed: bool = False,
         extra_args_str: str = None,
-        evaluation: bool = True,
+        predict_with_generate: bool = True,
     ):
         data_dir = self.examples_dir / "test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -193,12 +195,16 @@ class TestTrainerExt(TestCasePlus):
             --max_target_length {max_len}
             --val_max_target_length {max_len}
             --do_train
+            --do_eval
+            --do_predict
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
             --learning_rate {learning_rate}
             --warmup_steps 8
+            --evaluation_strategy steps
             --logging_steps 0
+            --eval_steps {str(eval_steps)}
             --save_steps {str(eval_steps)}
             --group_by_length
             --label_smoothing_factor 0.1
@@ -207,14 +213,8 @@ class TestTrainerExt(TestCasePlus):
             --target_lang ro_RO
             --source_lang en_XX
         """
-        if evaluation:
-            args += f"""
-                --predict_with_generate
-                --do_eval
-                --do_predict
-                --evaluation_strategy steps
-                --eval_steps {str(eval_steps)}
-            """
+        if predict_with_generate:
+            args += "--predict_with_generate"
 
         args = args.split()
 
