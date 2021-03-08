@@ -564,7 +564,7 @@ class Speech2TextPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-speech_to_text_START_DOCSTRING = r"""
+SPEECH_TO_TEXT_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
     methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
     pruning heads etc.)
@@ -580,7 +580,7 @@ speech_to_text_START_DOCSTRING = r"""
             :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
-speech_to_text_INPUTS_DOCSTRING = r"""
+SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
     Args:
         input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, fbank_feature_length, num_mel_bins)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
@@ -1072,7 +1072,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
 @add_start_docstrings(
     "The bare Speech2Text Model outputting raw hidden-states without any specific head on top.",
-    speech_to_text_START_DOCSTRING,
+    SPEECH_TO_TEXT_START_DOCSTRING,
 )
 class Speech2TextModel(Speech2TextPreTrainedModel):
     def __init__(self, config: Speech2TextConfig):
@@ -1095,7 +1095,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    @add_start_docstrings_to_model_forward(speech_to_text_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="s2t_transformer_s",
@@ -1175,7 +1175,7 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
 
 @add_start_docstrings(
     "The Speech2Text Model with a language modeling head. Can be used for summarization.",
-    speech_to_text_START_DOCSTRING,
+    SPEECH_TO_TEXT_START_DOCSTRING,
 )
 class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     base_model_prefix = "model"
@@ -1208,7 +1208,7 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    @add_start_docstrings_to_model_forward(speech_to_text_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(SPEECH_TO_TEXT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
