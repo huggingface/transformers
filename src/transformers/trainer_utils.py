@@ -425,6 +425,6 @@ class TrainerMemoryTracker:
 
 class ShardedDDPOption(ExplicitEnum):
     SIMPLE = "simple"
-    ZERO_DP_2 = "zero2"
-    ZERO_DP_3 = "zero3"
+    ZERO_DP_2 = "zero_dp_2"
+    ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
