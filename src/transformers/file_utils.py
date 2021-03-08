@@ -1105,6 +1105,10 @@ def cached_path(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+
     if is_remote_url(url_or_filename):
         # URL, so get it from the cache (downloading if necessary)
         output_path = get_from_cache(
