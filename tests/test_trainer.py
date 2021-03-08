@@ -992,7 +992,7 @@ class TrainerIntegrationTest(unittest.TestCase):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
-    
+
     def test_no_wd_param_group(self):
         model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
         trainer = Trainer(model=model)
