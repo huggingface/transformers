@@ -486,9 +486,17 @@ class BigBirdBlockSparseAttention(nn.Module):
         assert from_seq_length % from_block_size == 0, "Query sided sequence length must be multiple of block size"
         assert to_seq_length % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
 
+        self.it = hidden_states # TODO
+
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
+
+        # TODO
+        self.q = query_layer.transpose(1,2)
+        self.k = key_layer.transpose(1,2)
+        self.v = value_layer.transpose(1,2)
+        # 
 
         context_layer, attention_probs = self.bigbird_block_sparse_attention(
             query_layer,
@@ -514,6 +522,10 @@ class BigBirdBlockSparseAttention(nn.Module):
         )
 
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
+        
+        # TODO
+        self.clo = context_layer
+        # 
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -1297,6 +1309,8 @@ class BigBirdLayer(nn.Module):
             # add cross-attn cache to positions 3,4 of present_key_value tuple
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
+
+        self.ao = attention_output # TODO
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
