@@ -27,8 +27,8 @@ PreTrainedSequenceFeatureExtractor
     :members: from_pretrained, save_pretrained, pad
 
 
-BatchSequenceFeature
+BatchFeature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.BatchSequenceFeature
+.. autoclass:: transformers.BatchFeature
     :members:

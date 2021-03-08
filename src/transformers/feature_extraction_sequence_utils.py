@@ -15,174 +15,24 @@
 """
  Sequence feature extraction class for common feature extrcactors to preprocess sequences.
 """
-from collections import UserDict
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from .feature_extraction_saving_utils import FeatureExtractionSavingUtilsMixin
+from .feature_extraction_common_utils import BatchFeature, FeatureExtractionSavingUtilsMixin
 from .file_utils import (
     PaddingStrategy,
     TensorType,
-    _is_jax,
-    _is_numpy,
     _is_tensorflow,
     _is_torch,
-    _is_torch_device,
-    is_flax_available,
     is_tf_available,
     is_torch_available,
     to_py_obj,
-    torch_required,
 )
 from .utils import logging
 
 
 logger = logging.get_logger(__name__)
-
-
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
-
-
-class BatchSequenceFeature(UserDict):
-    r"""
-    Holds the output of the :meth:`~transformers.PreTrainedSequenceFeatureExtractor.pad` and feature extractor specific
-    ``__call__`` methods.
-
-    This class is derived from a python dictionary and can be used as a dictionary.
-
-    Args:
-        data (:obj:`dict`):
-            Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('input_values', 'attention_mask',
-            etc.).
-        tensor_type (:obj:`Union[None, str, TensorType]`, `optional`):
-            You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
-            initialization.
-    """
-
-    def __init__(self, data: Optional[Dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
-        super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
-
-    def __getitem__(self, item: str) -> Union[Any]:
-        """
-        If the key is a string, returns the value of the dict associated to :obj:`key` ('input_values',
-        'attention_mask', etc.).
-        """
-        if isinstance(item, str):
-            return self.data[item]
-        else:
-            raise KeyError("Indexing with integers is not available when using Python based feature extractors")
-
-    def __getattr__(self, item: str):
-        try:
-            return self.data[item]
-        except KeyError:
-            raise AttributeError
-
-    def __getstate__(self):
-        return {"data": self.data}
-
-    def __setstate__(self, state):
-        if "data" in state:
-            self.data = state["data"]
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.keys
-    def keys(self):
-        return self.data.keys()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.values
-    def values(self):
-        return self.data.values()
-
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.items
-    def items(self):
-        return self.data.items()
-
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
-        """
-        Convert the inner content to tensors.
-
-        Args:
-            tensor_type (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
-                The type of tensors to use. If :obj:`str`, should be one of the values of the enum
-                :class:`~transformers.file_utils.TensorType`. If :obj:`None`, no modification is done.
-        """
-        if tensor_type is None:
-            return self
-
-        # Convert to TensorType
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
-
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            as_tensor = tf.constant
-            is_tensor = tf.is_tensor
-        elif tensor_type == TensorType.PYTORCH:
-            if not is_torch_available():
-                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch
-
-            as_tensor = torch.tensor
-            is_tensor = torch.is_tensor
-        elif tensor_type == TensorType.JAX:
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            as_tensor = jnp.array
-            is_tensor = _is_jax
-        else:
-            as_tensor = np.asarray
-            is_tensor = _is_numpy
-
-        # Do the tensor conversion in batch
-        for key, value in self.items():
-            try:
-                if not is_tensor(value):
-                    tensor = as_tensor(value)
-
-                    self[key] = tensor
-            except:  # noqa E722
-                if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
-                raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
-
-        return self
-
-    @torch_required
-    # Copied from transformers.tokenization_utils_base.BatchEncoding.to with BatchEncoding->BatchSequenceFeature
-    def to(self, device: Union[str, "torch.device"]) -> "BatchSequenceFeature":
-        """
-        Send all values to device by calling :obj:`v.to(device)` (PyTorch only).
-
-        Args:
-            device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
-
-        Returns:
-            :class:`~transformers.BatchSequenceFeature`: The same instance after modification.
-        """
-
-        # This check catches things like APEX blindly calling "to" on all inputs to a module
-        # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
-        # into a HalfTensor
-        if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) for k, v in self.data.items()}
-        else:
-            logger.warning(f"Attempting to cast a BatchSequenceFeature to type {str(device)}. This is not supported.")
-        return self
 
 
 class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
@@ -217,18 +67,18 @@ class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
     def pad(
         self,
         processed_features: Union[
-            BatchSequenceFeature,
-            List[BatchSequenceFeature],
-            Dict[str, BatchSequenceFeature],
-            Dict[str, List[BatchSequenceFeature]],
-            List[Dict[str, BatchSequenceFeature]],
+            BatchFeature,
+            List[BatchFeature],
+            Dict[str, BatchFeature],
+            Dict[str, List[BatchFeature]],
+            List[Dict[str, BatchFeature]],
         ],
         padding: Union[bool, str, PaddingStrategy] = True,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-    ) -> BatchSequenceFeature:
+    ) -> BatchFeature:
         """
         Pad input values / input vectors or a batch of input values / input vectors up to predefined length or to the
         max sequence length in the batch.
@@ -243,12 +93,11 @@ class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
             the case of PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
-            processed_features (:class:`~transformers.BatchSequenceFeature`, list of :class:`~transformers.BatchSequenceFeature`, :obj:`Dict[str, List[float]]`, :obj:`Dict[str, List[List[float]]` or :obj:`List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input (:class:`~transformers.BatchSequenceFeature` or
-                :obj:`Dict[str, List[float]]`) or a batch of input values / vectors (list of
-                :class:`~transformers.BatchSequenceFeature`, `Dict[str, List[List[float]]]` or `List[Dict[str,
-                List[float]]]`) so you can use this method during preprocessing as well as in a PyTorch Dataloader
-                collate function.
+            processed_features (:class:`~transformers.BatchFeature`, list of :class:`~transformers.BatchFeature`, :obj:`Dict[str, List[float]]`, :obj:`Dict[str, List[List[float]]` or :obj:`List[Dict[str, List[float]]]`):
+                Processed inputs. Can represent one input (:class:`~transformers.BatchFeature` or :obj:`Dict[str,
+                List[float]]`) or a batch of input values / vectors (list of :class:`~transformers.BatchFeature`,
+                `Dict[str, List[List[float]]]` or `List[Dict[str, List[float]]]`) so you can use this method during
+                preprocessing as well as in a PyTorch Dataloader collate function.
 
                 Instead of :obj:`List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow
                 tensors), see the note above for the return type.
@@ -283,9 +132,7 @@ class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
         """
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
-        if isinstance(processed_features, (list, tuple)) and isinstance(
-            processed_features[0], (dict, BatchSequenceFeature)
-        ):
+        if isinstance(processed_features, (list, tuple)) and isinstance(processed_features[0], (dict, BatchFeature)):
             processed_features = {
                 key: [example[key] for example in processed_features] for key in processed_features[0].keys()
             }
@@ -293,7 +140,7 @@ class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
         # The model's main input name, usually `input_values`, has be passed for padding
         if self.model_input_names[0] not in processed_features:
             raise ValueError(
-                "You should supply an instance of :class:`~transformers.BatchSequenceFeature` or list of :class:`~transformers.BatchSequenceFeature` to this method"
+                "You should supply an instance of :class:`~transformers.BatchFeature` or list of :class:`~transformers.BatchFeature` to this method"
                 f"that includes {self.model_input_names[0]}, but you provided {list(processed_features.keys())}"
             )
 
@@ -348,7 +195,7 @@ class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
             )
-            return BatchSequenceFeature(processed_features, tensor_type=return_tensors)
+            return BatchFeature(processed_features, tensor_type=return_tensors)
 
         batch_size = len(required_input)
         assert all(
@@ -375,11 +222,11 @@ class PreTrainedSequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
                     batch_outputs[key] = []
                 batch_outputs[key].append(value)
 
-        return BatchSequenceFeature(batch_outputs, tensor_type=return_tensors)
+        return BatchFeature(batch_outputs, tensor_type=return_tensors)
 
     def _pad(
         self,
-        processed_features: Union[Dict[str, List[float]], BatchSequenceFeature],
+        processed_features: Union[Dict[str, List[float]], BatchFeature],
         max_length: Optional[int] = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         pad_to_multiple_of: Optional[int] = None,

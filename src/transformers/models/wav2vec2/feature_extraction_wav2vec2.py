@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_sequence_utils import BatchSequenceFeature, PreTrainedSequenceFeatureExtractor
+from ...feature_extraction_common_utils import BatchFeature
+from ...feature_extraction_sequence_utils import PreTrainedSequenceFeatureExtractor
 from ...file_utils import PaddingStrategy, TensorType
 from ...utils import logging
 
@@ -93,7 +94,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedSequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         **kwargs
-    ) -> BatchSequenceFeature:
+    ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s). sequences.
 
@@ -179,7 +180,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedSequenceFeatureExtractor):
             raw_speech = self.zero_mean_unit_var_norm(raw_speech)
 
         # convert into correct format for padding
-        encoded_inputs = BatchSequenceFeature({"input_values": raw_speech})
+        encoded_inputs = BatchFeature({"input_values": raw_speech})
 
         padded_inputs = self.pad(
             encoded_inputs,
