@@ -28,7 +28,7 @@ from flax.traverse_util import flatten_dict, unflatten_dict
 from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
-from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_remote_url
+from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
 
 
@@ -228,6 +228,10 @@ class FlaxPreTrainedModel(ABC):
         local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
