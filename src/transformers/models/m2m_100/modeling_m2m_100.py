@@ -124,7 +124,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
 
     def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        emb_weights = self.get_embedding(num_embeddings + self.offset, embedding_dim, padding_idx)
+        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
             # in forward, put the weights on correct device
             emb_weights = emb_weights.to(self.weights.device)
