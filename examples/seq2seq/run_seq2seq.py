@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 try:
     nltk.data.find("tokenizers/punkt")
-except LookupError:
+except (LookupError, OSError):
     if is_offline_mode():
         raise LookupError(
             "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
