@@ -1,11 +1,10 @@
 import argparse
 import logging
 import sys
-import unittest
 from unittest.mock import patch
 
 import run_glue_deebert
-from transformers.testing_utils import require_torch_non_multi_gpu_but_fix_me, slow
+from transformers.testing_utils import TestCasePlus, get_gpu_count, require_torch_non_multi_gpu, slow
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -20,17 +19,34 @@ def get_setup_file():
     return args.f
 
 
-class DeeBertTests(unittest.TestCase):
+class DeeBertTests(TestCasePlus):
     def setup(self) -> None:
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
+    def run_and_check(self, args):
+        n_gpu = get_gpu_count()
+
+        if n_gpu > 1:
+            pass
+            # XXX: doesn't quite work with n_gpu > 1 https://github.com/huggingface/transformers/issues/10560
+            # script = f"{self.examples_dir_str}/research_projects/deebert/run_glue_deebert.py"
+            # distributed_args = f"-m torch.distributed.launch --nproc_per_node={n_gpu} {script}".split()
+            # cmd = [sys.executable] + distributed_args + args
+            # execute_subprocess_async(cmd, env=self.get_env())
+            # XXX: test the results - need to save them first into .json file
+        else:
+            args.insert(0, "run_glue_deebert.py")
+            with patch.object(sys, "argv", args):
+                result = run_glue_deebert.main()
+                for value in result.values():
+                    self.assertGreaterEqual(value, 0.666)
+
     @slow
-    @require_torch_non_multi_gpu_but_fix_me
+    @require_torch_non_multi_gpu
     def test_glue_deebert_train(self):
 
         train_args = """
-            run_glue_deebert.py
             --model_type roberta
             --model_name_or_path roberta-base
             --task_name MRPC
@@ -51,13 +67,9 @@ class DeeBertTests(unittest.TestCase):
             --overwrite_cache
             --eval_after_first_stage
             """.split()
-        with patch.object(sys, "argv", train_args):
-            result = run_glue_deebert.main()
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.666)
+        self.run_and_check(train_args)
 
         eval_args = """
-            run_glue_deebert.py
             --model_type roberta
             --model_name_or_path ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
             --task_name MRPC
@@ -72,13 +84,9 @@ class DeeBertTests(unittest.TestCase):
             --overwrite_cache
             --per_gpu_eval_batch_size=1
             """.split()
-        with patch.object(sys, "argv", eval_args):
-            result = run_glue_deebert.main()
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.666)
+        self.run_and_check(eval_args)
 
         entropy_eval_args = """
-            run_glue_deebert.py
             --model_type roberta
             --model_name_or_path ./examples/deebert/saved_models/roberta-base/MRPC/two_stage
             --task_name MRPC
@@ -93,7 +101,4 @@ class DeeBertTests(unittest.TestCase):
             --overwrite_cache
             --per_gpu_eval_batch_size=1
             """.split()
-        with patch.object(sys, "argv", entropy_eval_args):
-            result = run_glue_deebert.main()
-            for value in result.values():
-                self.assertGreaterEqual(value, 0.666)
+        self.run_and_check(entropy_eval_args)

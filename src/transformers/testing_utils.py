@@ -301,12 +301,6 @@ def require_torch_non_multi_gpu(test_case):
         return test_case
 
 
-# this is a decorator identical to require_torch_non_multi_gpu, but is used as a quick band-aid to
-# allow all of examples to be run multi-gpu CI and it reminds us that tests decorated with this one
-# need to be ported and aren't so by design.
-require_torch_non_multi_gpu_but_fix_me = require_torch_non_multi_gpu
-
-
 def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
