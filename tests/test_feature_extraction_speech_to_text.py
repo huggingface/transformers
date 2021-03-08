@@ -100,6 +100,8 @@ class Speech2TextFeatureExtractionTester(unittest.TestCase):
         return speech_inputs
 
 
+@require_torch
+@require_torchaudio
 class Speech2TextFeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
 
     feature_extraction_class = Speech2TextFeatureExtractor
