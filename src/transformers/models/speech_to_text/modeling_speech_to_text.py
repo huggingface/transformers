@@ -101,21 +101,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
-    """
-    Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
-    are ignored. This is modified from fairseq's `utils.make_positions`.
-
-    Args:
-        x: torch.Tensor x:
-    Returns: torch.Tensor
-    """
-    # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-    return incremental_indices.long() + padding_idx
-
-
 class Conv1dSubsampler(nn.Module):
     """
     Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
@@ -162,8 +147,17 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        self.weights = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
-        self.register_buffer("_float_tensor", torch.FloatTensor(1))
+        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
+
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
+        if hasattr(self, "weights"):
+            # in forward, put the weights on correct device
+            emb_weights = emb_weights.to(self.weights.device)
+
+        self.weights = nn.Parameter(emb_weights)
+        self.weights.requires_grad = False
+        self.weights.detach_()
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -187,17 +181,32 @@ class Speech2TextSinusoidalPositionalEmbedding(nn.Module):
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
         bsz, seq_len = input_ids.size()
         # Create the position ids from the input token ids. Any padded tokens remain padded.
-        position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
+        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
             input_ids.device
         )
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > self.weights.size(0):
-            self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
-        self.weights = self.weights.to(self._float_tensor)
+            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+
+    def create_position_ids_from_input_ids(
+        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+    ):
+        """
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
+        symbols are ignored. This is modified from fairseq's `utils.make_positions`.
+
+        Args:
+            x: torch.Tensor x:
+        Returns: torch.Tensor
+        """
+        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+        mask = input_ids.ne(padding_idx).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        return incremental_indices.long() + padding_idx
 
 
 # Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->Speech2Text
@@ -1181,7 +1190,12 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder\.version",
         r"decoder\.version",
-        r"lm_head\.weight",
+        r"model.encoder.embed_positions.weights",
+        r"model.decoder.embed_positions.weights",
+    ]
+    _keys_to_ignore_on_save = [
+        r"model.encoder.embed_positions.weights",
+        r"model.decoder.embed_positions.weights",
     ]
 
     def __init__(self, config: Speech2TextConfig):
