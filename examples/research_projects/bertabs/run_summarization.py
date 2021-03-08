@@ -9,10 +9,8 @@ import torch
 from torch.utils.data import DataLoader, SequentialSampler
 from tqdm import tqdm
 
-from filelock import FileLock
 from modeling_bertabs import BertAbs, build_predictor
 from transformers import BertTokenizer
-from transformers.file_utils import is_offline_mode
 
 from .utils_summarization import (
     CNNDMDataset,
@@ -50,16 +48,7 @@ def evaluate(args):
 
         import rouge
 
-        try:
-            nltk.data.find("tokenizers/punkt")
-        except (LookupError, OSError):
-            if is_offline_mode():
-                raise LookupError(
-                    "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
-                )
-            with FileLock(".lock") as lock:  # noqa
-                nltk.download("punkt", quiet=True)
-
+        nltk.download("punkt")
         rouge_evaluator = rouge.Rouge(
             metrics=["rouge-n", "rouge-l"],
             max_n=2,
