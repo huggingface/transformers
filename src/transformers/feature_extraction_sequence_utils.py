@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
- Feature extraction common class for python feature extractors.
+ Sequence feature extraction class for common feature extrcactors to preprocess sequences.
 """
 from collections import UserDict
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
@@ -172,8 +172,7 @@ class BatchSequenceFeature(UserDict):
             device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
 
         Returns:
-            :class:`~transformers.BatchSequenceFeature`: The same instance of
-            :class:`~transformers.BatchSequenceFeature` after modification.
+            :class:`~transformers.BatchSequenceFeature`: The same instance after modification.
         """
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
