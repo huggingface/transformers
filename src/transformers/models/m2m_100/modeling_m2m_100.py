@@ -121,7 +121,17 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
-        self.weights = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
+        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
+
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        emb_weights = self.get_embedding(num_embeddings + self.offset, embedding_dim, padding_idx)
+        if hasattr(self, "weights"):
+            # in forward, put the weights on correct device
+            emb_weights = emb_weights.to(self.weights.device)
+
+        self.weights = nn.Parameter(emb_weights)
+        self.weights.requires_grad = False
+        self.weights.detach_()
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -142,10 +152,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         if padding_idx is not None:
             emb[padding_idx, :] = 0
 
-        emb_weights = nn.Parameter(emb)
-        emb_weights.requires_grad = False
-        emb_weights.detach_()
-        return emb_weights
+        return emb
 
     @torch.no_grad()
     def forward(
@@ -164,7 +171,7 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > self.weights.size(0):
-            self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
+            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
