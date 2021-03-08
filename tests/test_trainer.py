@@ -59,8 +59,6 @@ if is_torch_available():
     )
     from transformers.modeling_utils import unwrap_model
 
-    from .test_trainer_utils import TstLayer
-
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
@@ -194,6 +192,20 @@ if is_torch_available():
                 return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
+
+    class TstLayer(torch.nn.Module):
+        def __init__(self, hidden_size):
+            super().__init__()
+            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln1 = torch.nn.LayerNorm(hidden_size)
+            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln2 = torch.nn.LayerNorm(hidden_size)
+            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+
+        def forward(self, x):
+            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
+            h = torch.nn.functional.relu(self.linear2(x))
+            return self.ln2(x + h + self.bias)
 
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
         label_names = kwargs.get("label_names", None)
