@@ -30,7 +30,7 @@ if is_torch_available():
         DistributedTensorGatherer,
         LabelSmoother,
         LengthGroupedSampler,
-        get_parameter_names,
+        get_parameter_names
     )
 
     class TstLayer(torch.nn.Module):
