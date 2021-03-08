@@ -375,6 +375,10 @@ class GenerationMixin:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
         return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
+    def _prepare_dummy_input_ids(self, encoder_outputs: ModelOutput) -> torch.LongTensor:
+        shape = encoder_outputs.last_hidden_state.size()[:-1]
+        return torch.ones(shape, dtype=torch.long, device=self.device) * -100
+
     def _prepare_attention_mask_for_generation(
         self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
     ) -> torch.LongTensor:
@@ -660,6 +664,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        encoder_outputs: Optional[ModelOutput] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -759,6 +764,9 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            encoder_outputs (:obj:`ModelOutput`, `optional`):
+                For encoder-decoder models only. If provided instead of `input_ids`, this function will skip the
+                encoding step and directly run the decoder.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -863,6 +871,10 @@ class GenerationMixin:
         model_kwargs["output_attentions"] = output_attentions
         model_kwargs["output_hidden_states"] = output_hidden_states
 
+        if encoder_outputs is not None:
+            assert input_ids is None, "`input_ids` is unnecessary if passing `encoder_outputs`"
+            input_ids = self._prepare_dummy_input_ids(encoder_outputs)
+
         if input_ids is None:
             # init `input_ids` with bos_token_id
             input_ids = self._prepare_input_ids_for_generation(bos_token_id)
@@ -883,7 +895,10 @@ class GenerationMixin:
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+            if encoder_outputs is None:
+                model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
+            else:
+                model_kwargs["encoder_outputs"] = encoder_outputs
 
             # set input_ids as decoder_input_ids
             if "decoder_input_ids" in model_kwargs:
