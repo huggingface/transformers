@@ -389,7 +389,12 @@ def main():
     if training_args.do_train:
         if "train" not in datasets:
             raise ValueError("--do_train requires a train dataset")
-        train_dataset = datasets["train"].map(
+        train_dataset = datasets["train"]
+        if data_args.max_train_samples is not None:
+            # Select samples from Dataset, This will help to decrease processing time
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        # Create Training Features
+        train_dataset = train_dataset.map(
             prepare_train_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -397,6 +402,7 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
         )
         if data_args.max_train_samples is not None:
+            # Select samples from dataset again since Feature Creation might increase number of features
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     # Validation preprocessing
@@ -468,7 +474,12 @@ def main():
     if training_args.do_eval:
         if "validation" not in datasets:
             raise ValueError("--do_eval requires a validation dataset")
-        eval_dataset = datasets["validation"].map(
+        eval_dataset = datasets["validation"]
+        if data_args.max_val_samples is not None:
+            # Selecting Eval Samples from Dataset
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        # Create Features from Eval Dataset
+        eval_dataset = eval_dataset.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -476,6 +487,7 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
         )
         if data_args.max_val_samples is not None:
+            # Selecting Samples from Dataset again since Feature Creation might increase samples size
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     # Data collator

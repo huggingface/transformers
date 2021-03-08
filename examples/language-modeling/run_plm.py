@@ -372,29 +372,27 @@ def main():
         #
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
         # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
-        if training_args.do_train:
-            if "train" not in tokenized_datasets:
-                raise ValueError("--do_train requires a train dataset")
-            train_dataset = tokenized_datasets["train"].map(
-                group_texts,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                load_from_cache_file=not data_args.overwrite_cache,
-            )
-            if data_args.max_train_samples is not None:
-                train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
-        if training_args.do_eval:
-            if "validation" not in tokenized_datasets:
-                raise ValueError("--do_eval requires a validation dataset")
-            eval_dataset = tokenized_datasets["validation"].map(
-                group_texts,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                load_from_cache_file=not data_args.overwrite_cache,
-            )
-            if data_args.max_val_samples is not None:
-                eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        tokenized_datasets = tokenized_datasets.map(
+            group_texts,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
+
+    if training_args.do_train:
+        if "train" not in tokenized_datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = tokenized_datasets["train"]
+        if data_args.max_train_samples is not None:
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+
+    if training_args.do_eval:
+        if "validation" not in tokenized_datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_dataset = tokenized_datasets["validation"]
+        if data_args.max_val_samples is not None:
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     # Data collator
     data_collator = DataCollatorForPermutationLanguageModeling(
