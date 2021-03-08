@@ -322,6 +322,13 @@ def init_deepspeed(trainer, num_training_steps):
     else:  # override only if the ds config doesn't already have this section
         config["gradient_clipping"] = args.max_grad_norm
 
+    # Optimizer + Scheduler
+    # Currently support combos:
+    # 1. DS scheduler + DS optimizer: Yes
+    # 2. HF scheduler + HF optimizer: Yes
+    # 3. DS scheduler + HF optimizer: Yes
+    # 4. HF scheduler + DS optimizer: No
+
     optimizer = None
     if "optimizer" in config:
         logger.info(
@@ -348,8 +355,13 @@ def init_deepspeed(trainer, num_training_steps):
             f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
-        trainer.create_scheduler(num_training_steps=num_training_steps)
-        lr_scheduler = trainer.lr_scheduler
+        if "optimizer" in config:
+            # to make this option work, we need to init DS optimizer first, then init HS scheduler,
+            # then pass the HS scheduler to DS init
+            raise ValueError("At the moment HF Scheduler + DeepSpeed Optimizer combination is not possible")
+        else:
+            trainer.create_scheduler(num_training_steps=num_training_steps)
+            lr_scheduler = trainer.lr_scheduler
 
     # fp16
     if trainer.fp16_backend is not None:

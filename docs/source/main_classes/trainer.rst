@@ -775,8 +775,24 @@ no equivalent command line arguments.
 
 
 
-Optimizer
+Optimizer and Scheduler
 =======================================================================================================================
+
+You can mix and match DeepSpeed and HuggingFace schedulers and optimizers, with the exception of HuggingFace scheduler and DeepSpeed optimizer:
+
++--------------+--------------+--------------+
+| Combos       | HF Scheduler | DS Scheduler |
++--------------+--------------+--------------+
+| HF Optimizer | Yes          | Yes          |
++--------------+--------------+--------------+
+| DS Optimizer | No           | Yes          |
++--------------+--------------+--------------+
+
+
+
+
+Optimizer
+-----------------------------------------------------------------------------------------------------------------------
 
 
 DeepSpeed's main optimizers are Adam, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are thus
@@ -812,7 +828,7 @@ make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` 
 
 
 Scheduler
-=======================================================================================================================
+-----------------------------------------------------------------------------------------------------------------------
 
 DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedulers. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.

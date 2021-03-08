@@ -110,15 +110,16 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
         self.assertNotEqual(new_a, a)
 
     def test_hf_scheduler_ds_optimizer(self):
+        # this combo is not possible at the moment
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = deepcopy(self.ds_config_dict)
             del ds_config_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
-            trainer.train()
-        new_a = trainer.model.a.item()
-        self.assertNotEqual(new_a, a)
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+        self.assertTrue("HF Scheduler + DeepSpeed Optimizer combination is not possible" in str(context.exception))
 
     def test_early_get_last_lr(self):
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
