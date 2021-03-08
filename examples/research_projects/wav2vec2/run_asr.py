@@ -75,7 +75,9 @@ class DataTrainingArguments:
     )
     validation_split_name: Optional[str] = field(
         default="validation",
-        metadata={"help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"},
+        metadata={
+            "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
+        },
     )
     target_feature_extractor_sampling_rate: Optional[bool] = field(
         default=False,
@@ -232,7 +234,8 @@ def main():
 
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     processor = Wav2Vec2Processor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, do_lower_case=data_args.do_lower_case)
+        model_args.model_name_or_path, cache_dir=model_args.cache_dir, do_lower_case=data_args.do_lower_case
+    )
 
     train_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
@@ -242,11 +245,11 @@ def main():
     )
 
     wer_metric = datasets.load_metric("wer")
-    target_sampling_rate = processor.feature_extractor.sampling_rate if data_args.target_feature_extractor_sampling_rate else None
+    target_sr = processor.feature_extractor.sampling_rate if data_args.target_feature_extractor_sampling_rate else None
     unique_chars_in_text = set()
 
     def map_to_array(batch):
-        speech_array, sampling_rate = librosa.load(batch["file"], sr=target_sampling_rate)
+        speech_array, sampling_rate = librosa.load(batch["file"], sr=target_sr)
         batch["speech"] = speech_array
         batch["sampling_rate"] = sampling_rate
         unique_chars_in_text.update(batch["text"])
@@ -254,11 +257,13 @@ def main():
 
     train_dataset = train_dataset.map(map_to_array, remove_columns=["file"])
     val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
-    unique_chars_in_text.remove(' ')  # let processor.tokenizer.word_delimiter_token do its job
+    unique_chars_in_text.remove(" ")  # let processor.tokenizer.word_delimiter_token do its job
     ascii_tokens_to_add = [c for c in unique_chars_in_text if c.isascii()]
     if data_args.add_discovered_ascii_tokens:
         added_tokens_count = processor.tokenizer.add_tokens(ascii_tokens_to_add)
-        logger.info(f"Added {added_tokens_count} tokens(s) found in dataset that may be intended for orthography in ASCII.")
+        logger.info(
+            f"Added {added_tokens_count} tokens(s) found in dataset that may be intended for orthography in ASCII."
+        )
         processor.tokenizer.save_vocabulary(training_args.output_dir)
     else:
         ascii_tokens_not_in_vocab = ascii_tokens_to_add - processor.tokenizer.get_vocab().keys()
