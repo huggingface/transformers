@@ -553,7 +553,7 @@ class TFAutoModel(object):
 
     @classmethod
     @replace_list_option_in_docstrings(TF_MODEL_MAPPING, use_model_types=False)
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         r"""
         Instantiates one of the base model classes of the library from a configuration.
 
@@ -575,7 +575,7 @@ class TFAutoModel(object):
             >>> model = TFAutoModel.from_config(config)
         """
         if type(config) in TF_MODEL_MAPPING.keys():
-            return TF_MODEL_MAPPING[type(config)](config)
+            return TF_MODEL_MAPPING[type(config)](config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
@@ -1037,7 +1037,7 @@ class TFAutoModelForSeq2SeqLM:
 
     @classmethod
     @replace_list_option_in_docstrings(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING, use_model_types=False)
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         r"""
         Instantiates one of the model classes of the library---with a sequence-to-sequence language modeling
         head---from a configuration.
@@ -1061,7 +1061,7 @@ class TFAutoModelForSeq2SeqLM:
             >>> model = TFAutoModelForSeq2SeqLM.from_config(config)
         """
         if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
-            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config)
+            return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config, **kwargs)
         raise ValueError(
             "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
             "Model type should be one of {}.".format(
