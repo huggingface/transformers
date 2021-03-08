@@ -2163,6 +2163,11 @@ class RobertaModel:
 SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class Speech2TextFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class Speech2TextForConditionalGeneration:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -2178,6 +2183,11 @@ class Speech2TextModel:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Speech2TextProcessor:
+    def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
 
