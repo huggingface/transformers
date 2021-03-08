@@ -126,6 +126,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig", "RemBertTokenizer"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -288,6 +289,7 @@ else:
 # tokenziers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.rembert"].append("RemBertTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -375,6 +377,22 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
+    _import_structure["models.rembert"].extend(
+        [
+            "REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "RemBertForMaskedLM",
+            "RemBertForCausalLM",
+            "RemBertForMultipleChoice",
+            "RemBertForQuestionAnswering",
+            "RemBertForSequenceClassification",
+            "RemBertForTokenClassification",
+            "RemBertLayer",
+            "RemBertModel",
+            "RemBertPreTrainedModel",
+            "load_tf_weights_in_rembert",
+        ]
+    )
 
     _import_structure["models.wav2vec2"].extend(
         [
@@ -887,6 +905,21 @@ if is_tf_available():
     ]
     # TensorFlow models structure
 
+    _import_structure["models.rembert"].extend(
+        [
+            "TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFRemBertForMaskedLM",
+            "TFRemBertForCausalLM",
+            "TFRemBertForMultipleChoice",
+            "TFRemBertForQuestionAnswering",
+            "TFRemBertForSequenceClassification",
+            "TFRemBertForTokenClassification",
+            "TFRemBertLayer",
+            "TFRemBertModel",
+            "TFRemBertPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.convbert"].extend(
         [
             "TF_CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1297,6 +1330,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig, RemBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1452,6 +1486,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.rembert import RemBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1490,6 +1525,20 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.rembert import (
+            REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RemBertForMaskedLM,
+            RemBertForCausalLM,
+            RemBertForMultipleChoice,
+            RemBertForQuestionAnswering,
+            RemBertForSequenceClassification,
+            RemBertForTokenClassification,
+            RemBertLayer,
+            RemBertModel,
+            RemBertPreTrainedModel,
+            load_tf_weights_in_rembert,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1950,6 +1999,19 @@ if TYPE_CHECKING:
 
     # TensorFlow
     if is_tf_available():
+
+        from .models.rembert import (
+            TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRemBertForMaskedLM,
+            TFRemBertForCausalLM,
+            TFRemBertForMultipleChoice,
+            TFRemBertForQuestionAnswering,
+            TFRemBertForSequenceClassification,
+            TFRemBertForTokenClassification,
+            TFRemBertLayer,
+            TFRemBertModel,
+            TFRemBertPreTrainedModel,
+        )
 
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 

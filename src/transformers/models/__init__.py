@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    rembert,
     albert,
     auto,
     bart,
