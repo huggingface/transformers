@@ -23,8 +23,8 @@ from .tokenization_speech_to_text import Speech2TextTokenizer
 
 class Speech2TextProcessor:
     r"""
-    Constructs a Speech2Text processor which wraps a Speech2Text feature extractor and a
-    Speech2Text tokenizer into a single processor.
+    Constructs a Speech2Text processor which wraps a Speech2Text feature extractor and a Speech2Text tokenizer into a
+    single processor.
 
     :class:`~transformers.Speech2TextProcessor` offers all the functionalities of
     :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer`. See the
@@ -55,8 +55,8 @@ class Speech2TextProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a Speech2Text feature_extractor object and Speech2Text tokenizer object to the
-        directory ``save_directory``, so that it can be re-loaded using the
+        Save a Speech2Text feature_extractor object and Speech2Text tokenizer object to the directory
+        ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.Speech2TextProcessor.from_pretrained` class method.
 
         .. note::

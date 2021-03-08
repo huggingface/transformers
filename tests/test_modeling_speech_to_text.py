@@ -41,14 +41,11 @@ if is_torch_available():
 
     from transformers import (
         Speech2TextConfig,
-        Speech2TextProcessor,
         Speech2TextForConditionalGeneration,
         Speech2TextModel,
+        Speech2TextProcessor,
     )
-    from transformers.models.speech_to_text.modeling_speech_to_text import (
-        Speech2TextDecoder,
-        Speech2TextEncoder,
-    )
+    from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextDecoder, Speech2TextEncoder
 
 
 def prepare_speech_to_text_inputs_dict(
@@ -245,9 +242,7 @@ class Speech2TextModelTester:
 
 @require_torch
 class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
-    )
+    all_model_classes = (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (Speech2TextForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False

@@ -604,8 +604,8 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             also be used by default.
 
             If you want to change padding behavior, you should read
-            :func:`modeling_speech_to_text._prepare_decoder_inputs` and modify to your needs. See diagram 1
-            in `the paper <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
+            :func:`modeling_speech_to_text._prepare_decoder_inputs` and modify to your needs. See diagram 1 in `the
+            paper <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
@@ -808,8 +808,7 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
 
 class Speech2TextDecoder(Speech2TextPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
-    :class:`Speech2TextDecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`Speech2TextDecoderLayer`
 
     Args:
         config: Speech2TextConfig

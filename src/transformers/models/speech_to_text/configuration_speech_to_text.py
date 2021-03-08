@@ -28,11 +28,10 @@ SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class Speech2TextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextModel`.
-    It is used to instantiate an Speech2Text model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    Speech2Text `facebook/s2t-small-librispeech-asr
-    <https://huggingface.co/facebook/s2t-small-librispeech-asr>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.Speech2TextModel`. It is used
+    to instantiate an Speech2Text model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Speech2Text
+    `facebook/s2t-small-librispeech-asr <https://huggingface.co/facebook/s2t-small-librispeech-asr>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -40,8 +39,8 @@ class Speech2TextConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
-            Vocabulary size of the Speech2Text model. Defines the number of different tokens that can be
-            represented by the :obj:`inputs_ids` passed when calling :class:`~transformers.Speech2TextModel`
+            Vocabulary size of the Speech2Text model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.Speech2TextModel`
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):

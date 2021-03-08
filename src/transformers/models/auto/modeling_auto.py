@@ -209,10 +209,7 @@ from ..roberta.modeling_roberta import (
     RobertaForTokenClassification,
     RobertaModel,
 )
-from ..speech_to_text.modeling_speech_to_text import (
-    Speech2TextForConditionalGeneration,
-    Speech2TextModel,
-)
+from ..speech_to_text.modeling_speech_to_text import Speech2TextForConditionalGeneration, Speech2TextModel
 from ..squeezebert.modeling_squeezebert import (
     SqueezeBertForMaskedLM,
     SqueezeBertForMultipleChoice,

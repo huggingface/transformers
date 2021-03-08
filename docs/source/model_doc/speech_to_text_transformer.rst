@@ -23,9 +23,9 @@ The Speech2Text model was proposed in `fairseq S2T: Fast Speech-to-Text Modeling
 Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`Speech2Text` is a speech model that accepts a float tensor of log-mel filter-bank features extracted from
-the speech signal. It's a transformer based seq2seq model, so the transcripts/translations are generated
-autoregressively. The `generate` method can be used for inference.
+`Speech2Text` is a speech model that accepts a float tensor of log-mel filter-bank features extracted from the speech
+signal. It's a transformer based seq2seq model, so the transcripts/translations are generated autoregressively. The
+`generate` method can be used for inference.
 
 The :class:`transformers.Speech2TextFeatureExtractor` class is responsible for extracting the log-mel filter-bank
 features. The :class:`transformers.Speech2Textprocessor` wraps the processor and tokenizer objects and is used to

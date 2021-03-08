@@ -19,10 +19,7 @@ from shutil import copyfile
 
 from transformers import SPIECE_UNDERLINE, is_sentencepiece_available
 from transformers.models.speech_to_text import Speech2TextTokenizer
-from transformers.models.speech_to_text.tokenization_speech_to_text import (
-    VOCAB_FILES_NAMES,
-    save_json,
-)
+from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
