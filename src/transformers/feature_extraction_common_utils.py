@@ -243,14 +243,19 @@ class FeatureExtractionSavingUtilsMixin:
             kwargs (:obj:`Dict[str, Any]`, `optional`):
                 The values in kwargs of any keys which are feature extractor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* feature extractor attributes is
-                controlled by the ``return_unused_kwargs`` keyword parameter. .. note::
+                controlled by the ``return_unused_kwargs`` keyword parameter.
+
+        .. note::
+
             Passing :obj:`use_auth_token=True` is required when you want to use a private model.
+
 
         Returns:
             :class:`~transformers.PreTrainedSequenceFeatureExtractor`: The feature extractor object instantiated from
             this pretrained model.
 
         Examples::
+
             # We can't instantiate directly the base class `PreTrainedSequenceFeatureExtractor` so let's show the examples on a
             # derived class: Wav2Vec2FeatureExtractor
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')    # Download feature_extraction_config from huggingface.co and cache.
