@@ -73,6 +73,27 @@ class DataTrainingArguments:
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
+        },
+    )
+    max_test_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
+            "value if set."
+        },
+    )
     server_ip: Optional[str] = field(default=None, metadata={"help": "For distant debugging."})
     server_port: Optional[str] = field(default=None, metadata={"help": "For distant debugging."})
 
@@ -238,12 +259,23 @@ def main():
             truncation=True,
         )
 
-    train_dataset = train_dataset.map(
-        preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
-    )
-    eval_dataset = eval_dataset.map(
-        preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache
-    )
+    if training_args.do_train:
+        if data_args.max_train_samples is not None:
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        train_dataset = train_dataset.map(
+            preprocess_function,
+            batched=True,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
+
+    if training_args.do_eval:
+        if data_args.max_val_samples is not None:
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        eval_dataset = eval_dataset.map(
+            preprocess_function,
+            batched=True,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
@@ -288,6 +320,10 @@ def main():
             model_path = None
         train_result = trainer.train(model_path=model_path)
         metrics = train_result.metrics
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
@@ -296,15 +332,15 @@ def main():
         trainer.save_state()
 
     # Evaluation
-    eval_results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        eval_result = trainer.evaluate(eval_dataset=eval_dataset)
-        trainer.log_metrics("eval", eval_result)
-        trainer.save_metrics("eval", eval_result)
-        eval_results.update(eval_result)
+        metrics = trainer.evaluate(eval_dataset=eval_dataset)
 
-    return eval_results
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 
 if __name__ == "__main__":

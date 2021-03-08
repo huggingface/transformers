@@ -601,7 +601,6 @@ def main():
         trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
@@ -614,6 +613,7 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # predict
     if training_args.do_predict:
         logger.info("*** Test ***")
 
@@ -639,8 +639,6 @@ def main():
                 output_test_preds_file = os.path.join(training_args.output_dir, "test_generations.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
-
-    return results
 
 
 def _mp_fn(index):
