@@ -23,14 +23,14 @@ customization during training.
 The API supports distributed training on multiple GPUs/TPUs, mixed precision through `NVIDIA Apex
 <https://github.com/NVIDIA/apex>`__ for PyTorch and :obj:`tf.keras.mixed_precision` for TensorFlow.
 
-Both :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` contain the basic training loop supporting the
-previous features. To inject custom behavior you can subclass them and override the following methods:
+Both :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` contain the basic training loop which supports
+the above features. To inject custom behavior you can subclass them and override the following methods:
 
 - **get_train_dataloader**/**get_train_tfdataset** -- Creates the training DataLoader (PyTorch) or TF Dataset.
 - **get_eval_dataloader**/**get_eval_tfdataset** -- Creates the evaluation DataLoader (PyTorch) or TF Dataset.
 - **get_test_dataloader**/**get_test_tfdataset** -- Creates the test DataLoader (PyTorch) or TF Dataset.
 - **log** -- Logs information on the various objects watching training.
-- **create_optimizer_and_scheduler** -- Setups the optimizer and learning rate scheduler if they were not passed at
+- **create_optimizer_and_scheduler** -- Sets up the optimizer and learning rate scheduler if they were not passed at
   init.
 - **compute_loss** - Computes the loss on a batch of training inputs.
 - **training_step** -- Performs a training step.
@@ -39,17 +39,23 @@ previous features. To inject custom behavior you can subclass them and override 
 - **evaluate** -- Runs an evaluation loop and returns metrics.
 - **predict** -- Returns predictions (with metrics if labels are available) on a test set.
 
-Here is an example of how to customize :class:`~transformers.Trainer` using a custom loss function:
+Here is an example of how to customize :class:`~transformers.Trainer` using a custom loss function for multi-label
+classification:
 
 .. code-block:: python
 
+    import torch
     from transformers import Trainer
-    class MyTrainer(Trainer):
-        def compute_loss(self, model, inputs):
+
+    class MultilabelTrainer(Trainer):
+        def compute_loss(self, model, inputs, return_outputs=False):
             labels = inputs.pop("labels")
             outputs = model(**inputs)
-            logits = outputs[0]
-            return my_custom_loss(logits, labels)
+            logits = outputs.logits
+            loss_fct = torch.nn.BCEWithLogitsLoss()
+            loss = loss_fct(logits.view(-1, self.model.config.num_labels),
+                            labels.float().view(-1, self.model.config.num_labels))
+            return (loss, outputs) if return_outputs else loss
 
 Another way to customize the training loop behavior for the PyTorch :class:`~transformers.Trainer` is to use
 :doc:`callbacks <callback>` that can inspect the training loop state (for progress reporting, logging on TensorBoard or
@@ -241,6 +247,8 @@ provides support for the following features from `the ZeRO paper <https://arxiv.
 
 1. Optimizer State Sharding
 2. Gradient Sharding
+3. Model Parameters Sharding (new and very experimental)
+4. CPU offload (new and very experimental)
 
 You will need at least two GPUs to use this feature.
 
@@ -255,30 +263,68 @@ To deploy this feature:
    or find more details on `the FairScale's GitHub page
    <https://github.com/facebookresearch/fairscale/#installation>`__.
 
-2. Add ``--sharded_ddp`` to the command line arguments, and make sure you have added the distributed launcher ``-m
-   torch.distributed.launch --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
+2. To use the first version of Sharded data-parallelism, add ``--sharded_ddp simple`` to the command line arguments,
+   and make sure you have added the distributed launcher ``-m torch.distributed.launch
+   --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
 
-For example here is how you could use it for ``finetune_trainer.py`` with 2 GPUs:
+For example here is how you could use it for ``run_seq2seq.py`` with 2 GPUs:
 
 .. code-block:: bash
 
-    cd examples/seq2seq
-    python -m torch.distributed.launch --nproc_per_node=2 ./finetune_trainer.py \
-    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
+    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_seq2seq.py \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir \
-    --do_train --n_train 500 --num_train_epochs 1 \
-    --per_device_train_batch_size 1  --freeze_embeds \
-    --src_lang en_XX --tgt_lang ro_RO --task translation \
-    --fp16 --sharded_ddp
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: " \
+    --fp16 --sharded_ddp simple
 
 Notes:
 
 - This feature requires distributed training (so multiple GPUs).
 - It is not implemented for TPUs.
 - It works with ``--fp16`` too, to make things even faster.
-- One of the main benefits of enabling ``--sharded_ddp`` is that it uses a lot less GPU memory, so you should be able
-  to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should lead to
+- One of the main benefits of enabling ``--sharded_ddp simple`` is that it uses a lot less GPU memory, so you should be
+  able to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should lead to
   significantly shorter training time.
+
+3. To use the second version of Sharded data-parallelism, add ``--sharded_ddp zero_dp_2`` or ``--sharded_ddp zero_dp_3`
+   to the command line arguments, and make sure you have added the distributed launcher ``-m torch.distributed.launch
+   --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
+
+For example here is how you could use it for ``run_seq2seq.py`` with 2 GPUs:
+
+.. code-block:: bash
+
+    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_seq2seq.py \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
+    --output_dir output_dir --overwrite_output_dir \
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: " \
+    --fp16 --sharded_ddp zero_dp_2
+
+:obj:`zero_dp_2` is an optimized version of the simple wrapper, while :obj:`zero_dp_3` fully shards model weights,
+gradients and optimizer states.
+
+Both are compatible with adding :obj:`cpu_offload` to enable ZeRO-offload (activate it like this: :obj:`--sharded_ddp
+"zero_dp_2 cpu_offload"`).
+
+Notes:
+
+- This feature requires distributed training (so multiple GPUs).
+- It is not implemented for TPUs.
+- It works with ``--fp16`` too, to make things even faster.
+- The ``cpu_offload`` additional option requires ``--fp16``.
+- This is an area of active development, so make sure you have a source install of fairscale to use this feature as
+  some bugs you encounter may have been fixed there already.
+
+Known caveats:
+
+- This feature is incompatible with :obj:`--predict_with_generate` in the `run_seq2seq.py` script.
+- Using :obj:`--sharded_ddp zero_dp_3` requires wrapping each layer of the model in the special container
+  :obj:`FullyShardedDataParallelism` of fairscale. This is not done automatically by any of the example scripts of the
+  :class:`~transformers.Trainer`.
 
 
 DeepSpeed
@@ -344,17 +390,18 @@ In fact, you can continue using ``-m torch.distributed.launch`` with DeepSpeed a
 the ``deepspeed`` launcher. But since in the DeepSpeed documentation it'll be used everywhere, for consistency we will
 use it here as well.
 
-Here is an example of running ``finetune_trainer.py`` under DeepSpeed deploying all available GPUs:
+Here is an example of running ``run_seq2seq.py`` under DeepSpeed deploying all available GPUs:
 
 .. code-block:: bash
 
-    cd examples/seq2seq
-    deepspeed ./finetune_trainer.py --deepspeed ds_config.json \
-    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
-    --output_dir output_dir --overwrite_output_dir \
-    --do_train --n_train 500 --num_train_epochs 1 \
-    --per_device_train_batch_size 1  --freeze_embeds \
-    --src_lang en_XX --tgt_lang ro_RO --task translation
+    deepspeed examples/seq2seq/run_seq2seq.py \
+    --deepspeed examples/tests/deepspeed/ds_config.json \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
+    --output_dir output_dir --overwrite_output_dir --fp16 \
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: "
+
 
 Note that in the DeepSpeed documentation you are likely to see ``--deepspeed --deepspeed_config ds_config.json`` - i.e.
 two DeepSpeed-related arguments, but for the sake of simplicity, and since there are already so many arguments to deal
@@ -372,13 +419,13 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 
 .. code-block:: bash
 
-    cd examples/seq2seq
-    deepspeed --num_gpus=1 ./finetune_trainer.py --deepspeed ds_config.json \
-    --model_name_or_path sshleifer/distill-mbart-en-ro-12-4 --data_dir wmt_en_ro \
-    --output_dir output_dir --overwrite_output_dir \
-    --do_train --n_train 500 --num_train_epochs 1 \
-    --per_device_train_batch_size 1  --freeze_embeds \
-    --src_lang en_XX --tgt_lang ro_RO --task translation
+    deepspeed --num_gpus=1 examples/seq2seq/run_seq2seq.py \
+    --deepspeed examples/tests/deepspeed/ds_config.json \
+    --model_name_or_path t5-small --per_device_train_batch_size 1   \
+    --output_dir output_dir --overwrite_output_dir --fp16 \
+    --do_train --max_train_samples 500 --num_train_epochs 1 \
+    --dataset_name wmt16 --dataset_config "ro-en" \
+    --task translation_en_to_ro --source_prefix "translate English to Romanian: "
 
 This is almost the same as with multiple-GPUs, but here we tell DeepSpeed explicitly to use just one GPU. By default,
 DeepSpeed deploys all GPUs it can see. If you have only 1 GPU to start with, then you don't need this argument. The
@@ -424,17 +471,17 @@ Notes:
 
    .. code-block:: bash
 
-       deepspeed --include localhost:1 ./finetune_trainer.py
+       deepspeed --include localhost:1 examples/seq2seq/run_seq2seq.py ...
 
-   In this example, we tell DeepSpeed to use GPU 1.
+   In this example, we tell DeepSpeed to use GPU 1 (second gpu).
 
 
 
 Deployment in Notebooks
 =======================================================================================================================
 
-The problem with notebooks is that there is no normal ``deepspeed`` launcher to rely on, so under certain setups we
-have to emulate it.
+The problem with running notebook cells as a script is that there is no normal ``deepspeed`` launcher to rely on, so
+under certain setups we have to emulate it.
 
 Here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
 
@@ -508,6 +555,24 @@ cell with:
         "wall_clock_breakdown": false
     }
     EOT
+
+
+That's said if the script is not in the notebook cells, you can launch ``deepspeed`` normally via shell from a cell
+with:
+
+.. code-block::
+
+   !deepspeed examples/seq2seq/run_seq2seq.py ...
+
+or with bash magic, where you can write a multi-line code for the shell to run:
+
+.. code-block::
+
+   %%bash
+
+   cd /somewhere
+   deepspeed examples/seq2seq/run_seq2seq.py ...
+
 
 
 
@@ -810,6 +875,28 @@ Here is an example of the ``amp`` configuration:
             "opt_level": "O1"
         }
     }
+
+
+Gradient Accumulation
+=======================================================================================================================
+
+While normally DeepSpeed gets gradient accumulation configured with:
+
+.. code-block:: json
+
+    {
+        "gradient_accumulation_steps": 3,
+    }
+
+in this case, to enable gradient accumulation, pass the command line `--gradient_accumulation_steps` argument as normal
+and it will get injected into the DeepSpeed configuration.
+
+If you try to add it directly to the configuration file, you will receive an error from the Trainer - this is because
+this setting is needed by the Trainer too, and so this approach ensures that there is a single way of setting this
+value and thus avoid potential subtle errors.
+
+
+
 
 
 

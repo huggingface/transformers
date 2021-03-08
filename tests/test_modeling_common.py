@@ -735,6 +735,8 @@ class ModelTesterMixin:
         inputs = self._prepare_for_class(inputs_dict, model_class)
 
         outputs = model(**inputs)
+
+        print(outputs)
         output = outputs[0]
 
         if config.is_encoder_decoder:

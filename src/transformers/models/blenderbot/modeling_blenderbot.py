@@ -112,9 +112,8 @@ class BlenderbotLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
-        assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
-        super().__init__(num_embeddings, embedding_dim, padding_idx=padding_idx)
+    def __init__(self, num_embeddings: int, embedding_dim: int):
+        super().__init__(num_embeddings, embedding_dim)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
@@ -323,7 +322,9 @@ class BlenderbotEncoderLayer(nn.Module):
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -635,7 +636,6 @@ class BlenderbotEncoder(BlenderbotPreTrainedModel):
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
-            self.padding_idx,
         )
         self.layers = nn.ModuleList([BlenderbotEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -800,7 +800,6 @@ class BlenderbotDecoder(BlenderbotPreTrainedModel):
         self.embed_positions = BlenderbotLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
-            self.padding_idx,
         )
         self.layers = nn.ModuleList([BlenderbotDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)

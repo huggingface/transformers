@@ -92,6 +92,8 @@ class ProphetNetConfig(PretrainedConfig):
             smoothing is performed.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
     """
     model_type = "prophetnet"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -119,6 +121,7 @@ class ProphetNetConfig(PretrainedConfig):
         num_buckets=32,
         relative_max_distance=128,
         disable_ngram_loss=False,
+        gradient_checkpointing=False,
         eps=0.0,
         use_cache=True,
         pad_token_id=0,
@@ -160,6 +163,9 @@ class ProphetNetConfig(PretrainedConfig):
         self.dropout = dropout
 
         self.use_cache = use_cache
+
+        # 4 Training Args (should be removed soon)
+        self.gradient_checkpointing = gradient_checkpointing
 
     @property
     def num_attention_heads(self) -> int:

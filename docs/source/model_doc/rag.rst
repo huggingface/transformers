@@ -56,7 +56,7 @@ RagTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.RagTokenizer
-    :members: prepare_seq2seq_batch
+    :members:
 
 
 Rag specific outputs
