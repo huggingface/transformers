@@ -122,6 +122,8 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         self.added_tokens_decoder: Dict[int, str] = {}
         self.unique_no_split_tokens: List[str] = []
 
+        self._decode_use_source_tokenizer = False
+
     @property
     def is_fast(self) -> bool:
         return False
@@ -702,7 +704,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
         spaces_between_special_tokens: bool = True,
+        **kwargs
     ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
         filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
 
         # To avoid mixing byte-level and unicode for byte-level BPT
