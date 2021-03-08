@@ -4,7 +4,7 @@ import sys
 from unittest.mock import patch
 
 import run_glue_with_pabee
-from transformers.testing_utils import TestCasePlus, require_torch_non_multi_gpu_but_fix_me
+from transformers.testing_utils import TestCasePlus
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -20,7 +20,6 @@ def get_setup_file():
 
 
 class PabeeTests(TestCasePlus):
-    @require_torch_non_multi_gpu_but_fix_me
     def test_run_glue(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
