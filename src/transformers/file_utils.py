@@ -234,6 +234,13 @@ PRESET_MIRROR_DICT = {
 }
 
 
+_is_offline_mode = True if os.environ.get("TRANSFORMERS_OFFLINE", "0").upper() in ENV_VARS_TRUE_VALUES else False
+
+
+def is_offline_mode():
+    return _is_offline_mode
+
+
 def is_torch_available():
     return _torch_available
 
@@ -1097,6 +1104,10 @@ def cached_path(
         url_or_filename = str(url_or_filename)
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
+
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
 
     if is_remote_url(url_or_filename):
         # URL, so get it from the cache (downloading if necessary)

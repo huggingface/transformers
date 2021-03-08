@@ -45,6 +45,7 @@ from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
+from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..marian.configuration_marian import MarianConfig
 from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from ..mobilebert.configuration_mobilebert import MobileBertConfig
@@ -76,6 +77,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -121,6 +123,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("wav2vec2", Wav2Vec2Config),
+        ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
@@ -172,6 +175,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("wav2vec2", "Wav2Vec2"),
+        ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),

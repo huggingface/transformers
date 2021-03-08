@@ -57,7 +57,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from transformers.trainer import _model_unwrap
+    from transformers.modeling_utils import unwrap_model
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -574,6 +574,19 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    @require_torch_multi_gpu
+    def test_run_seq2seq_double_train_wrap_once(self):
+        # test that we don't wrap the model more than once
+        # since wrapping primarily happens on multi-gpu setup we want multiple gpus to test for
+        # example DataParallel(DataParallel(model))
+
+        trainer = get_regression_trainer()
+        trainer.train()
+        model_wrapped_before = trainer.model_wrapped
+        trainer.train()
+        model_wrapped_after = trainer.model_wrapped
+        self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+
     def test_can_resume_training(self):
         if torch.cuda.device_count() > 2:
             # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -882,8 +895,8 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(learning_rate=0.1)
 
         def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, _model_unwrap(wrapped_model_to_check))
-            self.assertGreaterEqual(getattr(_model_unwrap(wrapped_model_to_check).config, "total_flos", 0), 0)
+            self.assertEqual(trainer.model, unwrap_model(wrapped_model_to_check))
+            self.assertGreaterEqual(getattr(unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0)
 
         # with plain model
         assert_flos_extraction(trainer, trainer.model)

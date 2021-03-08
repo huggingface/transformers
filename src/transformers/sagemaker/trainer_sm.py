@@ -37,9 +37,10 @@ if is_smdistributed_available():
     import smdistributed.modelparallel.torch as smp
 
     @smp.step()
-    def forward_backward(model, inputs):
+    def forward_backward(model, inputs, gradient_accumulation_steps=1):
         outputs = model(**inputs)
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        loss /= gradient_accumulation_steps
         model.backward(loss)
         return loss
 
@@ -73,8 +74,6 @@ class SageMakerTrainer(Trainer):
     def __init__(self, args=None, **kwargs):
         self.is_model_parallel_enabled = is_smdistributed_available() and args.mp_parameters != ""
         super().__init__(args=args, **kwargs)
-        if self.is_model_parallel_enabled and self.args.gradient_accumulation_steps != 1:
-            raise ValueError("Gradient accumulation is not supported when model parallel is enabled.")
 
     def is_world_process_zero(self) -> bool:
         """
@@ -108,7 +107,7 @@ class SageMakerTrainer(Trainer):
             # Wrapping the base model twice in a DistributedModel will raise an error.
             if isinstance(self.model_wrapped, smp.model.DistributedModel):
                 return self.model_wrapped
-            return smp.DistributedModel(model)
+            return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
         else:
             return super()._wrap_model(model)
 
@@ -121,7 +120,7 @@ class SageMakerTrainer(Trainer):
         if self.is_model_parallel_enabled:
             model.train()
             inputs = self._prepare_inputs(inputs)
-            loss_mb = forward_backward(model, inputs)
+            loss_mb = forward_backward(model, inputs, self.args.gradient_accumulation_steps)
             return loss_mb.reduce_mean().detach().to(self.args.device)
         else:
             return super().training_step(model, inputs)
