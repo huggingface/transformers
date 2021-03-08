@@ -66,7 +66,7 @@ def require_apex(test_case):
 
 
 class TestTrainerExt(TestCasePlus):
-    def run_seq2seq_quick(self, distributed=False, extra_args_str=None, eval=True, predict_with_generate=True):
+    def run_seq2seq_quick(self, distributed=False, extra_args_str=None, evaluation=True):
         output_dir = self.run_trainer(
             eval_steps=1,
             max_len=12,
@@ -74,18 +74,18 @@ class TestTrainerExt(TestCasePlus):
             num_train_epochs=1,
             distributed=distributed,
             extra_args_str=extra_args_str,
-            predict_with_generate=predict_with_generate,
+            evaluation=evaluation,
         )
         logs = TrainerState.load_from_json(os.path.join(output_dir, "trainer_state.json")).log_history
         eval_metrics = [log for log in logs if "eval_loss" in log.keys()]
 
-        first_step_stats = eval_metrics[0]
-        if predict_with_generate:
+        if evaluation:
+            first_step_stats = eval_metrics[0]
             assert "eval_bleu" in first_step_stats
 
-        last_step_stats = eval_metrics[-1]
-        assert isinstance(last_step_stats["eval_bleu"], float)
-        assert not math.isnan(float(last_step_stats["eval_loss"])), "eval_loss must not be `nan`"
+            last_step_stats = eval_metrics[-1]
+            assert isinstance(last_step_stats["eval_bleu"], float)
+            assert not math.isnan(float(last_step_stats["eval_loss"])), "eval_loss must not be `nan`"
 
     @require_torch_non_multi_gpu
     def test_run_seq2seq_no_dist(self):
@@ -116,18 +116,14 @@ class TestTrainerExt(TestCasePlus):
     # test --sharded_ddp zero_dp_2 w/o --fp16
     @require_torch_multi_gpu
     @require_fairscale
-    @unittest.skip("XXX: Fixme: hanging")
     def test_run_seq2seq_fully_sharded_ddp(self):
-        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2", predict_with_generate=False)
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2", evaluation=False)
 
     # test --sharded_ddp zero_dp_2 w/ --fp16
     @require_torch_multi_gpu
     @require_fairscale
-    @unittest.skip("XXX: Fixme: hanging")
     def test_run_seq2seq_fully_sharded_ddp_fp16(self):
-        self.run_seq2seq_quick(
-            distributed=True, extra_args_str="--sharded_ddp zero_dp_2 --fp16", predict_with_generate=False
-        )
+        self.run_seq2seq_quick(distributed=True, extra_args_str="--sharded_ddp zero_dp_2 --fp16", evaluation=False)
 
     @require_apex
     @require_torch_gpu
@@ -180,7 +176,7 @@ class TestTrainerExt(TestCasePlus):
         learning_rate: float = 3e-3,
         distributed: bool = False,
         extra_args_str: str = None,
-        predict_with_generate: bool = True,
+        evaluation: bool = True,
     ):
         data_dir = self.examples_dir / "test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
@@ -197,17 +193,13 @@ class TestTrainerExt(TestCasePlus):
             --max_target_length {max_len}
             --val_max_target_length {max_len}
             --do_train
-            --do_eval
-            --do_predict
             --num_train_epochs {str(num_train_epochs)}
             --per_device_train_batch_size 4
             --per_device_eval_batch_size 4
             --learning_rate {learning_rate}
             --warmup_steps 8
-            --evaluation_strategy steps
             --logging_steps 0
             --save_steps {str(eval_steps)}
-            --eval_steps {str(eval_steps)}
             --group_by_length
             --label_smoothing_factor 0.1
             --adafactor
@@ -215,8 +207,14 @@ class TestTrainerExt(TestCasePlus):
             --target_lang ro_RO
             --source_lang en_XX
         """
-        if predict_with_generate:
-            args += "--predict_with_generate"
+        if evaluation:
+            args += f"""
+                --predict_with_generate
+                --do_eval
+                --do_predict
+                --evaluation_strategy steps
+                --eval_steps {str(eval_steps)}
+            """
 
         args = args.split()
 
