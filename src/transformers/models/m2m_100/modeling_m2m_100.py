@@ -122,7 +122,6 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(num_positions + self.offset, embedding_dim, padding_idx)
-        self.register_buffer("_float_tensor", torch.tensor([1.0]))
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
@@ -142,7 +141,11 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
             emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
         if padding_idx is not None:
             emb[padding_idx, :] = 0
-        return emb
+
+        emb_weights = nn.Parameter(emb)
+        emb_weights.requires_grad = False
+        emb_weights.detach_()
+        return emb_weights
 
     @torch.no_grad()
     def forward(
@@ -162,8 +165,6 @@ class M2M100SinusoidalPositionalEmbedding(nn.Module):
         max_pos = self.padding_idx + 1 + seq_len
         if max_pos > self.weights.size(0):
             self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
-
-        self.weights = self.weights.to(self._float_tensor)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
