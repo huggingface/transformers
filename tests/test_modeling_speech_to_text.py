@@ -20,9 +20,7 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import Speech2TextConfig, Speech2TextForConditionalGeneration, Speech2TextModel, Speech2TextProcessor
 from transformers.file_utils import cached_property
-from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextDecoder, Speech2TextEncoder
 from transformers.testing_utils import (
     is_torch_available,
     require_sentencepiece,
@@ -40,6 +38,14 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
+
+    from transformers import (
+        Speech2TextConfig,
+        Speech2TextForConditionalGeneration,
+        Speech2TextModel,
+        Speech2TextProcessor,
+    )
+    from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextDecoder, Speech2TextEncoder
 
 
 def prepare_speech_to_text_inputs_dict(
