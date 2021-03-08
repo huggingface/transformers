@@ -229,6 +229,24 @@ class SageMakerTrainer(Trainer):
         else:
             super()._save_checkpoint(self, model, trial, metrics=metrics)
 
+    def _load_optimizer_and_scheduler(self, checkpoint):
+        """If optimizer and scheduler states exist, load them."""
+        if self.is_model_parallel_enabled:
+            if checkpoint is None:
+                return
+
+            if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
+                os.path.join(checkpoint, "scheduler.pt")
+            ):
+                self.optimizer.load_state_dict(
+                    torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location="cpu")
+                )
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
+                reissue_pt_warnings(caught_warnings)
+        else:
+            super()._load_optimizer_and_scheduler(checkpoint)
+
     def prediction_step(
         self,
         model: nn.Module,
