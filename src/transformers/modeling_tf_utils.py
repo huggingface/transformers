@@ -447,7 +447,7 @@ def input_processing(func, config, input_ids, **kwargs):
     return output
 
 
-def load_tf_weights(model, resolved_archive_file, prefix=None):
+def load_tf_weights(model, resolved_archive_file, _prefix=None):
     """
     Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
 
@@ -494,8 +494,8 @@ def load_tf_weights(model, resolved_archive_file, prefix=None):
                     # TF names always start with the model name so we ignore it
                     name = "/".join(weight_name.split("/")[1:])
 
-                    if prefix is not None:
-                        name = prefix + "/" + name
+                    if _prefix is not None:
+                        name = _prefix + "/" + name
 
                     saved_weights[name] = np.asarray(h5_layer_object[weight_name])
 
@@ -505,8 +505,8 @@ def load_tf_weights(model, resolved_archive_file, prefix=None):
                 # Loop over each weights from the instantiated model and compare with the weights from the H5 file
                 for symbolic_weight in symbolic_weights:
                     # TF names always start with the model name so we ignore it
-                    if prefix is not None:
-                        delimeter = len(prefix.split("/"))
+                    if _prefix is not None:
+                        delimeter = len(_prefix.split("/"))
                         symbolic_weight_name = "/".join(
                             symbolic_weight.name.split("/")[:delimeter]
                             + symbolic_weight.name.split("/")[delimeter + 1 :]
@@ -750,14 +750,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         )
         return self.get_lm_head()
 
-    def get_prefix_bias_name(self) -> Union[None, str]:
+    def get__prefix_bias_name(self) -> Union[None, str]:
         """
-        Get the concatenated prefix name of the bias from the model name to the parent layer
+        Get the concatenated _prefix name of the bias from the model name to the parent layer
 
         Return:
-            :obj:`str`: The prefix name of the bias.
+            :obj:`str`: The _prefix name of the bias.
         """
-        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        warnings.warn("The method get__prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return None
 
     def get_bias(self) -> Union[None, Dict[str, tf.Variable]]:

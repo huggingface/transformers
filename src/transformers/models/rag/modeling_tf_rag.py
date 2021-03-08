@@ -365,9 +365,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
 RAG_START_DOCSTRING = r"""
 
-    RAG is a sequence-to-sequence model which encapsulates two core components: a question encoder and a generator. During a forward
-    pass, we encode the input with the question encoder and pass it to the retriever to extract relevant context
-    documents. The documents are then prepended to the input. Such contextualized inputs is passed to the generator.
+    RAG is a sequence-to-sequence model which encapsulates two core components: a question encoder and a generator.
+    During a forward pass, we encode the input with the question encoder and pass it to the retriever to extract
+    relevant context documents. The documents are then prepended to the input. Such contextualized inputs is passed to
+    the generator.
 
     The question encoder can be any `autoencoding` model, preferably :class:`~transformers.TFDPRQuestionEncoder`, and
     the generator can be any `seq2seq` model, preferably :class:`~transformers.TFBartForConditionalGeneration`.
@@ -385,9 +386,9 @@ RAG_START_DOCSTRING = r"""
     This model is also a Tensorflow `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__
     subclass. Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to
     general usage and behavior.
-    
-    The model is in a developing state as it is now fully supports in eager-mode only, and may not be exported in 
-    SavedModel format. 
+
+    The model is in a developing state as it is now fully supports in eager-mode only, and may not be exported in
+    SavedModel format.
 
     Args:
         config (:class:`~transformers.RagConfig`):
