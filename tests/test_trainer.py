@@ -193,6 +193,20 @@ if is_torch_available():
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
+    class TstLayer(torch.nn.Module):
+        def __init__(self, hidden_size):
+            super().__init__()
+            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln1 = torch.nn.LayerNorm(hidden_size)
+            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln2 = torch.nn.LayerNorm(hidden_size)
+            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+
+        def forward(self, x):
+            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
+            h = torch.nn.functional.relu(self.linear2(x))
+            return self.ln2(x + h + self.bias)
+
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
         label_names = kwargs.get("label_names", None)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
@@ -990,6 +1004,18 @@ class TrainerIntegrationTest(unittest.TestCase):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    def test_no_wd_param_group(self):
+        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        trainer = Trainer(model=model)
+        trainer.create_optimizer_and_scheduler(10)
+        # fmt: off
+        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']
+        # fmt: on
+        wd_params = [p for n, p in model.named_parameters() if n in wd_names]
+        no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
+        self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
+        self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
 
 @require_torch
