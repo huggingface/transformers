@@ -484,6 +484,7 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
+    @slow
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         # head_mask and decoder_head_mask has different shapes than other input args
