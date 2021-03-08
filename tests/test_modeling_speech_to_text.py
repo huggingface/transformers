@@ -164,7 +164,7 @@ class Speech2TextModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-    def get_subsampled_output_lengths(self, input_lengths: torch.LongTensor):
+    def get_subsampled_output_lengths(self, input_lengths):
         """
         Computes the output length of the convolutional layers
         """
