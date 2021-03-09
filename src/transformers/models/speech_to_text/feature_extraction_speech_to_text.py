@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_utils import BatchFeature
 from ...file_utils import PaddingStrategy, TensorType, is_torch_available, is_torchaudio_available
 from ...utils import logging
 
@@ -34,7 +35,7 @@ if is_torchaudio_available():
 logger = logging.get_logger(__name__)
 
 
-class Speech2TextFeatureExtractor(PreTrainedFeatureExtractor):
+class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Speech2Text feature extractor.
 

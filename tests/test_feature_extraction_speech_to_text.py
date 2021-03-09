@@ -23,7 +23,7 @@ import numpy as np
 from transformers import Speech2TextFeatureExtractor
 from transformers.testing_utils import require_torch, require_torchaudio
 
-from .test_feature_extraction_common import FeatureExtractionMixin
+from .test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 global_rng = random.Random()
@@ -99,7 +99,7 @@ class Speech2TextFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_torchaudio
-class Speech2TextFeatureExtractionTest(FeatureExtractionMixin, unittest.TestCase):
+class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
 
     feature_extraction_class = Speech2TextFeatureExtractor
 
