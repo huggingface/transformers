@@ -371,7 +371,7 @@ class GenerationMixin:
         return logits
 
     def _prepare_input_ids_for_generation(
-            self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+        self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
     ) -> torch.LongTensor:
         if encoder_outputs is None:
             if bos_token_id is None:
