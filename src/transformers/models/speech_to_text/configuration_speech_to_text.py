@@ -66,9 +66,6 @@ class Speech2TextConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
@@ -79,6 +76,24 @@ class Speech2TextConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        max_source_positions (:obj:`int`, `optional`, defaults to 6000):
+            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        max_target_positions: (:obj:`int`, `optional`, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        num_conv_layers (:obj:`int`, `optional`, defaults to 2):
+            Number of 1D convolutional layers in the conv module.
+        conv_kernel_sizes (:obj:`List[int]`, `optional`, defaults to :obj:`[5, 5]`):
+            A list of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
+            of `conv_kernel_sizes` has to match `num_conv_layers`.
+        conv_channels (:obj:`int`, `optional`, defaults to 1024):
+            An integer defining the number of output channels of each convolution layers except the final one in the
+            conv module.
+        input_feat_per_channel (:obj:`int`, `optional`, defaults to 80):
+            An integer specifying the size of feature vector. This is also the dimentions of log-mel filter-bank
+            features.
+        input_channels (:obj:`int`, `optionl`, defaults to 1):
+            An integer specifying number of input channels of the input feature vector.
 
         Example::
 
@@ -167,6 +182,14 @@ class Speech2TextConfig(PretrainedConfig):
         self.conv_channels = conv_channels
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
+
+        if len(self.conv_kernel_sizes) != self.num_conv_layers:
+            raise ValueError(
+                "Configuration for convolutional module is incorrect."
+                "It is required that `len(config.conv_kernel_sizes)` == `config.num_conv_layers`"
+                f"but is `len(config.conv_kernel_sizes) = {len(self.conv_kernel_sizes)}`,"
+                f"`config.num_conv_layers = {self.num_conv_layers}`."
+            )
 
     @property
     def num_attention_heads(self) -> int:

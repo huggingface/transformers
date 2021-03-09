@@ -32,7 +32,7 @@ features. The :class:`transformers.Speech2Textprocessor` wraps the processor and
 extract the features and decode the text. The feature extractor depends on `torchaudio` so make sure to install it
 before importing the extractor or processor.
 
-- ASR
+- ASR and Speech Translation
 
 .. code-block::
 
