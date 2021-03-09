@@ -30,7 +30,7 @@ For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2s
 - `FSMTForConditionalGeneration` (translation only)
 - `T5ForConditionalGeneration`
 
-`run_seq2seq.py` is a lightweight example of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
+`run_summarization.py` is a lightweight example of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
 
 For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets.html#json-files
 and you also will find examples of these below.
@@ -39,11 +39,10 @@ and you also will find examples of these below.
 
 Here is an example on a summarization task:
 ```bash
-python examples/seq2seq/run_seq2seq.py \
+python examples/seq2seq/run_summarization.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --task summarization \
     --dataset_name xsum \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
@@ -60,11 +59,10 @@ And here is how you would use it on your own files, after adjusting the values f
 `--train_file`, `--validation_file`, `--text_column` and `--summary_column` to match your setup:
 
 ```bash
-python examples/seq2seq/run_seq2seq.py \
+python examples/seq2seq/run_summarization.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --task summarization \
     --train_file path_to_csv_or_jsonlines_file \
     --validation_file path_to_csv_or_jsonlines_file \
     --output_dir /tmp/tst-summarization \
@@ -140,11 +138,12 @@ And as with the CSV files, you can specify which values to select from the file,
 Here is an example of a translation fine-tuning with T5:
 
 ```bash
-python examples/seq2seq/run_seq2seq.py \
+python examples/seq2seq/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --task translation_en_to_ro \
+    --source_language en \
+    --target_language ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --source_prefix "translate English to Romanian: " \
@@ -160,11 +159,12 @@ python examples/seq2seq/run_seq2seq.py \
 And the same with MBart:
 
 ```bash
-python examples/seq2seq/run_seq2seq.py \
+python examples/seq2seq/run_summarization.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
-    --task translation_en_to_ro \
+    --source_language en_XX \
+    --target_language ro_RO 
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --source_lang en_XX \
@@ -188,10 +188,10 @@ Note, that depending on the used model additional language-specific command-line
 * T5 requires:
 
    ```
+       --source_lang en \
+       --target_lang ro \
        --source_prefix "translate English to Romanian: "
    ```
-
-* yet, other models, require nether.
 
 Also, if you switch to a different language pair, make sure to adjust the source and target values in all command line arguments.
 
@@ -199,11 +199,12 @@ And here is how you would use the translation finetuning on your own files, afte
 values for the arguments `--train_file`, `--validation_file` to match your setup:
 
 ```bash
-python examples/seq2seq/run_seq2seq.py \
+python examples/seq2seq/run_summarization.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --task translation_en_to_ro \
+    --source_lang en \
+    --target_lang ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --source_prefix "translate English to Romanian: " \
@@ -229,11 +230,12 @@ Here the languages are Romanian (`ro`) and English (`en`).
 If you want to use a pre-processed dataset that leads to high bleu scores, but for the `en-de` language pair, you can use `--dataset_name wmt14-en-de-pre-processed`, as following:
 
 ```bash
-python examples/seq2seq/run_seq2seq.py \
+python examples/seq2seq/run_summarization.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --task translation_en_to_de \
+    --source_lang en \
+    --target_lang de \
     --dataset_name wmt14-en-de-pre-processed \
     --source_prefix "translate English to German: " \
     --output_dir /tmp/tst-translation \

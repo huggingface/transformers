@@ -228,12 +228,12 @@ class TestTrainerExt(TestCasePlus):
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
-                {self.examples_dir_str}/seq2seq/run_seq2seq.py
+                {self.examples_dir_str}/seq2seq/run_summarization.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
-            testargs = ["run_seq2seq.py"] + args
+            testargs = ["run_summarization.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()
 
