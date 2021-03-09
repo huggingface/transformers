@@ -1221,7 +1221,14 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            next_token_logits = outputs.logits[:, -1, :]
+            if outputs.logits.size(1) == 1:
+                mask_pad_indices = torch.zeros(
+                    [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
+                )
+            else:
+                # find first padding index
+                _, mask_pad_indices = torch.max(input_ids == pad_token_id, dim=1)
+            next_token_logits = outputs.logits[torch.arange(outputs.logits.size(0)), mask_pad_indices - 1]
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -1252,8 +1259,10 @@ class GenerationMixin:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
 
-            # add token and increase length by one
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            # set next token before padding index and increase length by one
+            input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
+            mask_pad_indices[mask_pad_indices == 0] = -1
+            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = next_tokens
 
             # update sequence length
             if eos_token_id is not None:
