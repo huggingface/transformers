@@ -135,7 +135,7 @@ _import_structure = {
         "Wav2Vec2Processor",
     ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
-    "models.speech_to_text_transformer": [
+    "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
         "Speech2TextTokenizer",
