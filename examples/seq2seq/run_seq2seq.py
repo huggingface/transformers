@@ -18,7 +18,6 @@ Fine-tuning the library models for sequence to sequence.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
-import json
 import logging
 import os
 import re
@@ -45,19 +44,21 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
+from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-
-
-with FileLock(".lock") as lock:
-    nltk.download("punkt", quiet=True)
 
 
 logger = logging.getLogger(__name__)
 
-
-def save_json(content, path, indent=4, **json_dump_kwargs):
-    with open(path, "w") as f:
-        json.dump(content, f, indent=indent, sort_keys=True, **json_dump_kwargs)
+try:
+    nltk.data.find("tokenizers/punkt")
+except (LookupError, OSError):
+    if is_offline_mode():
+        raise LookupError(
+            "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
+        )
+    with FileLock(".lock") as lock:
+        nltk.download("punkt", quiet=True)
 
 
 @dataclass
@@ -403,10 +404,18 @@ def main():
             text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
         else:
             text_column = data_args.text_column
+            if text_column not in column_names:
+                raise ValueError(
+                    f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
+                )
         if data_args.summary_column is None:
             summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
         else:
             summary_column = data_args.summary_column
+            if summary_column not in column_names:
+                raise ValueError(
+                    f"--summary_column' value '{data_args.summary_column}' needs to be one of: {', '.join(column_names)}"
+                )
     else:
         # Get the language codes for input/target.
         lang_search = re.match("translation_([a-z]+)_to_([a-z]+)", data_args.task)
@@ -570,7 +579,6 @@ def main():
         compute_metrics=compute_metrics if training_args.predict_with_generate else None,
     )
 
-    all_metrics = {}
     # Training
     if training_args.do_train:
         if last_checkpoint is not None:
@@ -587,21 +595,12 @@ def main():
             data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
         )
         metrics["train_samples"] = min(max_train_samples, len(train_dataset))
-        if trainer.is_world_process_zero():
-            metrics_formatted = trainer.metrics_format(metrics)
-            logger.info("***** train metrics *****")
-            k_width = max(len(str(x)) for x in metrics_formatted.keys())
-            v_width = max(len(str(x)) for x in metrics_formatted.values())
-            for key in sorted(metrics_formatted.keys()):
-                logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-            save_json(metrics, os.path.join(training_args.output_dir, "train_results.json"))
-            all_metrics.update(metrics)
 
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
@@ -611,16 +610,10 @@ def main():
         max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
         metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
-        if trainer.is_world_process_zero():
-            metrics_formatted = trainer.metrics_format(metrics)
-            logger.info("***** val metrics *****")
-            k_width = max(len(str(x)) for x in metrics_formatted.keys())
-            v_width = max(len(str(x)) for x in metrics_formatted.values())
-            for key in sorted(metrics_formatted.keys()):
-                logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-            save_json(metrics, os.path.join(training_args.output_dir, "eval_results.json"))
-            all_metrics.update(metrics)
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
+    # predict
     if training_args.do_predict:
         logger.info("*** Test ***")
 
@@ -634,29 +627,18 @@ def main():
         max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
         metrics["test_samples"] = min(max_test_samples, len(test_dataset))
 
-        if trainer.is_world_process_zero():
-            metrics_formatted = trainer.metrics_format(metrics)
-            logger.info("***** test metrics *****")
-            k_width = max(len(str(x)) for x in metrics_formatted.keys())
-            v_width = max(len(str(x)) for x in metrics_formatted.values())
-            for key in sorted(metrics_formatted.keys()):
-                logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
-            save_json(metrics, os.path.join(training_args.output_dir, "test_results.json"))
-            all_metrics.update(metrics)
+        trainer.log_metrics("test", metrics)
+        trainer.save_metrics("test", metrics)
 
+        if trainer.is_world_process_zero():
             if training_args.predict_with_generate:
                 test_preds = tokenizer.batch_decode(
                     test_results.predictions, skip_special_tokens=True, clean_up_tokenization_spaces=True
                 )
                 test_preds = [pred.strip() for pred in test_preds]
-                output_test_preds_file = os.path.join(training_args.output_dir, "test_preds_seq2seq.txt")
+                output_test_preds_file = os.path.join(training_args.output_dir, "test_generations.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
-
-    if trainer.is_world_process_zero():
-        save_json(all_metrics, os.path.join(training_args.output_dir, "all_results.json"))
-
-    return results
 
 
 def _mp_fn(index):

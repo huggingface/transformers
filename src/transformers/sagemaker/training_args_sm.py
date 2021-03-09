@@ -87,3 +87,7 @@ class SageMakerTrainingArguments(TrainingArguments):
     @property
     def place_model_on_device(self):
         return not (is_smdistributed_available() and self.mp_parameters != "")
+
+    @property
+    def _no_sync_in_gradient_accumulation(self):
+        return False

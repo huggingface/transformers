@@ -53,6 +53,7 @@ from .configuration_marian import MarianConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "Helsinki-NLP/opus-mt-en-de"
 _CONFIG_FOR_DOC = "MarianConfig"
 _TOKENIZER_FOR_DOC = "MarianTokenizer"
 
@@ -557,13 +558,14 @@ MARIAN_GENERATION_EXAMPLE = r"""
             >>> src = 'fr'  # source language
             >>> trg = 'en'  # target language
             >>> sample_text = "où est l'arrêt de bus ?"
-            >>> mname = f'Helsinki-NLP/opus-mt-{src}-{trg}'
+            >>> model_name = f'Helsinki-NLP/opus-mt-{src}-{trg}'
 
-            >>> model = MarianMTModel.from_pretrained(mname)
-            >>> tok = MarianTokenizer.from_pretrained(mname)
-            >>> batch = tok.prepare_seq2seq_batch(src_texts=[sample_text], return_tensors="tf")  # don't need tgt_text for inference
+            >>> model = TFMarianMTModel.from_pretrained(model_name)
+            >>> tokenizer = MarianTokenizer.from_pretrained(model_name)
+            >>> batch = tokenizer([sample_text], return_tensors="tf")
             >>> gen = model.generate(**batch)
-            >>> words: List[str] = tok.batch_decode(gen, skip_special_tokens=True)  # returns "Where is the bus stop ?"
+            >>> tokenizer.batch_decode(gen, skip_special_tokens=True)
+            "Where is the bus stop ?"
 """
 
 MARIAN_INPUTS_DOCSTRING = r"""
@@ -1202,7 +1204,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="Helsinki-NLP/opus-mt-en-de",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
