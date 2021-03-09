@@ -284,7 +284,7 @@ class ExamplesTests(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_seq2seq.py
+            run_summarization.py
             --model_name_or_path t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
@@ -315,7 +315,7 @@ class ExamplesTests(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_seq2seq.py
+            run_trans.py
             --model_name_or_path sshleifer/student_marian_en_ro_6_1
             --source_lang en
             --target_lang ro
