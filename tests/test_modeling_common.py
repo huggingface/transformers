@@ -47,6 +47,7 @@ if is_torch_available():
         BertModel,
         PretrainedConfig,
         PreTrainedModel,
+        T5ForConditionalGeneration,
     )
 
 
@@ -59,7 +60,6 @@ def _config_zero_init(config):
 
 
 TINY_T5 = "patrickvonplaten/t5-tiny-random"
-TINY_BERT = "lysandre/tiny-bert-random"
 
 
 @require_torch
@@ -1290,7 +1290,9 @@ class ModelUtilsTest(unittest.TestCase):
             self.assertEqual(model.config, config)
 
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
-        model = BertModel.from_pretrained(TINY_BERT)
+        model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
 
-        self.assertRaises(AssertionError, BertModel.from_pretrained, TINY_T5)
+        with self.assertRaises(Exception) as context:
+            BertModel.from_pretrained(TINY_T5)
+        self.assertTrue("You tried to initiate a model of type" in str(context.exception))
