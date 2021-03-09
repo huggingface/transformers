@@ -28,8 +28,8 @@ class Speech2TextProcessor:
 
     :class:`~transformers.Speech2TextProcessor` offers all the functionalities of
     :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer`. See the
-    :meth:`~transformers.Speech2TextProcessor.__call__` and
-    :meth:`~transformers.Speech2TextProcessor.decode` for more information.
+    :meth:`~transformers.Speech2TextProcessor.__call__` and :meth:`~transformers.Speech2TextProcessor.decode` for more
+    information.
 
     Args:
         feature_extractor (:obj:`Speech2TextFeatureExtractor`):

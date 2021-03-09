@@ -28,9 +28,10 @@ signal. It's a transformer-based seq2seq model, so the transcripts/translations 
 :obj:`generate()` method can be used for inference.
 
 The :class:`~transformers.Speech2TextFeatureExtractor` class is responsible for extracting the log-mel filter-bank
-features. The :class:`~transformers.Speech2TextProcessor` wraps :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer` into a single instance to both extract the input features and decode the predicted token ids
-extract the features and decode the text. The feature extractor depends on :obj:`torchaudio` so make sure to install it
-before importing it.
+features. The :class:`~transformers.Speech2TextProcessor` wraps :class:`~transformers.Speech2TextFeatureExtractor` and
+:class:`~transformers.Speech2TextTokenizer` into a single instance to both extract the input features and decode the
+predicted token ids extract the features and decode the text. The feature extractor depends on :obj:`torchaudio` so
+make sure to install it before importing it.
 
 - ASR and Speech Translation
 
@@ -62,8 +63,9 @@ before importing it.
 
     For multilingual speech translation models, :obj:`eos_token_id` is used as the :obj:`decoder_start_token_id` and
     the target language id is forced as the first generated token. To force the target language id as the first
-    generated token, pass the :obj:`forced_bos_token_id` parameter to the :obj:`generate()` method. The following example shows how
-    to transate English speech to French text using the `facebook/s2t-medium-mustc-multilingual-st` checkpoint.
+    generated token, pass the :obj:`forced_bos_token_id` parameter to the :obj:`generate()` method. The following
+    example shows how to transate English speech to French text using the `facebook/s2t-medium-mustc-multilingual-st`
+    checkpoint.
 
 .. code-block::
 
