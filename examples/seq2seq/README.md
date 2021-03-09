@@ -30,7 +30,7 @@ For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2s
 - `FSMTForConditionalGeneration` (translation only)
 - `T5ForConditionalGeneration`
 
-`run_summarization.py`  and  `run_translation.py` are lightweight examples of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
+`run_sum.py`  and  `run_trans.py` are lightweight examples of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
 
 For custom datasets in `jsonlines` format please see: https://huggingface.co/docs/datasets/loading_datasets.html#json-files
 and you also will find examples of these below.
@@ -39,7 +39,7 @@ and you also will find examples of these below.
 
 Here is an example on a summarization task:
 ```bash
-python examples/seq2seq/run_summarization.py \
+python examples/seq2seq/run_sum.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -59,7 +59,7 @@ And here is how you would use it on your own files, after adjusting the values f
 `--train_file`, `--validation_file`, `--text_column` and `--summary_column` to match your setup:
 
 ```bash
-python examples/seq2seq/run_summarization.py \
+python examples/seq2seq/run_sum.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -138,7 +138,7 @@ And as with the CSV files, you can specify which values to select from the file,
 Here is an example of a translation fine-tuning with T5:
 
 ```bash
-python examples/seq2seq/run_translation.py \
+python examples/seq2seq/run_trans.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -159,7 +159,7 @@ python examples/seq2seq/run_translation.py \
 And the same with MBart:
 
 ```bash
-python examples/seq2seq/run_translation.py \
+python examples/seq2seq/run_trans.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
@@ -193,7 +193,7 @@ And here is how you would use the translation finetuning on your own files, afte
 values for the arguments `--train_file`, `--validation_file` to match your setup:
 
 ```bash
-python examples/seq2seq/run_translation.py \
+python examples/seq2seq/run_trans.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -224,7 +224,7 @@ Here the languages are Romanian (`ro`) and English (`en`).
 If you want to use a pre-processed dataset that leads to high bleu scores, but for the `en-de` language pair, you can use `--dataset_name wmt14-en-de-pre-processed`, as following:
 
 ```bash
-python examples/seq2seq/run_translation.py \
+python examples/seq2seq/run_trans.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
