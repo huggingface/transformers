@@ -19,7 +19,7 @@ import numpy as np
 from transformers import BatchFeature
 from transformers.testing_utils import require_tf, require_torch
 
-from .test_feature_extraction_saving_common import FeatureExtractionSavingTestMixin
+from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
 class SequenceFeatureExtractionTestMixin(FeatureExtractionSavingTestMixin):

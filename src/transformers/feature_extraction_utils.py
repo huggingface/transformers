@@ -191,7 +191,7 @@ class BatchFeature(UserDict):
         return self
 
 
-class FeatureExtractionSavingUtilsMixin:
+class FeatureExtractionMixin:
     """
     This is a feature extraction mixin used to provide saving/loading functionality for sequential and image feature
     extractors.
@@ -202,8 +202,8 @@ class FeatureExtractionSavingUtilsMixin:
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> PreTrainedFeatureExtractor:
         r"""
-        Instantiate a type of :class:`~transformers.feature_extraction_common:class:`~transformers.SequenceFeatureExtractor` (or a derived class) from a pretrained feature
-        extractor.
+        Instantiate a type of :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin` from a feature
+        extractor, *e.g.* a derived class of :class:`~transformers.SequenceFeatureExtractor`.
 
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -213,7 +213,7 @@ class FeatureExtractionSavingUtilsMixin:
                   huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
                   namespaced under a user or organization name, like ``dbmdz/bert-base-german-cased``.
                 - a path to a `directory` containing a feature extractor file saved using the
-                  :func:`~transformers.SequenceFeatureExtractor.save_pretrained` method, e.g.,
+                  :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` method, e.g.,
                   ``./my_model_directory/``.
                 - a path or url to a saved feature extractor JSON `file`, e.g.,
                   ``./my_model_directory/feature_extraction_config.json``.
@@ -252,13 +252,12 @@ class FeatureExtractionSavingUtilsMixin:
 
 
         Returns:
-            :class:`~transformers.SequenceFeatureExtractor`: The feature extractor object instantiated from this
-            pretrained model.
+            A feature extractor of type :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin`.
 
         Examples::
 
-            # We can't instantiate directly the base class `SequenceFeatureExtractor` so let's show the examples on a
-            # derived class: Wav2Vec2FeatureExtractor
+            # We can't instantiate directly the base class `FeatureExtractionMixin` nor `SequenceFeatureExtractor` so let's show the examples on a
+            # derived class: `Wav2Vec2FeatureExtractor`
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('facebook/wav2vec2-base-960h')    # Download feature_extraction_config from huggingface.co and cache.
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/')  # E.g. feature_extractor (or model) was saved using `save_pretrained('./test/saved_model/')`
             feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained('./test/saved_model/preprocessor_config.json')
@@ -276,7 +275,7 @@ class FeatureExtractionSavingUtilsMixin:
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
         Save a feature_extractor object to the directory ``save_directory``, so that it can be re-loaded using the
-        :func:`~transformers.SequenceFeatureExtractor.from_pretrained` class method.
+        :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` class method.
 
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
@@ -297,7 +296,8 @@ class FeatureExtractionSavingUtilsMixin:
     ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
         """
         From a ``pretrained_model_name_or_path``, resolve to a dictionary of parameters, to be used for instantiating a
-        :class:`~transformers.SequenceFeatureExtractor` using ``from_dict``.
+        feature extractor of type :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin` using
+        ``from_dict``.
 
         Parameters:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
@@ -374,19 +374,20 @@ class FeatureExtractionSavingUtilsMixin:
     @classmethod
     def from_dict(cls, feature_extractor_dict: Dict[str, Any], **kwargs) -> PreTrainedFeatureExtractor:
         """
-        Instantiates a :class:`~transformers.SequenceFeatureExtractor` from a Python dictionary of parameters.
+        Instantiates a type of :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin` from a Python
+        dictionary of parameters.
 
         Args:
             feature_extractor_dict (:obj:`Dict[str, Any]`):
                 Dictionary that will be used to instantiate the feature extractor object. Such a dictionary can be
                 retrieved from a pretrained checkpoint by leveraging the
-                :func:`~transformers.SequenceFeatureExtractor.to_dict` method.
+                :func:`~transformers.feature_extraction_utils.FeatureExtractionMixin.to_dict` method.
             kwargs (:obj:`Dict[str, Any]`):
                 Additional parameters from which to initialize the feature extractor object.
 
         Returns:
-            :class:`~transformers.SequenceFeatureExtractor`: The feature extractor object instantiated from those
-            parameters.
+            :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin`: The feature extractor object
+            instantiated from those parameters.
         """
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
 
@@ -421,15 +422,16 @@ class FeatureExtractionSavingUtilsMixin:
     @classmethod
     def from_json_file(cls, json_file: Union[str, os.PathLike]) -> PreTrainedFeatureExtractor:
         """
-        Instantiates a :class:`~transformers.SequenceFeatureExtractor` from the path to a JSON file of parameters.
+        Instantiates a feature extractor of type :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin`
+        from the path to a JSON file of parameters.
 
         Args:
             json_file (:obj:`str` or :obj:`os.PathLike`):
                 Path to the JSON file containing the parameters.
 
         Returns:
-            :class:`~transformers.SequenceFeatureExtractor`: The feature_extractor object instantiated from that JSON
-            file.
+            A feature extractor of type :class:`~transformers.feature_extraction_utils.FeatureExtractionMixin`: The
+            feature_extractor object instantiated from that JSON file.
         """
         with open(json_file, "r", encoding="utf-8") as reader:
             text = reader.read()

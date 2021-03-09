@@ -59,7 +59,8 @@ class Wav2Vec2Processor:
 
         .. note::
 
-            This class method is simply calling :meth:`~transformers.SequenceFeatureExtractor.save_pretrained` and
+            This class method is simply calling
+            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.save_pretrained` and
             :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.save_pretrained`. Please refer to the
             docstrings of the methods above for more information.
 
@@ -80,9 +81,9 @@ class Wav2Vec2Processor:
         .. note::
 
             This class method is simply calling Wav2Vec2FeatureExtractor's
-            :meth:`~transformers.SequenceFeatureExtractor.from_pretrained` and Wav2Vec2CTCTokenizer's
-            :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`. Please refer to the
-            docstrings of the methods above for more information.
+            :meth:`~transformers.feature_extraction_utils.FeatureExtractionMixin.from_pretrained` and
+            Wav2Vec2CTCTokenizer's :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained`.
+            Please refer to the docstrings of the methods above for more information.
 
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):

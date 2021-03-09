@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from .feature_extraction_utils import BatchFeature, FeatureExtractionSavingUtilsMixin
+from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from .file_utils import (
     PaddingStrategy,
     TensorType,
@@ -35,7 +35,7 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
-class SequenceFeatureExtractor(FeatureExtractionSavingUtilsMixin):
+class SequenceFeatureExtractor(FeatureExtractionMixin):
     """
     This is a general feature extraction class for speech recognition.
 
