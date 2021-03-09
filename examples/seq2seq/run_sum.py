@@ -250,6 +250,13 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # @patrickvonplaten|@stas00 picked this up from
+    #   https://github.com/huggingface/transformers/issues/10164#issuecomment-779293173
+    #   https://github.com/huggingface/transformers/pull/10611#discussion_r590595798
+    # but unclear for me if I should restrict like this or just `.startswith("t5")`?
+    if data_args.source_prefix is None and model_args.model_name_or_path in ["t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"]:
+        data_args.source_prefix = "summarize: "
+
     # Detecting last checkpoint.
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
