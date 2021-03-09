@@ -50,8 +50,8 @@ if SRC_DIRS is not None:
     import run_ner
     import run_qa as run_squad
     import run_sum
-    import run_trans
     import run_swag
+    import run_trans
 
 
 logging.basicConfig(level=logging.DEBUG)
