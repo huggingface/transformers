@@ -159,7 +159,7 @@ python examples/seq2seq/run_translation.py \
 And the same with MBart:
 
 ```bash
-python examples/seq2seq/run_summarization.py \
+python examples/seq2seq/run_translation.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
@@ -199,7 +199,7 @@ And here is how you would use the translation finetuning on your own files, afte
 values for the arguments `--train_file`, `--validation_file` to match your setup:
 
 ```bash
-python examples/seq2seq/run_summarization.py \
+python examples/seq2seq/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
@@ -230,7 +230,7 @@ Here the languages are Romanian (`ro`) and English (`en`).
 If you want to use a pre-processed dataset that leads to high bleu scores, but for the `en-de` language pair, you can use `--dataset_name wmt14-en-de-pre-processed`, as following:
 
 ```bash
-python examples/seq2seq/run_summarization.py \
+python examples/seq2seq/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
