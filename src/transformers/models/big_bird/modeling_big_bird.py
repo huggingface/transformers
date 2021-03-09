@@ -524,11 +524,11 @@ class BigBirdBlockSparseAttention(nn.Module):
             output_attentions=output_attentions,
         )
 
-        context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
-        
         # TODO
         self.clo = context_layer
         # 
+
+        context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
         return outputs
@@ -624,6 +624,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         rand_attn.unsqueeze_(0)
         rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
         # -> (b, h, n/wn-2, r)
+        # print("hf_block_size", wn) # TODO
 
         rand_mask = self._create_rand_mask_from_inputs(from_blocked_mask, to_blocked_mask, rand_attn, h, r, b, m, wm)
 
@@ -631,11 +632,25 @@ class BigBirdBlockSparseAttention(nn.Module):
         blocked_key_matrix = key_layer.view(b, h, n // wn, wn, -1)
         blocked_value_matrix = value_layer.view(b, h, n // wn, wn, -1)
 
+
+        # TODO
+        self.bqm = blocked_query_matrix
+        self.bkm = blocked_key_matrix
+        self.bvm = blocked_value_matrix
+        self.ra = rand_attn
+        # 
+
+
         # preparing block for randn attn
         gathered_key = self.torch_gather_b2(blocked_key_matrix, rand_attn)
         gathered_key = gathered_key.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
         gathered_value = self.torch_gather_b2(blocked_value_matrix, rand_attn)
         gathered_value = gathered_value.view(b, h, n // wn - 2, r * wn, -1)  # [b, h, n//wn-2, r, wn, -1]
+
+        # TODO
+        self.gk = gathered_key
+        self.gv = gathered_value
+        # 
 
         # 1st block is global q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
 
@@ -649,6 +664,8 @@ class BigBirdBlockSparseAttention(nn.Module):
             "bhqk,bhkd->bhqd", first_attn_weights, value_layer
         )  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
         first_context_layer.unsqueeze_(2)
+
+        self.fcl = first_context_layer # TODO
 
         # q[1] x (sliding_keys, random_keys, global_keys)
 
@@ -889,6 +906,8 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         else:
             attention_probs = None
+
+        self.fcl = context_layer # TODO
 
         return context_layer, attention_probs
 
