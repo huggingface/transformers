@@ -98,9 +98,7 @@ class DataTrainingArguments:
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines)."}
-    )
+    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a jsonlines)."})
     validation_file: Optional[str] = field(
         default=None,
         metadata={
@@ -111,8 +109,7 @@ class DataTrainingArguments:
     test_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input test data file to evaluate the metrics (sacreblue) on "
-            "a jsonlines file."
+            "help": "An optional input test data file to evaluate the metrics (sacreblue) on " "a jsonlines file."
         },
     )
     overwrite_cache: bool = field(
