@@ -142,8 +142,8 @@ python examples/seq2seq/run_translation.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --source_language en \
-    --target_language ro \
+    --source_lang en \
+    --target_lang ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --source_prefix "translate English to Romanian: " \
@@ -163,8 +163,8 @@ python examples/seq2seq/run_translation.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
-    --source_language en_XX \
-    --target_language ro_RO 
+    --source_lang en_XX \
+    --target_lang ro_RO 
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --source_lang en_XX \
@@ -180,16 +180,10 @@ python examples/seq2seq/run_translation.py \
 
 Note, that depending on the used model additional language-specific command-line arguments are sometimes required. Specifically:
 
-* MBart models require:
-   ```
-       --source_lang en_XX \
-       --target_lang ro_RO \
-   ```
+* MBart models require different `{source,target}_lang` values, e.g. in place of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. @reviewers: can we redirect to a specification for these values? 
 * T5 requires:
 
    ```
-       --source_lang en \
-       --target_lang ro \
        --source_prefix "translate English to Romanian: "
    ```
 

@@ -276,7 +276,7 @@ For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
     --output_dir output_dir --overwrite_output_dir \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
     --dataset_name wmt16 --dataset_config "ro-en" \
-    --source_language en --target_language ro --source_prefix "translate English to Romanian: " \
+    --source_lang en --target_lang ro --source_prefix "translate English to Romanian: " \
     --fp16 --sharded_ddp simple
 
 Notes:
@@ -301,7 +301,7 @@ For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
     --output_dir output_dir --overwrite_output_dir \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
     --dataset_name wmt16 --dataset_config "ro-en" \
-    --source_language en --target_language ro --source_prefix "translate English to Romanian: " \
+    --source_lang en --target_lang ro --source_prefix "translate English to Romanian: " \
     --fp16 --sharded_ddp zero_dp_2
 
 :obj:`zero_dp_2` is an optimized version of the simple wrapper, while :obj:`zero_dp_3` fully shards model weights,
@@ -400,7 +400,7 @@ Here is an example of running ``run_translation.py`` under DeepSpeed deploying a
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
     --dataset_name wmt16 --dataset_config "ro-en" \
-    --source_language en --target_language ro --source_prefix "translate English to Romanian: "
+    --source_lang en --target_lang ro --source_prefix "translate English to Romanian: "
 
 
 Note that in the DeepSpeed documentation you are likely to see ``--deepspeed --deepspeed_config ds_config.json`` - i.e.
@@ -425,7 +425,7 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
     --dataset_name wmt16 --dataset_config "ro-en" \
-    --source_language en --target_language ro --source_prefix "translate English to Romanian: "
+    --source_lang en --target_lang ro --source_prefix "translate English to Romanian: "
 
 This is almost the same as with multiple-GPUs, but here we tell DeepSpeed explicitly to use just one GPU. By default,
 DeepSpeed deploys all GPUs it can see. If you have only 1 GPU to start with, then you don't need this argument. The
