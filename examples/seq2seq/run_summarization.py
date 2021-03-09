@@ -122,14 +122,14 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input evaluation data file to evaluate the metrics (rouge/sacreblue) on "
+            "help": "An optional input evaluation data file to evaluate the metrics (rouge) on "
             "(a jsonlines or csv file)."
         },
     )
     test_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input test data file to evaluate the metrics (rouge/sacreblue) on "
+            "help": "An optional input test data file to evaluate the metrics (rouge) on "
             "(a jsonlines or csv file)."
         },
     )
@@ -340,16 +340,6 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-
-    # Set decoder_start_token_id
-    if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        assert (
-            data_args.target_lang is not None and data_args.source_lang is not None
-        ), "mBart requires --target_lang and --source_lang"
-        if isinstance(tokenizer, MBartTokenizer):
-            model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
-        else:
-            model.config.decoder_start_token_id = tokenizer.convert_tokens_to_ids(data_args.target_lang)
 
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
