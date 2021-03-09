@@ -1364,14 +1364,14 @@ if TYPE_CHECKING:
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         DPRConfig,
         DPRContextEncoderTokenizer,
         DPRQuestionEncoderTokenizer,
         DPRReaderOutput,
         DPRReaderTokenizer,
-        TF_DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF_DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TF_DPR_READER_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFDPRContextEncoder,
         TFDPRPretrainedContextEncoder,
         TFDPRPretrainedQuestionEncoder,
@@ -1380,7 +1380,10 @@ if TYPE_CHECKING:
         TFDPRReader,
     )
     from .models.electra import (
+        ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        ElectraConfig,
+        ElectraTokenizer,
         TFElectraForMaskedLM,
         TFElectraForMultipleChoice,
         TFElectraForPreTraining,
@@ -1390,8 +1393,12 @@ if TYPE_CHECKING:
         TFElectraModel,
         TFElectraPreTrainedModel,
     )
+    from .models.encoder_decoder import EncoderDecoderConfig
     from .models.flaubert import (
+        FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FlaubertConfig,
+        FlaubertTokenizer,
         TFFlaubertForMultipleChoice,
         TFFlaubertForQuestionAnsweringSimple,
         TFFlaubertForSequenceClassification,
@@ -1399,8 +1406,12 @@ if TYPE_CHECKING:
         TFFlaubertModel,
         TFFlaubertWithLMHeadModel,
     )
+    from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import (
+        FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_FUNNEL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        FunnelConfig,
+        FunnelTokenizer,
         TFFunnelBaseModel,
         TFFunnelForMaskedLM,
         TFFunnelForMultipleChoice,
@@ -1411,7 +1422,10 @@ if TYPE_CHECKING:
         TFFunnelModel,
     )
     from .models.gpt2 import (
+        GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_GPT2_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2Config,
+        GPT2Tokenizer,
         TFGPT2DoubleHeadsModel,
         TFGPT2ForSequenceClassification,
         TFGPT2LMHeadModel,
@@ -1419,9 +1433,22 @@ if TYPE_CHECKING:
         TFGPT2Model,
         TFGPT2PreTrainedModel,
     )
-    from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
+    from .models.herbert import HerbertTokenizer
+    from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
+    from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
+    from .models.led import (
+        LED_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LEDConfig,
+        LEDTokenizer,
+        TFLEDForConditionalGeneration,
+        TFLEDModel,
+        TFLEDPreTrainedModel,
+    )
     from .models.longformer import (
+        LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LongformerConfig,
+        LongformerTokenizer,
         TFLongformerForMaskedLM,
         TFLongformerForMultipleChoice,
         TFLongformerForQuestionAnswering,
@@ -1431,17 +1458,24 @@ if TYPE_CHECKING:
         TFLongformerSelfAttention,
     )
     from .models.lxmert import (
+        LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_LXMERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LxmertConfig,
+        LxmertTokenizer,
         TFLxmertForPreTraining,
         TFLxmertMainLayer,
         TFLxmertModel,
         TFLxmertPreTrainedModel,
         TFLxmertVisualFeatureEncoder,
     )
-    from .models.marian import TFMarianMTModel
-    from .models.mbart import TFMBartForConditionalGeneration
+    from .models.marian import MarianConfig, TFMarianMTModel
+    from .models.mbart import MBartConfig, TFMBartForConditionalGeneration
+    from .models.mmbt import MMBTConfig
     from .models.mobilebert import (
+        MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MobileBertConfig,
+        MobileBertTokenizer,
         TFMobileBertForMaskedLM,
         TFMobileBertForMultipleChoice,
         TFMobileBertForNextSentencePrediction,
@@ -1454,7 +1488,10 @@ if TYPE_CHECKING:
         TFMobileBertPreTrainedModel,
     )
     from .models.mpnet import (
+        MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
+        MPNetConfig,
+        MPNetTokenizer,
         TFMPNetForMaskedLM,
         TFMPNetForMultipleChoice,
         TFMPNetForQuestionAnswering,
@@ -1464,9 +1501,12 @@ if TYPE_CHECKING:
         TFMPNetModel,
         TFMPNetPreTrainedModel,
     )
-    from .models.mt5 import TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
+    from .models.mt5 import MT5Config, TFMT5EncoderModel, TFMT5ForConditionalGeneration, TFMT5Model
     from .models.openai import (
+        OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_OPENAI_GPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+        OpenAIGPTConfig,
+        OpenAIGPTTokenizer,
         TFOpenAIGPTDoubleHeadsModel,
         TFOpenAIGPTForSequenceClassification,
         TFOpenAIGPTLMHeadModel,
@@ -1474,9 +1514,17 @@ if TYPE_CHECKING:
         TFOpenAIGPTModel,
         TFOpenAIGPTPreTrainedModel,
     )
-    from .models.pegasus import TFPegasusForConditionalGeneration
+    from .models.pegasus import PegasusConfig, TFPegasusForConditionalGeneration
+    from .models.phobert import PhobertTokenizer
+    from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
+    from .models.rag import RagConfig, RagRetriever, RagTokenizer
+    from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import (
+        ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+        RobertaConfig,
+        RobertaTokenizer,
         TFRobertaForMaskedLM,
         TFRobertaForMultipleChoice,
         TFRobertaForQuestionAnswering,
@@ -1486,42 +1534,16 @@ if TYPE_CHECKING:
         TFRobertaModel,
         TFRobertaPreTrainedModel,
     )
+    from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import (
+        T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
+        T5Config,
         TFT5EncoderModel,
         TFT5ForConditionalGeneration,
         TFT5Model,
         TFT5PreTrainedModel,
     )
-    from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
-    from .models.encoder_decoder import EncoderDecoderConfig
-    from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
-    from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
-    from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
-    from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
-    from .models.herbert import HerbertTokenizer
-    from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
-    from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
-    from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
-    from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
-    from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
-    from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config, M2M100Tokenizer
-    from .models.marian import MarianConfig
-    from .models.mbart import MBartConfig
-    from .models.mmbt import MMBTConfig
-    from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
-    from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
-    from .models.mt5 import MT5Config
-    from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
-    from .models.pegasus import PegasusConfig
-    from .models.phobert import PhobertTokenizer
-    from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
-    from .models.rag import RagConfig, RagRetriever, RagTokenizer
-    from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
-    from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
-    from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
-    from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.transfo_xl import (
         TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -2115,6 +2137,15 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_utils import tf_top_k_top_p_filtering
+        from .modeling_tf_layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMMainLayer,
+            TFLayoutLMModel,
+            TFLayoutLMPreTrainedModel,
+        )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

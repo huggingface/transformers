@@ -219,7 +219,7 @@ MODEL_CLASSES = {
         RobertaForMaskedLM,
         ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     ),
-     "layoutlm": (
+    "layoutlm": (
         LayoutLMConfig,
         TFLayoutLMForMaskedLM,
         LayoutLMForMaskedLM,

@@ -74,7 +74,6 @@ if TYPE_CHECKING:
             TFLayoutLMForMaskedLM,
             TFLayoutLMForSequenceClassification,
             TFLayoutLMForTokenClassification,
-            TFLayoutLMForSequenceClassification,
             TFLayoutLMMainLayer,
             TFLayoutLMModel,
             TFLayoutLMPreTrainedModel,

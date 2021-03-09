@@ -29,17 +29,13 @@ from ...modeling_tf_outputs import (
     TFMaskedLMOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
-    TFSequenceClassifierOutput,
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
-    TFPreTrainedModel,
     TFTokenClassificationLoss,
-    TFSequenceClassificationLoss,
-    TFModelInputType,
     get_initializer,
     input_processing,
     keras_serializable,
@@ -148,7 +144,9 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         Returns:
             final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        assert not (input_ids is None and inputs_embeds is None)
+        assert not (
+            input_ids is None and inputs_embeds is None
+        ), "The `input_ids` and `inputs_emneds` arguments  can not both be None"
 
         if input_ids is not None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
