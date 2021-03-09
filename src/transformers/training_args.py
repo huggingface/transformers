@@ -260,7 +260,7 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for :obj:`False` and :obj:`["simple"]` for :obj:`True`.
-        deepspeed (:obj:`str`, :obj:`dict`, `optional`):
+        deepspeed (:obj:`str` or :obj:`dict`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             ``ds_config.json``) or an already loaded json file as a :obj:`dict`"

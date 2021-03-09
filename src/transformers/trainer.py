@@ -612,7 +612,7 @@ class Trainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
-        Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
+        Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer` and/or :obj:`create_scheduler`) in a subclass.
         """
         self.create_optimizer()
         self.create_scheduler(num_training_steps)
@@ -658,7 +658,7 @@ class Trainer:
 
     def create_scheduler(self, num_training_steps: int):
         """
-        Setup the scheduler. The optmizer of the trainer must have been set up.
+        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
 
         Args:
             num_training_steps (int): The number of training steps to do.
