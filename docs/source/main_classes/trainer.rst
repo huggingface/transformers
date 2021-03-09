@@ -31,7 +31,10 @@ the above features. To inject custom behavior you can subclass them and override
 - **get_test_dataloader**/**get_test_tfdataset** -- Creates the test DataLoader (PyTorch) or TF Dataset.
 - **log** -- Logs information on the various objects watching training.
 - **create_optimizer_and_scheduler** -- Sets up the optimizer and learning rate scheduler if they were not passed at
-  init.
+  init. Note, that you can also subclass or override the ``create_optimizer`` and ``create_scheduler`` methods
+  separately.
+- **create_optimizer** -- Sets up the optimizer if it wasn't passed at init.
+- **create_scheduler** -- Sets up the learning rate scheduler if it wasn't passed at init.
 - **compute_loss** - Computes the loss on a batch of training inputs.
 - **training_step** -- Performs a training step.
 - **prediction_step** -- Performs an evaluation/test step.
