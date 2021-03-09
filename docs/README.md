@@ -296,3 +296,5 @@ This tells you which characters have already been assigned for each level.
 So using this particular example's output -- if your current section's header uses `=` as its underline character, you now know you're at level 4, and if you want to add a sub-section header you know you want `"` as it'd level 5.
 
 If you needed to add yet another sub-level, then pick a character that is not used already. That is you must pick a character that is not in the output of that script.
+
+Here is the full list of characters that can be used in this context: `= - ` : ' " ~ ^ _ * + # < >`
