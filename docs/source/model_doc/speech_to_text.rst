@@ -89,6 +89,9 @@ before importing the extractor or processor.
         >>> translation = processor.batch_decode(generated_ids)
 
 
+See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look for `Speech2Text` checkpoints.
+
+
 Speech2TextConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
