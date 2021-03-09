@@ -37,7 +37,7 @@ SequenceFeatureExtractor
 ImageFeatureExtractor
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.SequenceFeatureExtractor
+.. autoclass:: transformers.ImageFeatureExtractor
     :members: 
 
 
