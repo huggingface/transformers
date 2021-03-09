@@ -141,7 +141,6 @@ class TrainerCallbackTest(unittest.TestCase):
 
     def test_init_callback(self):
         trainer = self.get_trainer()
-        print(trainer.callback_handler.callbacks)
         expected_callbacks = DEFAULT_CALLBACKS.copy() + [ProgressCallback]
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
