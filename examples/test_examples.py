@@ -284,7 +284,7 @@ class ExamplesTests(TestCasePlus):
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_summarization.py
+            run_sum.py
             --model_name_or_path t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
