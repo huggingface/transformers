@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_utils import BatchFeature
 from ...file_utils import PaddingStrategy, TensorType
 from ...utils import logging
 
@@ -28,7 +29,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
+class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2 feature extractor.
 

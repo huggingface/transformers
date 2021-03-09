@@ -14,16 +14,24 @@
 Feature Extractor
 -----------------------------------------------------------------------------------------------------------------------
 
-A feature extractor is in charge of preparing read-in audio files for a speech model. This includes feature extraction,
-such as processing audio files to, *e.g.*, Log-Mel Spectrogram features, but also padding, normalization, and
-conversion to Numpy, PyTorch, and TensorFlow tensors.
+A feature extractor is in charge of preparing input features for a multi-modal model. This includes feature extraction
+from sequences, *e.g.*, pre-processing audio files to Log-Mel Spectrogram features, feature extraction from images
+*e.g.* cropping image image files, but also padding, normalization, and conversion to Numpy, PyTorch, and TensorFlow
+tensors.
 
 
-PreTrainedFeatureExtractor
+FeatureExtractionMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.PreTrainedFeatureExtractor
-    :members: from_pretrained, save_pretrained, pad
+.. autoclass:: transformers.feature_extraction_utils.FeatureExtractionMixin
+    :members: from_pretrained, save_pretrained
+
+
+SequenceFeatureExtractor
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.SequenceFeatureExtractor
+    :members: pad
 
 
 BatchFeature

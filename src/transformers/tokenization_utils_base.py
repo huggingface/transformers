@@ -727,8 +727,7 @@ class BatchEncoding(UserDict):
             device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
 
         Returns:
-            :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
-            modification.
+            :class:`~transformers.BatchEncoding`: The same instance after modification.
         """
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
