@@ -370,14 +370,16 @@ class GenerationMixin:
         """
         return logits
 
-    def _prepare_input_ids_for_generation(self, bos_token_id: int) -> torch.LongTensor:
-        if bos_token_id is None:
-            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-        return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
-
-    def _prepare_dummy_input_ids(self, encoder_outputs: ModelOutput) -> torch.LongTensor:
-        shape = encoder_outputs.last_hidden_state.size()[:-1]
-        return torch.ones(shape, dtype=torch.long, device=self.device) * -100
+    def _prepare_input_ids_for_generation(
+            self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+    ) -> torch.LongTensor:
+        if encoder_outputs is None:
+            if bos_token_id is None:
+                raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
+            return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
+        else:
+            shape = encoder_outputs.last_hidden_state.size()[:-1]
+            return torch.ones(shape, dtype=torch.long, device=self.device) * -100
 
     def _prepare_attention_mask_for_generation(
         self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
@@ -871,13 +873,9 @@ class GenerationMixin:
         model_kwargs["output_attentions"] = output_attentions
         model_kwargs["output_hidden_states"] = output_hidden_states
 
-        if encoder_outputs is not None:
-            assert input_ids is None, "`input_ids` is unnecessary if passing `encoder_outputs`"
-            input_ids = self._prepare_dummy_input_ids(encoder_outputs)
-
         if input_ids is None:
-            # init `input_ids` with bos_token_id
-            input_ids = self._prepare_input_ids_for_generation(bos_token_id)
+            # init `input_ids` with bos_token_id or encoder_outputs
+            input_ids = self._prepare_input_ids_for_generation(bos_token_id, encoder_outputs)
 
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
