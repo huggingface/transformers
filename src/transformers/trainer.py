@@ -80,6 +80,7 @@ from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
+    get_parameter_names,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -613,14 +614,15 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            no_decay = ["bias", "LayerNorm.weight"]
+            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
                     "weight_decay": 0.0,
                 },
             ]
@@ -737,6 +739,10 @@ class Trainer:
         # already initialized its own DDP and AMP
         if self.deepspeed:
             return self.deepspeed
+
+        # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
+        if unwrap_model(model) is not model:
+            return model
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
