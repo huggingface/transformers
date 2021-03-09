@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from .feature_extraction_common_utils import BatchFeature, FeatureExtractionSavingUtilsMixin
+from .feature_extraction_utils import BatchFeature, FeatureExtractionSavingUtilsMixin
 from .file_utils import (
     PaddingStrategy,
     TensorType,

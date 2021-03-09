@@ -23,7 +23,7 @@ tensors.
 FeatureExtractionSavingUtilsMixin
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.feature_extraction_common_utils.FeatureExtractionSavingUtilsMixin
+.. autoclass:: transformers.feature_extraction_utils.FeatureExtractionSavingUtilsMixin
     :members: from_pretrained, save_pretrained
 
 

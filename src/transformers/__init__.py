@@ -1250,7 +1250,7 @@ if TYPE_CHECKING:
     )
 
     # Feature Extractor
-    from .feature_extraction_common_utils import BatchFeature, SequenceFeatureExtractor
+    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor
 
     # Files and general utilities
     from .file_utils import (

@@ -202,7 +202,7 @@ class FeatureExtractionSavingUtilsMixin:
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
     ) -> PreTrainedFeatureExtractor:
         r"""
-        Instantiate a :class:`~transformers.SequenceFeatureExtractor` (or a derived class) from a pretrained feature
+        Instantiate a type of :class:`~transformers.feature_extraction_common:class:`~transformers.SequenceFeatureExtractor` (or a derived class) from a pretrained feature
         extractor.
 
         Args:
