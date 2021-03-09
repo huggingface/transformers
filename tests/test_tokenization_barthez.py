@@ -17,13 +17,14 @@
 import unittest
 
 from transformers import BarthezTokenizer, BarthezTokenizerFast, BatchEncoding
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
 @require_sentencepiece
+@slow
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BarthezTokenizer
