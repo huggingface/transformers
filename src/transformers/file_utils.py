@@ -350,7 +350,7 @@ def is_sagemaker_distributed_available():
 
 
 def is_training_run_on_sagemaker():
-    return ("SAGEMAKER_JOB_NAME" in os.environ and not DISABLE_TELEMETRY)
+    return "SAGEMAKER_JOB_NAME" in os.environ and not DISABLE_TELEMETRY
 
 
 def is_soundfile_availble():
