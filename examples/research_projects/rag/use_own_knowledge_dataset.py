@@ -78,6 +78,13 @@ def main(
 
     # Then split the documents into passages of 100 words
     dataset = dataset.map(split_documents, batched=True, num_proc=processing_args.num_proc)
+    
+    #new save the object to disk
+    dataset.save_to_disk('/hpc/gsir059/MY-Test/all_data/covid-f/csv/')
+    
+    
+    #load this object
+    new_dataset_object=load_from_disk('/hpc/gsir059/MY-Test/all_data/covid-f/csv/')
 
     # And compute the embeddings
     ctx_encoder = DPRContextEncoder.from_pretrained(rag_example_args.dpr_ctx_encoder_model_name).to(device=device)
@@ -85,7 +92,7 @@ def main(
     new_features = Features(
         {"text": Value("string"), "title": Value("string"), "embeddings": Sequence(Value("float32"))}
     )  # optional, save as float32 instead of float64 to save space
-    dataset = dataset.map(
+    new_dataset_object = new_dataset_object.map(
         partial(embed, ctx_encoder=ctx_encoder, ctx_tokenizer=ctx_tokenizer),
         batched=True,
         batch_size=processing_args.batch_size,
@@ -94,9 +101,12 @@ def main(
 
     # And finally save your dataset
     passages_path = os.path.join(rag_example_args.output_dir, "my_knowledge_dataset")
-    dataset.save_to_disk(passages_path)
+    new_dataset_object.save_to_disk(passages_path)
     # from datasets import load_from_disk
     # dataset = load_from_disk(passages_path)  # to reload the dataset
+    
+    #now you can see both dataset objects have updated and arrow files is something cache...... 
+    #####################################################
 
     ######################################
     logger.info("Step 2 - Index the dataset")
