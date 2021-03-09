@@ -350,7 +350,7 @@ def is_sagemaker_distributed_available():
 
 
 def is_training_run_on_sagemaker():
-    return True if "SAGEMAKER_JOB_NAME" in os.environ and os.environ["DISABLE_TELEMETRY"] is False else False
+    return ("SAGEMAKER_JOB_NAME" in os.environ and not DISABLE_TELEMETRY)
 
 
 def is_soundfile_availble():
@@ -1195,9 +1195,9 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     if is_tf_available():
         ua += f"; tensorflow/{_tf_version}"
     if is_training_run_on_sagemaker():
-        ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in define_sagemaker_information().items())
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
     if isinstance(user_agent, dict):
-        ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
         ua += "; " + user_agent
     return ua
