@@ -91,7 +91,7 @@ class TrainerCallbackTest(unittest.TestCase):
         config = RegressionModelConfig(a=a, b=b)
         model = RegressionPreTrainedModel(config)
 
-        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, **kwargs)
+        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, report_to=[], **kwargs)
         return Trainer(
             model,
             args,
@@ -141,6 +141,7 @@ class TrainerCallbackTest(unittest.TestCase):
 
     def test_init_callback(self):
         trainer = self.get_trainer()
+        print(trainer.callback_handler.callbacks)
         expected_callbacks = DEFAULT_CALLBACKS.copy() + [ProgressCallback]
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
