@@ -58,6 +58,10 @@ def _config_zero_init(config):
     return configs_no_init
 
 
+TINY_T5 = "patrickvonplaten/t5-tiny-random"
+TINY_BERT = "lysandre/tiny-bert-random"
+
+
 @require_torch
 class ModelTesterMixin:
 
@@ -1284,3 +1288,9 @@ class ModelUtilsTest(unittest.TestCase):
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
+
+    def test_model_from_pretrained_with_different_pretrained_model_name(self):
+        model = BertModel.from_pretrained(TINY_BERT)
+        self.assertIsNotNone(model)
+
+        self.assertRaises(AssertionError, BertModel.from_pretrained, TINY_T5)
