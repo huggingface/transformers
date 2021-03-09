@@ -822,8 +822,8 @@ Translation
 -----------------------------------------------------------------------------------------------------------------------
 
 Translation is the task of translating a text from one language to another. If you would like to fine-tune a model on a
-translation task, you may leverage the `run_summarization.py
-<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_summarization.py>`__ script.
+translation task, you may leverage the `run_translation.py
+<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_translation.py>`__ script.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a
