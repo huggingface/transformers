@@ -257,22 +257,15 @@ class ImageFeatureExtractor(FeatureExtractionMixin):
         needs_to_be_padded = padding_strategy != PaddingStrategy.DO_NOT_PAD and len(required_input) != max_resolution
 
         if needs_to_be_padded:
+            # (Niels) to be updated since we are in 2D
             difference = max_resolution - len(required_input)
             padding_vector = self.feature_size * [self.padding_value] if self.feature_size > 1 else self.padding_value
-            if self.padding_side == "right":
-                if return_attention_mask:
-                    processed_features["attention_mask"] = [1] * len(required_input) + [0] * difference
-                processed_features[self.model_input_names[0]] = required_input + [
-                    padding_vector for _ in range(difference)
-                ]
-            elif self.padding_side == "left":
-                if return_attention_mask:
-                    processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
-                processed_features[self.model_input_names[0]] = [
-                    padding_vector for _ in range(difference)
-                ] + required_input
-            else:
-                raise ValueError("Invalid padding strategy:" + str(self.padding_side))
+            # (Niels) removed the padding_side attribute since we are in 2D
+            if return_attention_mask:
+                processed_features["attention_mask"] = [0] * difference + [1] * len(required_input)
+            processed_features[self.model_input_names[0]] = [
+                padding_vector for _ in range(difference)
+            ] + required_input
         elif return_attention_mask and "attention_mask" not in processed_features:
             processed_features["attention_mask"] = [1] * len(required_input)
 
