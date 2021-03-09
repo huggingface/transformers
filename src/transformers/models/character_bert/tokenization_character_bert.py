@@ -138,6 +138,14 @@ class CharacterBertTokenizer(PreTrainedTokenizer):
         # This is responsible for converting tokens into character ids
         self._mapper = CharacterMapper(max_word_length=max_word_length)
 
+    def __repr__(self) -> str:
+        # NOTE: we overwrite this because CharacterBERT does not have self.vocab_size
+        return (
+            f"CharacterBertTokenizer(name_or_path='{self.name_or_path}', "
+            f"model_max_len={self.model_max_length}, is_fast={self.is_fast}, "
+            f"padding_side='{self.padding_side}', special_tokens={self.special_tokens_map_extended})"
+        )
+
     @property
     def do_lower_case(self):
         return self.basic_tokenizer.do_lower_case
