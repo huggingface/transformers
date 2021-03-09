@@ -210,7 +210,10 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
             array = np.transpose(array)
         try:
             if len(array.shape) > len(pointer.shape) and math.prod(array.shape) == math.prod(pointer.shape):
-                array = array.reshape(pointer.shape)
+                if txt_name.endswith("attention/self/key/kernel") or txt_name.endswith("attention/self/query/kernel") or txt_name.endswith("attention/self/value/kernel"):
+                    array = array.transpose(1,0,2).reshape(pointer.shape)
+                else:
+                    array = array.reshape(pointer.shape)
 
             assert (
                 pointer.shape == array.shape
