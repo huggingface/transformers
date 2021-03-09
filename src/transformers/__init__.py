@@ -126,6 +126,9 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.vit": [
+        "ViTFeatureExtractor",
+    ],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -251,6 +254,7 @@ _import_structure = {
         "SpecialTokensMixin",
         "TokenSpan",
     ],
+    "feature_extraction_image_utils": ["ImageFeatureExtractor", "BatchFeature"],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor", "BatchFeature"],
     "trainer_callback": [
         "DefaultFlowCallback",
@@ -1272,7 +1276,7 @@ if TYPE_CHECKING:
     )
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor
+    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor, ImageFeatureExtractor
 
     # Files and general utilities
     from .file_utils import (
@@ -1407,6 +1411,9 @@ if TYPE_CHECKING:
         TransfoXLConfig,
         TransfoXLCorpus,
         TransfoXLTokenizer,
+    )
+    from .models.vit import(
+        ViTFeatureExtractor,
     )
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
