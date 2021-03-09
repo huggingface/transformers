@@ -71,6 +71,8 @@ class M2M100ModelTester:
         hidden_act="relu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
         max_position_embeddings=20,
         eos_token_id=2,
         pad_token_id=1,
@@ -89,6 +91,8 @@ class M2M100ModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
         self.max_position_embeddings = max_position_embeddings
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -120,6 +124,8 @@ class M2M100ModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
+            encoder_layerdrop=self.encoder_layerdrop,
+            decoder_layerdrop=self.decoder_layerdrop,
             max_position_embeddings=self.max_position_embeddings,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
