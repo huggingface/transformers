@@ -53,7 +53,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         num_mel_bins (:obj:`int`, defaults to 80):
             Number of triangular Mel-frequency bins
         padding_value (:obj:`float`, defaults to 0.0):
-            The value that is used to fill the padding values.
+            The value that is used to fill the padding vectors.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
         norm_means (:obj:`bool`, `optional`, defaults to :obj:`True`):

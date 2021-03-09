@@ -92,7 +92,7 @@ class Speech2TextConfig(PretrainedConfig):
         input_feat_per_channel (:obj:`int`, `optional`, defaults to 80):
             An integer specifying the size of feature vector. This is also the dimentions of log-mel filter-bank
             features.
-        input_channels (:obj:`int`, `optionl`, defaults to 1):
+        input_channels (:obj:`int`, `optional`, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
 
         Example::

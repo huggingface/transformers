@@ -23,14 +23,14 @@ The Speech2Text model was proposed in `fairseq S2T: Fast Speech-to-Text Modeling
 Inference
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-`Speech2Text` is a speech model that accepts a float tensor of log-mel filter-bank features extracted from the speech
-signal. It's a transformer based seq2seq model, so the transcripts/translations are generated autoregressively. The
-`generate` method can be used for inference.
+Speech2Text is a speech model that accepts a float tensor of log-mel filter-bank features extracted from the speech
+signal. It's a transformer-based seq2seq model, so the transcripts/translations are generated autoregressively. The
+:obj:`generate()` method can be used for inference.
 
-The :class:`transformers.Speech2TextFeatureExtractor` class is responsible for extracting the log-mel filter-bank
-features. The :class:`transformers.Speech2Textprocessor` wraps the processor and tokenizer objects and is used to
-extract the features and decode the text. The feature extractor depends on `torchaudio` so make sure to install it
-before importing the extractor or processor.
+The :class:`~transformers.Speech2TextFeatureExtractor` class is responsible for extracting the log-mel filter-bank
+features. The :class:`~transformers.Speech2TextProcessor` wraps :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer` into a single instance to both extract the input features and decode the predicted token ids
+extract the features and decode the text. The feature extractor depends on :obj:`torchaudio` so make sure to install it
+before importing it.
 
 - ASR and Speech Translation
 
@@ -62,7 +62,7 @@ before importing the extractor or processor.
 
     For multilingual speech translation models, :obj:`eos_token_id` is used as the :obj:`decoder_start_token_id` and
     the target language id is forced as the first generated token. To force the target language id as the first
-    generated token, pass the `forced_bos_token_id` parameter to the `generate` method. The following example shows how
+    generated token, pass the :obj:`forced_bos_token_id` parameter to the :obj:`generate()` method. The following example shows how
     to transate English speech to French text using the `facebook/s2t-medium-mustc-multilingual-st` checkpoint.
 
 .. code-block::
@@ -89,7 +89,7 @@ before importing the extractor or processor.
         >>> translation = processor.batch_decode(generated_ids)
 
 
-See the [model hub](https://huggingface.co/models?filter=speech_to_text) to look for `Speech2Text` checkpoints.
+See the `model hub <https://huggingface.co/models?filter=speech_to_text>`__ to look for Speech2Text checkpoints.
 
 
 Speech2TextConfig

@@ -28,7 +28,7 @@ class Speech2TextProcessor:
 
     :class:`~transformers.Speech2TextProcessor` offers all the functionalities of
     :class:`~transformers.Speech2TextFeatureExtractor` and :class:`~transformers.Speech2TextTokenizer`. See the
-    docstring of :meth:`~transformers.Speech2TextProcessor.__call__` and
+    :meth:`~transformers.Speech2TextProcessor.__call__` and
     :meth:`~transformers.Speech2TextProcessor.decode` for more information.
 
     Args:
@@ -55,7 +55,7 @@ class Speech2TextProcessor:
 
     def save_pretrained(self, save_directory):
         """
-        Save a Speech2Text feature_extractor object and Speech2Text tokenizer object to the directory
+        Save a Speech2Text feature extractor object and Speech2Text tokenizer object to the directory
         ``save_directory``, so that it can be re-loaded using the
         :func:`~transformers.Speech2TextProcessor.from_pretrained` class method.
 
