@@ -26,6 +26,7 @@ from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
+import langcodes as lc
 
 import transformers
 from transformers import (
@@ -216,6 +217,15 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # @patrickvonplaten|@stas00 picked this up from
+    #   https://github.com/huggingface/transformers/issues/10164#issuecomment-779293173
+    #   https://github.com/huggingface/transformers/pull/10611#discussion_r590595798
+    # but unclear for me if I should restrict like this or just `.startswith("t5")`?
+    if data_args.source_prefix is None and model_args.model_name_or_path in ["t5-small", "t5-base", "t5-large", "t5-3b", "t5-11b"]:
+        src = lc.Language(data_args.source_lang).display_name()
+        tgt = lc.Language(data_args.target_lang).display_name()
+        data_args.source_prefix = f"translate {src} to {tgt}: "
 
     # Detecting last checkpoint.
     last_checkpoint = None
