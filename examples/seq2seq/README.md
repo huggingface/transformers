@@ -180,7 +180,7 @@ python examples/seq2seq/run_trans.py \
 
 Note, that depending on the used model additional language-specific command-line arguments are sometimes required. Specifically:
 
-* MBart models require different `{source,target}_lang` values, e.g. in place of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. The full MBart specification for language codes can be looked up [here](https://huggingface.co/facebook/mbart-large-cc25)
+* MBart models require different `--{source,target}_lang` values, e.g. in place of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. The full MBart specification for language codes can be looked up [here](https://huggingface.co/facebook/mbart-large-cc25)
 * T5 requires:
 
    ```
