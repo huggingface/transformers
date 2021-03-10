@@ -83,8 +83,8 @@ class Speech2TextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         num_conv_layers (:obj:`int`, `optional`, defaults to 2):
             Number of 1D convolutional layers in the conv module.
-        conv_kernel_sizes (:obj:`List[int]`, `optional`, defaults to :obj:`[5, 5]`):
-            A list of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
+        conv_kernel_sizes (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 5)`):
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
             of `conv_kernel_sizes` has to match `num_conv_layers`.
         conv_channels (:obj:`int`, `optional`, defaults to 1024):
             An integer defining the number of output channels of each convolution layers except the final one in the
@@ -140,7 +140,7 @@ class Speech2TextConfig(PretrainedConfig):
         max_source_positions=6000,
         max_target_positions=1024,
         num_conv_layers=2,
-        conv_kernel_sizes=[5, 5],
+        conv_kernel_sizes=(5, 5),
         conv_channels=1024,
         input_feat_per_channel=80,
         input_channels=1,
@@ -178,7 +178,7 @@ class Speech2TextConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
         self.num_conv_layers = num_conv_layers
-        self.conv_kernel_sizes = conv_kernel_sizes
+        self.conv_kernel_sizes = list(conv_kernel_sizes)
         self.conv_channels = conv_channels
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
