@@ -65,6 +65,13 @@ test:
 test-examples:
 	python -m pytest -n auto --dist=loadfile -s -v ./examples/
 
+# Run tests for SageMaker DLC release
+
+test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
+	# TEST_SAGEMAKER=True python -m pytest -n auto --dist=loadfile -s -v ./tests/sagemaker
+	TEST_SAGEMAKER=True python -m pytest -s -v ./tests/sagemaker
+
+
 # Check that docs can build
 
 docs:
