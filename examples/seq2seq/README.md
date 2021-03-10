@@ -146,7 +146,6 @@ python examples/seq2seq/run_trans.py \
     --target_lang ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
-    --source_prefix "translate English to Romanian: " \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
@@ -163,8 +162,6 @@ python examples/seq2seq/run_trans.py \
     --model_name_or_path facebook/mbart-large-en-ro  \
     --do_train \
     --do_eval \
-    --source_lang en_XX \
-    --target_lang ro_RO 
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --source_lang en_XX \
@@ -181,11 +178,7 @@ python examples/seq2seq/run_trans.py \
 Note, that depending on the used model additional language-specific command-line arguments are sometimes required. Specifically:
 
 * MBart models require different `--{source,target}_lang` values, e.g. in place of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. The full MBart specification for language codes can be looked up [here](https://huggingface.co/facebook/mbart-large-cc25)
-* T5 requires:
-
-   ```
-       --source_prefix "translate English to Romanian: "
-   ```
+* T5 models can use a `--source_prefix` argument to override the otherwise automated prefix of the form `translate {source_lang} to {target_lang}` for `run_trans.py` and `summarize: ` for `run_sum.py`
 
 Also, if you switch to a different language pair, make sure to adjust the source and target values in all command line arguments.
 
@@ -201,7 +194,6 @@ python examples/seq2seq/run_trans.py \
     --target_lang ro \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
-    --source_prefix "translate English to Romanian: " \
     --train_file path_to_jsonlines_file \
     --validation_file path_to_jsonlines_file \
     --output_dir /tmp/tst-translation \
@@ -231,7 +223,6 @@ python examples/seq2seq/run_trans.py \
     --source_lang en \
     --target_lang de \
     --dataset_name wmt14-en-de-pre-processed \
-    --source_prefix "translate English to German: " \
     --output_dir /tmp/tst-translation \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
