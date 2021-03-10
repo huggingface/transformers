@@ -384,9 +384,10 @@ class PretrainedConfig(object):
 
         """
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        assert (
-            config_dict["model_type"] == cls.model_type
-        ), f"You tried to initiate a model of type '{cls.model_type}' with a pretrained model of type '{config_dict['model_type']}'"
+        if config_dict.get("model_type", False) and hasattr(cls, "model_type"):
+            assert (
+                config_dict["model_type"] == cls.model_type
+            ), f"You tried to initiate a model of type '{cls.model_type}' with a pretrained model of type '{config_dict['model_type']}'"
 
         return cls.from_dict(config_dict, **kwargs)
 
