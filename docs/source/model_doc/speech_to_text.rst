@@ -17,7 +17,15 @@ Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The Speech2Text model was proposed in `fairseq S2T: Fast Speech-to-Text Modeling with fairseq
-<https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
+<https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino. It's a
+transformer-based seq2seq (encoder-decoder) model designed for end-to-end Automatic Speech Recognition (ASR) and Speech
+Translation (ST). It uses a convolutional downsampler to reduce the length of speech inputs by 3/4th before they are
+fed into the encoder. The model is trained with standard autoregressive cross-entropy loss and generates the
+transcripts/translations autoregressively. Speech2Text has been fine-tuned on several datasets for ASR and ST:
+`LibriSpeech <http://www.openslr.org/12>`__, `CoVoST 2 <https://github.com/facebookresearch/covost>`__, `MuST-C
+<https://ict.fbk.eu/must-c/>`__.
+
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/examples/speech_to_text>`__.
 
 
 Inference
@@ -30,8 +38,13 @@ signal. It's a transformer-based seq2seq model, so the transcripts/translations 
 The :class:`~transformers.Speech2TextFeatureExtractor` class is responsible for extracting the log-mel filter-bank
 features. The :class:`~transformers.Speech2TextProcessor` wraps :class:`~transformers.Speech2TextFeatureExtractor` and
 :class:`~transformers.Speech2TextTokenizer` into a single instance to both extract the input features and decode the
-predicted token ids extract the features and decode the text. The feature extractor depends on :obj:`torchaudio` so
-make sure to install it before importing it.
+predicted token ids.
+
+The feature extractor depends on :obj:`torchaudio` and the tokenizer depends on :obj:`sentencepiece` so be sure to
+install those packages before running the examples. You could either install those as extra speech dependancies with
+``pip install transformers"[speech, sentencepiece]"`` or install the packages seperatly with ``pip install torchaudio
+sentencepiece``.
+
 
 - ASR and Speech Translation
 
