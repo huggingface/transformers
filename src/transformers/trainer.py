@@ -98,6 +98,7 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    denumpify_detensorize,
     get_last_checkpoint,
     set_seed,
     speed_metrics,
@@ -1823,6 +1824,9 @@ class Trainer:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
+
+        # To be JSON-serializable, we need to remove numpy types or zero-d tensors
+        metrics = denumpify_detensorize(metrics)
 
         if eval_loss is not None:
             metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()
