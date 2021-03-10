@@ -19,10 +19,12 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 import collections
 import gc
 import inspect
+import logging
 import math
 import os
 import re
 import shutil
+import sys
 import time
 import warnings
 from pathlib import Path
@@ -58,6 +60,7 @@ from .file_utils import (
     is_datasets_available,
     is_in_notebook,
     is_sagemaker_distributed_available,
+    is_training_run_on_sagemaker,
     is_torch_tpu_available,
 )
 from .modeling_utils import PreTrainedModel, unwrap_model
@@ -103,7 +106,7 @@ from .trainer_utils import (
     speed_metrics,
 )
 from .training_args import ParallelMode, TrainingArguments
-from .utils import logging
+from .utils import logging as hf_logging
 from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
@@ -149,10 +152,14 @@ if is_sagemaker_distributed_available():
 else:
     import torch.distributed as dist
 
+if is_training_run_on_sagemaker():
+   hf_logging.addHandler(logging.StreamHandler(sys.stdout))
+
+
 if TYPE_CHECKING:
     import optuna
 
-logger = logging.get_logger(__name__)
+logger = hf_logging.get_logger(__name__)
 
 
 class Trainer:
