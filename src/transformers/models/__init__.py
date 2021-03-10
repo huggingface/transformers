@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    visual_bert,
     albert,
     auto,
     bart,
