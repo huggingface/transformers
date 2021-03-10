@@ -23,8 +23,10 @@ import math
 import os
 import re
 import shutil
+import sys
 import time
 import warnings
+from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -59,6 +61,7 @@ from .file_utils import (
     is_in_notebook,
     is_sagemaker_distributed_available,
     is_torch_tpu_available,
+    is_training_run_on_sagemaker,
 )
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
@@ -148,6 +151,10 @@ if is_sagemaker_distributed_available():
     from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
 else:
     import torch.distributed as dist
+
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
+
 
 if TYPE_CHECKING:
     import optuna
