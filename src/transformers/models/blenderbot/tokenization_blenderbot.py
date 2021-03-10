@@ -29,9 +29,18 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
-    # "tokenizer_config_file": "tokenizer_config.json",
+    "tokenizer_config_file": "tokenizer_config.json",
 }
-CKPT_3B = "facebook/blenderbot-3B"
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
+    "merges_file": {"facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
+    "tokenizer_config_file": {
+        "facebook/blenderbot-3B": "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 
 class BlenderbotTokenizer(RobertaTokenizer):
@@ -45,19 +54,9 @@ class BlenderbotTokenizer(RobertaTokenizer):
     Refer to superclass :class:`~transformers.RobertaTokenizer` for usage examples and documentation concerning
     parameters.
     """
-    vocab_files_names = {
-        "vocab_file": "vocab.json",
-        "merges_file": "merges.txt",
-        "tokenizer_config_file": "tokenizer_config.json",
-    }
-    pretrained_vocab_files_map = {
-        "vocab_file": {CKPT_3B: "https://huggingface.co/facebook/blenderbot-3B/resolve/main/vocab.json"},
-        "merges_file": {CKPT_3B: "https://huggingface.co/facebook/blenderbot-3B/resolve/main/merges.txt"},
-        "tokenizer_config_file": {
-            CKPT_3B: "https://huggingface.co/facebook/blenderbot-3B/resolve/main/tokenizer_config.json"
-        },
-    }
-    max_model_input_sizes = {"facebook/blenderbot-3B": 128}
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: List[int] = None):
         """

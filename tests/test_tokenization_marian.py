@@ -26,7 +26,7 @@ from transformers.testing_utils import require_sentencepiece
 
 
 if is_sentencepiece_available():
-    from transformers.models.marian.tokenization_marian import save_json, vocab_files_names
+    from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -50,11 +50,11 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
-        save_json(vocab_tokens, save_dir / vocab_files_names["vocab"])
-        save_json(mock_tokenizer_config, save_dir / vocab_files_names["tokenizer_config_file"])
-        if not (save_dir / vocab_files_names["source_spm"]).exists():
-            copyfile(SAMPLE_SP, save_dir / vocab_files_names["source_spm"])
-            copyfile(SAMPLE_SP, save_dir / vocab_files_names["target_spm"])
+        save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab"])
+        save_json(mock_tokenizer_config, save_dir / VOCAB_FILES_NAMES["tokenizer_config_file"])
+        if not (save_dir / VOCAB_FILES_NAMES["source_spm"]).exists():
+            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["source_spm"])
+            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["target_spm"])
 
         tokenizer = MarianTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
