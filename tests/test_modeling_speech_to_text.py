@@ -282,6 +282,13 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_inputs_embeds(self):
         pass
 
+    # training is not supported yet
+    def test_training(self):
+        pass
+
+    def test_training_gradient_checkpointing(self):
+        pass
+
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         input_features = input_dict["input_features"]
