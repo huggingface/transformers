@@ -24,12 +24,12 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "distilbert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "distilbert-base-uncased-distilled-squad": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
-        "distilbert-base-cased": "https://huggingface.co/bert-base-cased/resolve/main/vocab.txt",
-        "distilbert-base-cased-distilled-squad": "https://huggingface.co/bert-large-cased/resolve/main/vocab.txt",
+        "distilbert-base-uncased": "https://huggingface.co/distilbert-base-uncased/resolve/main/vocab.txt",
+        "distilbert-base-uncased-distilled-squad": "https://huggingface.co/distilbert-base-uncased-distilled-squad/resolve/main/vocab.txt",
+        "distilbert-base-cased": "https://huggingface.co/distilbert-base-cased/resolve/main/vocab.txt",
+        "distilbert-base-cased-distilled-squad": "https://huggingface.co/distilbert-base-cased-distilled-squad/resolve/main/vocab.txt",
         "distilbert-base-german-cased": "https://huggingface.co/distilbert-base-german-cased/resolve/main/vocab.txt",
-        "distilbert-base-multilingual-cased": "https://huggingface.co/bert-base-multilingual-cased/resolve/main/vocab.txt",
+        "distilbert-base-multilingual-cased": "https://huggingface.co/distilbert-base-multilingual-cased/resolve/main/vocab.txt",
     }
 }
 
