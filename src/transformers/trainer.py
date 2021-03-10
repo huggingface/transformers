@@ -1776,12 +1776,7 @@ class Trainer:
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
 
-        world_size = 1
-        if is_torch_tpu_available():
-            world_size = xm.xrt_world_size()
-        elif self.args.local_rank != -1:
-            world_size = dist.get_world_size()
-        world_size = max(1, world_size)
+        world_size = max(1, self.args.world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
         if not prediction_loss_only:
