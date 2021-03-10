@@ -43,7 +43,9 @@ predicted token ids.
 The feature extractor depends on :obj:`torchaudio` and the tokenizer depends on :obj:`sentencepiece` so be sure to
 install those packages before running the examples. You could either install those as extra speech dependancies with
 ``pip install transformers"[speech, sentencepiece]"`` or install the packages seperatly with ``pip install torchaudio
-sentencepiece``.
+sentencepiece``. Also ``torchaudio`` requires the development version of the `libsndfile
+<http://www.mega-nerd.com/libsndfile/>`__ package which can be installed via a system package manager. On Ubuntu it can
+be installed as follows: ``apt install libsndfile1-dev``
 
 
 - ASR and Speech Translation
