@@ -1593,6 +1593,27 @@ class LxmertXLayer:
         requires_pytorch(self)
 
 
+M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class M2M100ForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class M2M100Model:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MarianForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -2131,6 +2152,27 @@ class RobertaForTokenClassification:
 
 
 class RobertaModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class Speech2TextForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Speech2TextModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

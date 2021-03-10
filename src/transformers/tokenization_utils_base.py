@@ -44,6 +44,7 @@ from .file_utils import (
     cached_path,
     hf_bucket_url,
     is_flax_available,
+    is_offline_mode,
     is_remote_url,
     is_tf_available,
     is_tokenizers_available,
@@ -726,8 +727,7 @@ class BatchEncoding(UserDict):
             device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
 
         Returns:
-            :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
-            modification.
+            :class:`~transformers.BatchEncoding`: The same instance after modification.
         """
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
@@ -1596,6 +1596,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         s3_models = list(cls.max_model_input_sizes.keys())
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)

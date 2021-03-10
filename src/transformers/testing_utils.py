@@ -38,6 +38,7 @@ from .file_utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_tpu_available,
+    is_torchaudio_available,
 )
 from .integrations import is_optuna_available, is_ray_available
 
@@ -195,6 +196,19 @@ def require_torch_scatter(test_case):
         return test_case
 
 
+def require_torchaudio(test_case):
+    """
+    Decorator marking a test that requires torchaudio.
+
+    These tests are skipped when torchaudio isn't installed.
+
+    """
+    if not is_torchaudio_available:
+        return unittest.skip("test requires torchaudio")(test_case)
+    else:
+        return test_case
+
+
 def require_tf(test_case):
     """
     Decorator marking a test that requires TensorFlow.
@@ -299,12 +313,6 @@ def require_torch_non_multi_gpu(test_case):
         return unittest.skip("test requires 0 or 1 GPU")(test_case)
     else:
         return test_case
-
-
-# this is a decorator identical to require_torch_non_multi_gpu, but is used as a quick band-aid to
-# allow all of examples to be run multi-gpu CI and it reminds us that tests decorated with this one
-# need to be ported and aren't so by design.
-require_torch_non_multi_gpu_but_fix_me = require_torch_non_multi_gpu
 
 
 def require_torch_tpu(test_case):
