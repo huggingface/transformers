@@ -179,12 +179,6 @@ from ..xlnet.modeling_tf_xlnet import (
     TFXLNetLMHeadModel,
     TFXLNetModel,
 )
-from ..layoutlm.modeling_tf_layoutlm import (
-    TFLayoutLMForMaskedLM,
-    TFLayoutLMForTokenClassification,
-    TFLayoutLMForSequenceClassification,
-    TFLayoutLMModel,
-)
 from .configuration_auto import (
     AlbertConfig,
     AutoConfig,
@@ -219,7 +213,6 @@ from .configuration_auto import (
     XLMRobertaConfig,
     XLNetConfig,
     replace_list_option_in_docstrings,
-    LayoutLMConfig,
 )
 
 
@@ -262,7 +255,6 @@ TF_MODEL_MAPPING = OrderedDict(
         (BlenderbotConfig, TFBlenderbotModel),
         (BlenderbotSmallConfig, TFBlenderbotSmallModel),
         (LayoutLMConfig, TFLayoutLMModel),
-
     ]
 )
 
@@ -402,7 +394,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (OpenAIGPTConfig, TFOpenAIGPTForSequenceClassification),
         (TransfoXLConfig, TFTransfoXLForSequenceClassification),
         (CTRLConfig, TFCTRLForSequenceClassification),
-        (LayoutLMConfig,TFLayoutLMForSequenceClassification),
+        (LayoutLMConfig, TFLayoutLMForSequenceClassification),
     ]
 )
 
