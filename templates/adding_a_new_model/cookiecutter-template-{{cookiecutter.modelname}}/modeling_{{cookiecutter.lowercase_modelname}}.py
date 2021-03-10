@@ -1041,6 +1041,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
             token_type_ids=None,
             position_ids=None,
             head_mask=None,
+            cross_head_mask=None,
             inputs_embeds=None,
             encoder_hidden_states=None,
             encoder_attention_mask=None,
