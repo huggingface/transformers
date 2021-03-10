@@ -85,7 +85,75 @@ Using mixed precision training usually results in 2x-speedup for training with t
 | WNLI  | Accuracy                     | 56.34       | 24            | 56.34         | 12                   |
 
 
-# Run TensorFlow 2.0 version
+## PyTorch version, no Trainer
+
+Based on the script [`run_glue_no_trainer.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_glue_no_trainer.py).
+
+Like `run_glue.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on a
+text classification task, either a GLUE task or your own data in a csv or a JSON file. The main difference is that this
+script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
+
+It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
+or the dataloaders directly in the script) but still run in a distributed setup, on TPU and supports mixed precision by
+the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
+after installing it:
+
+```bash
+pip install accelerate
+```
+
+then
+
+```bash
+export TASK_NAME=mrpc
+
+python run_glue_no_trainer.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+You can then use your usual launchers to run in it in a distributed environment, but the easiest way is to run
+
+```bash
+accelerate config
+```
+
+and reply to the questions asked. Then
+
+```bash
+accelerate test
+```
+
+that will check everything is ready for training. Finally, you cna launch training with
+
+```bash
+export TASK_NAME=mrpc
+
+accelerate launch run_glue_no_trainer.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/
+```
+
+This command is the same and will work for:
+
+- a CPU-only setup
+- a setup with one GPU
+- a distributed training with several GPUs (single or multi node)
+- a training on TPUs
+
+Note that this library is in alpha release so your feedback is more than welcome if you encounter any problem using it.
+
+## TensorFlow 2.0 version
 
 Based on the script [`run_tf_glue.py`](https://github.com/huggingface/transformers/blob/master/examples/text-classification/run_tf_glue.py).
 
