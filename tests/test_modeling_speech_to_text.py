@@ -295,7 +295,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         attention_mask = input_dict["attention_mask"]
         model = Speech2TextForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
-            input_features.to(torch.float16)
+            input_features = input_features.half()
             model.half()
         model.generate(input_features, attention_mask=attention_mask)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
