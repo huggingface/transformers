@@ -36,10 +36,10 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/s2t-small-librispeech-asr": "https://huggingface.co/valhalla/facebook/s2t-small-librispeech-asr/resolve/main/vocab.json",
+        "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/vocab.json",
     },
     "spm_file": {
-        "facebook/s2t-small-librispeech-asr": "https://huggingface.co/valhalla/facebook/s2t-small-librispeech-asr/resolve/main/sentencepiece.bpe.model"
+        "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-small-librispeech-asr/resolve/main/sentencepiece.bpe.model"
     },
 }
 
@@ -77,7 +77,8 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
            Whether or not to uppercase the output when decoding.
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to lowercase the input when tokenizing.
-
+        tgt_lang (:obj:`str`, `optional`):
+            A string representing the target language.
         **kwargs
             Additional keyword arguments passed along to :class:`~transformers.PreTrainedTokenizer`
     """
