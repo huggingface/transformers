@@ -46,29 +46,20 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     mean and variance normalization to the extracted features.
 
     Args:
-        feature_size (:obj:`int`, defaults to 1):
+        feature_size (:obj:`int`, defaults to 80):
             The feature dimension of the extracted features.
         sampling_rate (:obj:`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
         num_mel_bins (:obj:`int`, defaults to 80):
-            Number of triangular Mel-frequency bins
+            Number of Mel-frequency bins.
         padding_value (:obj:`float`, defaults to 0.0):
             The value that is used to fill the padding vectors.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        do_ceptral_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
-        norm_means (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        normalize_means (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to zero-mean normalize the extracted features.
-        norm_vars (:obj:`bool`, `optional`, defaults to :obj:`True`):
+        normalize_vars (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to unit-variance normalize the extracted features.
-        return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not :meth:`~transformers.Speech2TextFeatureExtractor.__call__` should return
-            :obj:`attention_mask`.
-
-            .. note::
-
-                For Speech2TextTransoformer models, :obj:`attention_mask` should alwys be passed for batched inference,
-                to avoid subtle bugs.
-
     """
 
     model_input_names = ["input_features", "attention_mask"]
@@ -79,20 +70,19 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate=16000,
         num_mel_bins=80,
         padding_value=0.0,
-        do_normalize=True,
-        norm_means=True,
-        norm_vars=True,
-        return_attention_mask=True,
+        do_ceptral_normalize=True,
+        normalize_means=True,
+        normalize_vars=True,
         **kwargs
     ):
         if not is_torchaudio_available():
             raise ImportError("`Speech2TextFeatureExtractor` requires torchaudio: `pip install torchaudio`.")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
-        self.do_normalize = do_normalize
-        self.norm_means = norm_means
-        self.norm_vars = norm_vars
-        self.return_attention_mask = return_attention_mask
+        self.do_ceptral_normalize = do_ceptral_normalize
+        self.normalize_means = normalize_means
+        self.normalize_vars = normalize_vars
+        self.return_attention_mask = True
 
     def _extract_fbank_features(
         self,
@@ -109,14 +99,14 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     @staticmethod
     def utterance_cmvn(
-        x: np.ndarray, norm_means: Optional[bool] = True, norm_vars: Optional[bool] = True
+        x: np.ndarray, normalize_means: Optional[bool] = True, normalize_vars: Optional[bool] = True
     ) -> np.ndarray:
         mean = x.mean(axis=0)
         square_sums = (x ** 2).sum(axis=0)
 
-        if norm_means:
+        if normalize_means:
             x = np.subtract(x, mean)
-        if norm_vars:
+        if normalize_vars:
             var = square_sums / x.shape[0] - mean ** 2
             std = np.sqrt(np.maximum(var, 1e-10))
             x = np.divide(x, std)
@@ -124,7 +114,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(self, input_values: List[np.ndarray]) -> List[np.ndarray]:
-        return [self.utterance_cmvn(x, self.norm_means, self.norm_vars) for x in input_values]
+        return [self.utterance_cmvn(x, self.normalize_means, self.normalize_vars) for x in input_values]
 
     def __call__(
         self,
@@ -182,6 +172,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 The sampling rate at which the ``raw_speech`` input was sampled. It is strongly recommended to pass
                 ``sampling_rate`` at the forward call to prevent silent errors.
             padding_value (:obj:`float`, defaults to 0.0):
+                The value that is used to fill the padding values / vectors.
         """
 
         if sampling_rate is not None:
@@ -192,11 +183,9 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 )
         else:
             logger.warning(
-                "It is strongly recommended to pass the ``sampling_rate`` argument to this function."
+                "It is strongly recommended to pass the `sampling_rate` argument to this function."
                 "Failing to do so can result in silent errors that might be hard to debug."
             )
-
-        return_attention_mask = self.return_attention_mask if return_attention_mask is None else return_attention_mask
 
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
@@ -217,7 +206,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
 
         # Utterance-level cepstral mean and variance normalization
-        if self.do_normalize:
+        if self.do_ceptral_normalize:
             features = self.normalize(features)
 
         # convert into correct format for padding
@@ -230,6 +219,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             return_tensors=return_tensors,
+            **kwargs,
         )
 
         return padded_inputs
