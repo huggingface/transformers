@@ -23,8 +23,20 @@ from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
 
 logger = logging.get_logger(__name__)
 
-_all_mbart_models = ["facebook/mbart-large-en-ro", "facebook/mbart-large-cc25"]
-SPM_URL = "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentence.bpe.model"
+
+VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/mbart-large-en-ro": "https://huggingface.co/facebook/mbart-large-en-ro/resolve/main/sentencepiece.bpe.model",
+        "facebook/mbart-large-cc25": "https://huggingface.co/facebook/mbart-large-cc25/resolve/main/sentencepiece.bpe.model",
+    }
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "facebook/mbart-large-en-ro": 1024,
+    "facebook/mbart-large-cc25": 1024,
+}
 
 FAIRSEQ_LANGUAGE_CODES = [
     "ar_AR",
@@ -78,9 +90,9 @@ class MBartTokenizer(XLMRobertaTokenizer):
         >>> inputs["labels"] = labels["input_ids"]
     """
 
-    vocab_files_names = {"vocab_file": "sentencepiece.bpe.model"}
-    max_model_input_sizes = {m: 1024 for m in _all_mbart_models}
-    pretrained_vocab_files_map = {"vocab_file": {m: SPM_URL for m in _all_mbart_models}}
+    vocab_files_names = VOCAB_FILES_NAMES
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
 
     prefix_tokens: List[int] = []
     suffix_tokens: List[int] = []
