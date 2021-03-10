@@ -19,7 +19,7 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 import collections
 import gc
 import inspect
-import logging
+import logging as native_logging
 import math
 import os
 import re
@@ -106,7 +106,7 @@ from .trainer_utils import (
     speed_metrics,
 )
 from .training_args import ParallelMode, TrainingArguments
-from .utils import logging as hf_logging
+from .utils import logging
 from .utils.modeling_auto_mapping import MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
 
 
@@ -153,13 +153,13 @@ else:
     import torch.distributed as dist
 
 if is_training_run_on_sagemaker():
-   hf_logging.addHandler(logging.StreamHandler(sys.stdout))
+    logging.addHandler(native_logging.StreamHandler(sys.stdout))
 
 
 if TYPE_CHECKING:
     import optuna
 
-logger = hf_logging.get_logger(__name__)
+logger = logging.get_logger(__name__)
 
 
 class Trainer:
