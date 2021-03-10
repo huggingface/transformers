@@ -502,7 +502,6 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
         (M2M100Config, M2M100ForConditionalGeneration),
-        (Speech2TextConfig, Speech2TextForConditionalGeneration),
         (LEDConfig, LEDForConditionalGeneration),
         (BlenderbotSmallConfig, BlenderbotSmallForConditionalGeneration),
         (MT5Config, MT5ForConditionalGeneration),
