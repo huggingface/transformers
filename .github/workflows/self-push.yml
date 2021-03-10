@@ -51,8 +51,9 @@ jobs:
       - name: Install dependencies
         run: |
           source .env/bin/activate
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece,speech]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -197,8 +198,9 @@ jobs:
       - name: Install dependencies
         run: |
           source .env/bin/activate
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece,speech]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
