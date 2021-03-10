@@ -165,7 +165,7 @@ class Orthography:
 
     def preprocess_for_training(
         self, text: str
-    ) -> str:  # TODO(elgeish) return a pipeline instead? Or rely on branch predictor as is
+    ) -> str:  # TODO(elgeish) return a pipeline (e.g., from jiwer) instead? Or rely on branch predictor as is
         if len(self.translation_table) > 0:
             text = text.translate(self.translation_table)
         if len(self.words_to_remove) == 0:
@@ -352,6 +352,7 @@ def main():
 
     train_dataset = train_dataset.map(prepare_example, remove_columns=["file"])
     val_dataset = val_dataset.map(prepare_example, remove_columns=["file"])
+
     logger.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
     if logger.isEnabledFor(logging.DEBUG):
         for original_text, updated_text in text_updates:
