@@ -152,8 +152,8 @@ if is_sagemaker_distributed_available():
 else:
     import torch.distributed as dist
 
-# if is_training_run_on_sagemaker():
-#     logging.addHandler(StreamHandler(sys.stdout))
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
 
 
 if TYPE_CHECKING:
