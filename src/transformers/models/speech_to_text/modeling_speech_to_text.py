@@ -349,7 +349,6 @@ class Speech2TextAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartEncoderLayer with MBart->Speech2Text
 class Speech2TextEncoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
@@ -376,11 +375,11 @@ class Speech2TextEncoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
+                :obj:`(config.encoder_attention_heads,)`.
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
                 returned tensors for more detail.
@@ -418,7 +417,6 @@ class Speech2TextEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Speech2Text
 class Speech2TextDecoderLayer(nn.Module):
     def __init__(self, config: Speech2TextConfig):
         super().__init__()
@@ -460,16 +458,16 @@ class Speech2TextDecoderLayer(nn.Module):
     ):
         """
         Args:
-            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             attention_mask (:obj:`torch.FloatTensor`): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape :obj:`(seq_len, batch, embed_dim)`
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+                :obj:`(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
+                :obj:`(config.encoder_attention_heads,)`.
             encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
-                size `(config.encoder_attention_heads,)`.
+                size :obj:`(config.encoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
@@ -596,14 +594,14 @@ SPEECH_TO_TEXT_START_DOCSTRING = r"""
 
 SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
     Args:
-        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length, feature_size)`):
+        input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, feature_size)`):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a ``.flac`` or ``.wav`` audio file into an array of type :obj:`List[float]` or a
             :obj:`numpy.ndarray`, *e.g.* via the soundfile library (``pip install soundfile``). To prepare the array
             into :obj:`input_features`, the :class:`~transformers.Speech2TextTokenizer` should be used for extracting
             the fbank features, padding and conversion into a tensor of type :obj:`torch.FloatTensor`. See
             :meth:`~transformers.Speech2TextTokenizer.__call__`
-        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
+        attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing convolution and attention on padding token indices. Mask values selected in ``[0,
             1]``:
 
@@ -710,14 +708,14 @@ class Speech2TextEncoder(Speech2TextPreTrainedModel):
     ):
         r"""
         Args:
-            input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, seq_length, feature_size)`):
+            input_features (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length, feature_size)`):
                 Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a ``.flac`` or ``.wav`` audio file into an array of type :obj:`List[float]` or a
                 :obj:`numpy.ndarray`, *e.g.* via the soundfile library (``pip install soundfile``). To prepare the
                 array into :obj:`input_features`, the :class:`~transformers.Speech2TextTokenizer` should be used for
                 extracting the fbank features, padding and conversion into a tensor of type :obj:`torch.FloatTensor`.
                 See :meth:`~transformers.Speech2TextTokenizer.__call__`
-            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, seq_length)`, `optional`):
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
                 Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
                 ``[0, 1]``:
 
