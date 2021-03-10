@@ -177,6 +177,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
+_torchaudio_available = importlib.util.find_spec("torchaudio")
+try:
+    _torchaudio_version = importlib_metadata.version("torchaudio")
+    logger.debug(f"Successfully imported soundfile version {_torchaudio_version}")
+except importlib_metadata.PackageNotFoundError:
+    _torchaudio_available = False
+
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
@@ -362,6 +369,10 @@ def is_training_run_on_sagemaker():
 
 def is_soundfile_availble():
     return _soundfile_available
+
+
+def is_torchaudio_available():
+    return _torchaudio_available
 
 
 def torch_only_method(fn):

@@ -53,12 +53,13 @@ if is_torch_available():
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
+    input_name = "input_ids"
 
     def _get_input_ids_and_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = torch.ones_like(input_ids)
+        input_ids = inputs_dict[self.input_name]
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
         max_batch_size = 2

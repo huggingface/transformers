@@ -60,6 +60,7 @@ from . import (
     reformer,
     retribert,
     roberta,
+    speech_to_text,
     squeezebert,
     t5,
     tapas,
