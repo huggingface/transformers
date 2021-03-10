@@ -85,7 +85,7 @@ class Speech2TextConfig(PretrainedConfig):
             Number of 1D convolutional layers in the conv module.
         conv_kernel_sizes (:obj:`Tuple[int]`, `optional`, defaults to :obj:`(5, 5)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
-            of `conv_kernel_sizes` has to match `num_conv_layers`.
+            of :obj:`conv_kernel_sizes` has to match :obj:`num_conv_layers`.
         conv_channels (:obj:`int`, `optional`, defaults to 1024):
             An integer defining the number of output channels of each convolution layers except the final one in the
             conv module.

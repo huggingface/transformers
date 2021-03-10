@@ -169,8 +169,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
                 * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
             sampling_rate (:obj:`int`, `optional`):
-                The sampling rate at which the ``raw_speech`` input was sampled. It is strongly recommended to pass
-                ``sampling_rate`` at the forward call to prevent silent errors.
+                The sampling rate at which the :obj:`raw_speech` input was sampled. It is strongly recommended to pass
+                :obj:`sampling_rate` at the forward call to prevent silent errors.
             padding_value (:obj:`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
         """
