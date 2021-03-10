@@ -85,6 +85,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return_attention_mask=True,
         **kwargs
     ):
+        if not is_torchaudio_available():
+            raise ImportError("`Speech2TextFeatureExtractor` requires torchaudio: `pip install torchaudio`.")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
         self.do_normalize = do_normalize

@@ -17,13 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import (
-    _BaseLazyModule,
-    is_sentencepiece_available,
-    is_tokenizers_available,
-    is_torch_available,
-    is_torchaudio_available,
-)
+from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_torch_available
 
 
 _import_structure = {
@@ -31,10 +25,12 @@ _import_structure = {
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
     ],
+    "feature_extraction_speech_to_text": ["Speech2TextFeatureExtractor"],
 }
 
 if is_sentencepiece_available():
     _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
+    _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
 
 if is_torch_available():
@@ -45,15 +41,14 @@ if is_torch_available():
         "Speech2TextPreTrainedModel",
     ]
 
-if is_torch_available() and is_torchaudio_available():
-    _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
-
-if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
-    _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
-    from .tokenization_speech_to_text import Speech2TextTokenizer
+    from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
+
+    if is_sentencepiece_available():
+        from .processing_speech_to_text import Speech2TextProcessor
+        from .tokenization_speech_to_text import Speech2TextTokenizer
 
     if is_torch_available():
         from .modeling_speech_to_text import (
@@ -62,12 +57,6 @@ if TYPE_CHECKING:
             Speech2TextModel,
             Speech2TextPreTrainedModel,
         )
-
-    if is_torch_available() and is_torchaudio_available():
-        from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
-
-    if is_torch_available() and is_torchaudio_available() and is_sentencepiece_available():
-        from .processing_speech_to_text import Speech2TextProcessor
 
 else:
     import importlib
