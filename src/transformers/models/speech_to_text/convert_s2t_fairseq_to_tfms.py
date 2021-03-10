@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
+
 import torch
 from torch import nn
 
@@ -25,6 +27,9 @@ def remove_ignore_keys_(state_dict):
         "model.encoder.version",
         "model.decoder.version",
         "decoder.output_projection.weight",
+        "_float_tensor",
+        "encoder.embed_positions._float_tensor",
+        "decoder.embed_positions._float_tensor",
     ]
     for k in ignore_keys:
         state_dict.pop(k, None)
@@ -46,7 +51,7 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
+def convert_fairseq_s2t_checkpoint_to_tfms(checkpoint_path, pytorch_dump_folder_path):
     m2m_100 = torch.load(checkpoint_path, map_location="cpu")
     args = m2m_100["args"]
     state_dict = m2m_100["model"]
@@ -95,4 +100,13 @@ def convert_fairseq_s2t_checkpoint_from_disk(checkpoint_path):
     else:
         model.lm_head.weight.data = lm_head_weights
 
-    return model
+    model.save_pretrained(pytorch_dump_folder_path)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # Required parameters
+    parser.add_argument("fairseq_path", type=str, help="Path to the fairseq model (.pt) file.")
+    parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    args = parser.parse_args()
+    convert_fairseq_s2t_checkpoint_to_tfms(args.fairseq_path, args.pytorch_dump_folder_path)
