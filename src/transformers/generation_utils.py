@@ -1221,7 +1221,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            if outputs.logits.size(1) == 1:
+            if outputs.logits.size(1) == 1 or pad_token_id is None:
                 mask_pad_indices = torch.zeros(
                     [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
                 )
@@ -1260,9 +1260,12 @@ class GenerationMixin:
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
 
             # set next token before padding index and increase length by one
-            input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
-            mask_pad_indices[mask_pad_indices == 0] = -1
-            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = next_tokens
+            if pad_token_id is None:
+                input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            else:
+                input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
+                mask_pad_indices[mask_pad_indices == 0] = -1
+                input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = next_tokens
 
             # update sequence length
             if eos_token_id is not None:
@@ -1442,7 +1445,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            if outputs.logits.size(1) == 1:
+            if outputs.logits.size(1) == 1 or pad_token_id is None:
                 mask_pad_indices = torch.zeros(
                     [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
                 )
@@ -1483,9 +1486,12 @@ class GenerationMixin:
                 next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
 
             # set next token before padding index and increase length by one
-            input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
-            mask_pad_indices[mask_pad_indices == 0] = -1
-            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = next_tokens
+            if pad_token_id is None:
+                input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            else:
+                input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
+                mask_pad_indices[mask_pad_indices == 0] = -1
+                input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = next_tokens
             cur_len = cur_len + 1
 
             # update sequence length
@@ -1681,7 +1687,7 @@ class GenerationMixin:
                 output_hidden_states=output_hidden_states,
             )
 
-            if outputs.logits.size(1) == 1:
+            if outputs.logits.size(1) == 1 or pad_token_id is None:
                 mask_pad_indices = torch.zeros(
                     [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
                 )
@@ -1744,11 +1750,14 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             # set next token before padding index and increase length by one
-            input_ids = torch.cat(
-                [input_ids[beam_idx, :], input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1
-            )
-            mask_pad_indices[mask_pad_indices == 0] = -1
-            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = beam_next_tokens
+            if pad_token_id is None:
+                input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+            else:
+                input_ids = torch.cat(
+                    [input_ids[beam_idx, :], input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1
+                )
+                mask_pad_indices[mask_pad_indices == 0] = -1
+                input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = beam_next_tokens
             cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -1952,7 +1961,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            if outputs.logits.size(1) == 1:
+            if outputs.logits.size(1) == 1 or pad_token_id is None:
                 mask_pad_indices = torch.zeros(
                     [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
                 )
@@ -2019,11 +2028,14 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             # set next token before padding index and increase length by one
-            input_ids = torch.cat(
-                [input_ids[beam_idx, :], input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1
-            )
-            mask_pad_indices[mask_pad_indices == 0] = -1
-            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = beam_next_tokens
+            if pad_token_id is None:
+                input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+            else:
+                input_ids = torch.cat(
+                    [input_ids[beam_idx, :], input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1
+                )
+                mask_pad_indices[mask_pad_indices == 0] = -1
+                input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = beam_next_tokens
             cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -2234,7 +2246,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-            if outputs.logits.size(1) == 1:
+            if outputs.logits.size(1) == 1 or pad_token_id is None:
                 mask_pad_indices = torch.zeros(
                     [outputs.logits.size(0)], dtype=torch.long, device=outputs.logits.device
                 )
@@ -2304,23 +2316,26 @@ class GenerationMixin:
                 beam_next_tokens = beam_outputs["next_beam_tokens"]
                 beam_idx = beam_outputs["next_beam_indices"]
 
-                # input_ids[batch_group_indices] = group_input_ids[beam_idx]
-                # group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+                input_ids[batch_group_indices] = group_input_ids[beam_idx]
 
                 # set next token before padding index and increase length by one
-                group_input_ids = torch.cat(
-                    [
-                        group_input_ids[beam_idx, :],
-                        group_input_ids.new_full([group_input_ids.shape[0], 1], pad_token_id),
-                    ],
-                    dim=-1,
-                )
-                mask_pad_indices[mask_pad_indices == 0] = -1
-                group_input_ids[
-                    torch.arange(group_input_ids.size(0)), mask_pad_indices[batch_group_indices]
-                ] = beam_next_tokens
+                if pad_token_id is None:
+                    group_input_ids = torch.cat([group_input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+                else:
+                    group_input_ids = torch.cat(
+                        [
+                            group_input_ids[beam_idx, :],
+                            group_input_ids.new_full([group_input_ids.shape[0], 1], pad_token_id),
+                        ],
+                        dim=-1,
+                    )
+                    mask_pad_indices[mask_pad_indices == 0] = -1
+                    group_input_ids[
+                        torch.arange(group_input_ids.size(0)), mask_pad_indices[batch_group_indices]
+                    ] = beam_next_tokens
+                    mask_pad_indices[mask_pad_indices == -1] = 0
+
                 current_tokens[batch_group_indices] = beam_next_tokens
-                mask_pad_indices[mask_pad_indices == -1] = 0
 
                 # (beam_idx // group_size) -> batch_idx
                 # (beam_idx % group_size) -> offset of idx inside the group
@@ -2352,11 +2367,13 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
 
-            # input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
             # set next token before padding index and increase length by one
-            input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
-            mask_pad_indices[mask_pad_indices == 0] = -1
-            input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = current_tokens
+            if pad_token_id is None:
+                input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+            else:
+                input_ids = torch.cat([input_ids, input_ids.new_full([input_ids.shape[0], 1], pad_token_id)], dim=-1)
+                mask_pad_indices[mask_pad_indices == 0] = -1
+                input_ids[torch.arange(input_ids.size(0)), mask_pad_indices] = current_tokens
             cur_len = cur_len + 1
             if beam_scorer.is_done:
                 break
