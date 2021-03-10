@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import logging
+import re
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Set, Union
 
 import datasets
 import numpy as np
@@ -18,19 +19,19 @@ from transformers import (
     Wav2Vec2ForCTC,
     Wav2Vec2Processor,
     is_apex_available,
+    trainer_utils,
 )
-from transformers.trainer_utils import is_main_process
 
-
-logger = logging.getLogger(__name__)
 
 if is_apex_available():
     from apex import amp
 
-
 if version.parse(torch.__version__) >= version.parse("1.6"):
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -49,6 +50,24 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
+    verbose_logging: Optional[bool] = field(
+        default=False,
+        metadata={"help": "Whether to log verbose messages or not."},
+    )
+
+
+def configure_logger(model_args: ModelArguments, training_args: TrainingArguments):
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
+    logging_level = logging.WARNING
+    if model_args.verbose_logging:
+        logging_level = logging.DEBUG
+    elif trainer_utils.is_main_process(training_args.local_rank):
+        logging_level = logging.INFO
+    logger.setLevel(logging_level)
 
 
 @dataclass
@@ -83,13 +102,11 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Resample loaded audio to target feature extractor's sampling rate or not."},
     )
-    add_discovered_ascii_tokens: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Add dataset characters (possibly intended for orthography in ASCII) to tokenizer or not."},
-    )
-    do_lower_case: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Normalize case (for text tokenization) or not."},
+    orthography: Optional[str] = field(
+        default="librispeech",
+        metadata={
+            "help": "Orthography used for normalization and tokenization: 'librispeech' (default), 'timit', or 'buckwalter'."
+        },
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -98,6 +115,82 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
+
+
+@dataclass
+class Orthography:
+    """
+    Orthography scheme used for text normalization and tokenization.
+
+    Args:
+        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether or not to accept lowercase input and lowercase the output when decoding.
+        additional_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`[]`):
+            Tokens to add to vocabulary. Particularly useful for transliteration in ASCII.
+        word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`None`):
+            When set, overrides the tokenizer's default for `word_delimiter_token` and added to vocabulary.
+        translation_table (:obj:`Dict[str, str]`, `optional`, defaults to :obj:`{}`):
+            Table to use with `str.translate()` when preprocessing text (e.g., "-" -> " ").
+        words_to_remove (:obj:`Set[str]`, `optional`, defaults to :obj:`set()`):
+            Words to remove when preprocessing text (e.g., "sil").
+    """
+
+    do_lower_case: bool = False
+    additional_tokens: Optional[List[str]] = field(default_factory=list)
+    word_delimiter_token: Optional[str] = None
+    translation_table: Optional[Dict[str, str]] = field(default_factory=dict)
+    words_to_remove: Optional[Set[str]] = field(default_factory=set)
+
+    @classmethod
+    def from_name(cls, name: str) -> "Orthography":
+        if name == "librispeech":
+            return cls()
+        if name == "timit":
+            return cls(
+                do_lower_case=True,
+                translation_table=str.maketrans(
+                    {"-": " "}
+                ),  # break compounds like "quarter-century-old" and replace pauses "--"
+            )
+        if (
+            name == "buckwalter"
+        ):  # for example, 'arabic_speech_corpus' dataset (note the addition of '^' to transliteration scheme)
+            return cls(
+                additional_tokens=list("'|>&<}AbptvjHxd*rzs$SDTZEg_fqklmnhwYyFNKaui~o`{PJVG^"),
+                word_delimiter_token="/",  # "|" is Arabic letter alef with madda above
+                translation_table=str.maketrans({"-": " "}),  # sometimes used to represent pauses
+                words_to_remove={"sil"},  # until we have a "<sil>" special token
+            )
+        raise ValueError(f"Unsupported orthography: '{name}'.")
+
+    def preprocess_for_training(
+        self, text: str
+    ) -> str:  # TODO(elgeish) return a pipeline instead? Or rely on branch predictor as is
+        if len(self.translation_table) > 0:
+            text = text.translate(self.translation_table)
+        if len(self.words_to_remove) == 0:
+            text = " ".join(text.split())  # clean up whilespaces
+        else:
+            text = " ".join(w for w in text.split() if w not in self.words_to_remove)  # and clean up whilespaces
+        return text
+
+    def create_processor(self, model_args: ModelArguments) -> Wav2Vec2Processor:
+        processor = Wav2Vec2Processor.from_pretrained(
+            model_args.model_name_or_path,
+            cache_dir=model_args.cache_dir,
+            do_lower_case=self.do_lower_case,
+        )
+        unique_no_split_tokens = processor.tokenizer.unique_no_split_tokens
+        processor.tokenizer.add_tokens(
+            self.additional_tokens
+        )  # tokens may already exist in vocabulary; `add_tokens` will deduplicate
+        if self.word_delimiter_token is not None:
+            processor.tokenizer.add_tokens(self.word_delimiter_token)
+            processor.tokenizer.word_delimiter_token = self.word_delimiter_token
+        processor.tokenizer.unique_no_split_tokens = (
+            unique_no_split_tokens  # HACK workaround for https://github.com/huggingface/transformers/issues/10622
+        )
+        return processor
 
 
 @dataclass
@@ -224,18 +317,12 @@ def main():
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
 
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
-    logger.setLevel(logging.INFO if is_main_process(training_args.local_rank) else logging.WARN)
+    configure_logger(model_args, training_args)
 
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
-    processor = Wav2Vec2Processor.from_pretrained(
-        model_args.model_name_or_path, cache_dir=model_args.cache_dir, do_lower_case=data_args.do_lower_case
-    )
+    orthography = Orthography.from_name(data_args.orthography.lower())
+    processor = orthography.create_processor(model_args)
+    processor.tokenizer.save_pretrained(training_args.output_dir)
 
     train_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
@@ -246,33 +333,30 @@ def main():
 
     wer_metric = datasets.load_metric("wer")
     target_sr = processor.feature_extractor.sampling_rate if data_args.target_feature_extractor_sampling_rate else None
-    unique_chars_in_text = set()
+    vocabulary_chars_str = "".join(t for t in processor.tokenizer.get_vocab().keys() if len(t) == 1)
+    vocabulary_text_cleaner = re.compile(  # remove characters not in vocabulary
+        f"[^\s{re.escape(vocabulary_chars_str)}]",  # allow space in addition to chars in vocabulary
+        flags=re.IGNORECASE if processor.tokenizer.do_lower_case else 0,
+    )
+    text_updates = []
 
-    def map_to_array(batch):
-        speech_array, sampling_rate = librosa.load(batch["file"], sr=target_sr)
-        batch["speech"] = speech_array
-        batch["sampling_rate"] = sampling_rate
-        unique_chars_in_text.update(batch["text"])
-        return batch
+    def prepare_example(example):  # TODO(elgeish) make use of caching and/or multiprocessing
+        example["speech"], example["sampling_rate"] = librosa.load(example["file"], sr=target_sr)
+        # Normalize and clean up text; order matters!
+        updated_text = orthography.preprocess_for_training(example["text"])
+        updated_text = vocabulary_text_cleaner.sub("", updated_text)
+        if updated_text != example["text"]:
+            text_updates.append((example["text"], updated_text))
+            example["text"] = updated_text
+        return example
 
-    train_dataset = train_dataset.map(map_to_array, remove_columns=["file"])
-    val_dataset = val_dataset.map(map_to_array, remove_columns=["file"])
-    unique_chars_in_text.remove(" ")  # let processor.tokenizer.word_delimiter_token do its job
-    ascii_tokens_to_add = [c for c in unique_chars_in_text if c.isascii()]
-    if data_args.add_discovered_ascii_tokens:
-        added_tokens_count = processor.tokenizer.add_tokens(ascii_tokens_to_add)
-        logger.info(
-            f"Added {added_tokens_count} tokens(s) found in dataset that may be intended for orthography in ASCII."
-        )
-        processor.tokenizer.save_vocabulary(training_args.output_dir)
-    else:
-        ascii_tokens_not_in_vocab = ascii_tokens_to_add - processor.tokenizer.get_vocab().keys()
-        if len(ascii_tokens_not_in_vocab) > 0:
-            logger.warning(
-                f"Found char(s) in dataset that may be intended for orthography in ASCII: {ascii_tokens_not_in_vocab}."
-                + " Use `--add_discovered_ascii_tokens` to add them automatically to tokenizer's vocab."
-                + ("" if data_args.do_lower_case else " Use `--do_lower_case` to normalize case.")
-            )
+    train_dataset = train_dataset.map(prepare_example, remove_columns=["file"])
+    val_dataset = val_dataset.map(prepare_example, remove_columns=["file"])
+    logger.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
+    if logger.isEnabledFor(logging.DEBUG):
+        for original_text, updated_text in text_updates:
+            logger.debug(f'Updated text: "{original_text}" -> "{updated_text}"')
+    text_updates = None
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
@@ -309,6 +393,10 @@ def main():
         pred_str = processor.batch_decode(pred_ids)
         # we do not want to group tokens when computing the metrics
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
+        if logger.isEnabledFor(logging.DEBUG):
+            for prediction, reference in zip(pred_str, label_str):
+                logger.debug(f'reference: "{reference}"')
+                logger.debug(f'prediction: "{prediction}"')
 
         wer = wer_metric.compute(predictions=pred_str, references=label_str)
 

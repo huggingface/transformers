@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 python run_asr.py \
---output_dir="./wav2vec2-base-100h-timit" \
+--output_dir="./wav2vec2-base-arabic-speech-corpus" \
 --num_train_epochs="30" \
---per_device_train_batch_size="64" \
---per_device_eval_batch_size="64" \
+--per_device_train_batch_size="7" \
+--per_device_eval_batch_size="7" \
 --evaluation_strategy="steps" \
---save_total_limit="3" \
 --save_steps="500" \
 --eval_steps="100" \
 --logging_steps="50" \
@@ -13,10 +12,12 @@ python run_asr.py \
 --warmup_steps="3000" \
 --model_name_or_path="facebook/wav2vec2-base" \
 --fp16 \
---dataset_name="timit_asr" \
+--dataset_name="arabic_speech_corpus" \
 --train_split_name="train" \
 --validation_split_name="test" \
---do_lower_case \
+--orthography buckwalter \
 --preprocessing_num_workers="$(nproc)" \
 --group_by_length \
 --freeze_feature_extractor \
+--target_feature_extractor_sampling_rate \
+--verbose_logging \
