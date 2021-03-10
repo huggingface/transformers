@@ -209,7 +209,7 @@ def remove_handler(handler: logging.Handler) -> None:
 
     _configure_library_root_logger()
 
-    assert handler is not None
+    assert handler is not None and handler not in _get_library_root_logger().handlers
     _get_library_root_logger().removeHandler(handler)
 
 
