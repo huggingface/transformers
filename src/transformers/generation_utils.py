@@ -384,7 +384,7 @@ class GenerationMixin:
         )
         if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
             return input_ids.ne(pad_token_id).long()
-        return input_ids.new_ones(input_ids.shape)
+        return input_ids.new_ones(input_ids.shape, dtype=torch.long)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: torch.LongTensor, model_kwargs
@@ -402,8 +402,7 @@ class GenerationMixin:
     ) -> torch.LongTensor:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         decoder_input_ids = (
-            torch.ones((input_ids.shape[0], 1), dtype=input_ids.dtype, device=input_ids.device)
-            * decoder_start_token_id
+            torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
         )
         return decoder_input_ids
 
