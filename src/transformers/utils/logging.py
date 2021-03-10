@@ -194,7 +194,8 @@ def enable_default_handler() -> None:
     assert _default_handler is not None
     _get_library_root_logger().addHandler(_default_handler)
 
-def add_handler(handler:logging.Handler) -> None:
+
+def add_handler(handler: logging.Handler) -> None:
     """adds a handler to the HuggingFace Transformers's root logger."""
 
     _configure_library_root_logger()

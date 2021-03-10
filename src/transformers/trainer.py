@@ -19,7 +19,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 import collections
 import gc
 import inspect
-from logging import StreamHandler
 import math
 import os
 import re
@@ -27,6 +26,7 @@ import shutil
 import sys
 import time
 import warnings
+from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -60,8 +60,8 @@ from .file_utils import (
     is_datasets_available,
     is_in_notebook,
     is_sagemaker_distributed_available,
-    is_training_run_on_sagemaker,
     is_torch_tpu_available,
+    is_training_run_on_sagemaker,
 )
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
