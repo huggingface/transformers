@@ -728,7 +728,7 @@ class TrainingArguments:
             return xm.xrt_world_size()
         elif is_sagemaker_distributed_available():
             return sm_dist.get_world_size()
-        elif self.args.local_rank != -1:
+        elif self.local_rank != -1:
             return torch.distributed.get_world_size()
         return 1
 
