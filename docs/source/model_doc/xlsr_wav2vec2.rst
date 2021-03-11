@@ -42,4 +42,4 @@ Tips:
 XLSR-Wav2Vec2's architecture is based on the Wav2Vec2 model, so one can refer to :doc:`Wav2Vec2's documentation page
 <wav2vec2>`.
 
-The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec>`_.
+The original code can be found `here <https://github.com/pytorch/fairseq/tree/master/fairseq/models/wav2vec>`__.
