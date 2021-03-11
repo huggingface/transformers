@@ -16,7 +16,7 @@ XLSR-Wav2Vec2
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The XLSR-Wav2Vec2 model was proposed in `UNSUPERVISED CROSS-LINGUAL REPRESENTATION LEARNING FOR SPEECH RECOGNITION
+The XLSR-Wav2Vec2 model was proposed in `Unsupervised Cross-Lingual Representation Learning For Speech Recognition
 <https://arxiv.org/abs/2006.13979>`__ by Alexis Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael
 Auli.
 
