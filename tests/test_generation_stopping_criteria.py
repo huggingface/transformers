@@ -10,7 +10,12 @@ from .test_modeling_common import ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers.generation_stopping_criteria import MaxLengthCriteria, MaxTimeCriteria, StoppingCriteriaList
+    from transformers.generation_stopping_criteria import (
+        MaxLengthCriteria,
+        MaxTimeCriteria,
+        StoppingCriteriaList,
+        validate_stopping_criteria,
+    )
 
 
 @require_torch
@@ -61,3 +66,14 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         criteria = MaxTimeCriteria(max_time=0.1, initial_timestamp=time.time() - 0.2)
         self.assertTrue(criteria(input_ids, scores))
+
+    def test_validate_stopping_criteria(self):
+        validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 10)
+
+        with self.assertWarns(UserWarning):
+            validate_stopping_criteria(StoppingCriteriaList([MaxLengthCriteria(10)]), 11)
+
+        stopping_criteria = StoppingCriteriaList()
+        validate_stopping_criteria(stopping_criteria, 11)
+
+        self.assertEqual(len(stopping_criteria), 1)

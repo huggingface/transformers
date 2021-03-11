@@ -1,4 +1,5 @@
 import time
+import warnings
 from abc import ABC
 from typing import Optional
 
@@ -81,3 +82,16 @@ class StoppingCriteriaList(list):
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
         return any(criteria(input_ids, scores) for criteria in self)
+
+
+def validate_stopping_criteria(stopping_criteria: StoppingCriteriaList, max_length: int):
+    found = False
+    for stopping_criterium in stopping_criteria:
+        if isinstance(stopping_criterium, MaxLengthCriteria):
+            found = True
+            if stopping_criterium.max_length != max_length:
+                warnings.warn(
+                    "You set different `max_length` for stopping criteria and `max_length` parameter", UserWarning
+                )
+    if not found:
+        stopping_criteria.append(MaxLengthCriteria(max_length=max_length))

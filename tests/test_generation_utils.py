@@ -17,6 +17,7 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.generation_stopping_criteria import MaxLengthCriteria, StoppingCriteriaList
 from transformers.testing_utils import require_torch, slow, torch_device
 
 
@@ -1334,6 +1335,7 @@ class GenerationIntegrationTests(unittest.TestCase):
             decoder_start_token_id=bart_model.config.decoder_start_token_id,
             bos_token_id=bart_model.config.bos_token_id,
         )
+
         bart_model.greedy_search(
             input_ids,
             max_length=max_length,
@@ -1423,3 +1425,84 @@ class GenerationIntegrationTests(unittest.TestCase):
         bart_model.group_beam_search(
             input_ids, diverse_beam_scorer, num_beams=num_beams, max_length=max_length, **model_kwargs
         )
+
+    def test_max_length_warning_if_different(self):
+        article = """Justin Timberlake and Jessica Biel, welcome to parenthood."""
+        bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
+        bart_model = BartForConditionalGeneration.from_pretrained("sshleifer/bart-tiny-random").to(torch_device)
+        input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
+
+        batch_size = 1
+
+        max_length = 20
+        num_beams = 6
+        num_beam_groups = 3
+        num_return_sequences = num_beams * batch_size
+        stopping_criteria_max_length = 18
+        stopping_criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=stopping_criteria_max_length)])
+
+        # Greedy
+        input_ids = input_ids.expand(6, -1)
+        model_kwargs = bart_model._prepare_encoder_decoder_kwargs_for_generation(input_ids, {})
+        input_ids = bart_model._prepare_decoder_input_ids_for_generation(
+            input_ids,
+            decoder_start_token_id=bart_model.config.decoder_start_token_id,
+            bos_token_id=bart_model.config.bos_token_id,
+        )
+
+        with self.assertWarns(UserWarning):
+            bart_model.greedy_search(
+                input_ids,
+                max_length=max_length,
+                pad_token_id=bart_model.config.pad_token_id,
+                stopping_criteria=stopping_criteria,
+                eos_token_id=bart_model.config.eos_token_id,
+                **model_kwargs,
+            )
+
+        # Sample
+        with self.assertWarns(UserWarning):
+            bart_model.sample(
+                input_ids,
+                max_length=max_length,
+                stopping_criteria=stopping_criteria,
+                pad_token_id=bart_model.config.pad_token_id,
+                eos_token_id=bart_model.config.eos_token_id,
+                **model_kwargs,
+            )
+
+        # Beam
+        beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=num_beams,
+            device=torch_device,
+        )
+        with self.assertWarns(UserWarning):
+            bart_model.beam_search(
+                input_ids,
+                num_beams=num_beams,
+                stopping_criteria=stopping_criteria,
+                max_length=max_length,
+                beam_scorer=beam_scorer,
+                **model_kwargs,
+            )
+
+        # Grouped beam search
+        diverse_beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            max_length=max_length,
+            num_beams=num_beams,
+            device=torch_device,
+            num_beam_hyps_to_keep=num_return_sequences,
+            num_beam_groups=num_beam_groups,
+        )
+        with self.assertWarns(UserWarning):
+            bart_model.group_beam_search(
+                input_ids,
+                diverse_beam_scorer,
+                stopping_criteria=stopping_criteria,
+                num_beams=num_beams,
+                max_length=max_length,
+                **model_kwargs,
+            )
