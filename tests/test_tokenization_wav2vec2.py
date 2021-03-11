@@ -30,7 +30,7 @@ from transformers import (
     Wav2Vec2Tokenizer,
 )
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import slow
+from transformers.testing_utils import require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -340,6 +340,7 @@ class Wav2Vec2TokenizerTest(unittest.TestCase):
         self.assertListEqual(processed.attention_mask.sum(-1).tolist(), [800, 1000, 1200])
 
     @slow
+    @require_torch
     def test_pretrained_checkpoints_are_set_correctly(self):
         # this test makes sure that models that are using
         # group norm don't have their tokenizer return the
