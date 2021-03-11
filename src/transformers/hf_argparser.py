@@ -80,7 +80,7 @@ class HfArgumentParser(ArgumentParser):
                     "We will add compatibility when Python 3.9 is released."
                 )
             typestring = str(field.type)
-            for prim_type in (int, float, str):
+            for prim_type in (int, float, str, bool):
                 for collection in (List,):
                     if (
                         typestring == f"typing.Union[{collection[prim_type]}, NoneType]"
