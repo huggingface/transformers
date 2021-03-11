@@ -1875,7 +1875,7 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
-        encoder_layer_head_mask: Optional[torch.Tensor] = None,
+        cross_layer_head_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
@@ -1889,9 +1889,9 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
             encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(config.encoder_attention_heads,)`.
-            encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
-                size `(config.encoder_attention_heads,)`.
+                `(encoder_attention_heads,)`.
+            cross_layer_head_mask (:obj:`torch.FloatTensor`): mask for cross-attention heads in a given layer of
+                size `(decoder_attention_heads,)`.
             past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
             output_attentions (:obj:`bool`, `optional`):
                 Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
@@ -1926,7 +1926,7 @@ class {{cookiecutter.camelcase_modelname}}DecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=encoder_layer_head_mask,
+                layer_head_mask=cross_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
@@ -2382,7 +2382,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        encoder_head_mask=None,
+        cross_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
@@ -2419,18 +2419,17 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
+            head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_num_layers, encoder_attention_heads)`, `optional`):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
-            encoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in ``[0, 1]``:
+            cross_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
@@ -2498,12 +2497,12 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         next_decoder_cache = () if use_cache else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            assert head_mask.size()[0] == (
-                len(self.layers)
-            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
-
+        # check if head_mask/cross_head_mask has a correct number of layers specified if desired
+        for attn_mask, mask_name in zip([head_mask, cross_head_mask], ["head_mask", "cross_head_mask"]):
+            if attn_mask is not None:
+                assert attn_mask.size()[0] == (
+                    len(self.layers)
+                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -2534,7 +2533,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
-                    encoder_head_mask[idx] if encoder_head_mask is not None else None,
+                    cross_head_mask[idx] if cross_head_mask is not None else None,
                     None,
                 )
             else:
@@ -2545,7 +2544,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
+                    cross_layer_head_mask=(cross_head_mask[idx] if cross_head_mask is not None else None),
                     past_key_value=past_key_value,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
@@ -3132,7 +3131,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        encoder_head_mask=None,
+        cross_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         labels=None,
@@ -3171,12 +3170,11 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
-            encoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in ``[0, 1]``:
+            cross_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
@@ -3233,7 +3231,7 @@ class {{cookiecutter.camelcase_modelname}}ForCausalLM({{cookiecutter.camelcase_m
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
-            encoder_head_mask=encoder_head_mask,
+            cross_head_mask=cross_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
