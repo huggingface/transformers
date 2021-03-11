@@ -507,6 +507,12 @@ class TrainingArguments:
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
+        # expand paths, see #10628
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+        if self.logging_dir is not None:
+            self.logging_dir = os.path.expanduser(self.logging_dir)
+
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
