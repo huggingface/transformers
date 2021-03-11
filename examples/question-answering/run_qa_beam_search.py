@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
@@ -116,6 +117,20 @@ class DataTrainingArguments:
             "be faster on GPU but will be slower on TPU)."
         },
     )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
+        },
+    )
     version_2_with_negative: bool = field(
         default=False, metadata={"help": "If true, some of the examples do not have an answer."}
     )
@@ -199,6 +214,8 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed before initializing model.
@@ -266,6 +283,13 @@ def main():
     # Padding side determines if we do (question|context) or (context|question).
     pad_on_right = tokenizer.padding_side == "right"
 
+    if data_args.max_seq_length > tokenizer.model_max_length:
+        logger.warn(
+            f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+            f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+        )
+    max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+
     # Training preprocessing
     def prepare_train_features(examples):
         # Tokenize our examples with truncation and maybe padding, but keep the overflows using a stride. This results
@@ -275,7 +299,7 @@ def main():
             examples[question_column_name if pad_on_right else context_column_name],
             examples[context_column_name if pad_on_right else question_column_name],
             truncation="only_second" if pad_on_right else "only_first",
-            max_length=data_args.max_seq_length,
+            max_length=max_seq_length,
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
@@ -363,13 +387,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_train:
-        train_dataset = datasets["train"].map(
+        if "train" not in datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
+        if data_args.max_train_samples is not None:
+            # Select samples from Dataset, This will help to decrease processing time
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        # Create Training Features
+        train_dataset = train_dataset.map(
             prepare_train_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_train_samples is not None:
+            # Select samples from dataset again since Feature Creation might increase number of features
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -380,7 +414,7 @@ def main():
             examples[question_column_name if pad_on_right else context_column_name],
             examples[context_column_name if pad_on_right else question_column_name],
             truncation="only_second" if pad_on_right else "only_first",
-            max_length=data_args.max_seq_length,
+            max_length=max_seq_length,
             stride=data_args.doc_stride,
             return_overflowing_tokens=True,
             return_offsets_mapping=True,
@@ -438,13 +472,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_eval:
-        validation_dataset = datasets["validation"].map(
+        if "validation" not in datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_dataset = datasets["validation"]
+        if data_args.max_val_samples is not None:
+            # Selecting Eval Samples from Dataset
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        # Create Features from Eval Dataset
+        eval_dataset = eval_dataset.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_val_samples is not None:
+            # Selecting Samples from Dataset again since Feature Creation might increase samples size
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
@@ -491,7 +535,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=validation_dataset if training_args.do_eval else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
         eval_examples=datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
@@ -510,32 +554,27 @@ def main():
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+        metrics = train_result.metrics
 
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        results = trainer.evaluate()
+        metrics = trainer.evaluate()
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in sorted(results.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
-    return results
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 
 def _mp_fn(index):

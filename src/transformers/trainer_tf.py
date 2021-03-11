@@ -33,7 +33,7 @@ from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, EvaluationStrategy, PredictionOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -218,10 +218,16 @@ class TFTrainer:
         TFTrainer's init through :obj:`optimizers`, or subclass and override this method.
         """
         if not self.optimizer and not self.lr_scheduler:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.optimizer, self.lr_scheduler = create_optimizer(
                 self.args.learning_rate,
                 num_training_steps,
-                self.args.warmup_steps,
+                warmup_steps,
                 adam_beta1=self.args.adam_beta1,
                 adam_beta2=self.args.adam_beta2,
                 adam_epsilon=self.args.adam_epsilon,
@@ -568,7 +574,7 @@ class TFTrainer:
 
                     if (
                         self.args.eval_steps > 0
-                        and self.args.evaluation_strategy == EvaluationStrategy.STEPS
+                        and self.args.evaluation_strategy == IntervalStrategy.STEPS
                         and self.global_step % self.args.eval_steps == 0
                     ):
                         self.evaluate()

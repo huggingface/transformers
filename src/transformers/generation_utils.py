@@ -23,6 +23,9 @@ from torch.nn import functional as F
 from .file_utils import ModelOutput
 from .generation_beam_search import BeamScorer, BeamSearchScorer
 from .generation_logits_process import (
+    EncoderNoRepeatNGramLogitsProcessor,
+    ForcedBOSTokenLogitsProcessor,
+    ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
@@ -93,6 +96,9 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
         decoder_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size, generated_length, hidden_size)`.
@@ -103,6 +109,7 @@ class GreedySearchEncoderDecoderOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -161,6 +168,9 @@ class SampleEncoderDecoderOutput(ModelOutput):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_return_sequences, num_heads, generated_length,
             sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_return_sequences, generated_length, hidden_size)`.
@@ -171,6 +181,7 @@ class SampleEncoderDecoderOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -236,6 +247,9 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams*num_return_sequences, num_heads,
             generated_length, sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams*num_return_sequences, generated_length,
@@ -248,6 +262,7 @@ class BeamSearchEncoderDecoderOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -311,6 +326,9 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, num_heads, generated_length,
             sequence_length)`.
+        cross_attentions (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_attentions=True`` is passed or ``config.output_attentions=True``):
+            Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
+            :obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_heads, generated_length, sequence_length)`.
         decoder_hidden_states (:obj:`tuple(tuple(torch.FloatTensor))`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             :obj:`torch.FloatTensor` of shape :obj:`(batch_size*num_beams, generated_length, hidden_size)`.
@@ -322,6 +340,7 @@ class BeamSampleEncoderDecoderOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    cross_attentions: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
     decoder_hidden_states: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
 
 
@@ -365,7 +384,7 @@ class GenerationMixin:
         )
         if is_pad_token_in_inputs_ids and is_pad_token_not_equal_to_eos_token_id:
             return input_ids.ne(pad_token_id).long()
-        return input_ids.new_ones(input_ids.shape)
+        return input_ids.new_ones(input_ids.shape, dtype=torch.long)
 
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: torch.LongTensor, model_kwargs
@@ -383,8 +402,7 @@ class GenerationMixin:
     ) -> torch.LongTensor:
         decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
         decoder_input_ids = (
-            torch.ones((input_ids.shape[0], 1), dtype=input_ids.dtype, device=input_ids.device)
-            * decoder_start_token_id
+            torch.ones((input_ids.shape[0], 1), dtype=torch.long, device=input_ids.device) * decoder_start_token_id
         )
         return decoder_input_ids
 
@@ -537,9 +555,14 @@ class GenerationMixin:
         self,
         repetition_penalty: float,
         no_repeat_ngram_size: int,
+        encoder_no_repeat_ngram_size: int,
+        encoder_input_ids: torch.LongTensor,
         bad_words_ids: List[List[int]],
         min_length: int,
+        max_length: int,
         eos_token_id: int,
+        forced_bos_token_id: int,
+        forced_eos_token_id: int,
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]],
         num_beams: int,
         num_beam_groups: int,
@@ -555,10 +578,21 @@ class GenerationMixin:
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
+        encoder_no_repeat_ngram_size = (
+            encoder_no_repeat_ngram_size
+            if encoder_no_repeat_ngram_size is not None
+            else self.config.encoder_no_repeat_ngram_size
+        )
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         min_length = min_length if min_length is not None else self.config.min_length
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
         diversity_penalty = diversity_penalty if diversity_penalty is not None else self.config.diversity_penalty
+        forced_bos_token_id = (
+            forced_bos_token_id if forced_bos_token_id is not None else self.config.forced_bos_token_id
+        )
+        forced_eos_token_id = (
+            forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
         # instantiate processors list
         processors = LogitsProcessorList()
 
@@ -574,12 +608,23 @@ class GenerationMixin:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
+        if encoder_no_repeat_ngram_size is not None and encoder_no_repeat_ngram_size > 0:
+            if self.config.is_encoder_decoder:
+                processors.append(EncoderNoRepeatNGramLogitsProcessor(encoder_no_repeat_ngram_size, encoder_input_ids))
+            else:
+                raise ValueError(
+                    "It's impossible to use `encoder_no_repeat_ngram_size` with decoder-only architecture"
+                )
         if bad_words_ids is not None:
             processors.append(NoBadWordsLogitsProcessor(bad_words_ids, eos_token_id))
         if min_length is not None and eos_token_id is not None and min_length > -1:
             processors.append(MinLengthLogitsProcessor(min_length, eos_token_id))
         if prefix_allowed_tokens_fn is not None:
-            processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams))
+            processors.append(PrefixConstrainedLogitsProcessor(prefix_allowed_tokens_fn, num_beams // num_beam_groups))
+        if forced_bos_token_id is not None:
+            processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
+        if forced_eos_token_id is not None:
+            processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
         return processors
 
     @torch.no_grad()
@@ -601,6 +646,7 @@ class GenerationMixin:
         eos_token_id: Optional[int] = None,
         length_penalty: Optional[float] = None,
         no_repeat_ngram_size: Optional[int] = None,
+        encoder_no_repeat_ngram_size: Optional[int] = None,
         num_return_sequences: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
         use_cache: Optional[bool] = None,
@@ -611,6 +657,8 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        forced_bos_token_id: Optional[int] = None,
+        forced_eos_token_id: Optional[int] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -661,6 +709,9 @@ class GenerationMixin:
                 sequences.
             no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
+            encoder_no_repeat_ngram_size (:obj:`int`, `optional`, defaults to 0):
+                If set to int > 0, all ngrams of that size that occur in the ``encoder_input_ids`` cannot occur in the
+                ``decoder_input_ids``.
             bad_words_ids(:obj:`List[List[int]]`, `optional`):
                 List of token ids that are not allowed to be generated. In order to get the tokens of the words that
                 should not appear in the generated text, use :obj:`tokenizer(bad_word,
@@ -701,6 +752,12 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            forced_bos_token_id (:obj:`int`, `optional`):
+                The id of the token to force as the first generated token after the :obj:`decoder_start_token_id`.
+                Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token
+                needs to be the target language token.
+            forced_eos_token_id (:obj:`int`, `optional`):
+                The id of the token to force as the last generated token when :obj:`max_length` is reached.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -820,6 +877,9 @@ class GenerationMixin:
             logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
             pad_token_id = eos_token_id
 
+        # Storing encoder_input_ids for logits_processor that could use them
+        encoder_input_ids = input_ids if self.config.is_encoder_decoder else None
+
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
@@ -862,9 +922,14 @@ class GenerationMixin:
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
+            encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
+            encoder_input_ids=encoder_input_ids,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
+            max_length=max_length,
             eos_token_id=eos_token_id,
+            forced_bos_token_id=forced_bos_token_id,
+            forced_eos_token_id=forced_eos_token_id,
             prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
@@ -1127,6 +1192,7 @@ class GenerationMixin:
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
@@ -1162,6 +1228,8 @@ class GenerationMixin:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
                     )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -1195,7 +1263,7 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
                 break
 
@@ -1210,6 +1278,7 @@ class GenerationMixin:
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:
@@ -1334,6 +1403,7 @@ class GenerationMixin:
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
@@ -1374,6 +1444,8 @@ class GenerationMixin:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
                     )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -1401,7 +1473,7 @@ class GenerationMixin:
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximul length
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
                 break
 
@@ -1418,6 +1490,7 @@ class GenerationMixin:
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:
@@ -1554,6 +1627,7 @@ class GenerationMixin:
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
@@ -1587,7 +1661,8 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
-            # adjust tokens for Bart, *e.g.*
+            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+            # cannot be generated both before and after the `F.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
@@ -1605,6 +1680,8 @@ class GenerationMixin:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
                     )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -1638,6 +1715,7 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
+
             cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
@@ -1664,6 +1742,7 @@ class GenerationMixin:
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:
@@ -1813,6 +1892,7 @@ class GenerationMixin:
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
@@ -1841,7 +1921,8 @@ class GenerationMixin:
             )
             next_token_logits = outputs.logits[:, -1, :]
 
-            # adjust token scores (a no-op by default)
+            # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+            # cannot be generated both before and after the `F.log_softmax` operation.
             next_token_logits = self.adjust_logits_during_generation(
                 next_token_logits, cur_len=cur_len, max_length=max_length
             )
@@ -1860,6 +1941,8 @@ class GenerationMixin:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
                     )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -1915,17 +1998,18 @@ class GenerationMixin:
             if not output_scores:
                 sequence_outputs["sequence_scores"] = None
             if self.config.is_encoder_decoder:
-                return BeamSearchEncoderDecoderOutput(
+                return BeamSampleEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:
-                return BeamSearchDecoderOnlyOutput(
+                return BeamSampleDecoderOnlyOutput(
                     sequences=sequence_outputs["sequences"],
                     sequences_scores=sequence_outputs["sequence_scores"],
                     scores=scores,
@@ -2062,6 +2146,7 @@ class GenerationMixin:
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
         decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
+        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
@@ -2125,7 +2210,8 @@ class GenerationMixin:
                 # select outputs of beams of current group only
                 next_token_logits = outputs.logits[batch_group_indices, -1, :]
 
-                # adjust tokens for Bart, *e.g.*
+                # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
+                # cannot be generated both before and after the `F.log_softmax` operation.
                 next_token_logits = self.adjust_logits_during_generation(
                     next_token_logits, cur_len=cur_len, max_length=max_length
                 )
@@ -2184,6 +2270,8 @@ class GenerationMixin:
                     decoder_attentions += (
                         (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
                     )
+                    if self.config.is_encoder_decoder:
+                        cross_attentions += (outputs.cross_attentions,)
 
                 if output_hidden_states:
                     decoder_hidden_states += (
@@ -2209,7 +2297,7 @@ class GenerationMixin:
 
         if return_dict_in_generate:
             if not output_scores:
-                sequence_outputs["sequence_scores"]
+                sequence_outputs["sequence_scores"] = None
             if self.config.is_encoder_decoder:
                 return BeamSearchEncoderDecoderOutput(
                     sequences=sequence_outputs["sequences"],
@@ -2218,6 +2306,7 @@ class GenerationMixin:
                     encoder_attentions=encoder_attentions,
                     encoder_hidden_states=encoder_hidden_states,
                     decoder_attentions=decoder_attentions,
+                    cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                 )
             else:

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding=utf-8
 # Copyright 2020 The HuggingFace Team All rights reserved.
 #
@@ -143,6 +144,20 @@ class DataTrainingArguments:
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+        },
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
         },
     )
 
@@ -302,6 +317,22 @@ def main():
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+    if data_args.max_seq_length is None:
+        max_seq_length = tokenizer.model_max_length
+        if max_seq_length > 1024:
+            logger.warn(
+                f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
+                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+            )
+            max_seq_length = 1024
+    else:
+        if data_args.max_seq_length > tokenizer.model_max_length:
+            logger.warn(
+                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+            )
+        max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+
     if data_args.line_by_line:
         # When using line_by_line, we just tokenize each nonempty line.
         padding = "max_length" if data_args.pad_to_max_length else False
@@ -313,7 +344,7 @@ def main():
                 examples["text"],
                 padding=padding,
                 truncation=True,
-                max_length=data_args.max_seq_length,
+                max_length=max_seq_length,
                 # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
                 # receives the `special_tokens_mask`.
                 return_special_tokens_mask=True,
@@ -341,22 +372,6 @@ def main():
             load_from_cache_file=not data_args.overwrite_cache,
         )
 
-        if data_args.max_seq_length is None:
-            max_seq_length = tokenizer.model_max_length
-            if max_seq_length > 1024:
-                logger.warn(
-                    f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                    "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
-                )
-                max_seq_length = 1024
-        else:
-            if data_args.max_seq_length > tokenizer.model_max_length:
-                logger.warn(
-                    f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-                    f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-                )
-            max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
-
         # Main data processing function that will concatenate all texts from our dataset and generate chunks of
         # max_seq_length.
         def group_texts(examples):
@@ -379,12 +394,27 @@ def main():
         #
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
         # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
+
         tokenized_datasets = tokenized_datasets.map(
             group_texts,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+
+    if training_args.do_train:
+        if "train" not in tokenized_datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = tokenized_datasets["train"]
+        if data_args.max_train_samples is not None:
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+
+    if training_args.do_eval:
+        if "validation" not in tokenized_datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_dataset = tokenized_datasets["validation"]
+        if data_args.max_val_samples is not None:
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -394,8 +424,8 @@ def main():
     trainer = Trainer(
         model=model,
         args=training_args,
-        train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
-        eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
+        train_dataset=train_dataset if training_args.do_train else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
     )
@@ -410,37 +440,30 @@ def main():
             checkpoint = None
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
+        metrics = train_result.metrics
 
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
-        eval_output = trainer.evaluate()
+        metrics = trainer.evaluate()
 
-        perplexity = math.exp(eval_output["eval_loss"])
-        results["perplexity"] = perplexity
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
+        perplexity = math.exp(metrics["eval_loss"])
+        metrics["perplexity"] = perplexity
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_mlm.txt")
-        if trainer.is_world_process_zero():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in sorted(results.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
-
-    return results
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 
 def _mp_fn(index):

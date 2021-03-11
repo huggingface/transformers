@@ -16,14 +16,17 @@
 Torch utilities for the Trainer class.
 """
 
+import json
 import math
+import os
 import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterator, List, Optional, Union
+from typing import Dict, Iterator, List, Optional, Union
 
 import numpy as np
 import torch
+from packaging import version
 from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
@@ -41,7 +44,7 @@ else:
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-# this is used to supress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
+# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
 try:
     from torch.optim.lr_scheduler import SAVE_STATE_WARNING
 except ImportError:
@@ -449,16 +452,23 @@ class LengthGroupedSampler(Sampler):
     keeping a bit of randomness.
     """
 
-    def __init__(self, dataset: Dataset, batch_size: int, lengths: Optional[List[int]] = None):
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int,
+        lengths: Optional[List[int]] = None,
+        model_input_name: Optional[str] = None,
+    ):
         self.dataset = dataset
         self.batch_size = batch_size
+        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+            if not isinstance(dataset[0], dict) or model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    "'input_ids' key."
+                    f"'{self.model_input_name}' key."
                 )
-            lengths = [len(feature["input_ids"]) for feature in dataset]
+            lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
 
     def __len__(self):
@@ -484,6 +494,7 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         seed: int = 0,
         drop_last: bool = False,
         lengths: Optional[List[int]] = None,
+        model_input_name: Optional[str] = None,
     ):
         if num_replicas is None:
             if not dist.is_available():
@@ -510,14 +521,15 @@ class DistributedLengthGroupedSampler(DistributedSampler):
             self.num_samples = math.ceil(len(self.dataset) / self.num_replicas)
         self.total_size = self.num_samples * self.num_replicas
         self.seed = seed
+        self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
 
         if lengths is None:
-            if not isinstance(dataset[0], dict) or "input_ids" not in dataset[0]:
+            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
-                    "'input_ids' key."
+                    f"'{self.model_input_name}' key."
                 )
-            lengths = [len(feature["input_ids"]) for feature in dataset]
+            lengths = [len(feature[self.model_input_name]) for feature in dataset]
         self.lengths = lengths
 
     def __iter__(self) -> Iterator:
@@ -539,3 +551,140 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         assert len(indices) == self.num_samples
 
         return iter(indices)
+
+
+# In order to keep `trainer.py` compact and easy to understand, place any secondary PT Trainer
+# helper methods here
+
+
+def _get_learning_rate(self):
+    if self.deepspeed:
+        # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
+        # not run for the first few dozen steps while loss scale is too large, and thus during
+        # that time `get_last_lr` will fail if called during that warm up stage, so work around it:
+        try:
+            last_lr = self.lr_scheduler.get_last_lr()[0]
+        except AssertionError as e:
+            if "need to call step" in str(e):
+                logger.warn("tried to get lr value before scheduler/optimizer started stepping, returning lr=0")
+                last_lr = 0
+            else:
+                raise
+    else:
+        last_lr = (
+            # backward compatibility for pytorch schedulers
+            self.lr_scheduler.get_last_lr()[0]
+            if version.parse(torch.__version__) >= version.parse("1.4")
+            else self.lr_scheduler.get_lr()[0]
+        )
+    return last_lr
+
+
+def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
+    """
+    Reformat Trainer metrics values to a human-readable format
+
+    Args:
+        metrics (:obj:`Dict[str, float]`):
+            The metrics returned from train/evaluate/predict
+
+    Returns:
+        metrics (:obj:`Dict[str, float]`): The reformatted metrics
+    """
+
+    metrics_copy = metrics.copy()
+    for k, v in metrics_copy.items():
+        if "_mem_" in k:
+            metrics_copy[k] = f"{ v >> 20 }MB"
+        elif k == "total_flos":
+            metrics_copy[k] = f"{ int(v) >> 30 }GF"
+        elif type(metrics_copy[k]) == float:
+            metrics_copy[k] = round(v, 4)
+
+    return metrics_copy
+
+
+def log_metrics(self, split, metrics):
+    """
+    Log metrics in a specially formatted way
+
+    Under distributed environment this is done only for a process with rank 0.
+
+    Args:
+        split (:obj:`str`):
+            Mode/split name: one of ``train``, ``eval``, ``test``
+        metrics (:obj:`Dict[str, float]`):
+            The metrics returned from train/evaluate/predictmetrics: metrics dict
+    """
+    if not self.is_world_process_zero():
+        return
+
+    logger.info(f"***** {split} metrics *****")
+    metrics_formatted = self.metrics_format(metrics)
+    k_width = max(len(str(x)) for x in metrics_formatted.keys())
+    v_width = max(len(str(x)) for x in metrics_formatted.values())
+    for key in sorted(metrics_formatted.keys()):
+        logger.info(f"  {key: <{k_width}} = {metrics_formatted[key]:>{v_width}}")
+
+
+def save_metrics(self, split, metrics, combined=True):
+    """
+    Save metrics into a json file for that split, e.g. ``train_results.json``.
+
+    Under distributed environment this is done only for a process with rank 0.
+
+    Args:
+        split (:obj:`str`):
+            Mode/split name: one of ``train``, ``eval``, ``test``, ``all``
+        metrics (:obj:`Dict[str, float]`):
+            The metrics returned from train/evaluate/predict
+        combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Creates combined metrics by updating ``all_results.json`` with metrics of this call
+    """
+    if not self.is_world_process_zero():
+        return
+
+    path = os.path.join(self.args.output_dir, f"{split}_results.json")
+    with open(path, "w") as f:
+        json.dump(metrics, f, indent=4, sort_keys=True)
+
+    if combined:
+        path = os.path.join(self.args.output_dir, "all_results.json")
+        if os.path.exists(path):
+            with open(path, "r") as f:
+                all_metrics = json.load(f)
+        else:
+            all_metrics = {}
+
+        all_metrics.update(metrics)
+        with open(path, "w") as f:
+            json.dump(all_metrics, f, indent=4, sort_keys=True)
+
+
+def save_state(self):
+    """
+    Saves the Trainer state, since Trainer.save_model saves only the tokenizer with the model
+
+    Under distributed environment this is done only for a process with rank 0.
+    """
+    if not self.is_world_process_zero():
+        return
+
+    path = os.path.join(self.args.output_dir, "trainer_state.json")
+    self.state.save_to_json(path)
+
+
+def get_parameter_names(model, forbidden_layer_types):
+    """
+    Returns the names of the model parameters that are not inside a forbidden layer.
+    """
+    result = []
+    for name, child in model.named_children():
+        result += [
+            f"{name}.{n}"
+            for n in get_parameter_names(child, forbidden_layer_types)
+            if not isinstance(child, tuple(forbidden_layer_types))
+        ]
+    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
+    result += list(model._parameters.keys())
+    return result

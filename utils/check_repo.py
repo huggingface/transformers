@@ -30,19 +30,23 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "M2M100Encoder",  # Building part of bigger (tested) model.
+    "M2M100Decoder",  # Building part of bigger (tested) model.
+    "Speech2TextEncoder",  # Building part of bigger (tested) model.
+    "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
     "LEDDecoder",  # Building part of bigger (tested) model.
-    "BartDecoder",  # Building part of bigger (tested) model.
+    "BartDecoderWrapper",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
     "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
-    "BlenderbotSmallDecoder",  # Building part of bigger (tested) model.
+    "BlenderbotSmallDecoderWrapper",  # Building part of bigger (tested) model.
     "BlenderbotEncoder",  # Building part of bigger (tested) model.
-    "BlenderbotDecoder",  # Building part of bigger (tested) model.
+    "BlenderbotDecoderWrapper",  # Building part of bigger (tested) model.
     "MBartEncoder",  # Building part of bigger (tested) model.
-    "MBartDecoder",  # Building part of bigger (tested) model.
+    "MBartDecoderWrapper",  # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
-    "PegasusDecoder",  # Building part of bigger (tested) model.
+    "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
@@ -75,14 +79,21 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
+    "M2M100Encoder",
+    "M2M100Decoder",
+    "Speech2TextEncoder",
+    "Speech2TextDecoder",
     "LEDEncoder",
     "LEDDecoder",
     "BartDecoder",
+    "BartDecoderWrapper",
     "BartEncoder",
     "BlenderbotSmallEncoder",
     "BlenderbotSmallDecoder",
+    "BlenderbotSmallDecoderWrapper",
     "BlenderbotEncoder",
     "BlenderbotDecoder",
+    "BlenderbotDecoderWrapper",
     "DPRContextEncoder",
     "DPREncoder",
     "DPRReader",
@@ -93,9 +104,11 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "MT5EncoderModel",
     "MBartEncoder",
     "MBartDecoder",
+    "MBartDecoderWrapper",
     "OpenAIGPTDoubleHeadsModel",
     "PegasusEncoder",
     "PegasusDecoder",
+    "PegasusDecoderWrapper",
     "ProphetNetDecoder",
     "ProphetNetEncoder",
     "ProphetNetDecoderWrapper",
@@ -112,7 +125,11 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "TFGPT2DoubleHeadsModel",
     "TFMT5EncoderModel",
     "TFOpenAIGPTDoubleHeadsModel",
+    "TFRagModel",
+    "TFRagSequenceForGeneration",
+    "TFRagTokenForGeneration",
     "TFT5EncoderModel",
+    "Wav2Vec2ForCTC",
     "XLMForQuestionAnswering",
     "XLMProphetNetDecoder",
     "XLMProphetNetEncoder",
@@ -205,9 +222,8 @@ def find_tested_models(test_file):
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
-    # Check with one less parenthesis
-    if len(all_models) == 0:
-        all_models = re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
+    # Check with one less parenthesis as well
+    all_models += re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
     if len(all_models) > 0:
         model_tested = []
         for entry in all_models:
@@ -366,6 +382,8 @@ DEPRECATED_OBJECTS = [
     "TFBartPretrainedModel",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
+    "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",

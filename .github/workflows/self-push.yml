@@ -27,14 +27,18 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
         with:
           path: .env
-          key: v1.1-tests_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -47,10 +51,10 @@ jobs:
       - name: Install dependencies
         run: |
           source .env/bin/activate
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece,speech]
           pip install git+https://github.com/huggingface/datasets
-          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cu102.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -77,14 +81,14 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_gpu_failures_short.txt
-        
+
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
           name: run_all_tests_torch_gpu_test_reports
           path: reports
-                  
+
 
   run_tests_tf_gpu:
     runs-on: [self-hosted, gpu, single-gpu]
@@ -95,16 +99,21 @@ jobs:
           which python
           python --version
           pip --version
+
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
         with:
           path: .env
-          key: v1.1-tests_tf_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_tf_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -146,7 +155,7 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_tf_gpu_failures_short.txt
-        
+
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
@@ -166,14 +175,18 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
         with:
           path: .env
-          key: v1.1-tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -185,10 +198,10 @@ jobs:
       - name: Install dependencies
         run: |
           source .env/bin/activate
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece,speech]
           pip install git+https://github.com/huggingface/datasets
-          pip install pandas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cu102.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -205,7 +218,7 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_multi_gpu_failures_short.txt          
+        run: cat reports/tests_torch_multi_gpu_failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -226,14 +239,18 @@ jobs:
 
       - name: Current dir
         run: pwd
+
       - run: nvidia-smi
+
+      - name: Kill any run-away pytest processes
+        run: (pkill -f tests; pkill -f examples) || echo "no zombies"
 
       - name: Loading cache.
         uses: actions/cache@v2
         id: cache
         with:
           path: .env
-          key: v1.1-tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -272,4 +289,3 @@ jobs:
         with:
           name: run_all_tests_tf_multi_gpu_test_reports
           path: reports
-          

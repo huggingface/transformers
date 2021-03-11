@@ -17,13 +17,14 @@
 import unittest
 
 from transformers import BarthezTokenizer, BarthezTokenizerFast, BatchEncoding
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
 @require_tokenizers
 @require_sentencepiece
+@slow
 class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     tokenizer_class = BarthezTokenizer
@@ -33,21 +34,18 @@ class BarthezTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
 
-        tokenizer = BarthezTokenizer.from_pretrained("moussaKam/mbarthez")
+        tokenizer = BarthezTokenizerFast.from_pretrained("moussaKam/mbarthez")
         tokenizer.save_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname, legacy_format=False)
         self.tokenizer = tokenizer
 
     @require_torch
-    def test_prepare_seq2seq_batch(self):
+    def test_prepare_batch(self):
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        tgt_text = [
-            "Summary of the text.",
-            "Another summary.",
-        ]
         expected_src_tokens = [0, 57, 3018, 70307, 91, 2]
 
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors="pt"
+        batch = self.tokenizer(
+            src_text, max_length=len(expected_src_tokens), padding=True, truncation=True, return_tensors="pt"
         )
         self.assertIsInstance(batch, BatchEncoding)
 

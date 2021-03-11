@@ -29,16 +29,8 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model ids.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
@@ -49,9 +41,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
     }
 }
 
-####################################################
-# Mapping from model ids to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-small": 512,
     "t5-base": 512,
@@ -92,6 +81,10 @@ class T5Tokenizer(PreTrainedTokenizer):
             <https://github.com/google-research/text-to-text-transfer-transformer/blob/9fd7b14a769417be33bc6c850f9598764913c833/t5/data/preprocessors.py#L2117>`__).
         additional_special_tokens (:obj:`List[str]`, `optional`):
             Additional special tokens used by the tokenizer.
+
+    Attributes:
+        sp_model (:obj:`SentencePieceProcessor`):
+            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -291,5 +284,6 @@ class T5Tokenizer(PreTrainedTokenizer):
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+            logger.info(f"Copy vocab file to {out_vocab_file}")
 
         return (out_vocab_file,)

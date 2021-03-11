@@ -26,6 +26,8 @@ if is_torch_available():
     from transformers import BartForConditionalGeneration, BartTokenizer, top_k_top_p_filtering
     from transformers.generation_beam_search import BeamSearchScorer
     from transformers.generation_logits_process import (
+        ForcedBOSTokenLogitsProcessor,
+        ForcedEOSTokenLogitsProcessor,
         HammingDiversityLogitsProcessor,
         LogitsProcessorList,
         MinLengthLogitsProcessor,
@@ -37,6 +39,8 @@ if is_torch_available():
         TopPLogitsWarper,
     )
     from transformers.generation_utils import (
+        BeamSampleDecoderOnlyOutput,
+        BeamSampleEncoderDecoderOutput,
         BeamSearchDecoderOnlyOutput,
         BeamSearchEncoderDecoderOutput,
         GreedySearchDecoderOnlyOutput,
@@ -49,12 +53,13 @@ if is_torch_available():
 class GenerationTesterMixin:
     model_tester = None
     all_generative_model_classes = ()
+    input_name = "input_ids"
 
     def _get_input_ids_and_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = torch.ones_like(input_ids)
+        input_ids = inputs_dict[self.input_name]
+        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
         max_batch_size = 2
@@ -70,7 +75,14 @@ class GenerationTesterMixin:
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
-    def _get_logits_processor_and_kwargs(input_length, eos_token_id, diversity_penalty=None):
+    def _get_logits_processor_and_kwargs(
+        input_length,
+        eos_token_id,
+        forced_bos_token_id=None,
+        forced_eos_token_id=None,
+        max_length=None,
+        diversity_penalty=None,
+    ):
         process_kwargs = {
             "min_length": input_length + 1,
             "bad_words_ids": [[1, 0]],
@@ -90,6 +102,18 @@ class GenerationTesterMixin:
                     MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
                 ]
                 if eos_token_id is not None
+                else []
+            )
+            + (
+                [
+                    ForcedBOSTokenLogitsProcessor(forced_bos_token_id),
+                ]
+                if forced_bos_token_id is not None
+                else []
+            )
+            + (
+                [ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id)]
+                if forced_eos_token_id is not None
                 else []
             )
             + [
@@ -182,13 +206,17 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        if model.config.is_encoder_decoder:
+            max_length = 4
         logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-            input_ids.shape[-1], model.config.eos_token_id
+            input_ids.shape[-1],
+            eos_token_id=model.config.eos_token_id,
+            forced_bos_token_id=model.config.forced_bos_token_id,
+            forced_eos_token_id=model.config.forced_eos_token_id,
+            max_length=max_length,
         )
 
         kwargs = {}
-        if model.config.is_encoder_decoder:
-            max_length = 4
 
         output_generate = model.generate(
             input_ids,
@@ -544,13 +572,18 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             model = model_class(config).to(torch_device).eval()
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], model.config.eos_token_id
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                model.config.eos_token_id,
+                forced_bos_token_id=model.config.forced_bos_token_id,
+                forced_eos_token_id=model.config.forced_eos_token_id,
+                max_length=max_length,
+            )
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             # check `generate()` and `sample()` are equal
             output_sample, output_generate = self._sample_generate(
@@ -586,13 +619,17 @@ class GenerationTesterMixin:
             config, input_ids, attention_mask, max_length = self._get_input_ids_and_config()
             config.use_cache = False
             model = model_class(config).to(torch_device).eval()
-            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], model.config.eos_token_id
-            )
-            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
-
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                model.config.eos_token_id,
+                forced_bos_token_id=model.config.forced_bos_token_id,
+                forced_eos_token_id=model.config.forced_eos_token_id,
+                max_length=max_length,
+            )
+            logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
             output_sample, output_generate = self._sample_generate(
                 model=model,
@@ -630,14 +667,19 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             # check `generate()` and `beam_search()` are equal
@@ -684,13 +726,19 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
             output_generate, output_beam_search = self._beam_search_generate(
                 model=model,
@@ -732,19 +780,24 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             if not hasattr(config, "use_cache"):
                 # only relevant if model has "use_cache"
                 return
 
             model = model_class(config).to(torch_device).eval()
-
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id
-            )
-
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+            )
+
             beam_kwargs, beam_scorer = self._get_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
 
             config.use_cache = True
@@ -780,6 +833,7 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
 
@@ -819,6 +873,7 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
             logits_warper_kwargs, logits_warper = self._get_warper_and_kwargs(num_beams=1)
@@ -848,11 +903,11 @@ class GenerationTesterMixin:
             )
 
             if model.config.is_encoder_decoder:
-                self.assertIsInstance(output_beam_sample, BeamSearchEncoderDecoderOutput)
-                self.assertIsInstance(output_generate, BeamSearchEncoderDecoderOutput)
+                self.assertIsInstance(output_beam_sample, BeamSampleEncoderDecoderOutput)
+                self.assertIsInstance(output_generate, BeamSampleEncoderDecoderOutput)
             else:
-                self.assertIsInstance(output_beam_sample, BeamSearchDecoderOnlyOutput)
-                self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
+                self.assertIsInstance(output_beam_sample, BeamSampleDecoderOnlyOutput)
+                self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
             self.assertListEqual(output_generate.sequences.tolist(), output_beam_sample.sequences.tolist())
             self.assertTrue(
@@ -892,16 +947,22 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
-
-            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id, diversity_penalty=2.0
-            )
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
-
-            # check `generate()` and `group_beam_search()` are equal
             if model.config.is_encoder_decoder:
                 max_length = 4
+
+            logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+                diversity_penalty=2.0,
+            )
+
+            # check `generate()` and `group_beam_search()` are equal
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(input_ids.shape[0], max_length)
             output_generate, output_group_beam_search = self._group_beam_search_generate(
                 model=model,
@@ -943,16 +1004,22 @@ class GenerationTesterMixin:
             # shorter than `max_length` can be generated which could lead to flaky circle ci
             # failures if the top `num_return_sequences` beams are all shorter than the longest beam
             config.eos_token_id = None
+            config.forced_eos_token_id = None
 
             model = model_class(config).to(torch_device).eval()
+            if model.config.is_encoder_decoder:
+                max_length = 4
 
             logits_process_kwargs, logits_processor = self._get_logits_processor_and_kwargs(
-                input_ids.shape[-1], config.eos_token_id, diversity_penalty=2.0
+                input_ids.shape[-1],
+                config.eos_token_id,
+                config.forced_bos_token_id,
+                config.forced_eos_token_id,
+                max_length,
+                diversity_penalty=2.0,
             )
 
             num_return_sequences = 1
-            if model.config.is_encoder_decoder:
-                max_length = 4
             beam_kwargs, beam_scorer = self._get_diverse_beam_scorer_and_kwargs(
                 input_ids.shape[0], max_length, num_return_sequences=num_return_sequences
             )

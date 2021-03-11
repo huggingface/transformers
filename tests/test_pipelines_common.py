@@ -16,9 +16,9 @@ from typing import List, Optional
 from unittest import mock
 
 from transformers import is_tf_available, is_torch_available, pipeline
+from transformers.file_utils import to_py_obj
 from transformers.pipelines import Pipeline
 from transformers.testing_utils import _run_slow_tests, is_pipeline_test, require_tf, require_torch, slow
-from transformers.tokenization_utils_base import to_py_obj
 
 
 VALID_INPUTS = ["A simple string", ["list of strings"]]

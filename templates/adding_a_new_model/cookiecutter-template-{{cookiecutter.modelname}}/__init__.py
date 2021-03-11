@@ -55,6 +55,7 @@ if is_torch_available():
         "{{cookiecutter.camelcase_modelname}}ForConditionalGeneration",
         "{{cookiecutter.camelcase_modelname}}ForQuestionAnswering",
         "{{cookiecutter.camelcase_modelname}}ForSequenceClassification",
+        "{{cookiecutter.camelcase_modelname}}ForCausalLM",
         "{{cookiecutter.camelcase_modelname}}Model",
         "{{cookiecutter.camelcase_modelname}}PreTrainedModel",
     ]
@@ -114,6 +115,7 @@ if TYPE_CHECKING:
         from .modeling_{{cookiecutter.lowercase_modelname}} import (
             {{cookiecutter.uppercase_modelname}}_PRETRAINED_MODEL_ARCHIVE_LIST,
             {{cookiecutter.camelcase_modelname}}ForConditionalGeneration,
+            {{cookiecutter.camelcase_modelname}}ForCausalLM,
             {{cookiecutter.camelcase_modelname}}ForQuestionAnswering,
             {{cookiecutter.camelcase_modelname}}ForSequenceClassification,
             {{cookiecutter.camelcase_modelname}}Model,
