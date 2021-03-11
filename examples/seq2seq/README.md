@@ -191,7 +191,7 @@ Note, that depending on the used model additional language-specific command-line
        --source_prefix "translate English to Romanian: "
    ```
 
-* yet, other models, require nether.
+* yet, other models, require neither.
 
 Also, if you switch to a different language pair, make sure to adjust the source and target values in all command line arguments.
 
