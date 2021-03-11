@@ -41,6 +41,7 @@ from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
 from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
+from ..m2m_100 import M2M100Tokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
 from ..mpnet.tokenization_mpnet import MPNetTokenizer
 from ..openai.tokenization_openai import OpenAIGPTTokenizer
@@ -49,6 +50,7 @@ from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
 from ..rag.tokenization_rag import RagTokenizer
 from ..retribert.tokenization_retribert import RetriBertTokenizer
 from ..roberta.tokenization_roberta import RobertaTokenizer
+from ..speech_to_text import Speech2TextTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
@@ -80,6 +82,7 @@ from .configuration_auto import (
     LEDConfig,
     LongformerConfig,
     LxmertConfig,
+    M2M100Config,
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
@@ -92,6 +95,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    Speech2TextConfig,
     SqueezeBertConfig,
     T5Config,
     TapasConfig,
@@ -240,6 +244,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (DebertaV2Config, (DebertaV2Tokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
+        (Speech2TextConfig, (Speech2TextTokenizer, None)),
+        (M2M100Config, (M2M100Tokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
