@@ -46,7 +46,7 @@ class VisualBertConfig(PretrainedConfig):
             :class:`~transformers.VisualBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        visual_embedding_dim (:obj:`int`, `optional`, defaults to 768): # TO-DO: Need to check original visual embedding dim
+        visual_embedding_dim (:obj:`int`, `optional`, defaults to 512):
             Dimensionality of the visual embeddings to be passed to the model.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
@@ -96,7 +96,7 @@ class VisualBertConfig(PretrainedConfig):
         self,
         vocab_size=30522,
         hidden_size=768,
-        visual_embedding_dim=768,  # TO-DO: Need to check original visual embedding dim
+        visual_embedding_dim=512,  # TO-DO: Need to check original visual embedding dim
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
