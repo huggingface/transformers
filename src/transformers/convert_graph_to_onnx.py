@@ -222,7 +222,9 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
     return input_vars, output_names, dynamic_axes, tokens
 
 
-def load_graph_from_args(pipeline_name: str, framework: str, model: str, tokenizer: Optional[str] = None, **models_kwargs) -> Pipeline:
+def load_graph_from_args(
+    pipeline_name: str, framework: str, model: str, tokenizer: Optional[str] = None, **models_kwargs
+) -> Pipeline:
     """
     Convert the set of arguments provided through the CLI to an actual pipeline reference (tokenizer + model
 
@@ -349,6 +351,7 @@ def convert(
         use_external_format: Split the model definition from its parameters to allow model bigger than 2GB (PyTorch only)
         pipeline_name: The kind of pipeline to instantiate (ner, question-answering, etc.)
         model_kwargs: Keyword arguments to be forwarded to the model constructor
+
     Returns:
 
     """

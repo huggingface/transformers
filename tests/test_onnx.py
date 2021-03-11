@@ -41,7 +41,7 @@ class OnnxExportTestCase(unittest.TestCase):
     MODEL_TO_TEST = [
         # (model_name, model_kwargs)
         ("bert-base-cased", {}),
-        ("gpt2", {"use_cache": False}), # We don't support exporting GPT2 past keys anymore
+        ("gpt2", {"use_cache": False}),  # We don't support exporting GPT2 past keys anymore
     ]
 
     @require_tf
