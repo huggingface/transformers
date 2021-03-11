@@ -210,8 +210,11 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
             array = np.transpose(array)
         try:
             if len(array.shape) > len(pointer.shape) and math.prod(array.shape) == math.prod(pointer.shape):
+                # print(txt_name, array.shape)
                 if txt_name.endswith("attention/self/key/kernel") or txt_name.endswith("attention/self/query/kernel") or txt_name.endswith("attention/self/value/kernel"):
                     array = array.transpose(1,0,2).reshape(pointer.shape)
+                elif txt_name.endswith("attention/output/dense/kernel"):
+                    array = array.transpose(0,2,1).reshape(pointer.shape)
                 else:
                     array = array.reshape(pointer.shape)
 
@@ -1250,7 +1253,14 @@ class BigBirdOutput(nn.Module):
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
+        self.o_1 = hidden_states # TODO
         hidden_states = self.dropout(hidden_states)
+
+        # TODO
+        self.it = input_tensor
+        self.hs = hidden_states
+        # 
+
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -2550,11 +2560,21 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
         self.output = BigBirdOutput(config)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, encoder_output, **kwargs):
+    def forward(self, encoder_output):
+        
+        self.qa_te = encoder_output
+
         hidden_states = self.dropout(encoder_output)
         hidden_states = self.intermediate(hidden_states)
+        
+        self.inter = hidden_states
+
         hidden_states = self.output(hidden_states, encoder_output)
+        
+        self.o = hidden_states
+
         hidden_states = self.qa_outputs(hidden_states)
+        
         return hidden_states
 
 
@@ -2645,9 +2665,14 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         self.encoder_out = sequence_output # TODO: remove this
 
         logits = self.qa_classifier(sequence_output)
-        self.logits = logits # TODO: remove this
+        self.l = logits # TODO: remove this
+        self.lmask = logits_mask
 
+        # removing question tokens from the competition
         logits = logits - (logits_mask.unsqueeze(2))*1e6
+
+        self.fl = logits
+
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
         end_logits = end_logits.squeeze(-1)
