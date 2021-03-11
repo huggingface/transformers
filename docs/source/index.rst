@@ -221,6 +221,9 @@ and conversion utilities for the following models:
 46. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+47. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
+    Cross-Lingual Representation Learning For Speech Recognition <https://arxiv.org/abs/2006.13979>`__ by Alexis
+    Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
 
 .. _bigtable:
@@ -451,6 +454,7 @@ TensorFlow and/or Flax.
     model_doc/xlmprophetnet
     model_doc/xlmroberta
     model_doc/xlnet
+    model_doc/xlsr_wav2vec2
 
 .. toctree::
     :maxdepth: 2
