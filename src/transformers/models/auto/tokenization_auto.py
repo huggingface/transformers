@@ -41,7 +41,6 @@ from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
 from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
-from ..m2m_100 import M2M100Tokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
 from ..mpnet.tokenization_mpnet import MPNetTokenizer
 from ..openai.tokenization_openai import OpenAIGPTTokenizer
@@ -115,6 +114,7 @@ if is_sentencepiece_available():
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
+    from ..m2m_100 import M2M100Tokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
     from ..mt5 import MT5Tokenizer
@@ -139,6 +139,7 @@ else:
     XLMRobertaTokenizer = None
     XLNetTokenizer = None
     XLMProphetNetTokenizer = None
+    M2M100Tokenizer = None
 
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
