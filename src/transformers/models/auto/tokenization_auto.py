@@ -49,7 +49,6 @@ from ..prophetnet.tokenization_prophetnet import ProphetNetTokenizer
 from ..rag.tokenization_rag import RagTokenizer
 from ..retribert.tokenization_retribert import RetriBertTokenizer
 from ..roberta.tokenization_roberta import RobertaTokenizer
-from ..speech_to_text import Speech2TextTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
@@ -120,6 +119,7 @@ if is_sentencepiece_available():
     from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
     from ..reformer.tokenization_reformer import ReformerTokenizer
+    from ..speech_to_text import Speech2TextTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
     from ..xlm_prophetnet.tokenization_xlm_prophetnet import XLMProphetNetTokenizer
     from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
@@ -140,6 +140,7 @@ else:
     XLNetTokenizer = None
     XLMProphetNetTokenizer = None
     M2M100Tokenizer = None
+    Speech2TextTokenizer = None
 
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
@@ -201,6 +202,7 @@ else:
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
+
 
 logger = logging.get_logger(__name__)
 
