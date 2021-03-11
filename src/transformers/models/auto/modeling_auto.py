@@ -394,6 +394,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (MPNetConfig, MPNetForMaskedLM),
         (TapasConfig, TapasForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
+        (DebertaConfig, DebertaForMaskedLM),
     ]
 )
 
