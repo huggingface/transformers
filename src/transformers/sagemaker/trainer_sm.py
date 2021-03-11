@@ -132,6 +132,8 @@ class SageMakerTrainer(Trainer):
             return super().training_step(model, inputs)
 
     def _gather_and_numpify(self, tensors, name):
+        if tensors is None:
+            return
         if self.is_model_parallel_enabled:
             tensors = smp_gather(tensors)
             return nested_numpify(tensors)
