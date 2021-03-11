@@ -80,7 +80,7 @@ class HfArgumentParser(ArgumentParser):
                     "We will add compatibility when Python 3.9 is released."
                 )
             typestring = str(field.type)
-            for prim_type in (int, float, str, bool):
+            for prim_type in (int, float, str):
                 for collection in (List,):
                     if (
                         typestring == f"typing.Union[{collection[prim_type]}, NoneType]"
@@ -98,7 +98,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["type"] = type(kwargs["choices"][0])
                 if field.default is not dataclasses.MISSING:
                     kwargs["default"] = field.default
-            elif field.type is bool or field.type is Optional[bool]:
+            elif field.type is bool or field.type == Optional[bool]:
                 if field.default is True:
                     self.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **kwargs)
 
