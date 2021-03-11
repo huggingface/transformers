@@ -21,19 +21,44 @@ from .tokenization_bart import BartTokenizer
 logger = logging.get_logger(__name__)
 
 
-# vocab and merges same as roberta
-vocab_url = "https://huggingface.co/roberta-large/resolve/main/vocab.json"
-merges_url = "https://huggingface.co/roberta-large/resolve/main/merges.txt"
-tokenizer_url = "https://huggingface.co/roberta-large/resolve/main/tokenizer.json"
-_all_bart_models = [
-    "facebook/bart-base",
-    "facebook/bart-large",
-    "facebook/bart-large-mnli",
-    "facebook/bart-large-cnn",
-    "facebook/bart-large-xsum",
-    "yjernite/bart_eli5",
-    # This is not exhaustive: see https://huggingface.co/models?filter=bart
-]
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+
+# See all BART models at https://huggingface.co/models?filter=bart
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/bart-base": "https://huggingface.co/facebook/bart-base/resolve/main/vocab.json",
+        "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/vocab.json",
+        "facebook/bart-large-mnli": "https://huggingface.co/facebook/bart-large-mnli/resolve/main/vocab.json",
+        "facebook/bart-large-cnn": "https://huggingface.co/facebook/bart-large-cnn/resolve/main/vocab.json",
+        "facebook/bart-large-xsum": "https://huggingface.co/facebook/bart-large-xsum/resolve/main/vocab.json",
+        "yjernite/bart_eli5": "https://huggingface.co/yjernite/bart_eli5/resolve/main/vocab.json",
+    },
+    "merges_file": {
+        "facebook/bart-base": "https://huggingface.co/facebook/bart-base/resolve/main/merges.txt",
+        "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/merges.txt",
+        "facebook/bart-large-mnli": "https://huggingface.co/facebook/bart-large-mnli/resolve/main/merges.txt",
+        "facebook/bart-large-cnn": "https://huggingface.co/facebook/bart-large-cnn/resolve/main/merges.txt",
+        "facebook/bart-large-xsum": "https://huggingface.co/facebook/bart-large-xsum/resolve/main/merges.txt",
+        "yjernite/bart_eli5": "https://huggingface.co/yjernite/bart_eli5/resolve/main/merges.txt",
+    },
+    "tokenizer_file": {
+        "facebook/bart-base": "https://huggingface.co/facebook/bart-base/resolve/main/tokenizer.json",
+        "facebook/bart-large": "https://huggingface.co/facebook/bart-large/resolve/main/tokenizer.json",
+        "facebook/bart-large-mnli": "https://huggingface.co/facebook/bart-large-mnli/resolve/main/tokenizer.json",
+        "facebook/bart-large-cnn": "https://huggingface.co/facebook/bart-large-cnn/resolve/main/tokenizer.json",
+        "facebook/bart-large-xsum": "https://huggingface.co/facebook/bart-large-xsum/resolve/main/tokenizer.json",
+        "yjernite/bart_eli5": "https://huggingface.co/yjernite/bart_eli5/resolve/main/tokenizer.json",
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "facebook/bart-base": 1024,
+    "facebook/bart-large": 1024,
+    "facebook/bart-large-mnli": 1024,
+    "facebook/bart-large-cnn": 1024,
+    "facebook/bart-large-xsum": 1024,
+    "yjernite/bart_eli5": 1024,
+}
 
 
 class BartTokenizerFast(RobertaTokenizerFast):
@@ -44,11 +69,7 @@ class BartTokenizerFast(RobertaTokenizerFast):
     superclass :class:`~transformers.RobertaTokenizerFast` for usage examples and documentation concerning the
     initialization parameters and other methods.
     """
-    # merges and vocab same as Roberta
-    max_model_input_sizes = {m: 1024 for m in _all_bart_models}
-    pretrained_vocab_files_map = {
-        "vocab_file": {m: vocab_url for m in _all_bart_models},
-        "merges_file": {m: merges_url for m in _all_bart_models},
-        "tokenizer_file": {m: tokenizer_url for m in _all_bart_models},
-    }
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = BartTokenizer
