@@ -1634,7 +1634,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                     else:
                         full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
                     if not os.path.exists(full_file_name):
-                        logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
+                        logger.info(f"Didn't find file {full_file_name}. We won't load it.")
                         full_file_name = None
                 else:
                     full_file_name = hf_bucket_url(
