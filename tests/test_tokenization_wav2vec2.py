@@ -30,7 +30,7 @@ from transformers import (
     Wav2Vec2Tokenizer,
 )
 from transformers.models.wav2vec2.tokenization_wav2vec2 import VOCAB_FILES_NAMES
-from transformers.testing_utils import slow, require_torch
+from transformers.testing_utils import require_torch, slow
 
 from .test_tokenization_common import TokenizerTesterMixin
 
