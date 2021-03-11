@@ -68,8 +68,8 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_ids=input_features)
+        >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
+        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask])
 
         >>> transcription = processor.batch_decode(generated_ids)
 
@@ -100,8 +100,8 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.map(map_to_array)
 
-        >>> input_features = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt").input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_ids=input_features, forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"])
+        >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
+        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask], forced_bos_token_id=processor.tokenizer.lang_code_to_id["fr"])
 
         >>> translation = processor.batch_decode(generated_ids)
 
