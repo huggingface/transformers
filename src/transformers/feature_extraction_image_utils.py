@@ -91,10 +91,9 @@ class ImageFeatureExtractor(FeatureExtractionMixin):
             the case of PyTorch tensors, you will lose the specific device of your tensors however.
 
         Args:
-            processed_features (:class:`~transformers.BatchFeature`, list of :class:`~transformers.BatchFeature`, :obj:`Dict[str, List[float]]`, :obj:`Dict[str, List[List[float]]` or :obj:`List[Dict[str, List[float]]]`):
-                Processed inputs. Can represent one input image (:class:`~transformers.BatchFeature` or :obj:`Dict[str,
-                List[float]]`) or a batch of input images (list of :class:`~transformers.BatchFeature`,
-                `Dict[str, List[List[float]]]` or `List[Dict[str, List[float]]]`) so you can use this method during
+            processed_features (:class:`~transformers.BatchFeature`, list of :class:`~transformers.BatchFeature`, :obj:`Dict[str, PIL.Image]`, :obj:`Dict[str, np.ndarray]`, :obj:`Dict[str, torch.Tensor]`, :obj:`Dict[str, List[PIL.Image]]`, :obj:`Dict[str, List[np.ndarray]]`), :obj:`Dict[str, List[torch.Tensor]]`):
+                Processed inputs. Can represent one input image (:class:`~transformers.BatchFeature` or :obj:`Dict[str, PIL.Image]`, :obj:`Dict[str, np.ndarray]`, :obj:`Dict[str, torch.Tensor]`) or a batch of input images (list of :class:`~transformers.BatchFeature`,
+                :obj:`Dict[str, List[PIL.Image]]`, :obj:`Dict[str, List[np.ndarray]]`), :obj:`Dict[str, List[torch.Tensor]]`) so you can use this method during
                 preprocessing as well as in a PyTorch Dataloader collate function.
 
                 Instead of :obj:`List[float]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow

@@ -213,7 +213,8 @@ class ViTFeatureExtractor(ImageFeatureExtractor):
         )
 
         is_batched = bool(
-            isinstance(images, (list, tuple)) and (isinstance(images[0], (PIL.Image.Image, np.ndarray, torch.Tensor)))
+            isinstance(images, (list, tuple)) 
+            and (isinstance(images[0], (PIL.Image.Image, np.ndarray, torch.Tensor)))
         )
 
         # step 1: make images a list of PIL images no matter what
