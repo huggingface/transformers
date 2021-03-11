@@ -13,11 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import random
 import unittest
-
-import numpy as np
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
@@ -275,16 +271,13 @@ class DebertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        random.seed(0)
-        np.random.seed(0)
-        torch.manual_seed(0)
-        torch.cuda.manual_seed_all(0)
         model = DebertaModel.from_pretrained("microsoft/deberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-0.0218, -0.6641, -0.3665], [-0.3907, -0.4716, -0.6640], [0.7461, 1.2570, -0.9063]]]
+            [[[-0.5986, -0.8055, -0.8462], [1.4484, -0.9348, -0.8059], [0.3123, 0.0032, -1.4131]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4), f"{output[:, :3, :3]}")
+        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4), f"{output[:, 1:4, 1:4]}")
