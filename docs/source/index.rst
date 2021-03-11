@@ -445,6 +445,7 @@ TensorFlow and/or Flax.
     model_doc/xlmprophetnet
     model_doc/xlmroberta
     model_doc/xlnet
+    model_doc/xlsr_wav2vec2
 
 .. toctree::
     :maxdepth: 2
