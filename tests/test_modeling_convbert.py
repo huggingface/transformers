@@ -416,18 +416,16 @@ class ConvBertModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class ConvBertModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
+    def test_inference_no_head(self):
         model = ConvBertModel.from_pretrained("YituTech/conv-bert-base")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6]])
         output = model(input_ids)[0]
-        print(output[:, :3, :3])
 
         expected_shape = torch.Size((1, 6, 768))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
-            [[[-0.0348, -0.4686, -0.3064], [0.2264, -0.2699, -0.7423], [0.1032, -0.4501, -0.5828]]]
+            [[[-0.0864, -0.4898, -0.3677], [0.1434, -0.2952, -0.7640], [-0.0112, -0.4432, -0.5432]]]
         )
 
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
