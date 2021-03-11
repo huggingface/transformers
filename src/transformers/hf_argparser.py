@@ -14,6 +14,7 @@
 
 import dataclasses
 import json
+import re
 import sys
 from argparse import ArgumentParser, ArgumentTypeError
 from enum import Enum
@@ -113,7 +114,9 @@ class HfArgumentParser(ArgumentParser):
                     kwargs["nargs"] = "?"
                     # This is the value that will get picked if we do --field_name (without value)
                     kwargs["const"] = True
-            elif hasattr(field.type, "__origin__") and issubclass(field.type.__origin__, List):
+            elif (
+                hasattr(field.type, "__origin__") and re.search(r"^typing\.List\[(.*)\]$", str(field.type)) is not None
+            ):
                 kwargs["nargs"] = "+"
                 kwargs["type"] = field.type.__args__[0]
                 assert all(
