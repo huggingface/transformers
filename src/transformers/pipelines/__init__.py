@@ -387,7 +387,6 @@ def pipeline(
     # Instantiate model if needed
     if isinstance(model, str):
         # Handle transparent TF/PT model conversion
-        # model_kwargs = {}
         if framework == "pt" and model.endswith(".h5"):
             model_kwargs["from_tf"] = True
             logger.warning(
