@@ -309,8 +309,8 @@ def pipeline(
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
         model_kwargs:
-            Additional dictionary of keyword arguments passed along to the model's
-            :obj:`from_pretrained(..., **model_kwargs)` function.
+            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
+            **model_kwargs)` function.
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
