@@ -1308,13 +1308,10 @@ def get_from_cache(
             # between the HEAD and the GET (unlikely, but hey).
             if 300 <= r.status_code <= 399:
                 url_to_download = r.headers["Location"]
-        except (
-            requests.exceptions.ConnectionError,
-            requests.exceptions.Timeout,
-        ) as exc:
-            # Actually raise for those subclasses of ConnectionError:
-            if isinstance(exc, requests.exceptions.SSLError) or isinstance(exc, requests.exceptions.ProxyError):
-                raise exc
+        except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+            # Actually raise for those subclasses of ConnectionError
+            raise
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             # Otherwise, our Internet connection is down.
             # etag is None
             pass
