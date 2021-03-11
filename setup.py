@@ -138,6 +138,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    # TODO: add correct sagemaker version"sagemaker>=2.29.0",
 ]
 
 
@@ -225,6 +226,8 @@ else:
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
 extras["modelcreation"] = deps_list("cookiecutter")
+
+extras["sagemaker"] = deps_list("sagemaker")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile")
