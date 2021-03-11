@@ -51,8 +51,8 @@ All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-
 Examples
 _______________________________________________________________________________________________________________________
 
-- :prefix_link:`Script <examples/seq2seq/finetune_pegasus_xsum.sh>` to fine-tune pegasus on the XSUM dataset. Data
-  download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
+- :prefix_link:`Script <examples/research_projects/seq2seq-distillation/finetune_pegasus_xsum.sh>` to fine-tune pegasus
+  on the XSUM dataset. Data download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
 - FP16 is not supported (help/ideas on this appreciated!).
 - The adafactor optimizer is recommended for pegasus fine-tuning.
 
