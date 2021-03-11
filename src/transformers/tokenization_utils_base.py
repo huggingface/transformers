@@ -1609,7 +1609,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if len(cls.vocab_files_names) > 1:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
-                    "supported. Use a model identifier or the path to a directory instead."
+                    "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
             warnings.warn(
                 f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
