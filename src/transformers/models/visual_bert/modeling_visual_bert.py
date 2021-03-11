@@ -15,8 +15,6 @@
 """ PyTorch VisualBERT model. """
 
 
-
-
 import math
 import os
 
@@ -34,6 +32,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -164,8 +163,8 @@ class VisualBertEmbeddings(nn.Module):
         self.visual_token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
         self.visual_position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         # TO-DO: Check if register buffer is needed for Visual features
-        self.projection = nn.Linear(config.visual_embedding_dim, config.hidden_size)
-    
+        self.visual_projection = nn.Linear(config.visual_embedding_dim, config.hidden_size)
+
     # TO-DO: Check how to incorporate this
     # def special_intialize(self):
     #     ### This is a bit unorthodox. The better way might be to add an inititilizer to AllenNLP.
@@ -175,7 +174,15 @@ class VisualBertEmbeddings(nn.Module):
     #     return
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, visual_embeds=None, visual_token_type_ids=None, image_text_alignment = None, past_key_values_length=0
+        self,
+        input_ids=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        visual_embeds=None,
+        visual_token_type_ids=None,
+        image_text_alignment=None,
+        past_key_values_length=0,
     ):
         # TO-DO: Check if `confidence=None` and `visual_position_embeds=None` (or id) is needed.
         if input_ids is not None:
@@ -201,7 +208,7 @@ class VisualBertEmbeddings(nn.Module):
             embeddings += position_embeddings
 
         if visual_embeds is not None:
-            visual_embeds = self.projection(visual_embeds)
+            visual_embeds = self.visual_projection(visual_embeds)
             visual_token_type_embeddings = self.visual_token_type_embeddings(visual_token_type_ids)
 
             if image_text_alignment is not None:
@@ -213,30 +220,38 @@ class VisualBertEmbeddings(nn.Module):
                 image_text_alignment = image_text_alignment_mask * image_text_alignment
 
                 # Batch x image_length x alignment length x dim
-                visual_position_embeddings = self.position_embeddings(image_text_alignment) * image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
+                visual_position_embeddings = self.position_embeddings(
+                    image_text_alignment
+                ) * image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).unsqueeze(-1)
                 visual_position_embeddings = visual_position_embeddings.sum(2)
 
                 # We want to averge along the alignment_number dimension.
                 image_text_alignment_mask = image_text_alignment_mask.to(dtype=next(self.parameters()).dtype).sum(2)
-                image_text_alignment_mask[image_text_alignment_mask==0] = 1 # Avoid devide by zero error
+                image_text_alignment_mask[image_text_alignment_mask == 0] = 1  # Avoid devide by zero error
                 visual_position_embeddings = visual_position_embeddings / image_text_alignment_mask.unsqueeze(-1)
 
-                visual_position_ids = torch.zeros(*visual_embeds.size()[:-1], dtype = torch.long)  # TO-DO: Add the device here
+                visual_position_ids = torch.zeros(
+                    *visual_embeds.size()[:-1], dtype=torch.long, device=visual_embeds.device
+                )
 
-                # When fine-tuning the detector , the image_text_alignment is sometimes padded too long. 
+                # When fine-tuning the detector , the image_text_alignment is sometimes padded too long.
                 if visual_position_embeddings.size(1) != visual_embeds.size(1):
-                    assert(visual_position_embeddings.size(1) >= visual_embeds.size(1))
-                    visual_position_embeddings = visual_position_embeddings[:, :visual_embeds.size(1), :]
+                    assert visual_position_embeddings.size(1) >= visual_embeds.size(1)
+                    visual_position_embeddings = visual_position_embeddings[:, : visual_embeds.size(1), :]
 
-                visual_position_embeddings = visual_position_embeddings + self.visual_position_embeddings(visual_position_ids)
+                visual_position_embeddings = visual_position_embeddings + self.visual_position_embeddings(
+                    visual_position_ids
+                )
             else:
-                visual_position_ids = torch.zeros(*visual_embeds.size()[:-1], dtype = torch.long) # TO-DO: Add the device here
+                visual_position_ids = torch.zeros(
+                    *visual_embeds.size()[:-1], dtype=torch.long, device=visual_embeds.device
+                )
                 visual_position_embeddings = self.visual_position_embeddings(visual_position_ids)
 
             visual_embeddings = visual_embeds + visual_position_embeddings + visual_token_type_embeddings
 
             # Concate the two:
-            embeddings = torch.cat((embeddings, visual_embeddings), dim = 1) # concat the visual embeddings after the attentions
+            embeddings = torch.cat((embeddings, visual_embeddings), dim=1)  # concat the visual embeddings
 
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
@@ -640,6 +655,21 @@ class VisualBertEncoder(nn.Module):
         )
 
 
+class VisualBertPooler(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.activation = nn.Tanh()
+
+    def forward(self, hidden_states):
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.activation(pooled_output)
+        return pooled_output
+
+
 class VisualBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -689,8 +719,8 @@ class VisualBertOnlyMLMHead(nn.Module):
 
 class VisualBertPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = VisualBertConfig
@@ -712,14 +742,15 @@ class VisualBertPreTrainedModel(PreTrainedModel):
 
 
 VISUAL_BERT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.VisualBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 VISUAL_BERT_INPUTS_DOCSTRING = r"""
@@ -727,9 +758,9 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`transformers.VisualBertTokenizer`.
-            See :func:`transformers.PreTrainedTokenizer.encode` and
-            :func:`transformers.PreTrainedTokenizer.__call__` for details.
+            Indices can be obtained using :class:`transformers.VisualBertTokenizer`. See
+            :func:`transformers.PreTrainedTokenizer.encode` and :func:`transformers.PreTrainedTokenizer.__call__` for
+            details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
@@ -748,8 +779,8 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
 
             `What are token type IDs? <../glossary.html#token-type-ids>`_
         position_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
-            Indices of positions of each input sequence tokens in the position embeddings.
-            Selected in the range ``[0, config.max_position_embeddings - 1]``.
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range ``[0,
+            config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -780,27 +811,31 @@ VISUAL_BERT_INPUTS_DOCSTRING = r"""
 class VisualBertModel(VisualBertPreTrainedModel):
     """
 
-    The model can behave as an encoder (with only self-attention) as well
-    as a decoder, in which case a layer of cross-attention is added between
-    the self-attention layers, following the architecture described in `Attention is
-    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani,
-    Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
+    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
+    cross-attention is added between the self-attention layers, following the architecture described in `Attention is
+    all you need <https://arxiv.org/abs/1706.03762>`__ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
-    To behave as an decoder the model needs to be initialized with the
-    :obj:`is_decoder` argument of the configuration set to :obj:`True`.
-    To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
-    argument and :obj:`add_cross_attention` set to :obj:`True`; an
-    :obj:`encoder_hidden_states` is then expected as an input to the forward pass.
+    To behave as an decoder the model needs to be initialized with the :obj:`is_decoder` argument of the configuration
+    set to :obj:`True`. To be used in a Seq2Seq model, the model needs to initialized with both :obj:`is_decoder`
+    argument and :obj:`add_cross_attention` set to :obj:`True`; an :obj:`encoder_hidden_states` is then expected as an
+    input to the forward pass.
     """
 
-    def __init__(self, config):
+    def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
         self.embeddings = VisualBertEmbeddings(config)
         self.encoder = VisualBertEncoder(config)
 
-        self.init_weights()
+        self.pooler = VisualBertPooler(config) if add_pooling_layer else None  # TO-DO: Check if pooler is needed
+
+        self.bypass_transformer = self.config.bypass_transformer
+        if self.bypass_transformer:
+            self.additional_layer = VisualBertLayer(config)
+
+        self.init_weights()  # self.apply(self.init_bert_weights) #old code
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
@@ -809,9 +844,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -831,6 +866,9 @@ class VisualBertModel(VisualBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
+        visual_embeds=None,
+        visual_token_type_ids=None,
+        image_text_alignment=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -841,12 +879,11 @@ class VisualBertModel(VisualBertPreTrainedModel):
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
-            if the model is configured as a decoder.
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask
-            is used in the cross-attention if the model is configured as a decoder.
-            Mask values selected in ``[0, 1]``:
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
@@ -886,7 +923,6 @@ class VisualBertModel(VisualBertPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
         if token_type_ids is None:
@@ -919,27 +955,62 @@ class VisualBertModel(VisualBertPreTrainedModel):
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
+            visual_embeds=visual_embeds,
+            visual_token_type_ids=visual_token_type_ids,
+            image_text_alignment=image_text_alignment,
             past_key_values_length=past_key_values_length,
         )
-        encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=extended_attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        sequence_output = encoder_outputs[0]
+
+        if self.bypass_transformer and visual_embeds is not None:
+            assert output_hidden_states is None  # TO-DO: Need to check if this is correct.
+            text_length = input_ids.size(1)
+            text_embedding_output = embedding_output[:, :text_length, :]
+            visual_embedding_output = embedding_output[:, text_length:, :]
+
+            text_extended_attention_mask = extended_attention_mask[:, :, text_length, :text_length]
+            text_encoder_hidden_states = encoder_hidden_states[:, :text_length, :]
+            text_encoder_attention_mask = encoder_extended_attention_mask[:, :, :text_length, :text_length]
+
+            # TO-DO: Check how past-key values work and whether they are required to be modified and added here
+
+            encoded_outputs = self.encoder(
+                text_embedding_output,
+                attention_mask=text_extended_attention_mask,
+                encoder_hidden_states=text_encoder_hidden_states,
+                encoder_attention_mask=text_encoder_attention_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            sequence_output = encoded_outputs[0]
+            concatenated_input = torch.cat((sequence_output, visual_embedding_output), dim=1)
+            sequence_output = self.additional_layer(concatenated_input, extended_attention_mask)
+            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        else:
+            encoder_outputs = self.encoder(
+                embedding_output,
+                attention_mask=extended_attention_mask,
+                head_mask=head_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_extended_attention_mask,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+            sequence_output = encoder_outputs[0]
+
+            pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPoolingAndCrossAttentions(  ## Changed
             last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
@@ -993,10 +1064,9 @@ class VisualBertForMaskedLM(VisualBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the masked language modeling loss.
-            Indices should be in ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring)
-            Tokens with indices set to ``-100`` are ignored (masked), the loss is only computed for the tokens with labels
-            in ``[0, ..., config.vocab_size]``.
+            Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
+            config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
+            (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1075,21 +1145,21 @@ class VisualBertForCausalLM(VisualBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
@@ -1189,8 +1259,11 @@ class VisualBertForCausalLM(VisualBertPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
+
 
 class VisualBertClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
@@ -1214,8 +1287,10 @@ class VisualBertClassificationHead(nn.Module):
 
 
 @add_start_docstrings(
-    """VisualBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
+    """
+    VisualBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
+    """,
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForSequenceClassification(VisualBertPreTrainedModel):
@@ -1235,23 +1310,22 @@ class VisualBertForSequenceClassification(VisualBertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1292,9 +1366,12 @@ class VisualBertForSequenceClassification(VisualBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
-    """VisualBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    VisualBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and
+    a softmax) e.g. for RocStories/SWAG tasks.
+    """,
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
@@ -1307,7 +1384,9 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        VISUAL_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="visual-bert-base-uncased",
@@ -1315,23 +1394,23 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in ``[0, ..., num_choices-1]`` where :obj:`num_choices` is the size of the second dimension
-            of the input tensors. (See :obj:`input_ids` above)
+            Labels for computing the multiple choice classification loss. Indices should be in ``[0, ...,
+            num_choices-1]`` where :obj:`num_choices` is the size of the second dimension of the input tensors. (See
+            :obj:`input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1382,8 +1461,10 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """VisualBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    VisualBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
+    """,
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForTokenClassification(VisualBertPreTrainedModel):
@@ -1419,8 +1500,8 @@ class VisualBertForTokenClassification(VisualBertPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Labels for computing the token classification loss.
-            Indices should be in ``[0, ..., config.num_labels - 1]``.
+            Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
+            1]``.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1468,8 +1549,10 @@ class VisualBertForTokenClassification(VisualBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """VisualBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    VisualBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     VISUAL_BERT_START_DOCSTRING,
 )
 class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
@@ -1508,12 +1591,12 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         r"""
         start_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         end_positions (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
             Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (:obj:`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
+            Positions are clamped to the length of the sequence (:obj:`sequence_length`). Position outside of the
+            sequence are not taken into account for computing the loss.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

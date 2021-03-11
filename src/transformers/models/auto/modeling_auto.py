@@ -21,17 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-from ..visual_bert.modeling_visual_bert import (
-    VisualBertForMaskedLM,
-    VisualBertForCausalLM,
-    VisualBertForMultipleChoice,
-    VisualBertForQuestionAnswering,
-    VisualBertForSequenceClassification,
-    VisualBertForTokenClassification,
-    VisualBertModel,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -74,17 +63,6 @@ from ..camembert.modeling_camembert import (
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
-)
-
-# Add modeling imports here
-from ..visual_bert.modeling_visual_bert import (
-    VisualBertForMaskedLM,
-    VisualBertForCausalLM,
-    VisualBertForMultipleChoice,
-    VisualBertForQuestionAnswering,
-    VisualBertForSequenceClassification,
-    VisualBertForTokenClassification,
-    VisualBertModel,
 )
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
@@ -246,6 +224,18 @@ from ..tapas.modeling_tapas import (
     TapasModel,
 )
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
+
+# Add modeling imports here
+# Add modeling imports here
+from ..visual_bert.modeling_visual_bert import (
+    VisualBertForCausalLM,
+    VisualBertForMaskedLM,
+    VisualBertForMultipleChoice,
+    VisualBertForQuestionAnswering,
+    VisualBertForSequenceClassification,
+    VisualBertForTokenClassification,
+    VisualBertModel,
+)
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
@@ -278,7 +268,6 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
-    VisualBertConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -321,6 +310,7 @@ from .configuration_auto import (
     T5Config,
     TapasConfig,
     TransfoXLConfig,
+    VisualBertConfig,
     Wav2Vec2Config,
     XLMConfig,
     XLMProphetNetConfig,
@@ -422,7 +412,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(VisualBertConfig, VisualBertForMaskedLM),
+        (VisualBertConfig, VisualBertForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (M2M100Config, M2M100ForConditionalGeneration),
@@ -495,7 +485,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(VisualBertConfig, VisualBertForMaskedLM),
+        (VisualBertConfig, VisualBertForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -620,7 +610,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(VisualBertConfig, VisualBertForTokenClassification),
+        (VisualBertConfig, VisualBertForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
@@ -648,7 +638,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(VisualBertConfig, VisualBertForMultipleChoice),
+        (VisualBertConfig, VisualBertForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),

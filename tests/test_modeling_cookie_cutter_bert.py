@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch VisualBERT model. """
+""" Testing suite for the PyTorch CookieCutterBERT model. """
 
 
 import unittest
@@ -29,19 +29,21 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        VisualBertConfig,
-        VisualBertForCausalLM,
-        VisualBertForMaskedLM,
-        VisualBertForMultipleChoice,
-        VisualBertForQuestionAnswering,
-        VisualBertForSequenceClassification,
-        VisualBertForTokenClassification,
-        VisualBertModel,
+        CookieCutterBertConfig,
+        CookieCutterBertForCausalLM,
+        CookieCutterBertForMaskedLM,
+        CookieCutterBertForMultipleChoice,
+        CookieCutterBertForQuestionAnswering,
+        CookieCutterBertForSequenceClassification,
+        CookieCutterBertForTokenClassification,
+        CookieCutterBertModel,
     )
-    from transformers.models.visual_bert.modeling_visual_bert import VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.cookie_cutter_bert.modeling_cookie_cutter_bert import (
+        COOKIE_CUTTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
 
 
-class VisualBertModelTester:
+class CookieCutterBertModelTester:
     def __init__(
         self,
         parent,
@@ -109,7 +111,7 @@ class VisualBertModelTester:
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             choice_labels = ids_tensor([self.batch_size], self.num_choices)
 
-        config = VisualBertConfig(
+        config = CookieCutterBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -156,7 +158,7 @@ class VisualBertModelTester:
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = VisualBertModel(config=config)
+        model = CookieCutterBertModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
@@ -177,7 +179,7 @@ class VisualBertModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = VisualBertModel(config)
+        model = CookieCutterBertModel(config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -208,7 +210,7 @@ class VisualBertModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = VisualBertForCausalLM(config=config)
+        model = CookieCutterBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -217,7 +219,7 @@ class VisualBertModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = VisualBertForMaskedLM(config=config)
+        model = CookieCutterBertForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -237,7 +239,7 @@ class VisualBertModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = VisualBertForCausalLM(config=config)
+        model = CookieCutterBertForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -288,7 +290,7 @@ class VisualBertModelTester:
     def create_and_check_for_question_answering(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = VisualBertForQuestionAnswering(config=config)
+        model = CookieCutterBertForQuestionAnswering(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -305,7 +307,7 @@ class VisualBertModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = VisualBertForSequenceClassification(config)
+        model = CookieCutterBertForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
@@ -315,7 +317,7 @@ class VisualBertModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = VisualBertForTokenClassification(config=config)
+        model = CookieCutterBertForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -325,7 +327,7 @@ class VisualBertModelTester:
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_choices = self.num_choices
-        model = VisualBertForMultipleChoice(config=config)
+        model = CookieCutterBertForMultipleChoice(config=config)
         model.to(torch_device)
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -355,26 +357,26 @@ class VisualBertModelTester:
 
 
 @require_torch
-class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
+class CookieCutterBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            VisualBertModel,
-            VisualBertForMaskedLM,
-            VisualBertForCausalLM,
-            VisualBertForMultipleChoice,
-            VisualBertForQuestionAnswering,
-            VisualBertForSequenceClassification,
-            VisualBertForTokenClassification,
+            CookieCutterBertModel,
+            CookieCutterBertForMaskedLM,
+            CookieCutterBertForCausalLM,
+            CookieCutterBertForMultipleChoice,
+            CookieCutterBertForQuestionAnswering,
+            CookieCutterBertForSequenceClassification,
+            CookieCutterBertForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (VisualBertForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (CookieCutterBertForCausalLM,) if is_torch_available() else ()
 
     def setUp(self):
-        self.model_tester = VisualBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VisualBertConfig, hidden_size=37)
+        self.model_tester = CookieCutterBertModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=CookieCutterBertConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -447,16 +449,16 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = VisualBertModel.from_pretrained(model_name)
+        for model_name in COOKIE_CUTTER_BERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CookieCutterBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
 @require_torch
-class VisualBertModelIntegrationTest(unittest.TestCase):
+class CookieCutterBertModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_masked_lm(self):
-        model = VisualBertForMaskedLM.from_pretrained("visual-bert-base-uncased")
+        model = CookieCutterBertForMaskedLM.from_pretrained("cookie-cutter-base-uncased")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 

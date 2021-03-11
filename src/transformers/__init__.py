@@ -399,6 +399,9 @@ if is_torch_available():
             "VisualBertModel",
             "VisualBertPreTrainedModel",
             "load_tf_weights_in_visual_bert",
+        ]
+    )
+
     _import_structure["models.speech_to_text"].extend(
         [
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1343,7 +1346,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig, VisualBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1424,6 +1426,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig, VisualBertTokenizer
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -1506,7 +1509,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.visual_bert import VisualBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1534,6 +1536,7 @@ if TYPE_CHECKING:
         from .models.roberta import RobertaTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.visual_bert import VisualBertTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
@@ -1545,20 +1548,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.visual_bert import (
-            VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            VisualBertForMaskedLM,
-            VisualBertForCausalLM,
-            VisualBertForMultipleChoice,
-            VisualBertForQuestionAnswering,
-            VisualBertForSequenceClassification,
-            VisualBertForTokenClassification,
-            VisualBertLayer,
-            VisualBertModel,
-            VisualBertPreTrainedModel,
-            load_tf_weights_in_visual_bert,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1953,6 +1942,19 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.visual_bert import (
+            VISUAL_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VisualBertForCausalLM,
+            VisualBertForMaskedLM,
+            VisualBertForMultipleChoice,
+            VisualBertForQuestionAnswering,
+            VisualBertForSequenceClassification,
+            VisualBertForTokenClassification,
+            VisualBertLayer,
+            VisualBertModel,
+            VisualBertPreTrainedModel,
+            load_tf_weights_in_visual_bert,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,

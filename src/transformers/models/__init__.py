@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    visual_bert,
     albert,
     auto,
     bart,
@@ -66,6 +65,7 @@ from . import (
     t5,
     tapas,
     transfo_xl,
+    visual_bert,
     wav2vec2,
     xlm,
     xlm_roberta,
