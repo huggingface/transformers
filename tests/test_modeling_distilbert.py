@@ -256,11 +256,12 @@ class DistilBertModelIntergrationTest(unittest.TestCase):
     def test_inference_no_head_absolute_embedding(self):
         model = DistilBertModel.from_pretrained("distilbert-base-uncased")
         input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
-        output = model(input_ids)[0]
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor(
-            [[[0.4026, -0.2919, 0.3902], [0.3828, -0.2129, 0.3563], [0.3919, -0.2287, 0.3438]]]
+            [[[-0.1639, 0.3299, 0.1648], [-0.1746, 0.3289, 0.1710], [-0.1884, 0.3357, 0.1810]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
