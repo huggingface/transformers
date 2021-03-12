@@ -21,17 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-from ..rembert.modeling_tf_rembert import (
-    TFRemBertForMaskedLM,
-    TFRemBertForCausalLM,
-    TFRemBertForMultipleChoice,
-    TFRemBertForQuestionAnswering,
-    TFRemBertForSequenceClassification,
-    TFRemBertForTokenClassification,
-    TFRemBertModel,
-)
 from ..albert.modeling_tf_albert import (
     TFAlbertForMaskedLM,
     TFAlbertForMultipleChoice,
@@ -144,6 +133,17 @@ from ..mpnet.modeling_tf_mpnet import (
 from ..mt5.modeling_tf_mt5 import TFMT5ForConditionalGeneration, TFMT5Model
 from ..openai.modeling_tf_openai import TFOpenAIGPTForSequenceClassification, TFOpenAIGPTLMHeadModel, TFOpenAIGPTModel
 from ..pegasus.modeling_tf_pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
+
+# Add modeling imports here
+from ..rembert.modeling_tf_rembert import (
+    TFRemBertForCausalLM,
+    TFRemBertForMaskedLM,
+    TFRemBertForMultipleChoice,
+    TFRemBertForQuestionAnswering,
+    TFRemBertForSequenceClassification,
+    TFRemBertForTokenClassification,
+    TFRemBertModel,
+)
 from ..roberta.modeling_tf_roberta import (
     TFRobertaForMaskedLM,
     TFRobertaForMultipleChoice,
@@ -183,7 +183,6 @@ from ..xlnet.modeling_tf_xlnet import (
     TFXLNetModel,
 )
 from .configuration_auto import (
-    RemBertConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -209,6 +208,7 @@ from .configuration_auto import (
     MT5Config,
     OpenAIGPTConfig,
     PegasusConfig,
+    RemBertConfig,
     RobertaConfig,
     T5Config,
     TransfoXLConfig,
@@ -289,7 +289,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(RemBertConfig, TFRemBertForMaskedLM),
+        (RemBertConfig, TFRemBertForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (LEDConfig, TFLEDForConditionalGeneration),
         (T5Config, TFT5ForConditionalGeneration),
@@ -319,7 +319,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
-(RemBertConfig, TFRemBertForCausalLM),
+        (RemBertConfig, TFRemBertForCausalLM),
         (BertConfig, TFBertLMHeadModel),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -336,7 +336,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(RemBertConfig, TFRemBertForMaskedLM),
+        (RemBertConfig, TFRemBertForMaskedLM),
         (ConvBertConfig, TFConvBertForMaskedLM),
         (DistilBertConfig, TFDistilBertForMaskedLM),
         (AlbertConfig, TFAlbertForMaskedLM),
@@ -373,7 +373,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
-(RemBertConfig, TFRemBertForSequenceClassification),
+        (RemBertConfig, TFRemBertForSequenceClassification),
         (ConvBertConfig, TFConvBertForSequenceClassification),
         (DistilBertConfig, TFDistilBertForSequenceClassification),
         (AlbertConfig, TFAlbertForSequenceClassification),
@@ -399,7 +399,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
-(RemBertConfig, TFRemBertForQuestionAnswering),
+        (RemBertConfig, TFRemBertForQuestionAnswering),
         (ConvBertConfig, TFConvBertForQuestionAnswering),
         (DistilBertConfig, TFDistilBertForQuestionAnswering),
         (AlbertConfig, TFAlbertForQuestionAnswering),
@@ -421,7 +421,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
 TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(RemBertConfig, TFRemBertForTokenClassification),
+        (RemBertConfig, TFRemBertForTokenClassification),
         (ConvBertConfig, TFConvBertForTokenClassification),
         (DistilBertConfig, TFDistilBertForTokenClassification),
         (AlbertConfig, TFAlbertForTokenClassification),
@@ -443,7 +443,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(RemBertConfig, TFRemBertForMultipleChoice),
+        (RemBertConfig, TFRemBertForMultipleChoice),
         (ConvBertConfig, TFConvBertForMultipleChoice),
         (CamembertConfig, TFCamembertForMultipleChoice),
         (XLMConfig, TFXLMForMultipleChoice),

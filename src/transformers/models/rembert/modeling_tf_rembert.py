@@ -15,7 +15,6 @@
 """ TF 2.0 RemBERT model. """
 
 
-
 import math
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -143,7 +142,6 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
         return final_embeddings
-
 
 
 class TFRemBertSelfAttention(tf.keras.layers.Layer):
@@ -340,10 +338,13 @@ class TFRemBertLayer(tf.keras.layers.Layer):
         )
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.bert_output(hidden_states=intermediate_output, input_tensor=attention_output, training=training)
+        layer_output = self.bert_output(
+            hidden_states=intermediate_output, input_tensor=attention_output, training=training
+        )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
+
 
 class TFRemBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
@@ -591,9 +592,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
 
         if not inputs["return_dict"]:
-            return (
-                sequence_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
@@ -603,13 +602,13 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
 
 
 class TFRemBertPreTrainedModel(TFPreTrainedModel):
-    """An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = RemBertConfig
     base_model_prefix = "rembert"
-
 
 
 REMBERT_START_DOCSTRING = r"""
@@ -618,9 +617,9 @@ REMBERT_START_DOCSTRING = r"""
     generic methods the library implements for all its model (such as downloading or saving, resizing the input
     embeddings, pruning heads etc.)
 
-    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass.
-    Use it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general
-    usage and behavior.
+    This model is also a `tf.keras.Model <https://www.tensorflow.org/api_docs/python/tf/keras/Model>`__ subclass. Use
+    it as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage
+    and behavior.
 
     .. note::
 
@@ -629,11 +628,11 @@ REMBERT_START_DOCSTRING = r"""
         - having all inputs as keyword arguments (like PyTorch models), or
         - having all inputs as a list, tuple or dict in the first positional arguments.
 
-        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having
-        all the tensors in the first argument of the model call function: :obj:`model(inputs)`.
+        This second option is useful when using :meth:`tf.keras.Model.fit` method which currently requires having all
+        the tensors in the first argument of the model call function: :obj:`model(inputs)`.
 
-        If you choose this second option, there are three possibilities you can use to gather all the input Tensors
-        in the first positional argument :
+        If you choose this second option, there are three possibilities you can use to gather all the input Tensors in
+        the first positional argument :
 
         - a single Tensor with :obj:`input_ids` only and nothing else: :obj:`model(inputs_ids)`
         - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -643,8 +642,9 @@ REMBERT_START_DOCSTRING = r"""
 
     Args:
         config (:class:`~transformers.RemBertConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 REMBERT_INPUTS_DOCSTRING = r"""
@@ -774,7 +774,6 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
 
 @add_start_docstrings("""RemBERT Model with a `language modeling` head on top. """, REMBERT_START_DOCSTRING)
 class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLoss):
-
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -869,11 +868,11 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
 
         return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+
 @add_start_docstrings(
     """RemBERT Model with a `language modeling` head on top for CLM fine-tuning. """, REMBERT_START_DOCSTRING
 )
 class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLoss):
-
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -999,8 +998,9 @@ class TFRemBertClassificationHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """RemBERT Model transformer with a sequence classification/regression head on top
-    e.g., for GLUE tasks. """,
+    """
+    RemBERT Model transformer with a sequence classification/regression head on top e.g., for GLUE tasks.
+    """,
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceClassificationLoss):
@@ -1091,8 +1091,10 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
 
 
 @add_start_docstrings(
-    """RemBERT Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
+    """
+    RemBERT Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    softmax) e.g. for RocStories/SWAG tasks.
+    """,
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss):
@@ -1100,9 +1102,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.rembert = TFRemBertMainLayer(config, name="rembert")
-        self.sequence_summary = TFSequenceSummary(
-            config, config.initializer_range, name="sequence_summary"
-        )
+        self.sequence_summary = TFSequenceSummary(config, config.initializer_range, name="sequence_summary")
         self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -1188,9 +1188,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
             else None
         )
         flat_inputs_embeds = (
-            tf.reshape(
-                tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3])
-            )
+            tf.reshape(tensor=inputs["inputs_embeds"], shape=(-1, seq_length, shape_list(inputs["inputs_embeds"])[3]))
             if inputs["inputs_embeds"] is not None
             else None
         )
@@ -1223,11 +1221,15 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
             attentions=outputs.attentions,
         )
 
-    @tf.function(input_signature=[{
-        "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-        "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-        "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
-    }])
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
     def serving(self, inputs: Dict[str, tf.Tensor]) -> TFMultipleChoiceModelOutput:
         output = self.call(input_ids=inputs)
 
@@ -1241,12 +1243,13 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
 
 
 @add_start_docstrings(
-    """RemBERT Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
+    """
+    RemBERT Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    Named-Entity-Recognition (NER) tasks.
+    """,
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassificationLoss):
-
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1337,12 +1340,13 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
 
 
 @add_start_docstrings(
-    """RemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
+    """
+    RemBERT Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
     REMBERT_START_DOCSTRING,
 )
 class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnsweringLoss):
-
     def __init__(self, config: RemBertConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1446,4 +1450,3 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
         return TFQuestionAnsweringModelOutput(
             start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )
-

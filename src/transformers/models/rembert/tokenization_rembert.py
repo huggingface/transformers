@@ -35,6 +35,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "rembert-large": 256,
 }
 
+
 class RemBertTokenizer(PreTrainedTokenizer):
     """
     Construct a RemBERT tokenizer. Based on `SentencePiece <https://github.com/google/sentencepiece>`__.
@@ -92,19 +93,19 @@ class RemBertTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
     def __init__(
-            self,
-            vocab_file,
-            do_lower_case=True,
-            remove_space=True,
-            keep_accents=False,
-            bos_token="[CLS]",
-            eos_token="[SEP]",
-            unk_token="<unk>",
-            sep_token="[SEP]",
-            pad_token="<pad>",
-            cls_token="[CLS]",
-            mask_token="[MASK]",
-            **kwargs
+        self,
+        vocab_file,
+        do_lower_case=True,
+        remove_space=True,
+        keep_accents=False,
+        bos_token="[CLS]",
+        eos_token="[SEP]",
+        unk_token="<unk>",
+        sep_token="[SEP]",
+        pad_token="<pad>",
+        cls_token="[CLS]",
+        mask_token="[MASK]",
+        **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
@@ -202,7 +203,7 @@ class RemBertTokenizer(PreTrainedTokenizer):
         return out_string
 
     def build_inputs_with_special_tokens(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -227,7 +228,7 @@ class RemBertTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -258,7 +259,7 @@ class RemBertTokenizer(PreTrainedTokenizer):
         return [1] + ([0] * len(token_ids_0)) + [1]
 
     def create_token_type_ids_from_sequences(
-            self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A RemBERT

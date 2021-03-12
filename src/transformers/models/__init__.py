@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    rembert,
     albert,
     auto,
     bart,
@@ -58,6 +57,7 @@ from . import (
     prophetnet,
     rag,
     reformer,
+    rembert,
     retribert,
     roberta,
     squeezebert,

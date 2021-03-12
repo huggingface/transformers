@@ -1330,7 +1330,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig, RemBertTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1394,6 +1393,7 @@ if TYPE_CHECKING:
     from .models.prophetnet import PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, ProphetNetConfig, ProphetNetTokenizer
     from .models.rag import RagConfig, RagRetriever, RagTokenizer
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
+    from .models.rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig, RemBertTokenizer
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
@@ -1486,7 +1486,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.rembert import RemBertTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1510,6 +1509,7 @@ if TYPE_CHECKING:
         from .models.openai import OpenAIGPTTokenizerFast
         from .models.pegasus import PegasusTokenizerFast
         from .models.reformer import ReformerTokenizerFast
+        from .models.rembert import RemBertTokenizerFast
         from .models.retribert import RetriBertTokenizerFast
         from .models.roberta import RobertaTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
@@ -1525,20 +1525,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.rembert import (
-            REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            RemBertForMaskedLM,
-            RemBertForCausalLM,
-            RemBertForMultipleChoice,
-            RemBertForQuestionAnswering,
-            RemBertForSequenceClassification,
-            RemBertForTokenClassification,
-            RemBertLayer,
-            RemBertModel,
-            RemBertPreTrainedModel,
-            load_tf_weights_in_rembert,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1882,6 +1868,19 @@ if TYPE_CHECKING:
             ReformerModel,
             ReformerModelWithLMHead,
         )
+        from .models.rembert import (
+            REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            RemBertForCausalLM,
+            RemBertForMaskedLM,
+            RemBertForMultipleChoice,
+            RemBertForQuestionAnswering,
+            RemBertForSequenceClassification,
+            RemBertForTokenClassification,
+            RemBertLayer,
+            RemBertModel,
+            RemBertPreTrainedModel,
+            load_tf_weights_in_rembert,
+        )
         from .models.retribert import RETRIBERT_PRETRAINED_MODEL_ARCHIVE_LIST, RetriBertModel, RetriBertPreTrainedModel
         from .models.roberta import (
             ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -1999,19 +1998,6 @@ if TYPE_CHECKING:
 
     # TensorFlow
     if is_tf_available():
-
-        from .models.rembert import (
-            TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFRemBertForMaskedLM,
-            TFRemBertForCausalLM,
-            TFRemBertForMultipleChoice,
-            TFRemBertForQuestionAnswering,
-            TFRemBertForSequenceClassification,
-            TFRemBertForTokenClassification,
-            TFRemBertLayer,
-            TFRemBertModel,
-            TFRemBertPreTrainedModel,
-        )
 
         from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
 
@@ -2217,6 +2203,18 @@ if TYPE_CHECKING:
             TFOpenAIGPTPreTrainedModel,
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
+        from .models.rembert import (
+            TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFRemBertForCausalLM,
+            TFRemBertForMaskedLM,
+            TFRemBertForMultipleChoice,
+            TFRemBertForQuestionAnswering,
+            TFRemBertForSequenceClassification,
+            TFRemBertForTokenClassification,
+            TFRemBertLayer,
+            TFRemBertModel,
+            TFRemBertPreTrainedModel,
+        )
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,

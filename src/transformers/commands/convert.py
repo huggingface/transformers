@@ -177,6 +177,7 @@ class ConvertCommand(BaseTransformersCLICommand):
             from ..models.rembert.convert_rembert_tf_checkpoint_to_pytorch import (
                 convert_rembert_tf_checkpoint_to_pytorch,
             )
+
             convert_rembert_tf_checkpoint_to_pytorch(self._tf_checkpoint, self._config, self._pytorch_dump_output)
         else:
             raise ValueError(

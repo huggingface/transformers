@@ -42,8 +42,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "rembert-large": 256,
 }
-    # "tokenizer_file": {
-    #     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/tokenizer.json",
+# "tokenizer_file": {
+#     "albert-base-v1": "https://huggingface.co/albert-base-v1/resolve/main/tokenizer.json",
 
 SPIECE_UNDERLINE = "▁"
 

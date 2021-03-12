@@ -21,17 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-from ..rembert.modeling_rembert import (
-    RemBertForMaskedLM,
-    RemBertForCausalLM,
-    RemBertForMultipleChoice,
-    RemBertForQuestionAnswering,
-    RemBertForSequenceClassification,
-    RemBertForTokenClassification,
-    RemBertModel,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -74,17 +63,6 @@ from ..camembert.modeling_camembert import (
     CamembertForSequenceClassification,
     CamembertForTokenClassification,
     CamembertModel,
-)
-
-# Add modeling imports here
-from ..rembert.modeling_rembert import (
-    RemBertForMaskedLM,
-    RemBertForCausalLM,
-    RemBertForMultipleChoice,
-    RemBertForQuestionAnswering,
-    RemBertForSequenceClassification,
-    RemBertForTokenClassification,
-    RemBertModel,
 )
 from ..convbert.modeling_convbert import (
     ConvBertForMaskedLM,
@@ -218,6 +196,18 @@ from ..reformer.modeling_reformer import (
     ReformerModel,
     ReformerModelWithLMHead,
 )
+
+# Add modeling imports here
+# Add modeling imports here
+from ..rembert.modeling_rembert import (
+    RemBertForCausalLM,
+    RemBertForMaskedLM,
+    RemBertForMultipleChoice,
+    RemBertForQuestionAnswering,
+    RemBertForSequenceClassification,
+    RemBertForTokenClassification,
+    RemBertModel,
+)
 from ..retribert.modeling_retribert import RetriBertModel
 from ..roberta.modeling_roberta import (
     RobertaForCausalLM,
@@ -276,7 +266,6 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
-    RemBertConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -311,6 +300,7 @@ from .configuration_auto import (
     PegasusConfig,
     ProphetNetConfig,
     ReformerConfig,
+    RemBertConfig,
     RetriBertConfig,
     RobertaConfig,
     SqueezeBertConfig,
@@ -416,7 +406,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-(RemBertConfig, RemBertForMaskedLM),
+        (RemBertConfig, RemBertForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LEDConfig, LEDForConditionalGeneration),
@@ -487,7 +477,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
-(RemBertConfig, RemBertForMaskedLM),
+        (RemBertConfig, RemBertForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -611,7 +601,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
-(RemBertConfig, RemBertForTokenClassification),
+        (RemBertConfig, RemBertForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
@@ -639,7 +629,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
-(RemBertConfig, RemBertForMultipleChoice),
+        (RemBertConfig, RemBertForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
