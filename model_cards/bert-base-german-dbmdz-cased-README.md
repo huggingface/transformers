@@ -1,4 +1,0 @@
----
-language: de
-license: mit
----

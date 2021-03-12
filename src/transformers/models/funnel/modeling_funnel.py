@@ -779,6 +779,8 @@ class FunnelPreTrainedModel(PreTrainedModel):
         elif classname == "FunnelEmbeddings":
             std = 1.0 if self.config.initializer_std is None else self.config.initializer_std
             nn.init.normal_(module.word_embeddings.weight, std=std)
+            if module.word_embeddings.padding_idx is not None:
+                module.word_embeddings.weight.data[module.padding_idx].zero_()
 
 
 class FunnelClassificationHead(nn.Module):
@@ -1166,6 +1168,9 @@ class FunnelForMaskedLM(FunnelPreTrainedModel):
 
     def get_output_embeddings(self):
         return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     @add_start_docstrings_to_model_forward(FUNNEL_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(

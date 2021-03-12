@@ -19,9 +19,7 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from ...file_utils import add_start_docstrings, is_sentencepiece_available
-from ...tokenization_utils import BatchEncoding
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -34,16 +32,8 @@ else:
 
 logger = logging.get_logger(__name__)
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model ids.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "t5-small": "https://huggingface.co/t5-small/resolve/main/spiece.model",
@@ -61,9 +51,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
     },
 }
 
-####################################################
-# Mapping from model ids to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "t5-small": 512,
     "t5-base": 512,
@@ -75,8 +62,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class T5TokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" T5 tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
-    <https://github.com/google/sentencepiece>`__ .
+    Construct a "fast" T5 tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
@@ -110,7 +97,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = T5Tokenizer
 
     prefix_tokens: List[int] = []
@@ -162,6 +149,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
 
         if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file):
             copyfile(self.vocab_file, out_vocab_file)
+            logger.info(f"Copy vocab file to {out_vocab_file}")
 
         return (out_vocab_file,)
 
@@ -212,47 +200,3 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(token_ids_0 + eos) * [0]
         return len(token_ids_0 + eos + token_ids_1 + eos) * [0]
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: str = None,
-        truncation: bool = True,
-        **kwargs,
-    ) -> BatchEncoding:
-        if max_length is None:
-            max_length = self.model_max_length
-        self.prefix_tokens = []
-        model_inputs = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        # set prefix_tokens for target text
-        self.prefix_tokens = [self.pad_token_id]
-        labels_and_decoder_mask = self(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=truncation,
-            **kwargs,
-        )
-        model_inputs["labels"] = labels_and_decoder_mask["input_ids"]
-        self.prefix_tokens = []
-        return model_inputs

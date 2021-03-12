@@ -1,10 +1,21 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Pretrained models
 =======================================================================================================================
 
-Here is the full list of the currently provided pretrained models together with a short presentation of each model.
+Here is a partial list of some of the available pretrained models together with a short presentation of each model.
 
-For a list that includes all community-uploaded models, refer to `https://huggingface.co/models
-<https://huggingface.co/models>`__.
+For the full list, refer to `https://huggingface.co/models <https://huggingface.co/models>`__.
 
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Architecture       | Model id                                                   | Details of the model                                                                                                                  |
@@ -333,6 +344,12 @@ For a list that includes all community-uploaded models, refer to `https://huggin
 |                    | ``facebook/bart-large-cnn``                                | | 24-layer, 1024-hidden, 16-heads, 406M parameters       (same as large)                                                              |
 |                    |                                                            | | bart-large base architecture finetuned on cnn summarization task                                                                    |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| BARThez            | ``moussaKam/barthez``                                      | | 12-layer,  768-hidden, 12-heads, 216M parameters                                                                                    |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/moussaKam/BARThez>`__)                                                                              |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``moussaKam/mbarthez``                                     | | 24-layer, 1024-hidden, 16-heads, 561M parameters                                                                                    |
++--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | DialoGPT           | ``DialoGPT-small``                                         | | 12-layer, 768-hidden, 12-heads, 124M parameters                                                                                     |
 |                    |                                                            | | Trained on English text: 147M conversation-like exchanges extracted from Reddit.                                                    |
 |                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
@@ -347,6 +364,12 @@ For a list that includes all community-uploaded models, refer to `https://huggin
 |                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                    | ``reformer-crime-and-punishment``                          | | 6-layer, 256-hidden, 2-heads, 3M parameters                                                                                         |
 |                    |                                                            | | Trained on English text: Crime and Punishment novel by Fyodor Dostoyevsky.                                                          |
++--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+| M2M100             | ``facebook/m2m100_418M``                                   | | 24-layer, 1024-hidden, 16-heads, 418M parameters                                                                                    |
+|                    |                                                            | | multilingual machine translation model for 100 languages                                                                            |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``facebook/m2m100_1.2B``                                   | | 48-layer, 1024-hidden, 16-heads, 1.2B parameters                                                                                    |
+|                    |                                                            | | multilingual machine translation model for 100 languages                                                                            |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | MarianMT           | ``Helsinki-NLP/opus-mt-{src}-{tgt}``                       | | 12-layer, 512-hidden, 8-heads, ~74M parameter Machine translation models. Parameter counts vary depending on vocab size.            |
 |                    |                                                            | | (see `model list <https://huggingface.co/Helsinki-NLP>`_)                                                                           |
@@ -364,6 +387,15 @@ For a list that includes all community-uploaded models, refer to `https://huggin
 |                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 |                    | ``facebook/mbart-large-en-ro``                             | | 24-layer, 1024-hidden, 16-heads, 610M parameters                                                                                    |
 |                    |                                                            | | mbart-large-cc25 model finetuned on WMT english romanian translation.                                                               |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``facebook/mbart-large-50``                                | | 24-layer, 1024-hidden, 16-heads,                                                                                                    |
+|                    |                                                            | | mBART model trained on 50 languages' monolingual corpus.                                                                            |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``facebook/mbart-large-50-one-to-many-mmt``                | | 24-layer, 1024-hidden, 16-heads,                                                                                                    |
+|                    |                                                            | | mbart-50-large model finetuned for one (English) to many multilingual machine translation covering 50 languages.                    |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``facebook/mbart-large-50-many-to-many-mmt``               | | 24-layer, 1024-hidden, 16-heads,                                                                                                    |
+|                    |                                                            | | mbart-50-large model finetuned for many to many multilingual machine translation covering 50 languages.                             |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
 | Lxmert             | ``lxmert-base-uncased``                                    | | 9-language layers, 9-relationship layers, and 12-cross-modality layers                                                              |
 |                    |                                                            | | 768-hidden, 12-heads (for each layer) ~ 228M parameters                                                                             |
@@ -417,13 +449,28 @@ For a list that includes all community-uploaded models, refer to `https://huggin
 |                    |                                                            |                                                                                                                                       |
 |                    |                                                            | (see `details <https://github.com/microsoft/unilm/tree/master/layoutlm>`__)                                                           |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-| DeBERTa            | ``microsoft/deberta-base``                                 | | 12-layer, 768-hidden, 12-heads, ~125M parameters                                                                                    |
+| DeBERTa            | ``microsoft/deberta-base``                                 | | 12-layer, 768-hidden, 12-heads, ~140M parameters                                                                                    |
 |                    |                                                            | | DeBERTa using the BERT-base architecture                                                                                            |
 |                    |                                                            |                                                                                                                                       |
 |                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
 |                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
-|                    | ``microsoft/deberta-large``                                | | 24-layer, 1024-hidden, 16-heads, ~390M parameters                                                                                   |
+|                    | ``microsoft/deberta-large``                                | | 24-layer, 1024-hidden, 16-heads, ~400M parameters                                                                                   |
 |                    |                                                            | | DeBERTa using the BERT-large architecture                                                                                           |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``microsoft/deberta-xlarge``                               | | 48-layer, 1024-hidden, 16-heads, ~750M parameters                                                                                   |
+|                    |                                                            | | DeBERTa XLarge with similar BERT architecture                                                                                       |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``microsoft/deberta-xlarge-v2``                            | | 24-layer, 1536-hidden, 24-heads, ~900M parameters                                                                                   |
+|                    |                                                            | | DeBERTa XLarge V2 with similar BERT architecture                                                                                    |
+|                    |                                                            |                                                                                                                                       |
+|                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
+|                    +------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+
+|                    | ``microsoft/deberta-xxlarge-v2``                           | | 48-layer, 1536-hidden, 24-heads, ~1.5B parameters                                                                                   |
+|                    |                                                            | | DeBERTa XXLarge V2 with similar BERT architecture                                                                                   |
 |                    |                                                            |                                                                                                                                       |
 |                    |                                                            | (see `details <https://github.com/microsoft/DeBERTa>`__)                                                                              |
 +--------------------+------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------+

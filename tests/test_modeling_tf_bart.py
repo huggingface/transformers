@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The Huggingface Inc. team
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,15 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import BartConfig, BartTokenizer, is_tf_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import is_pt_tf_cross_test, require_tf, slow
+from transformers.testing_utils import require_tf, slow
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -31,7 +29,6 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFBartForConditionalGeneration, TFBartModel
-    from transformers.models.bart.modeling_tf_bart import TFSinusoidalPositionalEmbedding
 
 
 @require_tf
@@ -40,30 +37,49 @@ class TFBartModelTester:
     config_updates = {}
     hidden_act = "gelu"
 
-    def __init__(self, parent):
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        seq_length=7,
+        is_training=True,
+        use_labels=False,
+        vocab_size=99,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        intermediate_size=37,
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        max_position_embeddings=20,
+        eos_token_id=2,
+        pad_token_id=1,
+        bos_token_id=0,
+    ):
         self.parent = parent
-        self.batch_size = 13
-        self.seq_length = 7
-        self.is_training = True
-        self.use_labels = False
-        self.vocab_size = 99
-        self.hidden_size = 32
-        self.num_hidden_layers = 5
-        self.num_attention_heads = 4
-        self.intermediate_size = 37
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
 
-        self.hidden_dropout_prob = 0.1
-        self.attention_probs_dropout_prob = 0.1
-        self.max_position_embeddings = 20
-        self.eos_token_ids = [2]
-        self.pad_token_id = 1
-        self.bos_token_id = 0
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([2] * self.batch_size), 1)
+        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
-        input_ids = tf.clip_by_value(input_ids, 3, self.vocab_size + 1)
+
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.config_cls(
             vocab_size=self.vocab_size,
@@ -83,86 +99,208 @@ class TFBartModelTester:
             decoder_start_token_id=self.pad_token_id,
             **self.config_updates,
         )
-        inputs_dict = prepare_bart_inputs_dict(config, input_ids)
+        inputs_dict = prepare_bart_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
+
+    def check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = TFBartModel(config=config).get_decoder()
+        input_ids = inputs_dict["input_ids"]
+
+        input_ids = input_ids[:1, :]
+        attention_mask = inputs_dict["attention_mask"][:1, :]
+        head_mask = inputs_dict["head_mask"]
+        self.batch_size = 1
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+        past_key_values = past_key_values[1]
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = tf.cast(ids_tensor((self.batch_size, 3), 2), tf.int8)
+
+        # append to next input_ids and
+        next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
+        next_attention_mask = tf.concat([attention_mask, next_attn_mask], axis=-1)
+
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)[0]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[0]
+
+        self.parent.assertEqual(next_tokens.shape[1], output_from_past.shape[1])
+
+        # select random slice
+        random_slice_idx = int(ids_tensor((1,), output_from_past.shape[-1]))
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
+        output_from_past_slice = output_from_past[:, :, random_slice_idx]
+
+        # test that outputs are equal for slice
+        tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-3)
 
 
 def prepare_bart_inputs_dict(
     config,
     input_ids,
+    decoder_input_ids,
     attention_mask=None,
+    decoder_attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = tf.cast(tf.math.not_equal(input_ids, config.pad_token_id), tf.int8)
+    if decoder_attention_mask is None:
+        decoder_attention_mask = tf.concat(
+            [
+                tf.ones(decoder_input_ids[:, :1].shape, dtype=tf.int8),
+                tf.cast(tf.math.not_equal(decoder_input_ids[:, 1:], config.pad_token_id), tf.int8),
+            ],
+            axis=-1,
+        )
+    if head_mask is None:
+        head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
+    if decoder_head_mask is None:
+        decoder_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
         "input_ids": input_ids,
-        "decoder_input_ids": input_ids,
+        "decoder_input_ids": decoder_input_ids,
         "attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": head_mask,
     }
 
 
 @require_tf
-class TestTFBart(TFModelTesterMixin, unittest.TestCase):
+class TFBartModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (TFBartForConditionalGeneration, TFBartModel) if is_tf_available() else ()
     all_generative_model_classes = (TFBartForConditionalGeneration,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    model_tester_cls = TFBartModelTester
+    test_onnx = True
+    onnx_min_opset = 10
 
     def setUp(self):
-        self.model_tester = self.model_tester_cls(self)
+        self.model_tester = TFBartModelTester(self)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    def test_inputs_embeds(self):
-        # inputs_embeds not supported
-        pass
+    def test_decoder_model_past_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_decoder_model_past_large_inputs(*config_and_inputs)
 
-    def test_compile_tf_model(self):
+    def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=3e-5, epsilon=1e-08, clipnorm=1.0)
-        loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-        metric = tf.keras.metrics.SparseCategoricalAccuracy("accuracy")
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
 
-        model_class = self.all_generative_model_classes[0]
-        input_ids = {
-            "decoder_input_ids": tf.keras.Input(batch_shape=(2, 2000), name="decoder_input_ids", dtype="int32"),
-            "input_ids": tf.keras.Input(batch_shape=(2, 2000), name="input_ids", dtype="int32"),
-        }
+            if model_class in self.all_generative_model_classes:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
 
-        # Prepare our model
-        model = model_class(config)
-        model(self._prepare_for_class(inputs_dict, model_class))  # Model must be called before saving.
-        # Let's load it from the disk to be sure we can use pretrained weights
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname)
+    def test_resize_token_embeddings(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        outputs_dict = model(input_ids)
-        hidden_states = outputs_dict[0]
+        def _get_word_embedding_weight(model, embedding_layer):
+            if hasattr(embedding_layer, "weight"):
+                return embedding_layer.weight
+            else:
+                # Here we build the word embeddings weights if not exists.
+                # And then we retry to get the attribute once built.
+                model(model.dummy_inputs)
+                if hasattr(embedding_layer, "weight"):
+                    return embedding_layer.weight
+                else:
+                    return None
 
-        # Add a dense layer on top to test integration with other keras modules
-        outputs = tf.keras.layers.Dense(2, activation="softmax", name="outputs")(hidden_states)
+        for model_class in self.all_model_classes:
+            for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
+                # build the embeddings
+                model = model_class(config=config)
+                old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                old_final_logits_bias = model.get_bias()
 
-        # Compile extended model
-        extended_model = tf.keras.Model(inputs=[input_ids], outputs=[outputs])
-        extended_model.compile(optimizer=optimizer, loss=loss, metrics=[metric])
+                # reshape the embeddings
+                model.resize_token_embeddings(size)
+                new_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
+                new_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
+                new_final_logits_bias = model.get_bias()
 
-    def test_saved_model_with_hidden_states_output(self):
-        # Should be uncommented during patrick TF refactor
+                # check that the resized embeddings size matches the desired size.
+                assert_size = size if size is not None else config.vocab_size
+
+                self.assertEqual(new_input_embeddings.shape[0], assert_size)
+
+                # check that weights remain the same after resizing
+                models_equal = True
+                for p1, p2 in zip(old_input_embeddings.value(), new_input_embeddings.value()):
+                    if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                        models_equal = False
+                self.assertTrue(models_equal)
+
+                if old_output_embeddings is not None and new_output_embeddings is not None:
+                    self.assertEqual(new_output_embeddings.shape[0], assert_size)
+
+                    models_equal = True
+                    for p1, p2 in zip(old_output_embeddings.value(), new_output_embeddings.value()):
+                        if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                            models_equal = False
+                    self.assertTrue(models_equal)
+
+                if old_final_logits_bias is not None and new_final_logits_bias is not None:
+                    old_final_logits_bias = old_final_logits_bias["final_logits_bias"]
+                    new_final_logits_bias = new_final_logits_bias["final_logits_bias"]
+                    self.assertEqual(new_final_logits_bias.shape[0], 1)
+                    self.assertEqual(new_final_logits_bias.shape[1], assert_size)
+
+                    models_equal = True
+                    for old, new in zip(old_final_logits_bias.value(), new_final_logits_bias.value()):
+                        for p1, p2 in zip(old, new):
+                            if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
+                                models_equal = False
+                    self.assertTrue(models_equal)
+
+    def test_saved_model_creation(self):
+        # This test is too long (>30sec) and makes fail the CI
         pass
 
-    def test_saved_model_with_attentions_output(self):
-        # Should be uncommented during patrick TF refactor
-        pass
+
+def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
+    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
+    if a is None and b is None:
+        return True
+    try:
+        if tf.debugging.assert_near(a, b, atol=atol):
+            return True
+        raise
+    except Exception:
+        msg = "{} != {}".format(a, b)
+        if prefix:
+            msg = prefix + ": " + msg
+        raise AssertionError(msg)
+
+
+def _long_tensor(tok_lst):
+    return tf.constant(tok_lst, dtype=tf.int32)
 
 
 @require_tf
 class TFBartHeadTests(unittest.TestCase):
-
     vocab_size = 99
 
     def _get_config_and_data(self):
@@ -190,7 +328,7 @@ class TFBartHeadTests(unittest.TestCase):
         config, input_ids, batch_size = self._get_config_and_data()
         decoder_lm_labels = ids_tensor([batch_size, input_ids.shape[1]], self.vocab_size)
         lm_model = TFBartForConditionalGeneration(config)
-        outputs = lm_model(inputs=input_ids, lm_labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False)
+        outputs = lm_model(input_ids=input_ids, labels=decoder_lm_labels, decoder_input_ids=input_ids, use_cache=False)
         expected_shape = (batch_size, input_ids.shape[1], config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
@@ -209,51 +347,29 @@ class TFBartHeadTests(unittest.TestCase):
         lm_model = TFBartForConditionalGeneration(config)
         context = tf.fill((7, 2), 4)
         summary = tf.fill((7, 7), 6)
-        outputs = lm_model(inputs=context, decoder_input_ids=summary, use_cache=False)
+        outputs = lm_model(input_ids=context, decoder_input_ids=summary, use_cache=False)
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs.logits.shape, expected_shape)
 
 
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if tf.debugging.assert_near(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        msg = "{} != {}".format(a, b)
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
-
-
-def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
-
-
-TOLERANCE = 1e-4
-
-
-@is_pt_tf_cross_test
 @slow
+@require_tf
 class TFBartModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TFBartModel.from_pretrained("facebook/bart-large", from_pt=True)
+        model = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large").model
+
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_bart_inputs_dict(model.config, input_ids)
-        # with torch.no_grad():
-        output = model(**inputs_dict)[0]
+        attention_mask = tf.cast(tf.math.not_equal(input_ids, model.config.pad_token_id), tf.int8)
+        output = model(input_ids=input_ids, attention_mask=attention_mask)[0]
         expected_shape = (1, 11, 1024)
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = tf.Tensor(
+        expected_slice = tf.convert_to_tensor(
             [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]],
         )
-        self.assertTrue(tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-3)
 
     def test_cnn_summarization_same_as_fairseq_hard(self):
-        hf = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn", from_pt=True)
+        hf = TFBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
         tok = self.tok
 
         FRANCE_ARTICLE = ' Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col. Jean-Marc Menichini, a French Gendarmerie spokesman in charge of communications on rescue efforts around the Germanwings crash site, told CNN that the reports were "completely wrong" and "unwarranted." Cell phones have been collected at the site, he said, but that they "hadn\'t been exploited yet." Menichini said he believed the cell phones would need to be sent to the Criminal Research Institute in Rosny sous-Bois, near Paris, in order to be analyzed by specialized technicians working hand-in-hand with investigators. But none of the cell phones found so far have been sent to the institute, Menichini said. Asked whether staff involved in the search could have leaked a memory card to the media, Menichini answered with a categorical "no." Reichelt told "Erin Burnett: Outfront" that he had watched the video and stood by the report, saying Bild and Paris Match are "very confident" that the clip is real. He noted that investigators only revealed they\'d recovered cell phones from the crash site after Bild and Paris Match published their reports. "That is something we did not know before. ... Overall we can say many things of the investigation weren\'t revealed by the investigation at the beginning," he said. What was mental state of Germanwings co-pilot? German airline Lufthansa confirmed Tuesday that co-pilot Andreas Lubitz had battled depression years before he took the controls of Germanwings Flight 9525, which he\'s accused of deliberately crashing last week in the French Alps. Lubitz told his Lufthansa flight training school in 2009 that he had a "previous episode of severe depression," the airline said Tuesday. Email correspondence between Lubitz and the school discovered in an internal investigation, Lufthansa said, included medical documents he submitted in connection with resuming his flight training. The announcement indicates that Lufthansa, the parent company of Germanwings, knew of Lubitz\'s battle with depression, allowed him to continue training and ultimately put him in the cockpit. Lufthansa, whose CEO Carsten Spohr previously said Lubitz was 100% fit to fly, described its statement Tuesday as a "swift and seamless clarification" and said it was sharing the information and documents -- including training and medical records -- with public prosecutors. Spohr traveled to the crash site Wednesday, where recovery teams have been working for the past week to recover human remains and plane debris scattered across a steep mountainside. He saw the crisis center set up in Seyne-les-Alpes, laid a wreath in the village of Le Vernet, closer to the crash site, where grieving families have left flowers at a simple stone memorial. Menichini told CNN late Tuesday that no visible human remains were left at the site but recovery teams would keep searching. French President Francois Hollande, speaking Tuesday, said that it should be possible to identify all the victims using DNA analysis by the end of the week, sooner than authorities had previously suggested. In the meantime, the recovery of the victims\' personal belongings will start Wednesday, Menichini said. Among those personal belongings could be more cell phones belonging to the 144 passengers and six crew on board. Check out the latest from our correspondents . The details about Lubitz\'s correspondence with the flight school during his training were among several developments as investigators continued to delve into what caused the crash and Lubitz\'s possible motive for downing the jet. A Lufthansa spokesperson told CNN on Tuesday that Lubitz had a valid medical certificate, had passed all his examinations and "held all the licenses required." Earlier, a spokesman for the prosecutor\'s office in Dusseldorf, Christoph Kumpa, said medical records reveal Lubitz suffered from suicidal tendencies at some point before his aviation career and underwent psychotherapy before he got his pilot\'s license. Kumpa emphasized there\'s no evidence suggesting Lubitz was suicidal or acting aggressively before the crash. Investigators are looking into whether Lubitz feared his medical condition would cause him to lose his pilot\'s license, a European government official briefed on the investigation told CNN on Tuesday. While flying was "a big part of his life," the source said, it\'s only one theory being considered. Another source, a law enforcement official briefed on the investigation, also told CNN that authorities believe the primary motive for Lubitz to bring down the plane was that he feared he would not be allowed to fly because of his medical problems. Lubitz\'s girlfriend told investigators he had seen an eye doctor and a neuropsychologist, both of whom deemed him unfit to work recently and concluded he had psychological issues, the European government official said. But no matter what details emerge about his previous mental health struggles, there\'s more to the story, said Brian Russell, a forensic psychologist. "Psychology can explain why somebody would turn rage inward on themselves about the fact that maybe they weren\'t going to keep doing their job and they\'re upset about that and so they\'re suicidal," he said. "But there is no mental illness that explains why somebody then feels entitled to also take that rage and turn it outward on 149 other people who had nothing to do with the person\'s problems." Germanwings crash compensation: What we know . Who was the captain of Germanwings Flight 9525? CNN\'s Margot Haddad reported from Marseille and Pamela Brown from Dusseldorf, while Laura Smith-Spark wrote from London. CNN\'s Frederik Pleitgen, Pamela Boykoff, Antonia Mortensen, Sandrine Amiel and Anna-Maja Rappard contributed to this report.'  # @noqa
@@ -315,13 +431,11 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
         model = self.xsum_1_1_model
         assert model.model.decoder.embed_tokens._layer == model.model.shared
         ARTICLE = 'The Palestinian Authority officially became the 123rd member of the International Criminal Court on Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The formal accession was marked with a ceremony at The Hague, in the Netherlands, where the court is based. The Palestinians signed the ICC\'s founding Rome Statute in January, when they also accepted its jurisdiction over alleged crimes committed "in the occupied Palestinian territory, including East Jerusalem, since June 13, 2014." Later that month, the ICC opened a preliminary examination into the situation in Palestinian territories, paving the way for possible war crimes investigations against Israelis. As members of the court, Palestinians may be subject to counter-charges as well. Israel and the United States, neither of which is an ICC member, opposed the Palestinians\' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki, speaking at Wednesday\'s ceremony, said it was a move toward greater justice. "As Palestine formally becomes a State Party to the Rome Statute today, the world is also a step closer to ending a long era of impunity and injustice," he said, according to an ICC news release. "Indeed, today brings us closer to our shared goals of justice and peace." Judge Kuniko Ozaki, a vice president of the ICC, said acceding to the treaty was just the first step for the Palestinians. "As the Rome Statute today enters into force for the State of Palestine, Palestine acquires all the rights as well as responsibilities that come with being a State Party to the Statute. These are substantive commitments, which cannot be taken lightly," she said. Rights group Human Rights Watch welcomed the development. "Governments seeking to penalize Palestine for joining the ICC should immediately end their pressure, and countries that support universal acceptance of the court\'s treaty should speak out to welcome its membership," said Balkees Jarrah, international justice counsel for the group. "What\'s objectionable is the attempts to undermine international justice, not Palestine\'s decision to join a treaty to which over 100 countries around the world are members." In January, when the preliminary ICC examination was opened, Israeli Prime Minister Benjamin Netanyahu described it as an outrage, saying the court was overstepping its boundaries. The United States also said it "strongly" disagreed with the court\'s decision. "As we have said repeatedly, we do not believe that Palestine is a state and therefore we do not believe that it is eligible to join the ICC," the State Department said in a statement. It urged the warring sides to resolve their differences through direct negotiations. "We will continue to oppose actions against Israel at the ICC as counterproductive to the cause of peace," it said. But the ICC begs to differ with the definition of a state for its purposes and refers to the territories as "Palestine." While a preliminary examination is not a formal investigation, it allows the court to review evidence and determine whether to investigate suspects on both sides. Prosecutor Fatou Bensouda said her office would "conduct its analysis in full independence and impartiality." The war between Israel and Hamas militants in Gaza last summer left more than 2,000 people dead. The inquiry will include alleged war crimes committed since June. The International Criminal Court was set up in 2002 to prosecute genocide, crimes against humanity and war crimes.'
+        EXPECTED = " The International Criminal Court (ICC) has announced that it has been announced by the International Criminal court."
         dct = self.tok(ARTICLE, return_tensors="tf")
         generated_ids = model.generate(**dct, num_beams=4)
         result = self.tok.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        assert (
-            result
-            == " The International Criminal Court (ICC) has announced that it has been announced by the International Criminal court."
-        )
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         batch = self.tok(
@@ -355,33 +469,6 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
             truncation=True,
         )
         features = self.xsum_1_1_model.get_encoder()(**batch).last_hidden_state
-        import numpy as np
 
         expected = np.array([[-0.0828, -0.0251, -0.0674], [0.1277, 0.3311, -0.0255], [0.2613, -0.0840, -0.2763]])
         assert np.allclose(features[0, :3, :3].numpy(), expected, atol=1e-3)
-
-
-@require_tf
-class TestTFSinusoidalPositionalEmbeddings(unittest.TestCase):
-    desired_weights = [
-        [0, 0, 0, 0, 0],
-        [0.84147096, 0.82177866, 0.80180490, 0.78165019, 0.76140374],
-        [0.90929741, 0.93651021, 0.95829457, 0.97505713, 0.98720258],
-    ]
-
-    def test_positional_emb_cache_logic(self):
-        input_ids = _long_tensor([[4, 10]])
-        emb1 = TFSinusoidalPositionalEmbedding(num_positions=32, embedding_dim=6)
-        no_cache = emb1(input_ids, use_cache=False)
-        yes_cache = emb1(input_ids, use_cache=True)
-        self.assertEqual((1, 1, 6), yes_cache.shape)  # extra dim to allow broadcasting, feel free to delete!
-
-        np.testing.assert_almost_equal(no_cache[-1].numpy(), yes_cache[0][0].numpy())
-
-    def test_positional_emb_weights_against_marian(self):
-        emb1 = TFSinusoidalPositionalEmbedding(num_positions=512, embedding_dim=512)
-        emb1.build(None)
-        weights = emb1.embeddings.numpy()
-        for i, (expected_weight, actual_weight) in enumerate(zip(self.desired_weights, weights)):
-            for j in range(5):
-                self.assertAlmostEqual(expected_weight[j], actual_weight[j], places=3)

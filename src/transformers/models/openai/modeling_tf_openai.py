@@ -15,7 +15,6 @@
 # limitations under the License.
 """ TF 2.0 OpenAI GPT model."""
 
-
 from dataclasses import dataclass
 from typing import Optional, Tuple
 
@@ -29,24 +28,26 @@ from ...file_utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput
+from ...modeling_tf_outputs import TFBaseModelOutput, TFCausalLMOutput, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
     TFCausalLanguageModelingLoss,
     TFConv1D,
     TFPreTrainedModel,
+    TFSequenceClassificationLoss,
     TFSequenceSummary,
     TFSharedEmbeddings,
     get_initializer,
+    input_processing,
     keras_serializable,
     shape_list,
 )
-from ...tokenization_utils import BatchEncoding
 from ...utils import logging
 from .configuration_openai import OpenAIGPTConfig
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 _TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
 
@@ -81,7 +82,7 @@ class TFAttention(tf.keras.layers.Layer):
         pass
 
     @staticmethod
-    def causal_attention_mask(nd, ns, dtype):
+    def causal_attention_mask(nd, ns):
         """
         1's in the lower triangle, counting from the lower right corner. Same as tf.matrix_band_part(tf.ones([nd, ns]),
         -1, ns-nd), but doesn't produce garbage on TPUs.
@@ -89,23 +90,24 @@ class TFAttention(tf.keras.layers.Layer):
         i = tf.range(nd)[:, None]
         j = tf.range(ns)
         m = i >= j - ns + nd
-        return tf.cast(m, dtype)
+        return m
 
     def _attn(self, q, k, v, attention_mask, head_mask, output_attentions, training=False):
         # q, k, v have shape [batch, heads, sequence, features]
         w = tf.matmul(q, k, transpose_b=True)
         if self.scale:
-            dk = tf.cast(shape_list(k)[-1], tf.float32)  # scale attention_scores
+            dk = tf.cast(shape_list(k)[-1], dtype=w.dtype)  # scale attention_scores
             w = w / tf.math.sqrt(dk)
 
         # w has shape [batch, heads, dst_sequence, src_sequence], where information flows from src to dst.
         _, _, nd, ns = shape_list(w)
-        b = self.causal_attention_mask(nd, ns, dtype=w.dtype)
+        b = tf.cast(self.causal_attention_mask(nd, ns), dtype=w.dtype)
         b = tf.reshape(b, [1, 1, nd, ns])
         w = w * b - 1e4 * (1 - b)
 
         if attention_mask is not None:
             # Apply the attention mask
+            attention_mask = tf.cast(attention_mask, dtype=w.dtype)
             w = w + attention_mask
 
         w = tf.nn.softmax(w, axis=-1)
@@ -193,31 +195,39 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
+
+        self.config = config
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
         self.return_dict = config.use_return_dict
         self.num_hidden_layers = config.n_layer
         self.vocab_size = config.vocab_size
         self.n_embd = config.n_embd
+        self.n_positions = config.n_positions
+        self.initializer_range = config.initializer_range
 
         self.tokens_embed = TFSharedEmbeddings(
             config.vocab_size, config.n_embd, initializer_range=config.initializer_range, name="tokens_embed"
         )
-        self.positions_embed = tf.keras.layers.Embedding(
-            config.n_positions,
-            config.n_embd,
-            embeddings_initializer=get_initializer(config.initializer_range),
-            name="positions_embed",
-        )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
+
+    def build(self, input_shape):
+        with tf.name_scope("positions_embed"):
+            self.positions_embed = self.add_weight(
+                name="embeddings",
+                shape=[self.n_positions, self.n_embd],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        super().build(input_shape)
 
     def get_input_embeddings(self):
         return self.tokens_embed
 
     def set_input_embeddings(self, value):
         self.tokens_embed.weight = value
-        self.tokens_embed.vocab_size = value.shape[0]
+        self.tokens_embed.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -227,7 +237,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -237,56 +247,44 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            position_ids = inputs[3] if len(inputs) > 3 else position_ids
-            head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            output_attentions = inputs[6] if len(inputs) > 6 else output_attentions
-            output_hidden_states = inputs[7] if len(inputs) > 7 else output_hidden_states
-            return_dict = inputs[8] if len(inputs) > 8 else return_dict
-            assert len(inputs) <= 9, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            position_ids = inputs.get("position_ids", position_ids)
-            head_mask = inputs.get("head_mask", head_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 9, "Too many inputs."
-        else:
-            input_ids = inputs
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
 
-        output_attentions = output_attentions if output_attentions is not None else self.output_attentions
-        output_hidden_states = output_hidden_states if output_hidden_states is not None else self.output_hidden_states
-        return_dict = return_dict if return_dict is not None else self.return_dict
-
-        if input_ids is not None and inputs_embeds is not None:
+        if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = shape_list(input_ids)
-            input_ids = tf.reshape(input_ids, [-1, input_shape[-1]])
-        elif inputs_embeds is not None:
-            input_shape = shape_list(inputs_embeds)[:-1]
+        elif inputs["input_ids"] is not None:
+            input_shape = shape_list(inputs["input_ids"])
+            inputs["input_ids"] = tf.reshape(inputs["input_ids"], [-1, input_shape[-1]])
+        elif inputs["inputs_embeds"] is not None:
+            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        if position_ids is None:
-            position_ids = tf.range(input_shape[-1], dtype=tf.int32)[tf.newaxis, :]
+        if inputs["position_ids"] is None:
+            inputs["position_ids"] = tf.expand_dims(tf.range(input_shape[-1]), axis=0)
 
-        if attention_mask is not None:
+        if inputs["attention_mask"] is not None:
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, tf.newaxis, tf.newaxis, :]
+            inputs["attention_mask"] = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
@@ -294,59 +292,70 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
 
-            attention_mask = tf.cast(attention_mask, tf.float32)
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            one_cst = tf.constant(1.0)
+            inputs["attention_mask"] = tf.cast(inputs["attention_mask"], dtype=one_cst.dtype)
+            inputs["attention_mask"] = tf.multiply(
+                tf.subtract(one_cst, inputs["attention_mask"]), tf.constant(-10000.0)
+            )
         else:
-            attention_mask = None
+            inputs["attention_mask"] = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        if head_mask is not None:
+        if inputs["head_mask"] is not None:
             raise NotImplementedError
         else:
-            head_mask = [None] * self.num_hidden_layers
+            inputs["head_mask"] = [None] * self.num_hidden_layers
             # head_mask = tf.constant([0] * self.num_hidden_layers)
 
-        position_ids = tf.reshape(position_ids, [-1, shape_list(position_ids)[-1]])
+        inputs["position_ids"] = tf.reshape(inputs["position_ids"], [-1, shape_list(inputs["position_ids"])[-1]])
 
-        if inputs_embeds is None:
-            inputs_embeds = self.tokens_embed(input_ids, mode="embedding")
-        position_embeds = self.positions_embed(position_ids)
-        if token_type_ids is not None:
-            token_type_ids = tf.reshape(token_type_ids, [-1, shape_list(token_type_ids)[-1]])
-            token_type_embeds = self.tokens_embed(token_type_ids, mode="embedding")
+        if inputs["inputs_embeds"] is None:
+            inputs["inputs_embeds"] = self.tokens_embed(inputs["input_ids"], mode="embedding")
+        position_embeds = tf.gather(self.positions_embed, inputs["position_ids"])
+        if inputs["token_type_ids"] is not None:
+            inputs["token_type_ids"] = tf.reshape(
+                inputs["token_type_ids"], [-1, shape_list(inputs["token_type_ids"])[-1]]
+            )
+            token_type_embeds = self.tokens_embed(inputs["token_type_ids"], mode="embedding")
         else:
             token_type_embeds = 0
-        hidden_states = inputs_embeds + position_embeds + token_type_embeds
-        hidden_states = self.drop(hidden_states, training=training)
+        hidden_states = inputs["inputs_embeds"] + position_embeds + token_type_embeds
+        hidden_states = self.drop(hidden_states, training=inputs["training"])
 
         output_shape = input_shape + [shape_list(hidden_states)[-1]]
 
-        all_attentions = () if output_attentions else None
-        all_hidden_states = () if output_hidden_states else None
+        all_attentions = () if inputs["output_attentions"] else None
+        all_hidden_states = () if inputs["output_hidden_states"] else None
         for i, block in enumerate(self.h):
-            if output_hidden_states:
+            if inputs["output_hidden_states"]:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions, training=training)
+            outputs = block(
+                hidden_states,
+                inputs["attention_mask"],
+                inputs["head_mask"][i],
+                inputs["output_attentions"],
+                training=inputs["training"],
+            )
             hidden_states = outputs[0]
-            if output_attentions:
+            if inputs["output_attentions"]:
                 all_attentions = all_attentions + (outputs[1],)
 
         hidden_states = tf.reshape(hidden_states, output_shape)
         # Add last hidden state
-        if output_hidden_states:
+        if inputs["output_hidden_states"]:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        if output_attentions:
+        if inputs["output_attentions"]:
             # let the number of heads free (-1) so we can extract attention even after head pruning
             attention_output_shape = input_shape[:-1] + [-1] + shape_list(all_attentions[0])[-2:]
             all_attentions = tuple(tf.reshape(t, attention_output_shape) for t in all_attentions)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
@@ -364,6 +373,19 @@ class TFOpenAIGPTPreTrainedModel(TFPreTrainedModel):
 
     config_class = OpenAIGPTConfig
     base_model_prefix = "transformer"
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 @dataclass
@@ -474,12 +496,15 @@ OPENAI_GPT_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -498,13 +523,59 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="openai-gpt",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def call(self, inputs, **kwargs):
-        outputs = self.transformer(inputs, **kwargs)
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        training=False,
+        **kwargs,
+    ):
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
+        outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
         return outputs
+
+    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -520,18 +591,21 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
 
     def get_output_embeddings(self):
-        return self.transformer.tokens_embed
+        return self.get_input_embeddings()
+
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
 
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="openai-gpt",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -542,22 +616,17 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
         return_dict=None,
         labels=None,
         training=False,
+        **kwargs,
     ):
         r"""
         labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
             config.vocab_size - 1]``.
         """
-        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
-        if isinstance(inputs, (tuple, list)):
-            labels = inputs[9] if len(inputs) > 9 else labels
-            if len(inputs) > 9:
-                inputs = inputs[:9]
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            labels = inputs.pop("labels", labels)
-
-        transformer_outputs = self.transformer(
-            inputs,
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -566,20 +635,34 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            labels=labels,
             training=training,
+            kwargs_call=kwargs,
+        )
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
         )
         hidden_states = transformer_outputs[0]
 
         logits = self.transformer.tokens_embed(hidden_states, mode="linear")
 
         loss = None
-        if labels is not None:
+        if inputs["labels"] is not None:
             # shift labels to the left and cut last logit token
             logits = logits[:, :-1]
-            labels = labels[:, 1:]
+            labels = inputs["labels"][:, 1:]
             loss = self.compute_loss(labels, logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + transformer_outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
@@ -589,6 +672,13 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertLMHeadModel.serving_output
+    def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 @add_start_docstrings(
@@ -609,14 +699,11 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             config, initializer_range=config.initializer_range, name="multiple_choice_head"
         )
 
-    def get_output_embeddings(self):
-        return self.transformer.tokens_embed
-
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOpenAIGPTDoubleHeadsModelOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        inputs,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
         position_ids=None,
@@ -627,6 +714,7 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         training=False,
+        **kwargs,
     ):
         r"""
         mc_token_ids (:obj:`tf.Tensor` or :obj:`Numpy array` of shape :obj:`(batch_size, num_choices)`, `optional`, default to index of the last token of the input):
@@ -656,63 +744,58 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         """
 
-        if isinstance(inputs, (tuple, list)):
-            input_ids = inputs[0]
-            attention_mask = inputs[1] if len(inputs) > 1 else attention_mask
-            token_type_ids = inputs[2] if len(inputs) > 2 else token_type_ids
-            position_ids = inputs[3] if len(inputs) > 3 else position_ids
-            head_mask = inputs[4] if len(inputs) > 4 else head_mask
-            inputs_embeds = inputs[5] if len(inputs) > 5 else inputs_embeds
-            mc_token_ids = inputs[6] if len(inputs) > 6 else mc_token_ids
-            output_attentions = inputs[7] if len(inputs) > 7 else output_attentions
-            output_hidden_states = inputs[8] if len(inputs) > 8 else output_hidden_states
-            return_dict = inputs[9] if len(inputs) > 9 else return_dict
-            assert len(inputs) <= 10, "Too many inputs."
-        elif isinstance(inputs, (dict, BatchEncoding)):
-            input_ids = inputs.get("input_ids")
-            attention_mask = inputs.get("attention_mask", attention_mask)
-            token_type_ids = inputs.get("token_type_ids", token_type_ids)
-            position_ids = inputs.get("position_ids", position_ids)
-            head_mask = inputs.get("head_mask", head_mask)
-            inputs_embeds = inputs.get("inputs_embeds", inputs_embeds)
-            mc_token_ids = inputs.get("mc_token_ids", mc_token_ids)
-            output_attentions = inputs.get("output_attentions", output_attentions)
-            output_hidden_states = inputs.get("output_hidden_states", output_hidden_states)
-            return_dict = inputs.get("return_dict", return_dict)
-            assert len(inputs) <= 10, "Too many inputs."
-        else:
-            input_ids = inputs
-        return_dict = return_dict if return_dict is not None else self.transformer.return_dict
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            mc_token_ids=mc_token_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+            kwargs_call=kwargs,
+        )
 
-        if input_ids is not None:
-            input_shapes = shape_list(input_ids)
+        if inputs["input_ids"] is not None:
+            input_shapes = shape_list(inputs["input_ids"])
         else:
-            input_shapes = shape_list(inputs_embeds)[:-1]
+            input_shapes = shape_list(inputs["inputs_embeds"])[:-1]
 
         seq_length = input_shapes[-1]
-        flat_input_ids = tf.reshape(input_ids, (-1, seq_length)) if input_ids is not None else None
-        flat_attention_mask = tf.reshape(attention_mask, (-1, seq_length)) if attention_mask is not None else None
-        flat_token_type_ids = tf.reshape(token_type_ids, (-1, seq_length)) if token_type_ids is not None else None
-        flat_position_ids = tf.reshape(position_ids, (-1, seq_length)) if position_ids is not None else None
+        flat_input_ids = tf.reshape(inputs["input_ids"], (-1, seq_length)) if inputs["input_ids"] is not None else None
+        flat_attention_mask = (
+            tf.reshape(inputs["attention_mask"], (-1, seq_length)) if inputs["attention_mask"] is not None else None
+        )
+        flat_token_type_ids = (
+            tf.reshape(inputs["token_type_ids"], (-1, seq_length)) if inputs["token_type_ids"] is not None else None
+        )
+        flat_position_ids = (
+            tf.reshape(inputs["position_ids"], (-1, seq_length)) if inputs["position_ids"] is not None else None
+        )
         transformer_outputs = self.transformer(
             flat_input_ids,
             flat_attention_mask,
             flat_token_type_ids,
             flat_position_ids,
-            head_mask,
-            inputs_embeds,
-            output_attentions,
-            output_hidden_states,
-            return_dict=return_dict,
-            training=training,
+            inputs["head_mask"],
+            inputs["inputs_embeds"],
+            inputs["output_attentions"],
+            inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
         )
         hidden_states = transformer_outputs[0]
         hidden_states = tf.reshape(hidden_states, input_shapes + shape_list(hidden_states)[-1:])
         lm_logits = self.transformer.tokens_embed(hidden_states, mode="linear")
-        mc_logits = self.multiple_choice_head(hidden_states, mc_token_ids, training=training)
+        mc_logits = self.multiple_choice_head(hidden_states, inputs["mc_token_ids"], training=inputs["training"])
         mc_logits = tf.squeeze(mc_logits, axis=-1)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (lm_logits, mc_logits) + transformer_outputs[1:]
 
         return TFOpenAIGPTDoubleHeadsModelOutput(
@@ -721,3 +804,173 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "mc_token_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFOpenAIGPTDoubleHeadsModelOutput(
+            logits=output.logits, mc_logits=output.mc_logits, hidden_states=hs, attentions=attns
+        )
+
+
+@add_start_docstrings(
+    """
+    The OpenAI GPT Model transformer with a sequence classification head on top (linear layer).
+
+    :class:`~transformers.TFOpenAIGPTForSequenceClassification` uses the last token in order to do the classification,
+    as other causal models (e.g. GPT-2) do.
+
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    :obj:`pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each
+    row. If no :obj:`pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot
+    guess the padding tokens when :obj:`inputs_embeds` are passed instead of :obj:`input_ids`, it does the same (take
+    the last value in each row of the batch).
+    """,
+    OPENAI_GPT_START_DOCSTRING,
+)
+class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+        self.score = tf.keras.layers.Dense(
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="score",
+            use_bias=False,
+        )
+        self.transformer = TFOpenAIGPTMainLayer(config, name="transformer")
+
+    @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        tokenizer_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFSequenceClassifierOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        labels=None,
+        training=False,
+        **kwargs,
+    ):
+        r"""
+        labels (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the cross entropy classification loss. Indices should be in ``[0, ...,
+            config.vocab_size - 1]``.
+        """
+        inputs = input_processing(
+            func=self.call,
+            config=self.config,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            labels=labels,
+            training=training,
+            kwargs_call=kwargs,
+        )
+
+        transformer_outputs = self.transformer(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            token_type_ids=inputs["token_type_ids"],
+            position_ids=inputs["position_ids"],
+            head_mask=inputs["head_mask"],
+            inputs_embeds=inputs["inputs_embeds"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
+            training=inputs["training"],
+        )
+
+        hidden_states = transformer_outputs[0]
+        logits = self.score(hidden_states)
+        in_logits = None
+        if self.config.pad_token_id is None:
+            sequence_lengths = -1
+        else:
+            if inputs["input_ids"] is not None:
+                sequence_lengths = (
+                    tf.reduce_sum(
+                        tf.cast(
+                            tf.math.not_equal(inputs["input_ids"], self.config.pad_token_id),
+                            dtype=inputs["input_ids"].dtype,
+                        ),
+                        -1,
+                        keepdims=False,
+                    )
+                    - 1
+                )
+                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
+            else:
+                sequence_lengths = -1
+                logger.warning(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
+        loss = None
+
+        if inputs["labels"] is not None:
+            if input_ids is not None:
+                batch_size, sequence_length = shape_list(inputs["input_ids"])[:2]
+            else:
+                batch_size, sequence_length = shape_list(inputs["inputs_embeds"])[:2]
+            assert (
+                self.config.pad_token_id is not None or batch_size == 1
+            ), "Cannot handle batch sizes > 1 if no padding token is defined."
+
+            if not tf.is_tensor(sequence_lengths):
+                in_logits = logits[0:batch_size, sequence_lengths]
+
+            loss = self.compute_loss(
+                tf.reshape(inputs["labels"], [-1, 1]), tf.reshape(in_logits, [-1, self.num_labels])
+            )
+
+        pooled_logits = in_logits if in_logits is not None else logits
+
+        if not inputs["return_dict"]:
+            output = (pooled_logits,) + transformer_outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=pooled_logits,
+            hidden_states=transformer_outputs.hidden_states,
+            attentions=transformer_outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

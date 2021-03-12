@@ -96,6 +96,9 @@ class OpenAIGPTConfig(PretrainedConfig):
             :class:`~transformers.OpenAIGPTDoubleHeadsModel` and :class:`~transformers.OpenAIGPTDoubleHeadsModel`.
 
             The dropout ratio to be used after the projection and activation.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
+
 
     Examples::
 

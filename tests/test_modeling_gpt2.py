@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -92,6 +92,9 @@ class GPT2ModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
 
+    def get_large_model_config(self):
+        return GPT2Config.from_pretrained("gpt2")
+
     def prepare_config_and_inputs(self, gradient_checkpointing=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
@@ -128,6 +131,7 @@ class GPT2ModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
+            use_cache=not gradient_checkpointing,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
@@ -275,22 +279,26 @@ class GPT2ModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs = model(input_ids, token_type_ids=token_type_ids, attention_mask=input_mask, use_cache=True)
 
         output, past = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
         next_token_types = ids_tensor([self.batch_size, 3], self.type_vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_no_past = model(
+            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
+        )["last_hidden_state"]
+        output_from_past = model(
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
+        )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -389,7 +397,9 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
+    all_parallelizable_model_classes = (GPT2LMHeadModel,) if is_torch_available() else ()
     test_missing_keys = False
+    test_model_parallel = True
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

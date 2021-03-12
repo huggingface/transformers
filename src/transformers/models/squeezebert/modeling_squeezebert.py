@@ -39,6 +39,7 @@ from .configuration_squeezebert import SqueezeBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "squeezebert/squeezebert-uncased"
 _CONFIG_FOR_DOC = "SqueezeBertConfig"
 _TOKENIZER_FOR_DOC = "SqueezeBertTokenizer"
 
@@ -328,28 +329,28 @@ class SqueezeBertEncoder(nn.Module):
         # [batch_size, sequence_length, hidden_size] --> [batch_size, hidden_size, sequence_length]
         hidden_states = hidden_states.permute(0, 2, 1)
 
-        all_hidden_states = (hidden_states,) if output_hidden_states else None
+        all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for layer in self.layers:
+
+            if output_hidden_states:
+                hidden_states = hidden_states.permute(0, 2, 1)
+                all_hidden_states += (hidden_states,)
+                hidden_states = hidden_states.permute(0, 2, 1)
+
             layer_output = layer.forward(hidden_states, attention_mask, output_attentions)
+
+            hidden_states = layer_output["feature_map"]
 
             if output_attentions:
                 all_attentions += (layer_output["attention_score"],)
-            if output_hidden_states:
-                all_hidden_states += (layer_output["feature_map"],)
-            hidden_states = layer_output["feature_map"]
-
-        # Transpose hidden states to be compatible with the standard format in Transformers.
-        if all_hidden_states:
-            old_all_hidden_states = all_hidden_states
-            all_hidden_states = ()
-            for hs in old_all_hidden_states:
-                # [batch_size, hidden_size, sequence_length] --> [batch_size, sequence_length, hidden_size]
-                all_hidden_states += (hs.permute(0, 2, 1),)
 
         # [batch_size, hidden_size, sequence_length] --> [batch_size, sequence_length, hidden_size]
         hidden_states = hidden_states.permute(0, 2, 1)
+
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
@@ -428,19 +429,23 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
     config_class = SqueezeBertConfig
     base_model_prefix = "transformer"
-    authorized_missing_keys = [r"position_ids"]
+    _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Embedding)):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, SqueezeBertLayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, (nn.Linear, nn.Conv1d)) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 SQUEEZEBERT_START_DOCSTRING = r"""
@@ -568,7 +573,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert/squeezebert-mnli-headless",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -642,7 +647,7 @@ class SqueezeBertModel(SqueezeBertPreTrainedModel):
 @add_start_docstrings("""SqueezeBERT Model with a `language modeling` head on top. """, SQUEEZEBERT_START_DOCSTRING)
 class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
 
-    authorized_missing_keys = [r"predictions.decoder.bias"]
+    _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -655,10 +660,13 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    def set_output_embeddings(self, new_embeddings):
+        self.cls.predictions.decoder = new_embeddings
+
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert/squeezebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -736,7 +744,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert/squeezebert-mnli-headless",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -822,7 +830,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert/squeezebert-mnli-headless",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -914,7 +922,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert/squeezebert-mnli-headless",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1001,7 +1009,7 @@ class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(SQUEEZEBERT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="squeezebert/squeezebert-mnli-headless",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

@@ -38,6 +38,7 @@ if is_torch_available():
         ProphetNetModel,
         ProphetNetTokenizer,
     )
+    from transformers.modeling_outputs import BaseModelOutput
 
 
 class ProphetNetModelTester:
@@ -242,7 +243,7 @@ class ProphetNetModelTester:
         # There should be `num_layers` key value embeddings stored in decoder_past
         self.parent.assertEqual(len(decoder_past), config.num_decoder_layers)
         # There should be a self attn key, a self attn value, a cross attn key and a cross attn value stored in each decoder_past tuple
-        self.parent.assertEqual(len(decoder_past[0]), 2)  # cross-attention + uni-directional self-attention
+        self.parent.assertEqual(len(decoder_past[0]), 4)  # cross-attention + uni-directional self-attention
 
     def create_and_check_with_lm_head(
         self,
@@ -299,6 +300,24 @@ class ProphetNetModelTester:
         )
         torch.manual_seed(0)
         output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=5, do_sample=True)
+        self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
+
+    def create_and_check_decoder_generate_with_past_key_value_states(
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
+        lm_labels,
+    ):
+        model = ProphetNetForCausalLM(config=config).to(torch_device).eval()
+        torch.manual_seed(0)
+        output_without_past_cache = model.generate(
+            input_ids[:1], num_beams=2, max_length=10, do_sample=True, use_cache=False
+        )
+        torch.manual_seed(0)
+        output_with_past_cache = model.generate(input_ids[:1], num_beams=2, max_length=10, do_sample=True)
         self.parent.assertTrue(torch.all(output_with_past_cache == output_without_past_cache))
 
     def create_and_check_model_fp16_forward(
@@ -463,6 +482,31 @@ class ProphetNetModelTester:
             torch.allclose(
                 outputs_no_mask.last_hidden_state_ngram[0, :5, 0],
                 outputs_with_mask.last_hidden_state_ngram[0, :5, 0],
+                atol=1e-3,
+            )
+        )
+
+    def check_causal_lm_from_pretrained(
+        self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask, *args
+    ):
+        model = ProphetNetForConditionalGeneration(config).to(torch_device).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dirname:
+            model.save_pretrained(tmp_dirname)
+            decoder = ProphetNetForCausalLM.from_pretrained(tmp_dirname).to(torch_device)
+
+        encoder_hidden_states = model.prophetnet.encoder(input_ids).last_hidden_state
+
+        model_outputs = model(
+            encoder_outputs=BaseModelOutput(last_hidden_state=encoder_hidden_states),
+            decoder_input_ids=decoder_input_ids,
+        )
+        dec_outputs = decoder(encoder_hidden_states=encoder_hidden_states, input_ids=decoder_input_ids)
+
+        self.parent.assertTrue(
+            torch.allclose(
+                model_outputs.logits[0, :5],
+                dec_outputs.logits[0, :5],
                 atol=1e-3,
             )
         )
@@ -885,6 +929,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_generate_with_past_key_value_states(*config_and_inputs)
 
+    def test_encoder_decoder_model_generate(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_generate_with_past_key_value_states(*config_and_inputs)
+
     def test_attn_mask_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_model_with_attn_mask(*config_and_inputs)
@@ -897,6 +945,10 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
             config = ProphetNetConfig.from_pretrained(tmp_dirname)
 
         self.assertFalse(config.add_cross_attention)
+
+    def test_causal_lm_from_pretrained(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.check_causal_lm_from_pretrained(*config_and_inputs)
 
     @unittest.skipIf(torch_device == "cpu", "Cant do half precision")
     def test_fp16_forward(self):
@@ -1011,6 +1063,32 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                     [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
                 )
 
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+        output = outputs[0]
+
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_hidden_states.retain_grad()
+        encoder_attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(encoder_attentions.grad)
+
 
 @require_torch
 class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -1036,6 +1114,10 @@ class ProphetNetStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMix
     def test_decoder_model_attn_mask_past(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        # decoder cannot keep gradients
+        return
 
 
 @require_torch

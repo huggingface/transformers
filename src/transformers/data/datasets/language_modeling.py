@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import os
 import pickle
@@ -229,7 +243,7 @@ class LineByLineWithSOPTextDataset(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens
@@ -425,7 +439,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         # to `block_size` anyways, so short sequences are generally wasted
         # computation. However, we *sometimes*
         # (i.e., short_seq_prob == 0.1 == 10% of the time) want to use shorter
-        # sequences to minimize the mismatch between pre-training and fine-tuning.
+        # sequences to minimize the mismatch between pretraining and fine-tuning.
         # The `target_seq_length` is just a rough target however, whereas
         # `block_size` is a hard limit.
         target_seq_length = max_num_tokens

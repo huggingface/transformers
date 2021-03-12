@@ -1,8 +1,20 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Training and fine-tuning
 =======================================================================================================================
 
 Model classes in 🤗 Transformers are designed to be compatible with native PyTorch and TensorFlow 2 and can be used
-seemlessly with either. In this quickstart, we will show how to fine-tune (or train from scratch) a model using the
+seamlessly with either. In this quickstart, we will show how to fine-tune (or train from scratch) a model using the
 standard training tools available in either framework. We will also show how to use our included
 :func:`~transformers.Trainer` class which handles much of the complexity of training for you.
 
@@ -265,6 +277,7 @@ pass it to the trainer.
 
 Finally, you can view the results, including any calculated metrics, by launching tensorboard in your specified
 ``logging_dir`` directory.
+
 
 
 .. _additional-resources:

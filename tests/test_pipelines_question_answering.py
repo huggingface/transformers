@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import unittest
 
 from transformers.data.processors.squad import SquadExample
@@ -22,6 +36,17 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         {
             "question": "In what field is HuggingFace working ?",
             "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+        },
+        {
+            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            "context": "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+        },
+        {
+            "question": ["In what field is HuggingFace working ?", "In what field is HuggingFace working ?"],
+            "context": [
+                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+                "HuggingFace is a startup based in New-York founded in Paris which is trying to solve NLP.",
+            ],
         },
     ]
 
@@ -78,6 +103,11 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
         normalized = qa(question=Q, context=C)
         self.assertEqual(type(normalized), list)
         self.assertEqual(len(normalized), 1)
+        self.assertEqual({type(el) for el in normalized}, {SquadExample})
+
+        normalized = qa(question=[Q, Q], context=C)
+        self.assertEqual(type(normalized), list)
+        self.assertEqual(len(normalized), 2)
         self.assertEqual({type(el) for el in normalized}, {SquadExample})
 
         normalized = qa({"question": Q, "context": C})
@@ -158,6 +188,26 @@ class QAPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
             qa([{"question": Q, "context": C}, {"question": Q, "context": None}])
         with self.assertRaises(ValueError):
             qa([{"question": Q, "context": C}, {"question": Q, "context": ""}])
+
+        with self.assertRaises(ValueError):
+            qa(question={"This": "Is weird"}, context="This is a context")
+
+        with self.assertRaises(ValueError):
+            qa(question=[Q, Q], context=[C, C, C])
+
+        with self.assertRaises(ValueError):
+            qa(question=[Q, Q, Q], context=[C, C])
+
+    def test_argument_handler_old_format(self):
+        qa = QuestionAnsweringArgumentHandler()
+
+        Q = "Where was HuggingFace founded ?"
+        C = "HuggingFace was founded in Paris"
+        # Backward compatibility for this
+        normalized = qa(question=[Q, Q], context=[C, C])
+        self.assertEqual(type(normalized), list)
+        self.assertEqual(len(normalized), 2)
+        self.assertEqual({type(el) for el in normalized}, {SquadExample})
 
     def test_argument_handler_error_handling_odd(self):
         qa = QuestionAnsweringArgumentHandler()

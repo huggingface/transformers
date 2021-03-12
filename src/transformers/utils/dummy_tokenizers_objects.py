@@ -20,6 +20,15 @@ class BartTokenizerFast:
         requires_tokenizers(self)
 
 
+class BarthezTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class BertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
@@ -30,6 +39,15 @@ class BertTokenizerFast:
 
 
 class CamembertTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
+class ConvBertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
 
@@ -119,6 +137,15 @@ class LayoutLMTokenizerFast:
         requires_tokenizers(self)
 
 
+class LEDTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class LongformerTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
@@ -137,6 +164,15 @@ class LxmertTokenizerFast:
         requires_tokenizers(self)
 
 
+class MBart50TokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class MBartTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
@@ -147,6 +183,24 @@ class MBartTokenizerFast:
 
 
 class MobileBertTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
+class MPNetTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
+class MT5TokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
 

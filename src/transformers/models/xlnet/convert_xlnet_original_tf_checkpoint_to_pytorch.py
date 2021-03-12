@@ -21,14 +21,13 @@ import os
 import torch
 
 from transformers import (
-    CONFIG_NAME,
-    WEIGHTS_NAME,
     XLNetConfig,
     XLNetForQuestionAnswering,
     XLNetForSequenceClassification,
     XLNetLMHeadModel,
     load_tf_weights_in_xlnet,
 )
+from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME
 from transformers.utils import logging
 
 

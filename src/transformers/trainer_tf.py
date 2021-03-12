@@ -1,9 +1,24 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """Tensorflow trainer class."""
 
 import datetime
 import math
 import os
 from typing import Callable, Dict, Optional, Tuple
+
+from .file_utils import ENV_VARS_TRUE_VALUES
 
 
 # Integrations must be imported before ML frameworks:
@@ -14,12 +29,11 @@ from .integrations import (  # isort: split
 
 import numpy as np
 import tensorflow as tf
-from packaging.version import parse
 from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, PredictionOutput, set_seed
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -80,11 +94,6 @@ class TFTrainer:
             None,
         ),
     ):
-        assert parse(tf.__version__).release >= (2, 2, 0), (
-            "You need to run the TensorFlow trainer with at least the version 2.2.0, your version is %r "
-            % tf.__version__
-        )
-
         self.model = model
         self.args = args
         self.train_dataset = train_dataset
@@ -94,6 +103,7 @@ class TFTrainer:
         self.gradient_accumulator = GradientAccumulator()
         self.global_step = 0
         self.epoch_logging = 0
+        self.eval_loss = tf.keras.metrics.Sum()
 
         if tb_writer is not None:
             self.tb_writer = tb_writer
@@ -102,7 +112,7 @@ class TFTrainer:
 
         if is_wandb_available():
             self.setup_wandb()
-        elif os.environ.get("WANDB_DISABLED") != "true":
+        elif os.getenv("WANDB_DISABLED", "").upper() not in ENV_VARS_TRUE_VALUES:
             logger.info(
                 "You are instantiating a Trainer but W&B is not installed. To use wandb logging, "
                 "run `pip install wandb; wandb login` see https://docs.wandb.com/huggingface."
@@ -128,7 +138,7 @@ class TFTrainer:
             raise ValueError("Trainer: training requires a train_dataset.")
 
         self.total_train_batch_size = self.args.train_batch_size * self.args.gradient_accumulation_steps
-        self.num_train_examples = tf.data.experimental.cardinality(self.train_dataset).numpy()
+        self.num_train_examples = self.train_dataset.cardinality().numpy()
 
         if self.num_train_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -160,7 +170,7 @@ class TFTrainer:
             raise ValueError("Trainer: evaluation requires an eval_dataset.")
 
         eval_dataset = eval_dataset if eval_dataset is not None else self.eval_dataset
-        num_examples = tf.data.experimental.cardinality(eval_dataset).numpy()
+        num_examples = eval_dataset.cardinality().numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
@@ -190,18 +200,13 @@ class TFTrainer:
         Subclass and override this method if you want to inject some custom behavior.
         """
 
-        num_examples = tf.data.experimental.cardinality(test_dataset).numpy()
+        num_examples = test_dataset.cardinality().numpy()
 
         if num_examples < 0:
             raise ValueError("The training dataset must have an asserted cardinality")
 
-        approx = math.floor if self.args.dataloader_drop_last else math.ceil
-        steps = approx(num_examples / self.args.eval_batch_size)
-        ds = (
-            test_dataset.repeat()
-            .batch(self.args.eval_batch_size, drop_remainder=self.args.dataloader_drop_last)
-            .prefetch(tf.data.experimental.AUTOTUNE)
-        )
+        steps = math.ceil(num_examples / self.args.eval_batch_size)
+        ds = test_dataset.batch(self.args.eval_batch_size).prefetch(tf.data.experimental.AUTOTUNE)
 
         return self.args.strategy.experimental_distribute_dataset(ds), steps, num_examples
 
@@ -213,10 +218,16 @@ class TFTrainer:
         TFTrainer's init through :obj:`optimizers`, or subclass and override this method.
         """
         if not self.optimizer and not self.lr_scheduler:
+            warmup_steps = (
+                self.args.warmup_steps
+                if self.args.warmup_steps > 0
+                else math.ceil(num_training_steps * self.args.warmup_ratio)
+            )
+
             self.optimizer, self.lr_scheduler = create_optimizer(
                 self.args.learning_rate,
                 num_training_steps,
-                self.args.warmup_steps,
+                warmup_steps,
                 adam_beta1=self.args.adam_beta1,
                 adam_beta2=self.args.adam_beta2,
                 adam_epsilon=self.args.adam_epsilon,
@@ -293,12 +304,14 @@ class TFTrainer:
         )
 
         logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", num_examples)
+        logger.info("  Num examples in dataset = %d", num_examples)
+        if description == "Evaluation":
+            logger.info("  Num examples in used in evaluation = %d", self.args.eval_batch_size * steps)
         logger.info("  Batch size = %d", self.args.eval_batch_size)
 
         label_ids: np.ndarray = None
         preds: np.ndarray = None
-        self.eval_loss = tf.keras.metrics.Sum()
+        self.eval_loss.reset_states()
 
         # Reset the past mems state at the beginning of the evaluation if necessary.
         if self.args.past_index >= 0:
@@ -338,7 +351,7 @@ class TFTrainer:
                     else:
                         label_ids = np.append(label_ids, labels.numpy(), axis=0)
 
-                if step == steps:
+                if step == steps - 1:
                     break
 
         if self.compute_metrics is not None and preds is not None and label_ids is not None:
@@ -561,7 +574,7 @@ class TFTrainer:
 
                     if (
                         self.args.eval_steps > 0
-                        and self.args.evaluate_during_training
+                        and self.args.evaluation_strategy == IntervalStrategy.STEPS
                         and self.global_step % self.args.eval_steps == 0
                     ):
                         self.evaluate()
@@ -631,7 +644,15 @@ class TFTrainer:
                 reduced_features = {
                     k: ft[: self.args.train_batch_size // self.args.n_replicas] for k, ft in features.items()
                 }
-                reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
+
+                if tf.is_tensor(labels):
+                    reduced_labels = labels[: self.args.train_batch_size // self.args.n_replicas]
+                elif isinstance(labels, dict):
+                    reduced_labels = {
+                        k: lbl[: self.args.train_batch_size // self.args.n_replicas] for k, lbl in labels.items()
+                    }
+                else:
+                    raise ValueError("The labels must be either a tf.Tensor or a dict.")
 
                 self.training_step(reduced_features, reduced_labels, nb_instances_in_global_batch)
 
@@ -643,9 +664,20 @@ class TFTrainer:
                     for k, ft in features.items()
                 }
 
-                labels = tf.concat(
-                    [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
-                )
+                if tf.is_tensor(labels):
+                    labels = tf.concat(
+                        [labels[self.args.train_batch_size // self.args.n_replicas :], reduced_labels], axis=0
+                    )
+                elif isinstance(labels, dict):
+                    labels = {
+                        k: tf.concat(
+                            [lbl[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]],
+                            axis=0,
+                        )
+                        for k, lbl in labels.items()
+                    }
+                else:
+                    raise ValueError("The labels must be either a tf.Tensor or a dict.")
 
             gradients = self.gradient_accumulator.gradients
             gradients = [

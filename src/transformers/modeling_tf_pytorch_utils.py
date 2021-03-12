@@ -39,7 +39,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     return tuple with:
 
         - pytorch model weight name
-        - transpose: boolean indicating wether TF2.0 and PyTorch weights matrices are transposed with regards to each
+        - transpose: boolean indicating whether TF2.0 and PyTorch weights matrices are transposed with regards to each
           other
     """
     tf_name = tf_name.replace(":0", "")  # device ids
@@ -51,16 +51,26 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
     )  # '_._' is replaced by a level separation (can be used to convert TF2.0 lists in PyTorch nn.ModulesList)
     tf_name = re.sub(r"//+", "/", tf_name)  # Remove empty levels at the end
     tf_name = tf_name.split("/")  # Convert from TF2.0 '/' separators to PyTorch '.' separators
-    tf_name = tf_name[1:]  # Remove level zero
+    # Some weights have a single name withtout "/" such as final_logits_bias in BART
+    if len(tf_name) > 1:
+        tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
+    transpose = bool(
+        tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
+        or "emb_projs" in tf_name
+        or "out_projs" in tf_name
+    )
 
     # Convert standard TF2.0 names in PyTorch names
     if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
         tf_name[-1] = "weight"
     if tf_name[-1] == "beta":
         tf_name[-1] = "bias"
+
+    # The SeparableConv1D TF layer contains two weights that are translated to PyTorch Conv1D here
+    if tf_name[-1] == "pointwise_kernel" or tf_name[-1] == "depthwise_kernel":
+        tf_name[-1] = tf_name[-1].replace("_kernel", ".weight")
 
     # Remove prefix if needed
     tf_name = ".".join(tf_name)
@@ -125,7 +135,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
-
     # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []
@@ -164,9 +173,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             if allow_missing_keys:
                 missing_keys.append(name)
                 continue
-            elif tf_model.authorized_missing_keys is not None:
+            elif tf_model._keys_to_ignore_on_load_missing is not None:
                 # authorized missing keys don't have to be loaded
-                if any(re.search(pat, name) is not None for pat in tf_model.authorized_missing_keys):
+                if any(re.search(pat, name) is not None for pat in tf_model._keys_to_ignore_on_load_missing):
                     continue
 
             raise AttributeError("{} not found in PyTorch model".format(name))
@@ -209,11 +218,11 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     unexpected_keys = list(all_pytorch_weights)
 
-    if tf_model.authorized_missing_keys is not None:
-        for pat in tf_model.authorized_missing_keys:
+    if tf_model._keys_to_ignore_on_load_missing is not None:
+        for pat in tf_model._keys_to_ignore_on_load_missing:
             missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
-    if tf_model.authorized_unexpected_keys is not None:
-        for pat in tf_model.authorized_unexpected_keys:
+    if tf_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in tf_model._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
 
     if len(unexpected_keys) > 0:

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -153,7 +153,7 @@ class TFXLNetModelTester:
         inputs = [input_ids_1, input_mask]
         result = model(inputs)
 
-        config.mem_len = 0
+        config.use_mems_eval = False
         model = TFXLNetModel(config)
         no_mems_outputs = model(inputs)
         self.parent.assertEqual(len(no_mems_outputs), 1)
@@ -347,6 +347,8 @@ class TFXLNetModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (
         (TFXLNetLMHeadModel,) if is_tf_available() else ()
     )  # TODO (PVP): Check other models whether language generation is also applicable
+    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFXLNetModelTester(self)

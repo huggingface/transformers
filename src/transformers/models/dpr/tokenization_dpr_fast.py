@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2018 The HuggingFace Inc. team, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,8 @@
 import collections
 from typing import List, Optional, Union
 
-from ...file_utils import add_end_docstrings, add_start_docstrings
-from ...tokenization_utils_base import BatchEncoding, TensorType
+from ...file_utils import TensorType, add_end_docstrings, add_start_docstrings
+from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
 from ..bert.tokenization_bert_fast import BertTokenizerFast
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
@@ -31,32 +31,32 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.jso
 
 CONTEXT_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/vocab.txt",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-ctx_encoder-single-nq-base/resolve/main/tokenizer.json",
+        "facebook/dpr-ctx_encoder-multiset-base": "https://huggingface.co/facebook/dpr-ctx_encoder-multiset-base/resolve/main/tokenizer.json",
     },
 }
 QUESTION_ENCODER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/vocab.txt",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-single-nq-base": "https://huggingface.co/facebook/dpr-question_encoder-single-nq-base/resolve/main/tokenizer.json",
+        "facebook/dpr-question_encoder-multiset-base": "https://huggingface.co/facebook/dpr-question_encoder-multiset-base/resolve/main/tokenizer.json",
     },
 }
 READER_PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/vocab.txt",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
-        "facebook/dpr-reader-multiset-base": "https://huggingface.co/bert-base-uncased/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-single-nq-base": "https://huggingface.co/facebook/dpr-reader-single-nq-base/resolve/main/tokenizer.json",
+        "facebook/dpr-reader-multiset-base": "https://huggingface.co/facebook/dpr-reader-multiset-base/resolve/main/tokenizer.json",
     },
 }
 
@@ -148,7 +148,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
             The passages titles to be encoded. This can be a string or a list of strings if there are several passages.
         texts (:obj:`str` or :obj:`List[str]`):
             The passages texts to be encoded. This can be a string or a list of strings if there are several passages.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
             Activates and controls padding. Accepts the following values:
 
             * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
@@ -178,7 +178,7 @@ CUSTOM_DPR_READER_DOCSTRING = r"""
                 If left unset or set to :obj:`None`, this will use the predefined model maximum length if a maximum
                 length is required by one of the truncation/padding parameters. If the model has no specific maximum
                 input length (like XLNet) truncation/padding to a maximum length will be deactivated.
-        return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+        return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -252,7 +252,9 @@ class CustomDPRReaderTokenizerMixin:
             ]
         }
         if return_attention_mask is not False:
-            attention_mask = [input_ids != self.pad_token_id for input_ids in encoded_inputs["input_ids"]]
+            attention_mask = []
+            for input_ids in encoded_inputs["input_ids"]:
+                attention_mask.append([int(input_id != self.pad_token_id) for input_id in input_ids])
             encoded_inputs["attention_mask"] = attention_mask
         return self.pad(encoded_inputs, padding=padding, max_length=max_length, return_tensors=return_tensors)
 
@@ -385,5 +387,5 @@ class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
     pretrained_vocab_files_map = READER_PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = READER_PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = READER_PRETRAINED_INIT_CONFIGURATION
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = DPRReaderTokenizer

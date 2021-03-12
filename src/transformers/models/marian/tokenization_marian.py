@@ -1,18 +1,31 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import re
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Dict, List, Optional, Tuple, Union
 
 import sentencepiece
 
-from ...file_utils import add_start_docstrings
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from ...tokenization_utils import PreTrainedTokenizer
 
 
-vocab_files_names = {
+VOCAB_FILES_NAMES = {
     "source_spm": "source.spm",
     "target_spm": "target.spm",
     "vocab": "vocab.json",
@@ -20,11 +33,17 @@ vocab_files_names = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "source_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/source.spm"},
-    "target_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/target.spm"},
-    "vocab": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/vocab.json"},
+    "source_spm": {
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/source.spm"
+    },
+    "target_spm": {
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/target.spm"
+    },
+    "vocab": {
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json"
+    },
     "tokenizer_config_file": {
-        "Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/tokenizer_config.json"
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
     },
 }
 
@@ -67,19 +86,22 @@ class MarianTokenizer(PreTrainedTokenizer):
     Examples::
 
         >>> from transformers import MarianTokenizer
-        >>> tok = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
+        >>> tokenizer = MarianTokenizer.from_pretrained('Helsinki-NLP/opus-mt-en-de')
         >>> src_texts = [ "I am a small frog.", "Tom asked his teacher for advice."]
         >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-        >>> batch_enc: BatchEncoding = tok.prepare_seq2seq_batch(src_texts, tgt_texts=tgt_texts, return_tensors="pt")
-        >>> # keys  [input_ids, attention_mask, labels].
-        >>> # model(**batch) should work
+        >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
+        >>> with tokenizer.as_target_tokenizer():
+        ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
+        >>> inputs["labels"] = labels["input_ids"]
+        # keys  [input_ids, attention_mask, labels].
+        >>> outputs = model(**inputs) should work
     """
 
-    vocab_files_names = vocab_files_names
+    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     language_code_re = re.compile(">>.+<<")  # type: re.Pattern
 
     def __init__(
@@ -143,7 +165,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.encoder.get(token, self.encoder[self.unk_token])
 
     def remove_language_code(self, text: str):
-        """Remove language codes like <<fr>> before sentencepiece"""
+        """Remove language codes like >>fr<< before sentencepiece"""
         match = self.language_code_re.match(text)
         code: list = [match.group(0)] if match else []
         return code, self.language_code_re.sub("", text)
@@ -154,12 +176,62 @@ class MarianTokenizer(PreTrainedTokenizer):
         return code + pieces
 
     def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the encoder."""
+        """Converts an index (integer) in a token (str) using the decoder."""
         return self.decoder.get(index, self.unk_token)
 
+    def batch_decode(self, sequences, **kwargs):
+        """
+        Convert a list of lists of token ids into a list of strings by calling decode.
+
+        Args:
+            sequences (:obj:`Union[List[int], List[List[int]], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the ``__call__`` method.
+            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to clean up the tokenization spaces.
+            use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
+                problems).
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            :obj:`List[str]`: The list of decoded sentences.
+        """
+        return super().batch_decode(sequences, **kwargs)
+
+    def decode(self, token_ids, **kwargs):
+        """
+        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
+        tokens and clean up tokenization spaces.
+
+        Similar to doing ``self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))``.
+
+        Args:
+            token_ids (:obj:`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
+                List of tokenized input ids. Can be obtained using the ``__call__`` method.
+            skip_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to remove special tokens in the decoding.
+            clean_up_tokenization_spaces (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to clean up the tokenization spaces.
+            use_source_tokenizer (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether or not to use the source tokenizer to decode sequences (only applicable in sequence-to-sequence
+                problems).
+            kwargs (additional keyword arguments, `optional`):
+                Will be passed to the underlying model specific decode method.
+
+        Returns:
+            :obj:`str`: The decoded sentence.
+        """
+        return super().decode(token_ids, **kwargs)
+
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Uses target language sentencepiece model"""
-        return self.spm_target.DecodePieces(tokens)
+        """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise """
+        if self._decode_use_source_tokenizer:
+            return self.spm_source.DecodePieces(tokens)
+        else:
+            return self.spm_target.DecodePieces(tokens)
 
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
         """Build model inputs from a sequence by appending eos_token_id."""
@@ -168,40 +240,15 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        return_tensors: Optional[str] = None,
-        truncation=True,
-        padding="longest",
-        **unused,
-    ) -> BatchEncoding:
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        self.current_spm = self.spm_source
-        src_texts = [self.normalize(t) for t in src_texts]  # this does not appear to do much
-        tokenizer_kwargs = dict(
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
-
-        if tgt_texts is None:
-            return model_inputs
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-
+    @contextmanager
+    def as_target_tokenizer(self):
+        """
+        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
+        sequence-to-sequence models that need a slightly different processing for the labels.
+        """
         self.current_spm = self.spm_target
-        model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
+        yield
         self.current_spm = self.spm_source
-        return model_inputs
 
     @property
     def vocab_size(self) -> int:

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 T5
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -17,7 +29,7 @@ The abstract from the paper is the following:
 task, has emerged as a powerful technique in natural language processing (NLP). The effectiveness of transfer learning
 has given rise to a diversity of approaches, methodology, and practice. In this paper, we explore the landscape of
 transfer learning techniques for NLP by introducing a unified framework that converts every language problem into a
-text-to-text format. Our systematic study compares pre-training objectives, architectures, unlabeled datasets, transfer
+text-to-text format. Our systematic study compares pretraining objectives, architectures, unlabeled datasets, transfer
 approaches, and other factors on dozens of language understanding tasks. By combining the insights from our exploration
 with scale and our new "Colossal Clean Crawled Corpus", we achieve state-of-the-art results on many benchmarks covering
 summarization, question answering, text classification, and more. To facilitate future work on transfer learning for
@@ -32,9 +44,9 @@ Tips:
 
   For more information about which prefix to use, it is easiest to look into Appendix D of the `paper
   <https://arxiv.org/pdf/1910.10683.pdf>`__. - For sequence-to-sequence generation, it is recommended to use
-  :obj:`T5ForConditionalGeneration.generate()``. This method takes care of feeding the encoded input via
-  cross-attention layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar
-  embeddings. Encoder input padding can be done on the left and on the right.
+  :obj:`T5ForConditionalGeneration.generate()`. This method takes care of feeding the encoded input via cross-attention
+  layers to the decoder and auto-regressively generates the decoder output. - T5 uses relative scalar embeddings.
+  Encoder input padding can be done on the left and on the right.
 
 The original code can be found `here <https://github.com/google-research/text-to-text-transfer-transformer>`__.
 
@@ -43,7 +55,7 @@ Training
 
 T5 is an encoder-decoder model and converts all NLP problems into a text-to-text format. It is trained using teacher
 forcing. This means that for training we always need an input sequence and a target sequence. The input sequence is fed
-to the model using :obj:`input_ids``. The target sequence is shifted to the right, i.e., prepended by a start-sequence
+to the model using :obj:`input_ids`. The target sequence is shifted to the right, i.e., prepended by a start-sequence
 token and fed to the decoder using the :obj:`decoder_input_ids`. In teacher-forcing style, the target sequence is then
 appended by the EOS token and corresponds to the :obj:`labels`. The PAD token is hereby used as the start-sequence
 token. T5 can be trained / fine-tuned both in a supervised and unsupervised fashion.
@@ -92,22 +104,34 @@ T5Tokenizer
 
 .. autoclass:: transformers.T5Tokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, prepare_seq2seq_batch, save_vocabulary
+        create_token_type_ids_from_sequences, save_vocabulary
+
+
+T5TokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5TokenizerFast
+    :members:
 
 
 T5Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.T5Model
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
 
 T5ForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.T5ForConditionalGeneration
-    :members: forward
+    :members: forward, parallelize, deparallelize
 
+T5EncoderModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.T5EncoderModel
+    :members: forward, parallelize, deparallelize
 
 TFT5Model
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -120,4 +144,10 @@ TFT5ForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFT5ForConditionalGeneration
+    :members: call
+
+TFT5EncoderModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFT5EncoderModel
     :members: call

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 DeBERTa
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -20,8 +32,8 @@ disentangled attention mechanism, where each word is represented using two vecto
 position, respectively, and the attention weights among words are computed using disentangled matrices on their
 contents and relative positions. Second, an enhanced mask decoder is used to replace the output softmax layer to
 predict the masked tokens for model pretraining. We show that these two techniques significantly improve the efficiency
-of model pre-training and performance of downstream tasks. Compared to RoBERTa-Large, a DeBERTa model trained on half
-of the training data performs consistently better on a wide range of NLP tasks, achieving improvements on MNLI by +0.9%
+of model pretraining and performance of downstream tasks. Compared to RoBERTa-Large, a DeBERTa model trained on half of
+the training data performs consistently better on a wide range of NLP tasks, achieving improvements on MNLI by +0.9%
 (90.2% vs. 91.1%), on SQuAD v2.0 by +2.3% (88.4% vs. 90.7%) and RACE by +3.6% (83.2% vs. 86.8%). The DeBERTa code and
 pre-trained models will be made publicly available at https://github.com/microsoft/DeBERTa.*
 
@@ -48,7 +60,7 @@ DebertaModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaModel
-    :members:
+    :members: forward
 
 
 DebertaPreTrainedModel
@@ -58,8 +70,29 @@ DebertaPreTrainedModel
     :members:
 
 
+DebertaForMaskedLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DebertaForMaskedLM
+    :members: forward
+
+
 DebertaForSequenceClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.DebertaForSequenceClassification
-    :members:
+    :members: forward
+
+
+DebertaForTokenClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DebertaForTokenClassification
+    :members: forward
+
+
+DebertaForQuestionAnswering
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.DebertaForQuestionAnswering
+    :members: forward

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 OpenAI GPT
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -14,7 +26,7 @@ The abstract from the paper is the following:
 *Natural language understanding comprises a wide range of diverse tasks such as textual entailment, question answering,
 semantic similarity assessment, and document classification. Although large unlabeled text corpora are abundant,
 labeled data for learning these specific tasks is scarce, making it challenging for discriminatively trained models to
-perform adequately. We demonstrate that large gains on these tasks can be realized by generative pre-training of a
+perform adequately. We demonstrate that large gains on these tasks can be realized by generative pretraining of a
 language model on a diverse corpus of unlabeled text, followed by discriminative fine-tuning on each specific task. In
 contrast to previous approaches, we make use of task-aware input transformations during fine-tuning to achieve
 effective transfer while requiring minimal changes to the model architecture. We demonstrate the effectiveness of our
@@ -125,4 +137,10 @@ TFOpenAIGPTDoubleHeadsModel
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFOpenAIGPTDoubleHeadsModel
+    :members: call
+
+TFOpenAIGPTForSequenceClassification
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFOpenAIGPTForSequenceClassification
     :members: call

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Testing
 =======================================================================================================================
 
@@ -13,25 +25,22 @@ How transformers are tested
 -----------------------------------------------------------------------------------------------------------------------
 
 1. Once a PR is submitted it gets tested with 9 CircleCi jobs. Every new commit to that PR gets retested. These jobs
-   are defined in this `config file <https://github.com/huggingface/transformers/blob/master/.circleci/config.yml>`__,
-   so that if needed you can reproduce the same environment on your machine.
+   are defined in this :prefix_link:`config file <.circleci/config.yml>`, so that if needed you can reproduce the same
+   environment on your machine.
 
    These CI jobs don't run ``@slow`` tests.
 
 2. There are 3 jobs run by `github actions <https://github.com/huggingface/transformers/actions>`__:
 
-   * `torch hub integration
-     <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__: checks
-     whether torch hub integration works.
+   * :prefix_link:`torch hub integration <.github/workflows/github-torch-hub.yml>`: checks whether torch hub
+     integration works.
 
-   * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__:
-     runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code
-     in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards,
-     notebooks, etc.)
+   * :prefix_link:`self-hosted (push) <.github/workflows/self-push.yml>`: runs fast tests on GPU only on commits on
+     ``master``. It only runs if a commit on ``master`` has updated the code in one of the following folders: ``src``,
+     ``tests``, ``.github`` (to prevent running on added model cards, notebooks, etc.)
 
-   * `self-hosted runner
-     <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs normal and
-     slow tests on GPU in ``tests`` and ``examples``:
+   * :prefix_link:`self-hosted runner <.github/workflows/self-scheduled.yml>`: runs normal and slow tests on GPU in
+     ``tests`` and ``examples``:
 
    .. code-block:: bash
 
@@ -480,12 +489,9 @@ spawns a normal process that then spawns off multiple workers and manages the IO
 
 This is still under development but you can study 2 different tests that perform this successfully:
 
-* `test_seq2seq_examples_multi_gpu.py
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_seq2seq_examples_multi_gpu.py>`__ - a
+* :prefix_link:`test_seq2seq_examples_multi_gpu.py <examples/seq2seq/test_seq2seq_examples_multi_gpu.py>` - a
   ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default)
-* `test_finetune_trainer.py
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal
-  (non-PL) test
+* :prefix_link:`test_finetune_trainer.py <examples/seq2seq/test_finetune_trainer.py>` - a normal (non-PL) test
 
 To jump right into the execution point, search for the ``execute_subprocess_async`` function in those tests.
 
@@ -909,9 +915,10 @@ pipelines), then we should run that test in the non-slow test suite. If it's foc
 such as the documentation or the examples, then we should run these tests in the slow test suite. And then, to refine
 this approach we should have exceptions:
 
-* All tests that need to download a heavy set of weights (e.g., model or tokenizer integration tests, pipeline
-  integration tests) should be set to slow. If you're adding a new model, you should create and upload to the hub a
-  tiny version of it (with random weights) for integration tests. This is discussed in the following paragraphs.
+* All tests that need to download a heavy set of weights or a dataset that is larger than ~50MB (e.g., model or
+  tokenizer integration tests, pipeline integration tests) should be set to slow. If you're adding a new model, you
+  should create and upload to the hub a tiny version of it (with random weights) for integration tests. This is
+  discussed in the following paragraphs.
 * All tests that need to do a training not specifically optimized to be fast should be set to slow.
 * We can introduce exceptions if some of these should-be-non-slow tests are excruciatingly slow, and set them to
   ``@slow``. Auto-modeling tests, which save and load large files to disk, are a good example of tests that are marked
@@ -927,10 +934,9 @@ slow models to do qualitative testing. To see the use of these simply look for *
 
     grep tiny tests examples
 
-Here is a an example of a `script
-<https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny
-model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your
-specific model's architecture.
+Here is a an example of a :prefix_link:`script <scripts/fsmt/fsmt-make-tiny-model.py>` that created the tiny model
+`stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your specific
+model's architecture.
 
 It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if
 you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the
@@ -1129,3 +1135,66 @@ To start a debugger at the point of the warning, do this:
 .. code-block:: bash
 
     pytest tests/test_logging.py -W error::UserWarning --pdb
+
+
+
+Testing Experimental CI Features
+-----------------------------------------------------------------------------------------------------------------------
+
+Testing CI features can be potentially problematic as it can interfere with the normal CI functioning. Therefore if a
+new CI feature is to be added, it should be done as following.
+
+1. Create a new dedicated job that tests what needs to be tested
+2. The new job must always succeed so that it gives us a green ✓ (details below).
+3. Let it run for some days to see that a variety of different PR types get to run on it (user fork branches,
+   non-forked branches, branches originating from github.com UI direct file edit, various forced pushes, etc. - there
+   are so many) while monitoring the experimental job's logs (not the overall job green as it's purposefully always
+   green)
+4. When it's clear that everything is solid, then merge the new changes into existing jobs.
+
+That way experiments on CI functionality itself won't interfere with the normal workflow.
+
+Now how can we make the job always succeed while the new CI feature is being developed?
+
+Some CIs, like TravisCI support ignore-step-failure and will report the overall job as successful, but CircleCI and
+Github Actions as of this writing don't support that.
+
+So the following workaround can be used:
+
+1. ``set +euo pipefail`` at the beginning of the run command to suppress most potential failures in the bash script.
+2. the last command must be a success: ``echo "done"`` or just ``true`` will do
+
+Here is an example:
+
+.. code-block:: yaml
+
+    - run:
+        name: run CI experiment
+        command: |
+            set +euo pipefail
+            echo "setting run-all-despite-any-errors-mode"
+            this_command_will_fail
+            echo "but bash continues to run"
+            # emulate another failure
+            false
+            # but the last command must be a success
+            echo "during experiment do not remove: reporting success to CI, even if there were failures"
+
+For simple commands you could also do:
+
+.. code-block:: bash
+
+    cmd_that_may_fail || true
+
+Of course, once satisfied with the results, integrate the experimental step or job with the rest of the normal jobs,
+while removing ``set +euo pipefail`` or any other things you may have added to ensure that the experimental job doesn't
+interfere with the normal CI functioning.
+
+This whole process would have been much easier if we only could set something like ``allow-failure`` for the
+experimental step, and let it fail without impacting the overall status of PRs. But as mentioned earlier CircleCI and
+Github Actions don't support it at the moment.
+
+You can vote for this feature and see where it is at at these CI-specific threads:
+
+* `Github Actions: <https://github.com/actions/toolkit/issues/399>`__
+* `CircleCI: <https://ideas.circleci.com/ideas/CCI-I-344>`__

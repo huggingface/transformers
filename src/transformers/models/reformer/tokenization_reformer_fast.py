@@ -32,31 +32,20 @@ else:
 
 logger = logging.get_logger(__name__)
 
+
 SPIECE_UNDERLINE = "▁"
 
-
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model ids.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/spiece.model"
+        "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/spiece.model"
     },
     "tokenizer_file": {
-        "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/tokenizer.json"
+        "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/tokenizer.json"
     },
 }
 
-####################################################
-# Mapping from model ids to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/reformer-crime-and-punishment": 524288,
 }
@@ -64,8 +53,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class ReformerTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" Reformer tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
-    <https://github.com/google/sentencepiece>`__ .
+    Construct a "fast" Reformer tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
@@ -93,7 +82,7 @@ class ReformerTokenizerFast(PreTrainedTokenizerFast):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = ReformerTokenizer
 
     def __init__(

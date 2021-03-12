@@ -18,8 +18,9 @@ import argparse
 import os
 
 import transformers
-from transformers.convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
-from transformers.utils import logging
+
+from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS
+from .utils import logging
 
 
 logging.set_verbosity_info()

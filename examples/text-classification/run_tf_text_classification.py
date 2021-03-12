@@ -1,4 +1,18 @@
+#!/usr/bin/env python
 # coding=utf-8
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """ Fine-tuning the library models for sequence classification."""
 
 
@@ -51,7 +65,7 @@ def get_tfds(
     label_name = features_name.pop(label_column_id)
     label_list = list(set(ds[list(files.keys())[0]][label_name]))
     label2id = {label: i for i, label in enumerate(label_list)}
-    input_names = ["input_ids"] + tokenizer.model_input_names
+    input_names = tokenizer.model_input_names
     transformed_ds = {}
 
     if len(features_name) == 1:
@@ -279,7 +293,6 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
         result = trainer.evaluate()
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
 

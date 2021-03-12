@@ -21,9 +21,10 @@ import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
+import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import EvaluationStrategy
+from .trainer_utils import IntervalStrategy
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -51,8 +52,9 @@ class TrainerState:
             During training, represents the number of update steps completed.
         max_steps (:obj:`int`, `optional`, defaults to 0):
             The number of update steps to do during the current training.
-        total_flos (:obj:`int`, `optional`, defaults to 0):
-            The total number of floating operations done by the model since the beginning of training.
+        total_flos (:obj:`float`, `optional`, defaults to 0):
+            The total number of floating operations done by the model since the beginning of training (stored as floats
+            to avoid overflow).
         log_history (:obj:`List[Dict[str, float]]`, `optional`):
             The list of logs done since the beginning of training.
         best_metric (:obj:`float`, `optional`):
@@ -75,7 +77,7 @@ class TrainerState:
     global_step: int = 0
     max_steps: int = 0
     num_train_epochs: int = 0
-    total_flos: int = 0
+    total_flos: float = 0
     log_history: List[Dict[str, float]] = None
     best_metric: Optional[float] = None
     best_model_checkpoint: Optional[str] = None
@@ -167,6 +169,8 @@ class TrainerCallback:
             The object that is returned to the :class:`~transformers.Trainer` and can be used to make some decisions.
         model (:class:`~transformers.PreTrainedModel` or :obj:`torch.nn.Module`):
             The model being trained.
+        tokenizer (:class:`~transformers.PreTrainedTokenizer`):
+            The tokenizer used for encoding the data.
         optimizer (:obj:`torch.optim.Optimizer`):
             The optimizer used for the training steps.
         lr_scheduler (:obj:`torch.optim.lr_scheduler.LambdaLR`):
@@ -273,11 +277,12 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """ Internal class that just calls the list of callbacks in order. """
 
-    def __init__(self, callbacks, model, optimizer, lr_scheduler):
+    def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler):
         self.callbacks = []
         for cb in callbacks:
             self.add_callback(cb)
         self.model = model
+        self.tokenizer = tokenizer
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
@@ -375,6 +380,7 @@ class CallbackHandler(TrainerCallback):
                 state,
                 control,
                 model=self.model,
+                tokenizer=self.tokenizer,
                 optimizer=self.optimizer,
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
@@ -397,17 +403,26 @@ class DefaultFlowCallback(TrainerCallback):
         # Log
         if state.global_step == 1 and args.logging_first_step:
             control.should_log = True
-        if args.logging_steps > 0 and state.global_step % args.logging_steps == 0:
+        if (
+            args.logging_strategy == IntervalStrategy.STEPS
+            and args.logging_steps > 0
+            and state.global_step % args.logging_steps == 0
+        ):
             control.should_log = True
 
         # Evaluate
-        if args.evaluation_strategy == EvaluationStrategy.STEPS and state.global_step % args.eval_steps == 0:
+        if args.evaluation_strategy == IntervalStrategy.STEPS and state.global_step % args.eval_steps == 0:
             control.should_evaluate = True
             if args.load_best_model_at_end:
                 control.should_save = True
 
         # Save
-        if not args.load_best_model_at_end and args.save_steps > 0 and state.global_step % args.save_steps == 0:
+        if (
+            not args.load_best_model_at_end
+            and args.save_strategy == IntervalStrategy.STEPS
+            and args.save_steps > 0
+            and state.global_step % args.save_steps == 0
+        ):
             control.should_save = True
 
         # End training
@@ -417,10 +432,20 @@ class DefaultFlowCallback(TrainerCallback):
         return control
 
     def on_epoch_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
-        if args.evaluation_strategy == EvaluationStrategy.EPOCH:
+        # Log
+        if args.logging_strategy == IntervalStrategy.EPOCH:
+            control.should_log = True
+
+        # Evaluate
+        if args.evaluation_strategy == IntervalStrategy.EPOCH:
             control.should_evaluate = True
             if args.load_best_model_at_end:
                 control.should_save = True
+
+        # Save
+        if args.save_strategy == IntervalStrategy.EPOCH:
+            control.should_save = True
+
         return control
 
 
@@ -475,3 +500,62 @@ class PrinterCallback(TrainerCallback):
         _ = logs.pop("total_flos", None)
         if state.is_local_process_zero:
             print(logs)
+
+
+class EarlyStoppingCallback(TrainerCallback):
+    """
+    A :class:`~transformers.TrainerCallback` that handles early stopping.
+
+    Args:
+       early_stopping_patience (:obj:`int`):
+            Use with :obj:`metric_for_best_model` to stop training when the specified metric worsens for
+            :obj:`early_stopping_patience` evaluation calls.
+       early_stopping_threshold(:obj:`float`, `optional`):
+            Use with TrainingArguments :obj:`metric_for_best_model` and :obj:`early_stopping_patience` to denote how
+            much the specified metric must improve to satisfy early stopping conditions. `
+
+    This callback depends on :class:`~transformers.TrainingArguments` argument `load_best_model_at_end` functionality
+    to set best_metric in :class:`~transformers.TrainerState`.
+    """
+
+    def __init__(self, early_stopping_patience: int = 1, early_stopping_threshold: Optional[float] = 0.0):
+        self.early_stopping_patience = early_stopping_patience
+        self.early_stopping_threshold = early_stopping_threshold
+        # early_stopping_patience_counter denotes the number of times validation metrics failed to improve.
+        self.early_stopping_patience_counter = 0
+
+    def check_metric_value(self, args, state, control, metric_value):
+        # best_metric is set by code for load_best_model
+        operator = np.greater if args.greater_is_better else np.less
+        if state.best_metric is None or (
+            operator(metric_value, state.best_metric)
+            and abs(metric_value - state.best_metric) > self.early_stopping_threshold
+        ):
+            self.early_stopping_patience_counter = 0
+        else:
+            self.early_stopping_patience_counter += 1
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        assert args.load_best_model_at_end, "EarlyStoppingCallback requires load_best_model_at_end = True"
+        assert (
+            args.metric_for_best_model is not None
+        ), "EarlyStoppingCallback requires metric_for_best_model is defined"
+        assert (
+            args.evaluation_strategy != IntervalStrategy.NO
+        ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+
+    def on_evaluate(self, args, state, control, metrics, **kwargs):
+        metric_to_check = args.metric_for_best_model
+        if not metric_to_check.startswith("eval_"):
+            metric_to_check = f"eval_{metric_to_check}"
+        metric_value = metrics.get(metric_to_check)
+
+        if metric_value is None:
+            logger.warning(
+                f"early stopping required metric_for_best_model, but did not find {metric_to_check} so early stopping is disabled"
+            )
+            return
+
+        self.check_metric_value(args, state, control, metric_value)
+        if self.early_stopping_patience_counter >= self.early_stopping_patience:
+            control.should_training_stop = True

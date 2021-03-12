@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,12 @@ from .test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST, TFTransfoXLLMHeadModel, TFTransfoXLModel
+    from transformers import (
+        TF_TRANSFO_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
+        TFTransfoXLForSequenceClassification,
+        TFTransfoXLLMHeadModel,
+        TFTransfoXLModel,
+    )
 
 
 class TFTransfoXLModelTester:
@@ -55,6 +60,9 @@ class TFTransfoXLModelTester:
         self.scope = None
         self.seed = 1
         self.eos_token_id = 0
+        self.num_labels = 3
+        self.pad_token_id = self.vocab_size - 1
+        self.init_range = 0.01
 
     def prepare_config_and_inputs(self):
         input_ids_1 = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -77,6 +85,9 @@ class TFTransfoXLModelTester:
             div_val=self.div_val,
             n_layer=self.num_hidden_layers,
             eos_token_id=self.eos_token_id,
+            pad_token_id=self.vocab_size - 1,
+            init_range=self.init_range,
+            num_labels=self.num_labels,
         )
 
         return (config, input_ids_1, input_ids_2, lm_labels)
@@ -131,6 +142,11 @@ class TFTransfoXLModelTester:
             [(self.mem_len, self.batch_size, self.hidden_size)] * self.num_hidden_layers,
         )
 
+    def create_and_check_transfo_xl_for_sequence_classification(self, config, input_ids_1, input_ids_2, lm_labels):
+        model = TFTransfoXLForSequenceClassification(config)
+        result = model(input_ids_1)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids_1, input_ids_2, lm_labels) = config_and_inputs
@@ -141,10 +157,14 @@ class TFTransfoXLModelTester:
 @require_tf
 class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (TFTransfoXLModel, TFTransfoXLLMHeadModel) if is_tf_available() else ()
+    all_model_classes = (
+        (TFTransfoXLModel, TFTransfoXLLMHeadModel, TFTransfoXLForSequenceClassification) if is_tf_available() else ()
+    )
     all_generative_model_classes = () if is_tf_available() else ()
     # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
     test_resize_embeddings = False
+    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFTransfoXLModelTester(self)
@@ -162,6 +182,32 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
         self.model_tester.set_seed()
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_transfo_xl_lm_head(*config_and_inputs)
+
+    def test_transfo_xl_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_transfo_xl_for_sequence_classification(*config_and_inputs)
+
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_other_models_with_output_ebd = [TFTransfoXLForSequenceClassification]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+            if model_class in list_other_models_with_output_ebd:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert name is None
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
+    def test_xla_mode(self):
+        # TODO JP: Make TransfoXL XLA compliant
+        pass
 
     @slow
     def test_model_from_pretrained(self):

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -273,6 +273,9 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
+    test_onnx = True
+    onnx_min_opset = 10
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -331,11 +334,32 @@ class TFBertModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFBertModel.from_pretrained("jplu/tiny-tf-bert-random")
         self.assertIsNotNone(model)
 
+    def test_model_common_attributes(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        list_lm_models = [TFBertForMaskedLM, TFBertForPreTraining, TFBertLMHeadModel]
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            assert isinstance(model.get_input_embeddings(), tf.keras.layers.Layer)
+
+            if model_class in list_lm_models:
+                x = model.get_output_embeddings()
+                assert isinstance(x, tf.keras.layers.Layer)
+                name = model.get_bias()
+                assert isinstance(name, dict)
+                for k, v in name.items():
+                    assert isinstance(v, tf.Variable)
+            else:
+                x = model.get_output_embeddings()
+                assert x is None
+                name = model.get_bias()
+                assert name is None
+
     def test_custom_load_tf_weights(self):
         model, output_loading_info = TFBertForTokenClassification.from_pretrained(
             "jplu/tiny-tf-bert-random", output_loading_info=True
         )
-        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), ["mlm___cls", "nsp___cls"])
+        self.assertEqual(sorted(output_loading_info["unexpected_keys"]), [])
         for layer in output_loading_info["missing_keys"]:
             self.assertTrue(layer.split("_")[0] in ["dropout", "classifier"])
 
@@ -348,7 +372,7 @@ class TFBertModelIntegrationTest(unittest.TestCase):
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        expected_shape = [1, 6, 10]
+        expected_shape = [1, 6, 32000]
         self.assertEqual(output.shape, expected_shape)
 
         print(output[:, :3, :3])
@@ -356,9 +380,9 @@ class TFBertModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.constant(
             [
                 [
-                    [0.03706957, 0.10124919, 0.03616843],
-                    [-0.06099961, 0.02266058, 0.00601412],
-                    [-0.06066202, 0.05684517, 0.02038802],
+                    [-0.05243197, -0.04498899, 0.05512108],
+                    [-0.07444685, -0.01064632, 0.04352357],
+                    [-0.05020351, 0.05530146, 0.00700043],
                 ]
             ]
         )
