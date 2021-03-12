@@ -245,7 +245,7 @@ class TestDeepSpeed(TestCasePlus):
             args = [x for x in args if x not in remove_args]
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config.json".split()
-        script = [f"{self.examples_dir_str}/seq2seq/run_trans.py"]
+        script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
         num_gpus = get_gpu_count() if distributed else 1
         launcher = f"deepspeed --num_gpus {num_gpus}".split()
 

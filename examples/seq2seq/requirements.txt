@@ -4,4 +4,3 @@ protobuf
 sacrebleu >= 1.4.12
 rouge-score
 nltk
-langcodes[data]

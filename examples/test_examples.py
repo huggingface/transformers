@@ -49,9 +49,9 @@ if SRC_DIRS is not None:
     import run_mlm
     import run_ner
     import run_qa as run_squad
-    import run_sum
+    import run_summarization
     import run_swag
-    import run_trans
+    import run_translation
 
 
 logging.basicConfig(level=logging.DEBUG)
@@ -278,13 +278,13 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(len(result[0]), 10)
 
     @slow
-    def test_run_sum(self):
+    def test_run_summarization(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_sum.py
+            run_summarization.py
             --model_name_or_path t5-small
             --train_file tests/fixtures/tests_samples/xsum/sample.json
             --validation_file tests/fixtures/tests_samples/xsum/sample.json
@@ -301,7 +301,7 @@ class ExamplesTests(TestCasePlus):
         """.split()
 
         with patch.object(sys, "argv", testargs):
-            run_sum.main()
+            run_summarization.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_rouge1"], 10)
             self.assertGreaterEqual(result["eval_rouge2"], 2)
@@ -309,13 +309,13 @@ class ExamplesTests(TestCasePlus):
             self.assertGreaterEqual(result["eval_rougeLsum"], 7)
 
     @slow
-    def test_run_trans(self):
+    def test_run_translation(self):
         stream_handler = logging.StreamHandler(sys.stdout)
         logger.addHandler(stream_handler)
 
         tmp_dir = self.get_auto_remove_tmp_dir()
         testargs = f"""
-            run_trans.py
+            run_translation.py
             --model_name_or_path sshleifer/student_marian_en_ro_6_1
             --source_lang en
             --target_lang ro
@@ -336,6 +336,6 @@ class ExamplesTests(TestCasePlus):
         """.split()
 
         with patch.object(sys, "argv", testargs):
-            run_trans.main()
+            run_translation.main()
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_bleu"], 30)

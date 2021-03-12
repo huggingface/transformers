@@ -23,10 +23,10 @@ To be able to reproduce the authors' results on the CNN/Daily Mail dataset you f
 tar -xvf cnn_stories.tgz && tar -xvf dailymail_stories.tgz
 ```
 
-And move all the stories to the same folder. We will refer as `$DATA_PATH` the path to where you uncompressed both archive. Then run the following in the same folder as `run_sum.py`:
+And move all the stories to the same folder. We will refer as `$DATA_PATH` the path to where you uncompressed both archive. Then run the following in the same folder as `run_summarization.py`:
 
 ```bash
-python run_sum.py \
+python run_summarization.py \
     --documents_dir $DATA_PATH \
     --summaries_output_dir $SUMMARIES_PATH \ # optional
     --no_cuda false \
@@ -43,10 +43,10 @@ The scripts executes on GPU if one is available and if `no_cuda` is not set to `
 
 ## Summarize any text
 
-Put the documents that you would like to summarize in a folder (the path to which is referred to as `$DATA_PATH` below) and run the following in the same folder as `run_sum.py`:
+Put the documents that you would like to summarize in a folder (the path to which is referred to as `$DATA_PATH` below) and run the following in the same folder as `run_summarization.py`:
 
 ```bash
-python run_sum.py \
+python run_summarization.py \
     --documents_dir $DATA_PATH \
     --summaries_output_dir $SUMMARIES_PATH \ # optional
     --no_cuda false \

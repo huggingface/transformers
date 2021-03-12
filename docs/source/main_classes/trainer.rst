@@ -279,11 +279,11 @@ To deploy this feature:
    and make sure you have added the distributed launcher ``-m torch.distributed.launch
    --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
 
-For example here is how you could use it for ``run_trans.py`` with 2 GPUs:
+For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
 
 .. code-block:: bash
 
-    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_trans.py \
+    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_translation.py \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -304,11 +304,11 @@ Notes:
    to the command line arguments, and make sure you have added the distributed launcher ``-m torch.distributed.launch
    --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
 
-For example here is how you could use it for ``run_trans.py`` with 2 GPUs:
+For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
 
 .. code-block:: bash
 
-    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_trans.py \
+    python -m torch.distributed.launch --nproc_per_node=2 examples/seq2seq/run_translation.py \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -333,7 +333,7 @@ Notes:
 
 Known caveats:
 
-- This feature is incompatible with :obj:`--predict_with_generate` in the `run_trans.py` script.
+- This feature is incompatible with :obj:`--predict_with_generate` in the `run_translation.py` script.
 - Using :obj:`--sharded_ddp zero_dp_3` requires wrapping each layer of the model in the special container
   :obj:`FullyShardedDataParallelism` of fairscale. This is not done automatically by any of the example scripts of the
   :class:`~transformers.Trainer`.
@@ -402,11 +402,11 @@ In fact, you can continue using ``-m torch.distributed.launch`` with DeepSpeed a
 the ``deepspeed`` launcher. But since in the DeepSpeed documentation it'll be used everywhere, for consistency we will
 use it here as well.
 
-Here is an example of running ``run_trans.py`` under DeepSpeed deploying all available GPUs:
+Here is an example of running ``run_translation.py`` under DeepSpeed deploying all available GPUs:
 
 .. code-block:: bash
 
-    deepspeed examples/seq2seq/run_trans.py \
+    deepspeed examples/seq2seq/run_translation.py \
     --deepspeed examples/tests/deepspeed/ds_config.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
@@ -431,7 +431,7 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 
 .. code-block:: bash
 
-    deepspeed --num_gpus=1 examples/seq2seq/run_trans.py \
+    deepspeed --num_gpus=1 examples/seq2seq/run_translation.py \
     --deepspeed examples/tests/deepspeed/ds_config.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
@@ -483,7 +483,7 @@ Notes:
 
    .. code-block:: bash
 
-       deepspeed --include localhost:1 examples/seq2seq/run_trans.py ...
+       deepspeed --include localhost:1 examples/seq2seq/run_translation.py ...
 
    In this example, we tell DeepSpeed to use GPU 1 (second gpu).
 
@@ -574,7 +574,7 @@ with:
 
 .. code-block::
 
-   !deepspeed examples/seq2seq/run_trans.py ...
+   !deepspeed examples/seq2seq/run_translation.py ...
 
 or with bash magic, where you can write a multi-line code for the shell to run:
 
@@ -583,7 +583,7 @@ or with bash magic, where you can write a multi-line code for the shell to run:
    %%bash
 
    cd /somewhere
-   deepspeed examples/seq2seq/run_trans.py ...
+   deepspeed examples/seq2seq/run_translation.py ...
 
 
 
