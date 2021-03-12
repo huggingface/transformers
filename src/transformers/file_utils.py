@@ -34,10 +34,7 @@ from enum import Enum
 from functools import partial, wraps
 from hashlib import sha256
 from pathlib import Path
-<<<<<<< HEAD
-=======
 from types import ModuleType
->>>>>>> master
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 from zipfile import ZipFile, is_zipfile
@@ -1085,18 +1082,17 @@ def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
 def delete_cached_model(model_bin_name: str, cache_dir: Union[str, Path] = None) -> bool:
     """
     Deletes a model file and its associated `.lock` and `.json` files. Models are identified by their unique url ending
-    with `.bin`. To get a list of all model urls in the cache use `get_cached_models()`
+    with `.bin`. To get a list of all model urls in the cache use :obj:`get_cached_models()`
 
     Args:
-        model_bin_name (str): Unique url pointing to a model `.bin` stored at huggingface.co
-        cache_dir (Union[str, Path], optional): Specify a cache directory to search for models within. Defaults to None.
+        model_bin_name (:obj:`str`): Unique url pointing to a model `.bin` stored at huggingface.co.
+        cache_dir (:obj:`Union[str, Path]`, optional): Specify a cache directory to search for models within. Defaults to None.
 
     Returns:
-        bool: Returns `True` if model was found and deleted, `False` if model file doesn't exist.
+        bool: Returns :obj:`True` if model was found and deleted, :obj:`False` if model file doesn't exist.
     """
     if cache_dir is None:
         cache_dir = TRANSFORMERS_CACHE
-
     elif isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
