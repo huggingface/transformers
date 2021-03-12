@@ -380,6 +380,12 @@ if is_torch_available():
         "TopKLogitsWarper",
         "TopPLogitsWarper",
     ]
+    _import_structure["generation_stopping_criteria"] = [
+        "StoppingCriteria",
+        "StoppingCriteriaList",
+        "MaxLengthCriteria",
+        "MaxTimeCriteria",
+    ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
