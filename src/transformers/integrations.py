@@ -25,6 +25,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from .utils import logging
+from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -279,6 +280,8 @@ def init_deepspeed(trainer, num_training_steps):
     Returns: model, optimizer, lr_scheduler
     """
     import deepspeed
+
+    require_version("deepspeed>0.3.10")
 
     args = trainer.args
     ds_config_file = args.deepspeed

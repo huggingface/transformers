@@ -25,7 +25,7 @@ import sentencepiece
 from ...tokenization_utils import PreTrainedTokenizer
 
 
-vocab_files_names = {
+VOCAB_FILES_NAMES = {
     "source_spm": "source.spm",
     "target_spm": "target.spm",
     "vocab": "vocab.json",
@@ -33,11 +33,17 @@ vocab_files_names = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "source_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/source.spm"},
-    "target_spm": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/target.spm"},
-    "vocab": {"Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/vocab.json"},
+    "source_spm": {
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/source.spm"
+    },
+    "target_spm": {
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/target.spm"
+    },
+    "vocab": {
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json"
+    },
     "tokenizer_config_file": {
-        "Helsinki-NLP/opus-mt-en-de": "https://cdn.huggingface.co/Helsinki-NLP/opus-mt-en-de/tokenizer_config.json"
+        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
     },
 }
 
@@ -91,7 +97,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         >>> outputs = model(**inputs) should work
     """
 
-    vocab_files_names = vocab_files_names
+    vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES

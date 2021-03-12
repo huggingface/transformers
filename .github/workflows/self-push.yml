@@ -38,7 +38,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-tests_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -51,8 +51,9 @@ jobs:
       - name: Install dependencies
         run: |
           source .env/bin/activate
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece,speech]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -112,7 +113,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-tests_tf_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_tf_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -185,7 +186,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
@@ -197,8 +198,9 @@ jobs:
       - name: Install dependencies
         run: |
           source .env/bin/activate
+          sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece]
+          pip install .[torch,sklearn,testing,onnxruntime,sentencepiece,speech]
           pip install git+https://github.com/huggingface/datasets
 
       - name: Are GPUs recognized by our DL frameworks
@@ -248,7 +250,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Create new python env (on self-hosted runners we have to handle isolation ourselves)
         run: |
