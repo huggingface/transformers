@@ -373,13 +373,14 @@ class GenerationMixin:
     def _prepare_input_ids_for_generation(
         self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
     ) -> torch.LongTensor:
-        if encoder_outputs is None:
-            if bos_token_id is None:
-                raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
-            return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
-        else:
+        if self.config.is_encoder_decoder and encoder_outputs is not None:
+            # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
             shape = encoder_outputs.last_hidden_state.size()[:-1]
             return torch.ones(shape, dtype=torch.long, device=self.device) * -100
+
+        if bos_token_id is None:
+            raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
+        return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
         self, input_ids: torch.Tensor, pad_token_id: int, eos_token_id: int
@@ -871,7 +872,7 @@ class GenerationMixin:
         model_kwargs["output_hidden_states"] = output_hidden_states
 
         if input_ids is None:
-            # init `input_ids` with bos_token_id or encoder_outputs
+            # init `input_ids` with bos_token_id
             input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
         if model_kwargs.get("attention_mask", None) is None:
