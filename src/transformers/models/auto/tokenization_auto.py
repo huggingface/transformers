@@ -356,7 +356,8 @@ class AutoTokenizer:
             kwargs (additional keyword arguments, `optional`):
                 Will be passed to the Tokenizer ``__init__()`` method. Can be used to set special tokens like
                 ``bos_token``, ``eos_token``, ``unk_token``, ``sep_token``, ``pad_token``, ``cls_token``,
-                ``mask_token``, ``additional_special_tokens``. See parameters in the ``__init__()`` for more details.
+                ``mask_token``, ``additional_special_tokens``, ``do_lower_case``.
+                See parameters in the ``__init__()`` for more details.
 
         Examples::
 
