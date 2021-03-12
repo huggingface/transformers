@@ -172,8 +172,8 @@ class TFModelTesterMixin:
                     "decoder_attention_mask",
                 ]
                 expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" in arg_names
+                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
@@ -491,6 +491,8 @@ class TFModelTesterMixin:
             del inputs_dict["head_mask"]
         if "decoder_head_mask" in inputs_dict:
             del inputs_dict["decoder_head_mask"]
+        if "cross_attn_head_mask" in inputs_dict:
+            del inputs_dict["cross_attn_head_mask"]
         tf_main_layer_classes = set(
             module_member
             for model_class in self.all_model_classes
@@ -712,6 +714,8 @@ class TFModelTesterMixin:
                 arg_names = [*signature.parameters.keys()]
                 if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
                     inputs["decoder_head_mask"] = head_mask
+                if "cross_attn_head_mask" in arg_names:
+                    inputs["cross_attn_head_mask"] = head_mask
 
             outputs = model(**inputs, return_dict=True)
 
@@ -736,6 +740,7 @@ class TFModelTesterMixin:
             if model.config.is_encoder_decoder:
                 check_attentions_validity(outputs.encoder_attentions)
                 check_attentions_validity(outputs.decoder_attentions)
+                check_attentions_validity(outputs.cross_attentions)
             else:
                 check_attentions_validity(outputs.attentions)
 

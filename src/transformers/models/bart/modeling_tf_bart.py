@@ -365,7 +365,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
         encoder_hidden_states: Optional[tf.Tensor] = None,
         encoder_attention_mask: Optional[tf.Tensor] = None,
         layer_head_mask: Optional[tf.Tensor] = None,
-        encoder_layer_head_mask: Optional[tf.Tensor] = None,
+        cross_attn_layer_head_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[tf.Tensor]] = None,
         training=False,
     ) -> Tuple[tf.Tensor, tf.Tensor, Tuple[Tuple[tf.Tensor]]]:
@@ -379,8 +379,8 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`tf.Tensor`): mask for attention heads in a given layer of size
                 `(decoder_attention_heads,)`
-            encoder_layer_head_mask (:obj:`tf.Tensor`): mask for encoder attention heads in a given layer of size
-                `(encoder_attention_heads,)`
+            cross_attn_layer_head_mask (:obj:`tf.Tensor`): mask for heads of the cross-attention module.
+                `(decoder_attention_heads,)`
             past_key_value (:obj:`Tuple(tf.Tensor)`): cached past key and value projection states
         """
         residual = hidden_states
@@ -410,7 +410,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=encoder_layer_head_mask,
+                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
             )
             hidden_states = self.dropout(hidden_states, training=training)
@@ -572,10 +572,16 @@ BART_INPUTS_DOCSTRING = r"""
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
-            - 0 indicates the heas is **masked**.
+            - 0 indicates the head is **masked**.
 
         decoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+            Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -814,7 +820,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        encoder_head_mask=None,
+        cross_attn_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -858,12 +864,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
-            encoder_head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in ``[0, 1]``:
+            cross_attn_head_mask (:obj:`tf.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+                Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
+                - 0 indicates the head is **masked**.
 
             past_key_values (:obj:`Tuple[Tuple[tf.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
@@ -894,7 +899,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
-            encoder_head_mask=encoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
@@ -954,12 +959,13 @@ class TFBartDecoder(tf.keras.layers.Layer):
         # check if head_mask has a correct number of layers specified if desired
         # The tf.debugging asserts are not compliant with XLA then they
         # have to be disabled in other modes than eager.
-        if inputs["head_mask"] is not None and tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(inputs["head_mask"])[0],
-                len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs['head_mask'])[0]}.",
-            )
+        for attn_mask in ["head_mask", "cross_attn_head_mask"]:
+            if inputs[attn_mask] is not None and tf.executing_eagerly():
+                tf.debugging.assert_equal(
+                    shape_list(inputs[attn_mask])[0],
+                    len(self.layers),
+                    message=f"The {attn_mask} should be specified for {len(self.layers)} layers, but it is for {shape_list(inputs[attn_mask])[0]}.",
+                )
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -979,8 +985,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
                 encoder_hidden_states=inputs["encoder_hidden_states"],
                 encoder_attention_mask=inputs["encoder_attention_mask"],
                 layer_head_mask=inputs["head_mask"][idx] if inputs["head_mask"] is not None else None,
-                encoder_layer_head_mask=inputs["encoder_head_mask"][idx]
-                if inputs["encoder_head_mask"] is not None
+                cross_attn_layer_head_mask=inputs["cross_attn_head_mask"][idx]
+                if inputs["cross_attn_head_mask"] is not None
                 else None,
                 past_key_value=past_key_value,
             )
@@ -1054,6 +1060,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1074,6 +1081,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1128,7 +1136,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
             encoder_hidden_states=inputs["encoder_outputs"][0],
             encoder_attention_mask=inputs["attention_mask"],
             head_mask=inputs["decoder_head_mask"],
-            encoder_head_mask=inputs["head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["decoder_inputs_embeds"],
             use_cache=inputs["use_cache"],
@@ -1183,6 +1191,7 @@ class TFBartModel(TFBartPretrainedModel):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[Union[Tuple, TFBaseModelOutput]] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1202,7 +1211,7 @@ class TFBartModel(TFBartPretrainedModel):
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1221,7 +1230,7 @@ class TFBartModel(TFBartPretrainedModel):
             decoder_input_ids=inputs["decoder_input_ids"],
             decoder_attention_mask=inputs["decoder_attention_mask"],
             head_mask=inputs["head_mask"],
-            decoder_head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
             encoder_outputs=inputs["encoder_outputs"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
@@ -1301,6 +1310,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[TFBaseModelOutput] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1331,6 +1341,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -1364,6 +1375,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             decoder_attention_mask=inputs["decoder_attention_mask"],
             head_mask=inputs["head_mask"],
             decoder_head_mask=inputs["decoder_head_mask"],
+            cross_attn_head_mask=inputs["cross_attn_head_mask"],
             past_key_values=inputs["past_key_values"],
             inputs_embeds=inputs["inputs_embeds"],
             decoder_inputs_embeds=inputs["decoder_inputs_embeds"],
