@@ -1152,3 +1152,24 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
         raise RuntimeError(f"'{cmd_str}' produced no output.")
 
     return result
+
+
+def deep_round(obj, decimals=3):
+    """
+    Simplifies an object by rounding float numbers, and downcasting tensors/numpy arrays to get simple equality test
+    within tests.
+    """
+    from transformers.tokenization_utils import BatchEncoding
+
+    if isinstance(obj, list):
+        return [deep_round(item, decimals) for item in obj]
+    elif isinstance(obj, (dict, BatchEncoding)):
+        return {deep_round(k, decimals): deep_round(v, decimals) for k, v in obj.items()}
+    elif isinstance(obj, (str, int)):
+        return obj
+    elif is_torch_available() and isinstance(obj, torch.Tensor):
+        return deep_round(obj.tolist())
+    elif isinstance(obj, float):
+        return round(obj, decimals)
+    else:
+        raise Exception(f"Not supported: {type(obj)}")
