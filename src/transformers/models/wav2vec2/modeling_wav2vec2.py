@@ -1090,3 +1090,27 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
+
+    def resize_lm_head(self, new_num_tokens: Optional[int] = None) -> torch.nn.Linear:
+        """
+        Resizes the LM Head layer of the model if :obj:`new_num_tokens != config.vocab_size`.
+
+        Takes care of tying weights afterwards if the model class has a :obj:`tie_weights()` method.
+
+        Arguments:
+            new_num_tokens (:obj:`int`, `optional`):
+                The number of new tokens in the LM Head matrix.
+                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
+                vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
+                :obj:`torch.nn.Linear` module of the model without doing anything.
+
+        Return:
+            :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module
+            if :obj:`new_num_tokens` is :obj:`None`
+        """
+        if new_num_tokens is None or new_num_tokens == self.config.vocab_size:
+            return self.lm_head
+        self.lm_head = self._get_resized_lm_head(self.lm_head, new_num_tokens)
+        self.config.vocab_size = new_num_tokens
+        self.tie_weights()  # tie weights again if needed
+        return self.lm_head

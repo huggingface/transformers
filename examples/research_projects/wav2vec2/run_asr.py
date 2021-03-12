@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import logging
+import pathlib
 import re
 import sys
 from dataclasses import dataclass, field
@@ -16,6 +17,8 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
+    Wav2Vec2CTCTokenizer,
+    Wav2Vec2FeatureExtractor,
     Wav2Vec2ForCTC,
     Wav2Vec2Processor,
     is_apex_available,
@@ -125,10 +128,10 @@ class Orthography:
     Args:
         do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to accept lowercase input and lowercase the output when decoding.
-        additional_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`[]`):
-            Tokens to add to vocabulary. Particularly useful for transliteration in ASCII.
-        word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`None`):
-            When set, overrides the tokenizer's default for `word_delimiter_token` and added to vocabulary.
+        vocab_file (:obj:`str`, `optional`, defaults to :obj:`None`):
+            File containing the vocabulary.
+        word_delimiter_token (:obj:`str`, `optional`, defaults to :obj:`"|"`):
+            The token used for delimiting words; it needs to be in the vocabulary.
         translation_table (:obj:`Dict[str, str]`, `optional`, defaults to :obj:`{}`):
             Table to use with `str.translate()` when preprocessing text (e.g., "-" -> " ").
         words_to_remove (:obj:`Set[str]`, `optional`, defaults to :obj:`set()`):
@@ -136,36 +139,32 @@ class Orthography:
     """
 
     do_lower_case: bool = False
-    additional_tokens: Optional[List[str]] = field(default_factory=list)
-    word_delimiter_token: Optional[str] = None
+    vocab_file: Optional[str] = None
+    word_delimiter_token: Optional[str] = "|"
     translation_table: Optional[Dict[str, str]] = field(default_factory=dict)
     words_to_remove: Optional[Set[str]] = field(default_factory=set)
 
     @classmethod
-    def from_name(cls, name: str) -> "Orthography":
+    def from_name(cls, name: str):
         if name == "librispeech":
             return cls()
         if name == "timit":
             return cls(
                 do_lower_case=True,
-                translation_table=str.maketrans(
-                    {"-": " "}
-                ),  # break compounds like "quarter-century-old" and replace pauses "--"
+                # break compounds like "quarter-century-old" and replace pauses "--"
+                translation_table=str.maketrans({"-": " "}),
             )
-        if (
-            name == "buckwalter"
-        ):  # for example, 'arabic_speech_corpus' dataset (note the addition of '^' to transliteration scheme)
+        if name == "buckwalter":
             return cls(
-                additional_tokens=list("'|>&<}AbptvjHxd*rzs$SDTZEg_fqklmnhwYyFNKaui~o`{PJVG^"),
+                vocab_file=pathlib.Path(__file__).parent.joinpath("vocab/buckwalter.json"),
                 word_delimiter_token="/",  # "|" is Arabic letter alef with madda above
                 translation_table=str.maketrans({"-": " "}),  # sometimes used to represent pauses
                 words_to_remove={"sil"},  # until we have a "<sil>" special token
             )
         raise ValueError(f"Unsupported orthography: '{name}'.")
 
-    def preprocess_for_training(
-        self, text: str
-    ) -> str:  # TODO(elgeish) return a pipeline (e.g., from jiwer) instead? Or rely on branch predictor as is
+    def preprocess_for_training(self, text: str) -> str:
+        # TODO(elgeish) return a pipeline (e.g., from jiwer) instead? Or rely on branch predictor as is
         if len(self.translation_table) > 0:
             text = text.translate(self.translation_table)
         if len(self.words_to_remove) == 0:
@@ -175,22 +174,24 @@ class Orthography:
         return text
 
     def create_processor(self, model_args: ModelArguments) -> Wav2Vec2Processor:
-        processor = Wav2Vec2Processor.from_pretrained(
-            model_args.model_name_or_path,
-            cache_dir=model_args.cache_dir,
-            do_lower_case=self.do_lower_case,
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+            model_args.model_name_or_path, cache_dir=model_args.cache_dir
         )
-        unique_no_split_tokens = processor.tokenizer.unique_no_split_tokens
-        processor.tokenizer.add_tokens(
-            self.additional_tokens
-        )  # tokens may already exist in vocabulary; `add_tokens` will deduplicate
-        if self.word_delimiter_token is not None:
-            processor.tokenizer.add_tokens(self.word_delimiter_token)
-            processor.tokenizer.word_delimiter_token = self.word_delimiter_token
-        processor.tokenizer.unique_no_split_tokens = (
-            unique_no_split_tokens  # HACK workaround for https://github.com/huggingface/transformers/issues/10622
-        )
-        return processor
+        if self.vocab_file:
+            tokenizer = Wav2Vec2CTCTokenizer(
+                self.vocab_file,
+                cache_dir=model_args.cache_dir,
+                do_lower_case=self.do_lower_case,
+                word_delimiter_token=self.word_delimiter_token,
+            )
+        else:
+            tokenizer = Wav2Vec2CTCTokenizer.from_pretrained(
+                model_args.model_name_or_path,
+                cache_dir=model_args.cache_dir,
+                do_lower_case=self.do_lower_case,
+                word_delimiter_token=self.word_delimiter_token,
+            )
+        return Wav2Vec2Processor(feature_extractor, tokenizer)
 
 
 @dataclass
@@ -322,7 +323,7 @@ def main():
     model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     orthography = Orthography.from_name(data_args.orthography.lower())
     processor = orthography.create_processor(model_args)
-    processor.tokenizer.save_pretrained(training_args.output_dir)
+    model.resize_lm_head(len(processor.tokenizer))
 
     train_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
@@ -352,6 +353,7 @@ def main():
 
     train_dataset = train_dataset.map(prepare_example, remove_columns=["file"])
     val_dataset = val_dataset.map(prepare_example, remove_columns=["file"])
+    logger.info(f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
 
     logger.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
     if logger.isEnabledFor(logging.DEBUG):
