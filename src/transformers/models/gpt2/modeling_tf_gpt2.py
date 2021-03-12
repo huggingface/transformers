@@ -230,7 +230,11 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
 
         self.wte = TFSharedEmbeddings(
-            config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte", dtype="float32"
+            config.vocab_size,
+            config.hidden_size,
+            initializer_range=config.initializer_range,
+            name="wte",
+            dtype="float32",
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
