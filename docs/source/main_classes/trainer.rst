@@ -655,7 +655,6 @@ enables FP16, uses AdamW optimizer and WarmupLR scheduler:
            "weight_decay": 3e-7
          }
        },
-       "zero_allow_untested_optimizer": true,
 
        "scheduler": {
          "type": "WarmupLR",
@@ -766,8 +765,8 @@ Optimizer
 =======================================================================================================================
 
 
-DeepSpeed's main optimizers are Adam, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are thus
-recommended to be used. It, however, can import other optimizers from ``torch``. The full documentation is `here
+DeepSpeed's main optimizers are Adam, AdamW, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are
+thus recommended to be used. It, however, can import other optimizers from ``torch``. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#optimizer-parameters>`__.
 
 If you don't configure the ``optimizer`` entry in the configuration file, the :class:`~transformers.Trainer` will
@@ -779,7 +778,6 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
 .. code-block:: json
 
     {
-       "zero_allow_untested_optimizer": true,
        "optimizer": {
            "type": "AdamW",
            "params": {
@@ -791,8 +789,8 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
          }
     }
 
-Since AdamW isn't on the list of tested with DeepSpeed/ZeRO optimizers, we have to add
-``zero_allow_untested_optimizer`` flag.
+If you want to use another optimizer which is not listed above, you will have to add ``"zero_allow_untested_optimizer":
+true`` to the top level configuration.
 
 If you want to use one of the officially supported optimizers, configure them explicitly in the configuration file, and
 make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` around ``0.01``.
