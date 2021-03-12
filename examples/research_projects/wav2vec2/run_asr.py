@@ -105,6 +105,10 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Resample loaded audio to target feature extractor's sampling rate or not."},
     )
+    max_duration_in_seconds: Optional[float] = field(
+        default=None,
+        metadata={"help": "Filters out examples longer than specified. Defaults to no filtering."},
+    )
     orthography: Optional[str] = field(
         default="librispeech",
         metadata={
@@ -343,6 +347,7 @@ def main():
 
     def prepare_example(example):  # TODO(elgeish) make use of caching and/or multiprocessing
         example["speech"], example["sampling_rate"] = librosa.load(example["file"], sr=target_sr)
+        example["duration_in_seconds"] = len(example["speech"]) / target_sr
         # Normalize and clean up text; order matters!
         updated_text = orthography.preprocess_for_training(example["text"])
         updated_text = vocabulary_text_cleaner.sub("", updated_text)
@@ -353,6 +358,21 @@ def main():
 
     train_dataset = train_dataset.map(prepare_example, remove_columns=["file"])
     val_dataset = val_dataset.map(prepare_example, remove_columns=["file"])
+
+    if data_args.max_duration_in_seconds is not None:
+        old_train_size = len(train_dataset)
+        old_val_size = len(val_dataset)
+        duration_filter = lambda example: example["duration_in_seconds"] <= data_args.max_duration_in_seconds
+        train_dataset = train_dataset.filter(duration_filter)
+        val_dataset = val_dataset.filter(duration_filter)
+        if len(train_dataset) > old_train_size:
+            logger.warning(
+                f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than {data_args.max_duration_in_seconds} second(s)."
+            )
+        if len(val_dataset) > old_val_size:
+            logger.warning(
+                f"Filtered out {len(val_dataset) - old_val_size} validation example(s) longer than {data_args.max_duration_in_seconds} second(s)."
+            )
     logger.info(f"Split sizes: {len(train_dataset)} train and {len(val_dataset)} validation.")
 
     logger.warning(f"Updated {len(text_updates)} transcript(s) using '{data_args.orthography}' orthography rules.")
