@@ -343,6 +343,8 @@ def init_deepspeed(trainer, num_training_steps):
         # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
         trainer.create_optimizer()
         optimizer = trainer.optimizer
+        # flag that this is non-native optimizer
+        config["zero_allow_untested_optimizer"] = True
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
