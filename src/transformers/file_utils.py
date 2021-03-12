@@ -989,6 +989,49 @@ def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
     return cached_models
 
 
+def delete_cached_model(model_bin_name: str, cache_dir: Union[str, Path] = None) -> bool:
+    """
+    Deletes a model file and its associated `.lock` and `.json` files. Models are identified by their unique url ending
+    with `.bin`. To get a list of all model urls in the cache use `get_cached_models()`
+
+    Args:
+        model_bin_name (str): Unique url pointing to a model `.bin` stored at huggingface.co
+        cache_dir (Union[str, Path], optional): Specify a cache directory to search for models within. Defaults to None.
+
+    Returns:
+        bool: Returns `True` if model was found and deleted, `False` if model file doesn't exist.
+    """
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+
+    if isinstance(cache_dir, Path):
+        cache_dir = str(cache_dir)
+
+    cached_models = get_cached_models(cache_dir)
+    model_bin_names = [model_bin for model_bin, _, _ in cached_models]
+
+    if model_bin_name not in model_bin_names:
+        return False
+
+    deletion_id = None
+
+    for file in os.listdir(cache_dir):
+        if file.endswith(".json"):
+            meta_path = os.path.join(cache_dir, file)
+            with open(meta_path, encoding="utf-8") as meta_file:
+                metadata = json.load(meta_file)
+                url = metadata["url"]
+                if url.endswith(".bin"):
+                    if url == model_bin_name:
+                        deletion_id = file.replace(".json", "")
+
+    for file in os.listdir(cache_dir):
+        if file.startswith(deletion_id):
+            os.remove(os.path.join(cache_dir, file))
+
+    return True
+
+
 def cached_path(
     url_or_filename,
     cache_dir=None,
