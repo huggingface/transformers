@@ -68,7 +68,6 @@ class BigBirdModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        norm_type="postnorm",
         attention_type="block_sparse",
         use_bias=True,
         rescale_embeddings=False,
@@ -100,7 +99,6 @@ class BigBirdModelTester:
         self.num_choices = num_choices
         self.scope = scope
 
-        self.norm_type = norm_type
         self.attention_type = attention_type
         self.use_bias = use_bias
         self.rescale_embeddings = rescale_embeddings
@@ -143,7 +141,6 @@ class BigBirdModelTester:
             attention_type=self.attention_type,
             use_bias=self.use_bias,
             rescale_embeddings=self.rescale_embeddings,
-            norm_type=self.norm_type,
             block_size=self.block_size,
             num_random_blocks=self.num_rand_blocks,
             position_embedding_type=self.position_embedding_type,

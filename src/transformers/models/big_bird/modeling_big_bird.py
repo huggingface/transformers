@@ -1288,12 +1288,12 @@ class BigBirdLayer(nn.Module):
         head_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
         band_mask=None,
         from_mask=None,
         to_mask=None,
         blocked_encoder_mask=None,
+        past_key_value=None,
+        output_attentions=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -1427,6 +1427,10 @@ class BigBirdEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
+                    band_mask,
+                    from_mask,
+                    to_mask,
+                    blocked_encoder_mask,
                 )
             else:
 
@@ -1436,12 +1440,12 @@ class BigBirdEncoder(nn.Module):
                     layer_head_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
                     band_mask,
                     from_mask,
                     to_mask,
                     blocked_encoder_mask,
+                    past_key_value,
+                    output_attentions,
                 )
 
             hidden_states = layer_outputs[0]
@@ -2634,16 +2638,21 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        seqlen = input_ids.size(1)
-        if question_lengths is None:
+        seqlen = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
+
+        if question_lengths is None and input_ids is not None:
             # assuming input_ids format: <cls> <question> <sep> context <sep>
             question_lengths = torch.argmax(input_ids.eq(self.sep_token_id).int(), dim=-1) + 1
+            question_lengths.unsqueeze_(1)
 
-        # setting lengths logits to `-infi`
-        logits_mask = self.prepare_question_mask(question_lengths.unsqueeze(1), seqlen)
-        if token_type_ids is None:
-            token_type_ids = (~logits_mask).long()
-        logits_mask = logits_mask.float()
+        logits_mask = None
+        if question_lengths is not None:
+            # setting lengths logits to `-infi`
+            logits_mask = self.prepare_question_mask(question_lengths, seqlen)
+            if token_type_ids is None:
+                token_type_ids = (~logits_mask).long()
+            logits_mask = logits_mask.float()
+            logits_mask.unsqueeze_(2)
 
         # TODO:
         # print(token_type_ids)
@@ -2668,12 +2677,11 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
 
         logits = self.qa_classifier(sequence_output)
         self.l = logits  # TODO: remove this
-        self.lmask = logits_mask
+        # self.lmask = logits_mask
 
-        # removing question tokens from the competition
-        logits = logits - (logits_mask.unsqueeze(2)) * 1e6
-
-        self.fl = logits
+        if logits_mask is not None:
+            # removing question tokens from the competition
+            logits = logits - logits_mask * 1e6
 
         start_logits, end_logits = logits.split(1, dim=-1)
         start_logits = start_logits.squeeze(-1)
