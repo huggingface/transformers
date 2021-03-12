@@ -230,11 +230,11 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
         self.initializer_range = config.initializer_range
 
         self.wte = TFSharedEmbeddings(
-            config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
+            config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte", dtype="float32"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
         self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
-        self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
+        self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f", dtype="float32")
 
     def build(self, input_shape):
         with tf.name_scope("wpe"):
