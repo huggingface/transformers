@@ -68,11 +68,11 @@ class Text2TextGenerationPipeline(Pipeline):
             raise ValueError(
                 f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
-        inputs =  super()._parse_and_tokenize(*args, padding=padding, truncation=truncation)
+        inputs = super()._parse_and_tokenize(*args, padding=padding, truncation=truncation)
         # This is produced by tokenizers but is an invalid
         # generate kwargs
-        if 'token_type_ids' in inputs:
-            del inputs['token_type_ids']
+        if "token_type_ids" in inputs:
+            del inputs["token_type_ids"]
         return inputs
 
     def __call__(
