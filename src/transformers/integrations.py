@@ -26,6 +26,7 @@ from types import SimpleNamespace
 
 from .trainer_utils import SchedulerType
 from .utils import logging
+from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -281,6 +282,8 @@ def init_deepspeed(trainer, num_training_steps):
     """
     import deepspeed
 
+    require_version("deepspeed>0.3.10")
+
     args = trainer.args
     ds_config_file = args.deepspeed
     model = trainer.model
@@ -323,9 +326,8 @@ def init_deepspeed(trainer, num_training_steps):
             f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
-        # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-        # But trainer uses AdamW by default.
-        # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+        # ds supports Adam, AdamW, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+        # To use other optimizers requires voiding warranty with: `"zero_allow_untested_optimizer": true"`
 
         optimizer_configs = {
             "AdamW": {
@@ -337,7 +339,6 @@ def init_deepspeed(trainer, num_training_steps):
         }
         optimizer = "AdamW"
 
-        config["zero_allow_untested_optimizer"] = True
         config["optimizer"] = {
             "type": optimizer,
             "params": optimizer_configs[optimizer],
