@@ -23,8 +23,10 @@ import math
 import os
 import re
 import shutil
+import sys
 import time
 import warnings
+from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -59,6 +61,7 @@ from .file_utils import (
     is_in_notebook,
     is_sagemaker_distributed_available,
     is_torch_tpu_available,
+    is_training_run_on_sagemaker,
 )
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
@@ -80,6 +83,7 @@ from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
+    get_parameter_names,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -97,6 +101,7 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    denumpify_detensorize,
     get_last_checkpoint,
     set_seed,
     speed_metrics,
@@ -147,6 +152,10 @@ if is_sagemaker_distributed_available():
     from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
 else:
     import torch.distributed as dist
+
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
+
 
 if TYPE_CHECKING:
     import optuna
@@ -613,14 +622,15 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            no_decay = ["bias", "LayerNorm.weight"]
+            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
                     "weight_decay": 0.0,
                 },
             ]
@@ -737,6 +747,10 @@ class Trainer:
         # already initialized its own DDP and AMP
         if self.deepspeed:
             return self.deepspeed
+
+        # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
+        if unwrap_model(model) is not model:
+            return model
 
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
@@ -1491,11 +1505,14 @@ class Trainer:
         """
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
-        else:
+        elif (
+            ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
+        ):
+            state_dict = self.model.state_dict()
             if self.is_world_process_zero():
-                self._save(output_dir)
-            if self.args.local_rank != -1:
-                dist.barrier()
+                self._save(output_dir, state_dict=state_dict)
+        elif self.is_world_process_zero():
+            self._save(output_dir)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1525,7 +1542,7 @@ class Trainer:
         if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
-    def _save(self, output_dir: Optional[str] = None):
+    def _save(self, output_dir: Optional[str] = None, state_dict=None):
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
@@ -1534,13 +1551,16 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
             if isinstance(unwrap_model(self.model), PreTrainedModel):
-                unwrap_model(self.model).save_pretrained(output_dir, state_dict=self.model.state_dict())
+                if state_dict is None:
+                    state_dict = self.model.state_dict()
+                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-                state_dict = self.model.state_dict()
+                if state_dict is None:
+                    state_dict = self.model.state_dict()
                 torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir)
+            self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
@@ -1811,6 +1831,9 @@ class Trainer:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
+
+        # To be JSON-serializable, we need to remove numpy types or zero-d tensors
+        metrics = denumpify_detensorize(metrics)
 
         if eval_loss is not None:
             metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()

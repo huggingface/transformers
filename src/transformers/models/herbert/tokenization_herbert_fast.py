@@ -17,12 +17,7 @@ from typing import List, Optional, Tuple
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
-from .tokenization_herbert import (
-    PRETRAINED_INIT_CONFIGURATION,
-    PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES,
-    PRETRAINED_VOCAB_FILES_MAP,
-    HerbertTokenizer,
-)
+from .tokenization_herbert import HerbertTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -31,6 +26,14 @@ VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
 }
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {"allegro/herbert-base-cased": "https://cdn.huggingface.co/allegro/herbert-base-cased/vocab.json"},
+    "merges_file": {"allegro/herbert-base-cased": "https://cdn.huggingface.co/allegro/herbert-base-cased/merges.txt"},
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"allegro/herbert-base-cased": 514}
+PRETRAINED_INIT_CONFIGURATION = {}
 
 
 class HerbertTokenizerFast(PreTrainedTokenizerFast):

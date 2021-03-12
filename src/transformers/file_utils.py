@@ -177,6 +177,13 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
+_torchaudio_available = importlib.util.find_spec("torchaudio")
+try:
+    _torchaudio_version = importlib_metadata.version("torchaudio")
+    logger.debug(f"Successfully imported soundfile version {_torchaudio_version}")
+except importlib_metadata.PackageNotFoundError:
+    _torchaudio_available = False
+
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
@@ -206,6 +213,7 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False)
 
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -355,8 +363,16 @@ def is_sagemaker_distributed_available():
     return importlib.util.find_spec("smdistributed") is not None
 
 
+def is_training_run_on_sagemaker():
+    return "SAGEMAKER_JOB_NAME" in os.environ and not DISABLE_TELEMETRY
+
+
 def is_soundfile_availble():
     return _soundfile_available
+
+
+def is_torchaudio_available():
+    return _torchaudio_available
 
 
 def torch_only_method(fn):
@@ -1105,6 +1121,10 @@ def cached_path(
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+
     if is_remote_url(url_or_filename):
         # URL, so get it from the cache (downloading if necessary)
         output_path = get_from_cache(
@@ -1161,6 +1181,32 @@ def cached_path(
     return output_path
 
 
+def define_sagemaker_information():
+    try:
+        instance_data = requests.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        dlc_container_used = instance_data["Image"]
+        dlc_tag = instance_data["Image"].split(":")[1]
+    except Exception:
+        dlc_container_used = None
+        dlc_tag = None
+
+    sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
+    runs_distributed_training = True if "sagemaker_distributed_dataparallel_enabled" in sagemaker_params else False
+    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
+
+    sagemaker_object = {
+        "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
+        "sm_region": os.getenv("AWS_REGION", None),
+        "sm_number_gpu": os.getenv("SM_NUM_GPUS", 0),
+        "sm_number_cpu": os.getenv("SM_NUM_CPUS", 0),
+        "sm_distributed_training": runs_distributed_training,
+        "sm_deep_learning_container": dlc_container_used,
+        "sm_deep_learning_container_tag": dlc_tag,
+        "sm_account_id": account_id,
+    }
+    return sagemaker_object
+
+
 def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
@@ -1170,8 +1216,10 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
         ua += f"; tensorflow/{_tf_version}"
+    if is_training_run_on_sagemaker():
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
     if isinstance(user_agent, dict):
-        ua += "; " + "; ".join("{}/{}".format(k, v) for k, v in user_agent.items())
+        ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
         ua += "; " + user_agent
     return ua

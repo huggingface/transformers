@@ -129,6 +129,7 @@ class TFModelTesterMixin:
 
                 self.assert_outputs_same(after_outputs, outputs)
 
+    @slow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -142,6 +143,7 @@ class TFModelTesterMixin:
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
 
+    @slow
     def test_xla_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -182,6 +184,7 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @slow
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = False
@@ -311,6 +314,7 @@ class TFModelTesterMixin:
 
             onnxruntime.InferenceSession(onnx_model.SerializeToString())
 
+    @slow
     def test_mixed_precision(self):
         tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
 
@@ -484,6 +488,7 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
+    @slow
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         # head_mask and decoder_head_mask has different shapes than other input args
@@ -904,6 +909,7 @@ class TFModelTesterMixin:
 
             model(inputs)
 
+    @slow
     def test_graph_mode_with_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
