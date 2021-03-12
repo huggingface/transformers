@@ -1166,7 +1166,7 @@ class TokenizerTesterMixin:
                 assert encoded_sequence == padded_sequence_left
 
     def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` will e deprecated"""
+        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` will be deprecated"""
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -2651,12 +2651,12 @@ class TokenizerTesterMixin:
 
                 # Using pad after tokenization
                 input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a input 1", "This is a much longer input whilch should be padded"]
+                    ["This is a input 1", "This is a much longer input which should be padded"]
                 )
                 input_r = tokenizer_r.pad(input_r)
 
                 input_p = tokenizer_r.batch_encode_plus(
-                    ["This is a input 1", "This is a much longer input whilch should be padded"]
+                    ["This is a input 1", "This is a much longer input which should be padded"]
                 )
                 input_p = tokenizer_r.pad(input_p)
 
@@ -2664,12 +2664,12 @@ class TokenizerTesterMixin:
 
                 # Using pad after tokenization
                 input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a input 1", "This is a much longer input whilch should be padded"]
+                    ["This is a input 1", "This is a much longer input which should be padded"]
                 )
                 input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
 
                 input_p = tokenizer_r.batch_encode_plus(
-                    ["This is a input 1", "This is a much longer input whilch should be padded"]
+                    ["This is a input 1", "This is a much longer input which should be padded"]
                 )
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
@@ -2684,10 +2684,10 @@ class TokenizerTesterMixin:
                 pad_token_id = tokenizer_p.pad_token_id
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a input 1", "This is a much longer input whilch should be padded"]
+                    ["This is a input 1", "This is a much longer input which should be padded"]
                 )
                 input_p = tokenizer_r.batch_encode_plus(
-                    ["This is a input 1", "This is a much longer input whilch should be padded"]
+                    ["This is a input 1", "This is a much longer input which should be padded"]
                 )
 
                 # rename encoded batch to "inputs"
