@@ -211,10 +211,14 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
         try:
             if len(array.shape) > len(pointer.shape) and math.prod(array.shape) == math.prod(pointer.shape):
                 # print(txt_name, array.shape)
-                if txt_name.endswith("attention/self/key/kernel") or txt_name.endswith("attention/self/query/kernel") or txt_name.endswith("attention/self/value/kernel"):
-                    array = array.transpose(1,0,2).reshape(pointer.shape)
+                if (
+                    txt_name.endswith("attention/self/key/kernel")
+                    or txt_name.endswith("attention/self/query/kernel")
+                    or txt_name.endswith("attention/self/value/kernel")
+                ):
+                    array = array.transpose(1, 0, 2).reshape(pointer.shape)
                 elif txt_name.endswith("attention/output/dense/kernel"):
-                    array = array.transpose(0,2,1).reshape(pointer.shape)
+                    array = array.transpose(0, 2, 1).reshape(pointer.shape)
                 else:
                     array = array.reshape(pointer.shape)
 
@@ -277,21 +281,21 @@ class BigBirdEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        self.we = inputs_embeds # TODO
+        self.we = inputs_embeds  # TODO
 
         if self.rescale_embeddings:
             inputs_embeds = inputs_embeds * (self.hidden_size ** 0.5)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        self.tte = token_type_embeddings # TODO
+        self.tte = token_type_embeddings  # TODO
 
         embeddings = inputs_embeds + token_type_embeddings
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
-        self.pe = position_embeddings # TODO
+        self.pe = position_embeddings  # TODO
 
         embeddings = self.dropout(embeddings)
         embeddings = self.LayerNorm(embeddings)
@@ -492,17 +496,17 @@ class BigBirdBlockSparseAttention(nn.Module):
         assert from_seq_length % from_block_size == 0, "Query sided sequence length must be multiple of block size"
         assert to_seq_length % to_block_size == 0, "Key/Value sided sequence length must be multiple of block size"
 
-        self.it = hidden_states # TODO
+        self.it = hidden_states  # TODO
 
         query_layer = self.transpose_for_scores(self.query(hidden_states))
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         # TODO
-        self.q = query_layer.transpose(1,2)
-        self.k = key_layer.transpose(1,2)
-        self.v = value_layer.transpose(1,2)
-        # 
+        self.q = query_layer.transpose(1, 2)
+        self.k = key_layer.transpose(1, 2)
+        self.v = value_layer.transpose(1, 2)
+        #
 
         context_layer, attention_probs = self.bigbird_block_sparse_attention(
             query_layer,
@@ -529,7 +533,7 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         # TODO
         self.clo = context_layer
-        # 
+        #
 
         context_layer = context_layer.contiguous().view(batch_size, from_seq_length, -1)
 
@@ -635,14 +639,12 @@ class BigBirdBlockSparseAttention(nn.Module):
         blocked_key_matrix = key_layer.view(b, h, n // wn, wn, -1)
         blocked_value_matrix = value_layer.view(b, h, n // wn, wn, -1)
 
-
         # TODO
         self.bqm = blocked_query_matrix
         self.bkm = blocked_key_matrix
         self.bvm = blocked_value_matrix
         self.ra = rand_attn
-        # 
-
+        #
 
         # preparing block for randn attn
         gathered_key = self.torch_gather_b2(blocked_key_matrix, rand_attn)
@@ -653,7 +655,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         # TODO
         self.gk = gathered_key
         self.gv = gathered_value
-        # 
+        #
 
         # 1st block is global q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
 
@@ -668,7 +670,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         )  # [b, h, wm, n] x [b, h, n, -1] ==> [b, h, wm, -1]
         first_context_layer.unsqueeze_(2)
 
-        self.fcl = first_context_layer # TODO
+        self.fcl = first_context_layer  # TODO
 
         # q[1] x (sliding_keys, random_keys, global_keys)
 
@@ -910,7 +912,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         else:
             attention_probs = None
 
-        self.fcl = context_layer # TODO
+        self.fcl = context_layer  # TODO
 
         return context_layer, attention_probs
 
@@ -1253,13 +1255,13 @@ class BigBirdOutput(nn.Module):
 
     def forward(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
-        self.o_1 = hidden_states # TODO
+        self.o_1 = hidden_states  # TODO
         hidden_states = self.dropout(hidden_states)
 
         # TODO
         self.it = input_tensor
         self.hs = hidden_states
-        # 
+        #
 
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
@@ -1342,7 +1344,7 @@ class BigBirdLayer(nn.Module):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        self.ao = attention_output # TODO
+        self.ao = attention_output  # TODO
 
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
@@ -2561,20 +2563,20 @@ class BigBirdForQuestionAnsweringHead(nn.Module):
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
     def forward(self, encoder_output):
-        
+
         self.qa_te = encoder_output
 
         hidden_states = self.dropout(encoder_output)
         hidden_states = self.intermediate(hidden_states)
-        
+
         self.inter = hidden_states
 
         hidden_states = self.output(hidden_states, encoder_output)
-        
+
         self.o = hidden_states
 
         hidden_states = self.qa_outputs(hidden_states)
-        
+
         return hidden_states
 
 
@@ -2636,18 +2638,18 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         if question_lengths is None:
             # assuming input_ids format: <cls> <question> <sep> context <sep>
             question_lengths = torch.argmax(input_ids.eq(self.sep_token_id).int(), dim=-1) + 1
-        
+
         # setting lengths logits to `-infi`
         logits_mask = self.prepare_question_mask(question_lengths.unsqueeze(1), seqlen)
         if token_type_ids is None:
             token_type_ids = (~logits_mask).long()
         logits_mask = logits_mask.float()
-        
+
         # TODO:
         # print(token_type_ids)
         # print(mask)
         self.tti = token_type_ids
-        # 
+        #
 
         outputs = self.bert(
             input_ids,
@@ -2662,14 +2664,14 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        self.encoder_out = sequence_output # TODO: remove this
+        self.encoder_out = sequence_output  # TODO: remove this
 
         logits = self.qa_classifier(sequence_output)
-        self.l = logits # TODO: remove this
+        self.l = logits  # TODO: remove this
         self.lmask = logits_mask
 
         # removing question tokens from the competition
-        logits = logits - (logits_mask.unsqueeze(2))*1e6
+        logits = logits - (logits_mask.unsqueeze(2)) * 1e6
 
         self.fl = logits
 
@@ -2707,9 +2709,9 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         )
 
     @staticmethod
-    def prepare_question_mask(q_lengths:torch.Tensor, maxlen:int):
+    def prepare_question_mask(q_lengths: torch.Tensor, maxlen: int):
         # q_lengths -> (bz, 1)
         mask = torch.arange(0, maxlen).to(q_lengths.device)
-        mask.unsqueeze_(0) # -> (1, maxlen)
+        mask.unsqueeze_(0)  # -> (1, maxlen)
         mask = mask < q_lengths
         return mask
