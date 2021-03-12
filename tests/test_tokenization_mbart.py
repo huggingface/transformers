@@ -240,8 +240,8 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         self.assertEqual(
             deep_round(inputs),
             {
-                # en_XX, A, test, EOS
-                "input_ids": [[250004, 62, 3034, 2]],
+                # A, test, EOS, en_XX
+                "input_ids": [[62, 3034, 2, 250004]],
                 "attention_mask": [[1, 1, 1, 1]],
                 # ar_AR
                 "forced_bos_token_id": 250001,
