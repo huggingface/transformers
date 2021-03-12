@@ -360,11 +360,14 @@ def main():
     val_dataset = val_dataset.map(prepare_example, remove_columns=["file"])
 
     if data_args.max_duration_in_seconds is not None:
+
+        def filter_by_max_duration(example):
+            return example["duration_in_seconds"] <= data_args.max_duration_in_seconds
+
         old_train_size = len(train_dataset)
         old_val_size = len(val_dataset)
-        duration_filter = lambda example: example["duration_in_seconds"] <= data_args.max_duration_in_seconds
-        train_dataset = train_dataset.filter(duration_filter)
-        val_dataset = val_dataset.filter(duration_filter)
+        train_dataset = train_dataset.filter(filter_by_max_duration)
+        val_dataset = val_dataset.filter(filter_by_max_duration)
         if len(train_dataset) > old_train_size:
             logger.warning(
                 f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than {data_args.max_duration_in_seconds} second(s)."
