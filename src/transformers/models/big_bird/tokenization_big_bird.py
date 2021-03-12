@@ -33,12 +33,14 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "google/bigbird-roberta-base": "https://huggingface.co/google/bigbird-roberta-base/resolve/main/spiece.model",
         "google/bigbird-roberta-large": "https://huggingface.co/google/bigbird-roberta-large/resolve/main/spiece.model",
+        "google/bigbird-base-trivia-itc": "https://huggingface.co/google/bigbird-base-trivia-itc/resolve/main/spiece.model",
     }
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/bigbird-roberta-base": 4096,
     "google/bigbird-roberta-large": 4096,
+    "google/bigbird-base-trivia-itc": 4096,
 }
 
 

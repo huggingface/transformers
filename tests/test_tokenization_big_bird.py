@@ -114,7 +114,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @cached_property
     def big_tokenizer(self):
-        return BigBirdTokenizer.from_pretrained("vasudevgupta/bigbird-roberta-base")
+        return BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
 
     @slow
     def test_tokenization_base_easy_symbols(self):
@@ -230,7 +230,7 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         ids = tf.concat([tf.constant([65]), ids, tf.constant([66])], axis=0)
         detokenized = tokenizer.detokenize(ids)  # should give [CLS] Paris is the [MASK].[SEP]
         """
-        tokenizer = BigBirdTokenizer.from_pretrained("vasudevgupta/bigbird-roberta-base")
+        tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
         decoded_text = tokenizer.decode(tokenizer("Paris is the [MASK].").input_ids)
 
         self.assertTrue(decoded_text == "[CLS] Paris is the [MASK].[SEP]")

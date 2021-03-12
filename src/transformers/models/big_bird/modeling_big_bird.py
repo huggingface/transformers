@@ -58,6 +58,7 @@ _TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/bigbird-roberta-base",
     "google/bigbird-roberta-large",
+    "google/bigbird-base-trivia-itc",
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 ]
 
@@ -2613,7 +2614,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/bigbird-roberta-base",
+        checkpoint="google/bigbird-base-trivia-itc",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

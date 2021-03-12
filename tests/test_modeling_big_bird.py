@@ -680,7 +680,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
 
     def test_inference_block_sparse_pretraining(self):
         model = BigBirdForPreTraining.from_pretrained(
-            "vasudevgupta/bigbird-roberta-base", attention_type="block_sparse"
+            "google/bigbird-roberta-base", attention_type="block_sparse"
         )
         model.to(torch_device)
 
@@ -710,7 +710,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
 
     def test_inference_full_pretraining(self):
         model = BigBirdForPreTraining.from_pretrained(
-            "vasudevgupta/bigbird-roberta-base", attention_type="original_full"
+            "google/bigbird-roberta-base", attention_type="original_full"
         )
         model.to(torch_device)
 
@@ -747,7 +747,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             return
 
         model = BigBirdModel.from_pretrained(
-            "vasudevgupta/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
+            "google/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
         )
         model.to(torch_device)
         model.eval()
@@ -805,7 +805,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
 
     def test_block_sparse_context_layer(self):
         model = BigBirdModel.from_pretrained(
-            "vasudevgupta/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
+            "google/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
         )
         model.to(torch_device)
         model.eval()
@@ -852,9 +852,9 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(context_layer[0, 64:78, 300:310], targeted_cl, atol=0.0001))
 
     def test_tokenizer_inference(self):
-        tokenizer = BigBirdTokenizer.from_pretrained("vasudevgupta/bigbird-roberta-base")
+        tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
         model = BigBirdModel.from_pretrained(
-            "vasudevgupta/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
+            "google/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
         )
         model.to(torch_device)
 
@@ -891,9 +891,9 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(prediction[0, 52:64, 320:324], expected_prediction, atol=1e-4))
 
     def test_inference_question_answering(self):
-        tokenizer = BigBirdTokenizer.from_pretrained("vasudevgupta/bigbird-base-trivia-itc")
+        tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-base-trivia-itc")
         model = BigBirdForQuestionAnswering.from_pretrained(
-            "vasudevgupta/bigbird-base-trivia-itc", attention_type="block_sparse", block_size=16, num_random_blocks=3
+            "google/bigbird-base-trivia-itc", attention_type="block_sparse", block_size=16, num_random_blocks=3
         )
         model.to(torch_device)
 
