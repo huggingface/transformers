@@ -77,6 +77,7 @@ class ListExample:
     foo_str: List[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
     foo_float: List[float] = list_field(default=[0.1, 0.2, 0.3])
 
+
 @dataclass
 class RequiredExample:
     required_list: List[int] = field()
