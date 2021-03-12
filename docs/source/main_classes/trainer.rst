@@ -335,8 +335,8 @@ Known caveats:
 
 - This feature is incompatible with :obj:`--predict_with_generate` in the `run_seq2seq.py` script.
 - Using :obj:`--sharded_ddp zero_dp_3` requires wrapping each layer of the model in the special container
-  :obj:`FullyShardedDataParallelism` of fairscale. This is not done automatically by any of the example scripts of the
-  :class:`~transformers.Trainer`.
+  :obj:`FullyShardedDataParallelism` of fairscale. It should be used with the option :obj:`auto_wrap` if you are not
+  doing this yourself: :obj:`--sharded_ddp "zero_dp_3 auto_wrap"`.
 
 
 DeepSpeed
