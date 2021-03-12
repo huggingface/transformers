@@ -195,6 +195,24 @@ def enable_default_handler() -> None:
     _get_library_root_logger().addHandler(_default_handler)
 
 
+def add_handler(handler: logging.Handler) -> None:
+    """adds a handler to the HuggingFace Transformers's root logger."""
+
+    _configure_library_root_logger()
+
+    assert handler is not None
+    _get_library_root_logger().addHandler(handler)
+
+
+def remove_handler(handler: logging.Handler) -> None:
+    """removes given handler from the HuggingFace Transformers's root logger."""
+
+    _configure_library_root_logger()
+
+    assert handler is not None and handler not in _get_library_root_logger().handlers
+    _get_library_root_logger().removeHandler(handler)
+
+
 def disable_propagation() -> None:
     """
     Disable propagation of the library log outputs. Note that log propagation is disabled by default.

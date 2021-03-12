@@ -135,6 +135,11 @@ _import_structure = {
         "Wav2Vec2Processor",
     ],
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
+    "models.speech_to_text": [
+        "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Speech2TextConfig",
+        "Speech2TextFeatureExtractor",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -275,6 +280,8 @@ if is_sentencepiece_available():
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
+    _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
+    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -376,6 +383,14 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
+    _import_structure["models.speech_to_text"].extend(
+        [
+            "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Speech2TextForConditionalGeneration",
+            "Speech2TextModel",
+        ]
+    )
 
     _import_structure["models.wav2vec2"].extend(
         [
@@ -1379,6 +1394,11 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.speech_to_text import (
+        SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Speech2TextConfig,
+        Speech2TextFeatureExtractor,
+    )
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -1461,6 +1481,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
+        from .models.speech_to_text import Speech2TextProcessor, Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -1861,6 +1882,11 @@ if TYPE_CHECKING:
             RobertaForSequenceClassification,
             RobertaForTokenClassification,
             RobertaModel,
+        )
+        from .models.speech_to_text import (
+            SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speech2TextForConditionalGeneration,
+            Speech2TextModel,
         )
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
