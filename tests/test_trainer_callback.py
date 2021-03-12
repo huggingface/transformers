@@ -1,10 +1,24 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import shutil
 import tempfile
 import unittest
 
 from transformers import (
     DefaultFlowCallback,
-    EvaluationStrategy,
+    IntervalStrategy,
     PrinterCallback,
     ProgressCallback,
     Trainer,
@@ -77,7 +91,7 @@ class TrainerCallbackTest(unittest.TestCase):
         config = RegressionModelConfig(a=a, b=b)
         model = RegressionPreTrainedModel(config)
 
-        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, **kwargs)
+        args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, report_to=[], **kwargs)
         return Trainer(
             model,
             args,
@@ -115,15 +129,12 @@ class TrainerCallbackTest(unittest.TestCase):
                 expected_events += ["on_step_begin", "on_step_end"]
                 if step % trainer.args.logging_steps == 0:
                     expected_events.append("on_log")
-                if (
-                    trainer.args.evaluation_strategy == EvaluationStrategy.STEPS
-                    and step % trainer.args.eval_steps == 0
-                ):
+                if trainer.args.evaluation_strategy == IntervalStrategy.STEPS and step % trainer.args.eval_steps == 0:
                     expected_events += evaluation_events.copy()
                 if step % trainer.args.save_steps == 0:
                     expected_events.append("on_save")
             expected_events.append("on_epoch_end")
-            if trainer.args.evaluation_strategy == EvaluationStrategy.EPOCH:
+            if trainer.args.evaluation_strategy == IntervalStrategy.EPOCH:
                 expected_events += evaluation_events.copy()
         expected_events += ["on_log", "on_train_end"]
         return expected_events

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright {{cookiecutter.authors}} and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@
 {%- if cookiecutter.tokenizer_type == "Based on BERT" %}
 from ...utils import logging
 from ..bert.tokenization_bert import BertTokenizer
-from ..bert.tokenization_bert_fast import BertTokenizerFast
 
 
 logger = logging.get_logger(__name__)
@@ -56,38 +55,66 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(BertTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
 
+{%- elif cookiecutter.tokenizer_type == "Based on BART" %}
+from ...utils import logging
+from ..bart.tokenization_bart import BartTokenizer
 
-class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
-    r"""
-    Construct a "fast" {{cookiecutter.modelname}} tokenizer (backed by HuggingFace's `tokenizers` library).
 
-    :class:`~transformers.{{cookiecutter.camelcase_modelname}}TokenizerFast` is identical to :class:`~transformers.BertTokenizerFast` and runs
-    end-to-end tokenization: punctuation splitting and wordpiece.
+logger = logging.get_logger(__name__)
 
-    Refer to superclass :class:`~transformers.BertTokenizerFast` for usage examples and documentation concerning
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.json",
+    },
+    "merges_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/merges.txt",
+    },
+    "tokenizer_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/tokenizer.json",
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "{{cookiecutter.checkpoint_identifier}}": 1024,
+}
+
+
+class {{cookiecutter.camelcase_modelname}}Tokenizer(BartTokenizer):
+    """
+    Construct a {{cookiecutter.modelname}} tokenizer.
+
+    :class:`~transformers.{{cookiecutter.camelcase_modelname}}Tokenizer` is identical to :class:`~transformers.BartTokenizer` and runs end-to-end
+    tokenization: punctuation splitting and wordpiece.
+
+    Refer to superclass :class:`~transformers.BartTokenizer` for usage examples and documentation concerning
     parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
 from typing import List, Optional
 
 from tokenizers import ByteLevelBPETokenizer
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
-PRETRAINED_VOCAB_FILES_MAP = {}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.txt",
+    },
+}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "{{cookiecutter.checkpoint_identifier}}": 1024,
@@ -105,7 +132,7 @@ class {{cookiecutter.camelcase_modelname}}Tokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
             self,
@@ -250,7 +277,7 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
             self,
@@ -307,6 +334,5 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(PreTrainedTokenizerFast)
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
-
 
 {% endif %}

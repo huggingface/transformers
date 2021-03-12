@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Pegasus
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -39,9 +51,8 @@ All the `checkpoints <https://huggingface.co/models?search=pegasus>`__ are fine-
 Examples
 _______________________________________________________________________________________________________________________
 
-- `Script <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/finetune_pegasus_xsum.sh>`__ to
-  fine-tune pegasus on the XSUM dataset. Data download instructions at `examples/seq2seq/
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/README.md>`__.
+- :prefix_link:`Script <examples/seq2seq/finetune_pegasus_xsum.sh>` to fine-tune pegasus on the XSUM dataset. Data
+  download instructions at :prefix_link:`examples/seq2seq/ <examples/seq2seq/README.md>`.
 - FP16 is not supported (help/ideas on this appreciated!).
 - The adafactor optimizer is recommended for pegasus fine-tuning.
 
@@ -54,7 +65,6 @@ Implementation Notes
 - Some key configuration differences:
 
     - static, sinusoidal position embeddings
-    - no :obj:`layernorm_embedding` (:obj:`PegasusConfig.normalize_embedding=False`)
     - the model starts generating with pad_token_id (which has 0 token_embedding) as the prefix.
     - more beams are used (:obj:`num_beams=8`)
 - All pretrained pegasus checkpoints are the same besides three attributes: :obj:`tokenizer.model_max_length` (maximum
@@ -68,20 +78,20 @@ Usage Example
 
 .. code-block:: python
 
-    from transformers import PegasusForConditionalGeneration, PegasusTokenizer
-    import torch
-    src_text = [
-        """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
-    ]
+    >>> from transformers import PegasusForConditionalGeneration, PegasusTokenizer
+    >>> import torch
+    >>> src_text = [
+    ...     """ PG&E stated it scheduled the blackouts in response to forecasts for high winds amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."""
+    >>> ]
 
-    model_name = 'google/pegasus-xsum'
-    torch_device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    tokenizer = PegasusTokenizer.from_pretrained(model_name)
-    model = PegasusForConditionalGeneration.from_pretrained(model_name).to(torch_device)
-    batch = tokenizer.prepare_seq2seq_batch(src_text, truncation=True, padding='longest', return_tensors="pt").to(torch_device)
-    translated = model.generate(**batch)
-    tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
-    assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
+    >>> model_name = 'google/pegasus-xsum'
+    >>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    >>> tokenizer = PegasusTokenizer.from_pretrained(model_name)
+    >>> model = PegasusForConditionalGeneration.from_pretrained(model_name).to(device)
+    >>> batch = tokenizer(src_text, truncation=True, padding='longest', return_tensors="pt").to(torch_device)
+    >>> translated = model.generate(**batch)
+    >>> tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
+    >>> assert tgt_text[0] == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
 
 
 
@@ -97,16 +107,46 @@ PegasusTokenizer
 warning: ``add_tokens`` does not work at the moment.
 
 .. autoclass:: transformers.PegasusTokenizer
-    :members: __call__, prepare_seq2seq_batch
+    :members:
+
+
+PegasusTokenizerFast
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusTokenizerFast
+    :members:
+
+
+PegasusModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusModel
+    :members: forward
 
 
 PegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.PegasusForConditionalGeneration
+    :members: forward
+
+
+PegasusForCausalLM
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.PegasusForCausalLM
+    :members: forward
+
+
+TFPegasusModel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.TFPegasusModel
+    :members: call
 
 
 TFPegasusForConditionalGeneration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.TFPegasusForConditionalGeneration
+    :members: call

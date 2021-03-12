@@ -1,3 +1,17 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import json
 import os
 from functools import partial
@@ -14,7 +28,7 @@ from .utils import DataProcessor
 
 
 # Store the tokenizers which insert 2 separators tokens
-MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart"}
+MULTI_SEP_TOKENS_TOKENIZERS_SET = {"roberta", "camembert", "bart", "mpnet"}
 
 
 if is_torch_available():
@@ -765,7 +779,7 @@ class SquadFeatures:
         token_to_orig_map: mapping between the tokens and the original text, needed in order to identify the answer.
         start_position: start of the answer token index
         end_position: end of the answer token index
-        encoding: optionally store the BatchEncoding with the fast-tokenizer alignement methods.
+        encoding: optionally store the BatchEncoding with the fast-tokenizer alignment methods.
     """
 
     def __init__(

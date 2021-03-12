@@ -20,6 +20,7 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -62,8 +63,8 @@ SEG_ID_PAD = 4
 
 class XLNetTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" XLNet tokenizer (backed by HuggingFace's `tokenizers` library). Based on `SentencePiece
-    <https://github.com/google/sentencepiece>`__.
+    Construct a "fast" XLNet tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
+    <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
     This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
     methods. Users should refer to this superclass for more information regarding those methods.
@@ -138,6 +139,9 @@ class XLNetTokenizerFast(PreTrainedTokenizerFast):
         additional_special_tokens=["<eop>", "<eod>"],
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file=vocab_file,
             tokenizer_file=tokenizer_file,

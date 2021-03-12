@@ -1,0 +1,20 @@
+tensorboard
+scikit-learn
+psutil
+sacrebleu
+rouge-score
+tensorflow_datasets
+pytorch-lightning==1.0.4
+matplotlib
+git-python==1.0.3
+faiss-cpu
+streamlit
+elasticsearch
+nltk
+pandas
+datasets >= 1.1.3
+fire
+pytest
+conllu
+sentencepiece != 0.1.92
+protobuf

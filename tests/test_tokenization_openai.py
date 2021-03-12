@@ -31,6 +31,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = OpenAIGPTTokenizer
     rust_tokenizer_class = OpenAIGPTTokenizerFast
     test_rust_tokenizer = True
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()
@@ -127,3 +128,7 @@ class OpenAIGPTTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
+
+    # tokenizer has no padding token
+    def test_padding_different_model_input_name(self):
+        pass

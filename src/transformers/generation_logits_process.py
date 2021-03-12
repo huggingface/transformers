@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import inspect
 import math
 from abc import ABC
 from typing import Callable, Iterable, List
 
 import numpy as np
 import torch
-from torch.nn import functional as F
 
 from .file_utils import add_start_docstrings
 
@@ -37,6 +37,8 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`):
             Prediction scores of a language modeling head. These can be scores for each vocabulary token before SoftMax
             or scores for each vocabulary token after SoftMax.
+        kwargs:
+            Additional logits processor specific kwargs.
 
     Return:
         :obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`: The processed prediction scores.
@@ -75,9 +77,16 @@ class LogitsProcessorList(list):
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         for processor in self:
-            scores = processor(input_ids, scores)
+            function_args = inspect.signature(processor.__call__).parameters
+            if len(function_args) > 2:
+                assert all(
+                    arg in kwargs for arg in list(function_args.keys())[2:]
+                ), f"Make sure that all the required parameters: {list(function_args.keys())} for {processor.__class__} are passed to the logits processor."
+                scores = processor(input_ids, scores, **kwargs)
+            else:
+                scores = processor(input_ids, scores)
         return scores
 
 
@@ -146,13 +155,12 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         self.penalty = penalty
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        ranges = torch.arange(scores.shape[0])
-        score = scores[ranges[:, None], input_ids]
+        score = torch.gather(scores, 1, input_ids)
 
         # if score < 0 then repetition penalty has to be multiplied to reduce the previous token probability
         score = torch.where(score < 0, score * self.penalty, score / self.penalty)
 
-        scores[ranges[:, None], input_ids] = score
+        scores.scatter_(1, input_ids, score)
         return scores
 
 
@@ -181,7 +189,7 @@ class TopPLogitsWarper(LogitsWarper):
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         sorted_logits, sorted_indices = torch.sort(scores, descending=True)
-        cumulative_probs = torch.cumsum(F.softmax(sorted_logits, dim=-1), dim=-1)
+        cumulative_probs = sorted_logits.softmax(dim=-1).cumsum(dim=-1)
 
         # Remove tokens with cumulative top_p above the threshold (token with 0 are kept)
         sorted_indices_to_remove = cumulative_probs > self.top_p
@@ -194,7 +202,7 @@ class TopPLogitsWarper(LogitsWarper):
 
         # scatter sorted tensors to original indexing
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
-        scores[indices_to_remove] = self.filter_value
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores
 
 
@@ -223,8 +231,43 @@ class TopKLogitsWarper(LogitsWarper):
         top_k = min(max(self.top_k, self.min_tokens_to_keep), scores.size(-1))  # Safety check
         # Remove all tokens with a probability less than the last token of the top-k
         indices_to_remove = scores < torch.topk(scores, top_k)[0][..., -1, None]
-        scores[indices_to_remove] = self.filter_value
+        scores = scores.masked_fill(indices_to_remove, self.filter_value)
         return scores
+
+
+def _get_ngrams(ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int):
+    generated_ngrams = [{} for _ in range(num_hypos)]
+    for idx in range(num_hypos):
+        gen_tokens = prev_input_ids[idx].tolist()
+        generated_ngram = generated_ngrams[idx]
+        for ngram in zip(*[gen_tokens[i:] for i in range(ngram_size)]):
+            prev_ngram_tuple = tuple(ngram[:-1])
+            generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+    return generated_ngrams
+
+
+def _get_generated_ngrams(banned_ngrams, prev_input_ids, ngram_size, cur_len):
+    # Before decoding the next token, prevent decoding of ngrams that have already appeared
+    start_idx = cur_len + 1 - ngram_size
+    ngram_idx = tuple(prev_input_ids[start_idx:cur_len].tolist())
+    return banned_ngrams.get(ngram_idx, [])
+
+
+def _calc_banned_ngram_tokens(
+    ngram_size: int, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int
+) -> List[Iterable[int]]:
+    """Copied from fairseq for no_repeat_ngram in beam_search"""
+    if cur_len + 1 < ngram_size:
+        # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
+        return [[] for _ in range(num_hypos)]
+
+    generated_ngrams = _get_ngrams(ngram_size, prev_input_ids, num_hypos)
+
+    banned_tokens = [
+        _get_generated_ngrams(generated_ngrams[hypo_idx], prev_input_ids[hypo_idx], ngram_size, cur_len)
+        for hypo_idx in range(num_hypos)
+    ]
+    return banned_tokens
 
 
 class NoRepeatNGramLogitsProcessor(LogitsProcessor):
@@ -245,36 +288,53 @@ class NoRepeatNGramLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         num_batch_hypotheses = scores.shape[0]
         cur_len = input_ids.shape[-1]
-        banned_batch_tokens = self._calc_banned_ngram_tokens(input_ids, num_batch_hypotheses, cur_len)
+        banned_batch_tokens = _calc_banned_ngram_tokens(self.ngram_size, input_ids, num_batch_hypotheses, cur_len)
 
         for i, banned_tokens in enumerate(banned_batch_tokens):
             scores[i, banned_tokens] = -float("inf")
 
         return scores
 
-    def _calc_banned_ngram_tokens(
-        self, prev_input_ids: torch.Tensor, num_hypos: int, cur_len: int
-    ) -> List[Iterable[int]]:
-        """Copied from fairseq for no_repeat_ngram in beam_search"""
-        if cur_len + 1 < self.ngram_size:
-            # return no banned tokens if we haven't generated no_repeat_ngram_size tokens yet
-            return [[] for _ in range(num_hypos)]
-        generated_ngrams = [{} for _ in range(num_hypos)]
-        for idx in range(num_hypos):
-            gen_tokens = prev_input_ids[idx].tolist()
-            generated_ngram = generated_ngrams[idx]
-            for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
-                prev_ngram_tuple = tuple(ngram[:-1])
-                generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
 
-        def _get_generated_ngrams(hypo_idx):
-            # Before decoding the next token, prevent decoding of ngrams that have already appeared
-            start_idx = cur_len + 1 - self.ngram_size
-            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].tolist())
-            return generated_ngrams[hypo_idx].get(ngram_idx, [])
+class EncoderNoRepeatNGramLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`transformers.LogitsProcessor` that enforces no repetition of encoder input ids n-grams for the decoder ids.
+    See `ParlAI <https://github.com/facebookresearch/ParlAI/blob/master/parlai/core/torch_generator_agent.py#L1350>`__.
 
-        banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
-        return banned_tokens
+    Args:
+        encoder_ngram_size (:obj:`int`):
+            All ngrams of size :obj:`ngram_size` can only occur within the encoder input ids.
+        encoder_input_ids (:obj:`int`):
+            The encoder_input_ids that should not be repeated within the decoder ids.
+    """
+
+    def __init__(self, encoder_ngram_size: int, encoder_input_ids: torch.LongTensor):
+        if not isinstance(encoder_ngram_size, int) or encoder_ngram_size <= 0:
+            raise ValueError(
+                f"`encoder_ngram_size` has to be a strictly positive integer, but is {encoder_ngram_size}"
+            )
+        self.ngram_size = encoder_ngram_size
+        if len(encoder_input_ids.shape) == 1:
+            encoder_input_ids = encoder_input_ids.unsqueeze(0)
+        self.batch_size = encoder_input_ids.shape[0]
+        self.generated_ngrams = _get_ngrams(encoder_ngram_size, encoder_input_ids, self.batch_size)
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # B x num_beams
+        num_hypos = scores.shape[0]
+        num_beams = num_hypos // self.batch_size
+        cur_len = input_ids.shape[-1]
+        banned_batch_tokens = [
+            _get_generated_ngrams(
+                self.generated_ngrams[hypo_idx // num_beams], input_ids[hypo_idx], self.ngram_size, cur_len
+            )
+            for hypo_idx in range(num_hypos)
+        ]
+
+        for i, banned_tokens in enumerate(banned_batch_tokens):
+            scores[i, banned_tokens] = -float("inf")
+
+        return scores
 
 
 class NoBadWordsLogitsProcessor(LogitsProcessor):
@@ -400,3 +460,109 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
                 mask[batch_id * self._num_beams + beam_id, self._prefix_allowed_tokens_fn(batch_id, sent)] = 0
 
         return scores + mask
+
+
+class HammingDiversityLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`transformers.LogitsProcessor` that enforces diverse beam search. Note that this logits processor is only
+    effective for :meth:`transformers.PretrainedModel.group_beam_search`. See `Diverse Beam Search: Decoding Diverse
+    Solutions from Neural Sequence Models <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+
+    Args:
+        diversity_penalty (:obj:`float`):
+            This value is subtracted from a beam's score if it generates a token same as any beam from other group at a
+            particular time. Note that :obj:`diversity_penalty` is only effective if ``group beam search`` is enabled.
+        num_beams (:obj:`int`):
+            Number of beams used for group beam search. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for
+            more details.
+        num_beam_groups (:obj:`int`):
+            Number of groups to divide :obj:`num_beams` into in order to ensure diversity among different groups of
+            beams. See `this paper <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
+    """
+
+    def __init__(self, diversity_penalty: float, num_beams: int, num_beam_groups: int):
+        if not isinstance(diversity_penalty, float) or (not diversity_penalty > 0.0):
+            raise ValueError("`diversity_penalty` should be a float strictly larger than 0.")
+        self._diversity_penalty = diversity_penalty
+        if not isinstance(num_beams, int) or num_beams < 2:
+            raise ValueError("`num_beams` should be an integer strictly larger than 1.")
+        self._num_beams = num_beams
+        if not isinstance(num_beam_groups, int) or num_beam_groups < 2:
+            raise ValueError("`num_beam_groups` should be an integer strictly larger than 1.")
+        if num_beam_groups > num_beams:
+            raise ValueError("`beam_groups` has to be smaller or equal to `num_beams`.")
+        self._num_sub_beams = num_beams // num_beam_groups
+
+    def __call__(
+        self,
+        input_ids: torch.LongTensor,
+        scores: torch.FloatTensor,
+        current_tokens: torch.LongTensor,
+        beam_group_idx: int,
+    ) -> torch.FloatTensor:
+        # hamming diversity: penalise using same token in current group which was used in previous groups at
+        # the same time step
+        batch_size = current_tokens.shape[0] // self._num_beams
+        group_start_idx = beam_group_idx * self._num_sub_beams
+        group_end_idx = min(group_start_idx + self._num_sub_beams, self._num_beams)
+        group_size = group_end_idx - group_start_idx
+        vocab_size = scores.shape[-1]
+
+        if group_start_idx == 0:
+            return scores
+
+        for batch_idx in range(batch_size):
+            # predicted tokens of last time step of previous groups
+            previous_group_tokens = current_tokens[
+                batch_idx * self._num_beams : batch_idx * self._num_beams + group_start_idx
+            ]
+            token_frequency = torch.bincount(previous_group_tokens, minlength=vocab_size).to(scores.device)
+            scores[batch_idx * group_size : (batch_idx + 1) * group_size] -= self._diversity_penalty * token_frequency
+
+        return scores
+
+
+class ForcedBOSTokenLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that enforces the specified token as the first generated token.
+
+    Args:
+        bos_token_id (:obj:`int`):
+            The id of the token to force as the first generated token.
+    """
+
+    def __init__(self, bos_token_id: int):
+        self.bos_token_id = bos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == 1:
+            num_tokens = scores.shape[1]
+            scores[:, [i for i in range(num_tokens) if i != self.bos_token_id]] = -float("inf")
+            scores[:, self.bos_token_id] = 0
+        return scores
+
+
+class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that enforces the specified token as the last generated token when
+    :obj:`max_length` is reached.
+
+    Args:
+        max_length (:obj:`int`):
+            The maximum length of the sequence to be generated.
+        eos_token_id (:obj:`int`):
+            The id of the token to force as the last generated token when :obj:`max_length` is reached.
+    """
+
+    def __init__(self, max_length: int, eos_token_id: int):
+        self.max_length = max_length
+        self.eos_token_id = eos_token_id
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        cur_len = input_ids.shape[-1]
+        if cur_len == self.max_length - 1:
+            num_tokens = scores.shape[1]
+            scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
+            scores[:, self.eos_token_id] = 0
+        return scores

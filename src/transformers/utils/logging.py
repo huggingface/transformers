@@ -16,6 +16,7 @@
 
 import logging
 import os
+import sys
 import threading
 from logging import CRITICAL  # NOQA
 from logging import DEBUG  # NOQA
@@ -78,6 +79,7 @@ def _configure_library_root_logger() -> None:
             # This library has already configured the library root logger.
             return
         _default_handler = logging.StreamHandler()  # Set sys.stderr as stream.
+        _default_handler.flush = sys.stderr.flush
 
         # Apply our default configuration to the library root logger.
         library_root_logger = _get_library_root_logger()
@@ -191,6 +193,24 @@ def enable_default_handler() -> None:
 
     assert _default_handler is not None
     _get_library_root_logger().addHandler(_default_handler)
+
+
+def add_handler(handler: logging.Handler) -> None:
+    """adds a handler to the HuggingFace Transformers's root logger."""
+
+    _configure_library_root_logger()
+
+    assert handler is not None
+    _get_library_root_logger().addHandler(handler)
+
+
+def remove_handler(handler: logging.Handler) -> None:
+    """removes given handler from the HuggingFace Transformers's root logger."""
+
+    _configure_library_root_logger()
+
+    assert handler is not None and handler not in _get_library_root_logger().handlers
+    _get_library_root_logger().removeHandler(handler)
 
 
 def disable_propagation() -> None:

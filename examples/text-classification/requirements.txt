@@ -1,0 +1,4 @@
+accelerate
+datasets >= 1.1.3
+sentencepiece != 0.1.92
+protobuf

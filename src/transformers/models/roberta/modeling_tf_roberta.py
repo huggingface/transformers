@@ -15,6 +15,11 @@
 # limitations under the License.
 """ TF 2.0 RoBERTa model. """
 
+import math
+import warnings
+from typing import Optional, Tuple, Union
+
+import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -35,6 +40,7 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFModelInputType,
     TFMultipleChoiceLoss,
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
@@ -51,6 +57,7 @@ from .configuration_roberta import RobertaConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "roberta-base"
 _CONFIG_FOR_DOC = "RobertaConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
@@ -73,270 +80,212 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
 
         self.padding_idx = 1
         self.vocab_size = config.vocab_size
+        self.type_vocab_size = config.type_vocab_size
         self.hidden_size = config.hidden_size
+        self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = tf.keras.layers.Embedding(
-            config.type_vocab_size,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
-            name="token_type_embeddings",
-        )
-
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
+        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def build(self, input_shape):
-        """Build shared word embedding layer """
+    def build(self, input_shape: tf.TensorShape):
         with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight",
+            self.weight = self.add_weight(
+                name="weight",
                 shape=[self.vocab_size, self.hidden_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        with tf.name_scope("token_type_embeddings"):
+            self.token_type_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.type_vocab_size, self.hidden_size],
+                initializer=get_initializer(self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.hidden_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         super().build(input_shape)
 
-    def create_position_ids_from_input_ids(self, x):
+    def create_position_ids_from_input_ids(self, input_ids):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
         symbols are ignored. This is modified from fairseq's `utils.make_positions`.
 
         Args:
-            x: tf.Tensor
-
+            input_ids: tf.Tensor
         Returns: tf.Tensor
         """
-        mask = tf.cast(tf.math.not_equal(x, self.padding_idx), dtype=tf.int32)
+        mask = tf.cast(tf.math.not_equal(input_ids, self.padding_idx), dtype=input_ids.dtype)
         incremental_indices = tf.math.cumsum(mask, axis=1) * mask
 
         return incremental_indices + self.padding_idx
 
-    def create_position_ids_from_inputs_embeds(self, inputs_embeds):
+    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
-        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
-
-        Args:
-            inputs_embeds: tf.Tensor
-
-        Returns: tf.Tensor
-        """
-        seq_length = shape_list(inputs_embeds)[1]
-        position_ids = tf.range(self.padding_idx + 1, seq_length + self.padding_idx + 1, dtype=tf.int32)[tf.newaxis, :]
-
-        return position_ids
-
-    def call(
-        self,
-        input_ids=None,
-        position_ids=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        mode="embedding",
-        training=False,
-    ):
-        """
-        Get token embeddings of inputs.
-
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        if mode == "embedding":
-            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
-        """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
+
+        if input_ids is not None:
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
+
+        if token_type_ids is None:
+            token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if position_ids is None:
             if input_ids is not None:
                 # Create the position ids from the input token ids. Any padded tokens remain padded.
-                position_ids = self.create_position_ids_from_input_ids(input_ids)
+                position_ids = self.create_position_ids_from_input_ids(input_ids=input_ids)
             else:
-                position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
+                position_ids = tf.expand_dims(
+                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1), axis=0
+                )
+                position_ids = tf.tile(input=position_ids, multiples=(input_shape[0], 1))
 
-        if input_ids is not None:
-            input_shape = shape_list(input_ids)
-        else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
+        final_embeddings = self.LayerNorm(inputs=final_embeddings)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-        seq_length = input_shape[1]
-
-        if position_ids is None:
-            position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
-
-        if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
-
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-
-        position_embeddings = tf.cast(self.position_embeddings(position_ids), inputs_embeds.dtype)
-        token_type_embeddings = tf.cast(self.token_type_embeddings(token_type_ids), inputs_embeds.dtype)
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings, training=training)
-
-        return embeddings
-
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer.
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Roberta
 class TFRobertaPooler(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size,
+            units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
             name="dense",
         )
 
-    def call(self, hidden_states):
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
+        pooled_output = self.dense(inputs=first_token_tensor)
 
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->Roberta
 class TFRobertaSelfAttention(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number "
+                f"of attention heads ({config.num_attention_heads})"
             )
 
         self.num_attention_heads = config.num_attention_heads
-        assert config.hidden_size % config.num_attention_heads == 0
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.sqrt_att_head_size = math.sqrt(self.attention_head_size)
+
         self.query = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query"
         )
         self.key = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key"
         )
         self.value = tf.keras.layers.Dense(
-            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
+            units=self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value"
         )
-        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.attention_probs_dropout_prob)
 
-    def transpose_for_scores(self, x, batch_size):
-        x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
+    def transpose_for_scores(self, tensor: tf.Tensor, batch_size: int) -> tf.Tensor:
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
+        tensor = tf.reshape(tensor=tensor, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
 
-        return tf.transpose(x, perm=[0, 2, 1, 3])
+        # Transpose the tensor from [batch_size, seq_length, num_attention_heads, attention_head_size] to [batch_size, num_attention_heads, seq_length, attention_head_size]
+        return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
-        mixed_query_layer = self.query(hidden_states)
-        mixed_key_layer = self.key(hidden_states)
-        mixed_value_layer = self.value(hidden_states)
+        mixed_query_layer = self.query(inputs=hidden_states)
+        mixed_key_layer = self.key(inputs=hidden_states)
+        mixed_value_layer = self.value(inputs=hidden_states)
         query_layer = self.transpose_for_scores(mixed_query_layer, batch_size)
         key_layer = self.transpose_for_scores(mixed_key_layer, batch_size)
         value_layer = self.transpose_for_scores(mixed_value_layer, batch_size)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = tf.matmul(
-            query_layer, key_layer, transpose_b=True
-        )  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(shape_list(key_layer)[-1], attention_scores.dtype)  # scale attention_scores
-        attention_scores = attention_scores / tf.math.sqrt(dk)
+        # (batch size, num_heads, seq_len_q, seq_len_k)
+        attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
+        dk = tf.cast(self.sqrt_att_head_size, dtype=attention_scores.dtype)
+        attention_scores = tf.divide(attention_scores, dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
-            attention_scores = attention_scores + attention_mask
+            # Apply the attention mask is (precomputed for all layers in TFRobertaModel call() function)
+            attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs, training=training)
+        attention_probs = self.dropout(inputs=attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            attention_probs = tf.multiply(attention_probs, head_mask)
 
-        context_layer = tf.matmul(attention_probs, value_layer)
-        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])
-        context_layer = tf.reshape(
-            context_layer, (batch_size, -1, self.all_head_size)
-        )  # (batch_size, seq_len_q, all_head_size)
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+        attention_output = tf.matmul(attention_probs, value_layer)
+        attention_output = tf.transpose(attention_output, perm=[0, 2, 1, 3])
+
+        # (batch_size, seq_len_q, all_head_size)
+        attention_output = tf.reshape(tensor=attention_output, shape=(batch_size, -1, self.all_head_size))
+        outputs = (attention_output, attention_probs) if output_attentions else (attention_output,)
 
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->Roberta
 class TFRobertaSelfOutput(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Roberta
 class TFRobertaAttention(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.self_attention = TFRobertaSelfAttention(config, name="self")
@@ -345,23 +294,36 @@ class TFRobertaAttention(tf.keras.layers.Layer):
     def prune_heads(self, heads):
         raise NotImplementedError
 
-    def call(self, input_tensor, attention_mask, head_mask, output_attentions, training=False):
+    def call(
+        self,
+        input_tensor: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
-            input_tensor, attention_mask, head_mask, output_attentions, training=training
+            hidden_states=input_tensor,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            training=training,
         )
-        attention_output = self.dense_output(self_outputs[0], input_tensor, training=training)
+        attention_output = self.dense_output(
+            hidden_states=self_outputs[0], input_tensor=input_tensor, training=training
+        )
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
 
         return outputs
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Roberta
 class TFRobertaIntermediate(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
 
         if isinstance(config.hidden_act, str):
@@ -369,48 +331,61 @@ class TFRobertaIntermediate(tf.keras.layers.Layer):
         else:
             self.intermediate_act_fn = config.hidden_act
 
-    def call(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->Roberta
 class TFRobertaOutput(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    def call(self, hidden_states, input_tensor, training=False):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states, training=training)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Roberta
 class TFRobertaLayer(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.attention = TFRobertaAttention(config, name="attention")
         self.intermediate = TFRobertaIntermediate(config, name="intermediate")
         self.bert_output = TFRobertaOutput(config, name="output")
 
-    def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
+    ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions, training=training
+            input_tensor=hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            training=training,
         )
         attention_output = attention_outputs[0]
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.bert_output(intermediate_output, attention_output, training=training)
+        intermediate_output = self.intermediate(hidden_states=attention_output)
+        layer_output = self.bert_output(
+            hidden_states=intermediate_output, input_tensor=attention_output, training=training
+        )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
 
         return outputs
@@ -418,21 +393,21 @@ class TFRobertaLayer(tf.keras.layers.Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Roberta
 class TFRobertaEncoder(tf.keras.layers.Layer):
-    def __init__(self, config, **kwargs):
+    def __init__(self, config: RobertaConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.layer = [TFRobertaLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
         self,
-        hidden_states,
-        attention_mask,
-        head_mask,
-        output_attentions,
-        output_hidden_states,
-        return_dict,
-        training=False,
-    ):
+        hidden_states: tf.Tensor,
+        attention_mask: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        output_hidden_states: bool,
+        return_dict: bool,
+        training: bool = False,
+    ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -441,7 +416,11 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             layer_outputs = layer_module(
-                hidden_states, attention_mask, head_mask[i], output_attentions, training=training
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                head_mask=head_mask[i],
+                output_attentions=output_attentions,
+                training=training,
             )
             hidden_states = layer_outputs[0]
 
@@ -464,27 +443,28 @@ class TFRobertaEncoder(tf.keras.layers.Layer):
 class TFRobertaMainLayer(tf.keras.layers.Layer):
     config_class = RobertaConfig
 
-    def __init__(self, config, **kwargs):
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
         super().__init__(**kwargs)
 
+        self.config = config
         self.num_hidden_layers = config.num_hidden_layers
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
         self.return_dict = config.use_return_dict
         self.encoder = TFRobertaEncoder(config, name="encoder")
-        self.pooler = TFRobertaPooler(config, name="pooler")
+        self.pooler = TFRobertaPooler(config, name="pooler") if add_pooling_layer else None
         # The embeddings must be the last declaration in order to follow the weights order
         self.embeddings = TFRobertaEmbeddings(config, name="embeddings")
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.get_input_embeddings
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
+    def set_input_embeddings(self, value: tf.Variable):
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
     def _prune_heads(self, heads_to_prune):
@@ -497,20 +477,21 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.call
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -523,34 +504,27 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
             training=training,
             kwargs_call=kwargs,
         )
-        output_attentions = (
-            inputs["output_attentions"] if inputs["output_attentions"] is not None else self.output_attentions
-        )
-        output_hidden_states = (
-            inputs["output_hidden_states"] if inputs["output_hidden_states"] is not None else self.output_hidden_states
-        )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.return_dict
 
         if inputs["input_ids"] is not None and inputs["inputs_embeds"] is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif inputs["input_ids"] is not None:
-            input_shape = shape_list(inputs["input_ids"])
+            input_shape = shape_list(tensor=inputs["input_ids"])
         elif inputs["inputs_embeds"] is not None:
-            input_shape = shape_list(inputs["inputs_embeds"])[:-1]
+            input_shape = shape_list(tensor=inputs["inputs_embeds"])[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs["attention_mask"] is None:
-            inputs["attention_mask"] = tf.fill(input_shape, 1)
+            inputs["attention_mask"] = tf.fill(dims=input_shape, value=1)
 
         if inputs["token_type_ids"] is None:
-            inputs["token_type_ids"] = tf.fill(input_shape, 0)
+            inputs["token_type_ids"] = tf.fill(dims=input_shape, value=0)
 
         embedding_output = self.embeddings(
-            inputs["input_ids"],
-            inputs["position_ids"],
-            inputs["token_type_ids"],
-            inputs["inputs_embeds"],
+            input_ids=inputs["input_ids"],
+            position_ids=inputs["position_ids"],
+            token_type_ids=inputs["token_type_ids"],
+            inputs_embeds=inputs["inputs_embeds"],
             training=inputs["training"],
         )
 
@@ -559,15 +533,15 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = inputs["attention_mask"][:, tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-        extended_attention_mask = tf.cast(extended_attention_mask, embedding_output.dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(1.0, extended_attention_mask), -10000.0)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -577,23 +551,22 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         if inputs["head_mask"] is not None:
             raise NotImplementedError
         else:
-            inputs["head_mask"] = [None] * self.num_hidden_layers
-            # head_mask = tf.constant([0] * self.num_hidden_layers)
+            inputs["head_mask"] = [None] * self.config.num_hidden_layers
 
         encoder_outputs = self.encoder(
-            embedding_output,
-            extended_attention_mask,
-            inputs["head_mask"],
-            output_attentions,
-            output_hidden_states,
-            return_dict,
+            hidden_states=embedding_output,
+            attention_mask=extended_attention_mask,
+            head_mask=inputs["head_mask"],
+            output_attentions=inputs["output_attentions"],
+            output_hidden_states=inputs["output_hidden_states"],
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output)
+        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             return (
                 sequence_output,
                 pooled_output,
@@ -615,6 +588,19 @@ class TFRobertaPreTrainedModel(TFPreTrainedModel):
 
     config_class = RobertaConfig
     base_model_prefix = "roberta"
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 ROBERTA_START_DOCSTRING = r"""
@@ -695,12 +681,15 @@ ROBERTA_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -719,7 +708,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -739,6 +728,7 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
     ):
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -766,6 +756,18 @@ class TFRobertaModel(TFRobertaPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 class TFRobertaLMHead(tf.keras.layers.Layer):
     """Roberta Head for masked language modeling."""
@@ -774,6 +776,7 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
+        self.hidden_size = config.hidden_size
         self.dense = tf.keras.layers.Dense(
             config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
         )
@@ -789,35 +792,57 @@ class TFRobertaLMHead(tf.keras.layers.Layer):
 
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, value):
+        self.decoder.weight = value
+        self.decoder.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
 
         # project back to size of vocabulary with bias
-        hidden_states = self.decoder(hidden_states, mode="linear") + self.bias
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
+        hidden_states = tf.matmul(a=hidden_states, b=self.decoder.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
         return hidden_states
 
 
 @add_start_docstrings("""RoBERTa Model with a `language modeling` head on top. """, ROBERTA_START_DOCSTRING)
 class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.lm_head = TFRobertaLMHead(config, self.roberta.embeddings, name="lm_head")
 
-    def get_output_embeddings(self):
-        return self.lm_head.decoder
+    def get_lm_head(self):
+        return self.lm_head
+
+    def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
+        return self.name + "/" + self.lm_head.name
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -844,6 +869,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -857,7 +883,6 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -867,7 +892,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
 
@@ -876,7 +901,7 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (prediction_scores,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -886,6 +911,13 @@ class TFRobertaForMaskedLM(TFRobertaPreTrainedModel, TFMaskedLanguageModelingLos
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFRobertaClassificationHead(tf.keras.layers.Layer):
@@ -921,20 +953,20 @@ class TFRobertaClassificationHead(tf.keras.layers.Layer):
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.classifier = TFRobertaClassificationHead(config, name="classifier")
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -961,6 +993,7 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -974,7 +1007,6 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -984,16 +1016,15 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
-        logits = self.classifier(sequence_output, training=training)
+        logits = self.classifier(sequence_output, training=inputs["training"])
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1004,6 +1035,13 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1013,6 +1051,10 @@ class TFRobertaForSequenceClassification(TFRobertaPreTrainedModel, TFSequenceCla
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"lm_head"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -1035,7 +1077,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1062,6 +1104,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1075,7 +1118,6 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
 
         if inputs["input_ids"] is not None:
             num_choices = shape_list(inputs["input_ids"])[1]
@@ -1103,7 +1145,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             inputs["inputs_embeds"],
             inputs["output_attentions"],
             inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
         pooled_output = outputs[1]
@@ -1113,7 +1155,7 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], reshaped_logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1124,6 +1166,26 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
             attentions=outputs.attentions,
         )
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1133,14 +1195,15 @@ class TFRobertaForMultipleChoice(TFRobertaPreTrainedModel, TFMultipleChoiceLoss)
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassificationLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
+    _keys_to_ignore_on_load_missing = [r"dropout"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
@@ -1149,7 +1212,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1175,6 +1238,7 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1188,7 +1252,6 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1198,18 +1261,17 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output, training=training)
+        sequence_output = self.dropout(sequence_output, training=inputs["training"])
         logits = self.classifier(sequence_output)
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], logits)
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1220,6 +1282,13 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1229,14 +1298,14 @@ class TFRobertaForTokenClassification(TFRobertaPreTrainedModel, TFTokenClassific
     ROBERTA_START_DOCSTRING,
 )
 class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnsweringLoss):
-
-    _keys_to_ignore_on_load_missing = [r"pooler"]
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head"]
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.num_labels = config.num_labels
 
-        self.roberta = TFRobertaMainLayer(config, name="roberta")
+        self.roberta = TFRobertaMainLayer(config, add_pooling_layer=False, name="roberta")
         self.qa_outputs = tf.keras.layers.Dense(
             config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )
@@ -1244,7 +1313,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="roberta-base",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1276,6 +1345,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
         """
         inputs = input_processing(
             func=self.call,
+            config=self.config,
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1290,7 +1360,6 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             training=training,
             kwargs_call=kwargs,
         )
-        return_dict = inputs["return_dict"] if inputs["return_dict"] is not None else self.roberta.return_dict
         outputs = self.roberta(
             inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
@@ -1300,10 +1369,9 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
             output_hidden_states=inputs["output_hidden_states"],
-            return_dict=return_dict,
+            return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-
         sequence_output = outputs[0]
 
         logits = self.qa_outputs(sequence_output)
@@ -1317,7 +1385,7 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             labels["end_position"] = inputs["end_positions"]
             loss = self.compute_loss(labels, (start_logits, end_logits))
 
-        if not return_dict:
+        if not inputs["return_dict"]:
             output = (start_logits, end_logits) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
@@ -1327,4 +1395,13 @@ class TFRobertaForQuestionAnswering(TFRobertaPreTrainedModel, TFQuestionAnswerin
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

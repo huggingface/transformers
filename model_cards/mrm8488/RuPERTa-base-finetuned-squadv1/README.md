@@ -1,5 +1,0 @@
----
-language: es
-datasets:
-- squad
----

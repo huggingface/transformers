@@ -56,6 +56,7 @@ from .configuration_mobilebert import MobileBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
@@ -251,8 +252,6 @@ class MobileBertSelfAttention(nn.Module):
         value_tensor,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
     ):
         mixed_query_layer = self.query(query_tensor)
@@ -335,8 +334,6 @@ class MobileBertAttention(nn.Module):
         layer_input,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
     ):
         self_outputs = self.self(
@@ -345,8 +342,6 @@ class MobileBertAttention(nn.Module):
             value_tensor,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
             output_attentions,
         )
         # Run a linear projection of `hidden_size` then add a residual
@@ -498,8 +493,6 @@ class MobileBertLayer(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
     ):
         if self.use_bottleneck:
@@ -554,8 +547,6 @@ class MobileBertEncoder(nn.Module):
         hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
@@ -570,8 +561,6 @@ class MobileBertEncoder(nn.Module):
                 hidden_states,
                 attention_mask,
                 head_mask[i],
-                encoder_hidden_states,
-                encoder_attention_mask,
                 output_attentions,
             )
             hidden_states = layer_outputs[0]
@@ -641,7 +630,7 @@ class MobileBertLMPredictionHead(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = hidden_states.matmul(torch.cat([self.decoder.weight.t(), self.dense.weight], dim=0))
-        hidden_states += self.bias
+        hidden_states += self.decoder.bias
         return hidden_states
 
 
@@ -681,15 +670,19 @@ class MobileBertPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, (nn.LayerNorm, NoNorm)):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 @dataclass
@@ -783,16 +776,6 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -840,7 +823,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -852,8 +835,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_hidden_states=None,
         output_attentions=None,
         return_dict=None,
@@ -886,17 +867,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
             attention_mask, input_shape, self.device
         )
 
-        # If a 2D ou 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
-
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
         # attention_probs has shape bsz x n_heads x N x N
@@ -911,8 +881,6 @@ class MobileBertModel(MobileBertPreTrainedModel):
             embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -949,26 +917,16 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings. If the `torchscript` flag is set in the
-        configuration, can't handle parameter sharing so we are cloning the weights instead.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
+    def set_output_embeddings(self, new_embeddigs):
+        self.cls.predictions.decoder = new_embeddigs
 
-        resized_dense = nn.Linear(
-            input_embeddings.num_embeddings, self.config.hidden_size - self.config.embedding_size, bias=False
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+        # resize dense output embedings at first
+        self.cls.predictions.dense = self._get_resized_lm_head(
+            self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
         )
-        kept_data = self.cls.predictions.dense.weight.data[
-            ..., : min(self.cls.predictions.dense.weight.data.shape[1], resized_dense.weight.data.shape[1])
-        ]
-        resized_dense.weight.data[..., : self.cls.predictions.dense.weight.data.shape[1]] = kept_data
-        self.cls.predictions.dense = resized_dense
-        self.cls.predictions.dense.to(self.device)
 
-        if output_embeddings is not None and self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        return super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=MobileBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
@@ -1067,31 +1025,20 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings. If the `torchscript` flag is set in the
-        configuration, can't handle parameter sharing so we are cloning the weights instead.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
+    def set_output_embeddings(self, new_embeddigs):
+        self.cls.predictions.decoder = new_embeddigs
 
-        resized_dense = nn.Linear(
-            input_embeddings.num_embeddings, self.config.hidden_size - self.config.embedding_size, bias=False
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> torch.nn.Embedding:
+        # resize dense output embedings at first
+        self.cls.predictions.dense = self._get_resized_lm_head(
+            self.cls.predictions.dense, new_num_tokens=new_num_tokens, transposed=True
         )
-        kept_data = self.cls.predictions.dense.weight.data[
-            ..., : min(self.cls.predictions.dense.weight.data.shape[1], resized_dense.weight.data.shape[1])
-        ]
-        resized_dense.weight.data[..., : self.cls.predictions.dense.weight.data.shape[1]] = kept_data
-        self.cls.predictions.dense = resized_dense
-        self.cls.predictions.dense.to(self.device)
-
-        if output_embeddings is not None and self.config.tie_word_embeddings:
-            self._tie_or_clone_weights(output_embeddings, self.get_input_embeddings())
+        return super().resize_token_embeddings(new_num_tokens=new_num_tokens)
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1104,8 +1051,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         head_mask=None,
         inputs_embeds=None,
         labels=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1125,8 +1070,6 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1266,20 +1209,22 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
 class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+
         self.mobilebert = MobileBertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, self.num_labels)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1315,7 +1260,9 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
         pooled_output = outputs[1]
+
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
@@ -1348,6 +1295,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1364,7 +1312,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1465,10 +1413,11 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
+    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.forward with Bert->MobileBert all-casing
     def forward(
         self,
         input_ids=None,
@@ -1543,6 +1492,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1560,7 +1510,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Longformer
 -----------------------------------------------------------------------------------------------------------------------
 
@@ -21,6 +33,12 @@ evaluate Longformer on character-level language modeling and achieve state-of-th
 contrast to most prior work, we also pretrain Longformer and finetune it on a variety of downstream tasks. Our
 pretrained Longformer consistently outperforms RoBERTa on long document tasks and sets new state-of-the-art results on
 WikiHop and TriviaQA.*
+
+Tips:
+
+- Since the Longformer is based on RoBERTa, it doesn't have :obj:`token_type_ids`. You don't need to indicate which
+  token belongs to which segment. Just separate your segments with the separation token :obj:`tokenizer.sep_token` (or
+  :obj:`</s>`).
 
 The Authors' code can be found `here <https://github.com/allenai/longformer>`__.
 

@@ -1,3 +1,15 @@
+.. 
+    Copyright 2020 The HuggingFace Team. All rights reserved.
+
+    Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        http://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+    an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+    specific language governing permissions and limitations under the License.
+
 Philosophy
 =======================================================================================================================
 
@@ -66,7 +78,7 @@ The library is built around three types of classes for each model:
 All these classes can be instantiated from pretrained instances and saved locally using two methods:
 
 - :obj:`from_pretrained()` lets you instantiate a model/configuration/tokenizer from a pretrained version either
-  provided by the library itself (the supported models are provided in the list :doc:`here <pretrained_models>` or
+  provided by the library itself (the supported models are provided in the list :doc:`here <pretrained_models>`) or
   stored locally (or on a server) by the user,
 - :obj:`save_pretrained()` lets you save a model/configuration/tokenizer locally so that it can be reloaded using
   :obj:`from_pretrained()`.

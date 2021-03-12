@@ -1,23 +1,32 @@
+# Copyright 2020 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import os
 import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
-from transformers.testing_utils import (
-    _sentencepiece_available,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-)
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
 
-if _sentencepiece_available:
-    from .test_tokenization_xlm_roberta import SAMPLE_VOCAB
+SAMPLE_VOCAB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
 
 
 if is_torch_available():
-    from transformers.models.bart.modeling_bart import shift_tokens_right
+    from transformers.models.mbart.modeling_mbart import shift_tokens_right
 
 EN_CODE = 250004
 RO_CODE = 250020
@@ -131,7 +140,9 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.tokenizer: MBartTokenizer = MBartTokenizer.from_pretrained(cls.checkpoint_name)
+        cls.tokenizer: MBartTokenizer = MBartTokenizer.from_pretrained(
+            cls.checkpoint_name, src_lang="en_XX", tgt_lang="ro_RO"
+        )
         cls.pad_token_id = 1
         return cls
 
@@ -156,10 +167,7 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         src_text = ["this is gunna be a long sentence " * 20]
         assert isinstance(src_text[0], str)
         desired_max_length = 10
-        ids = self.tokenizer.prepare_seq2seq_batch(
-            src_text,
-            max_length=desired_max_length,
-        ).input_ids[0]
+        ids = self.tokenizer(src_text, max_length=desired_max_length, truncation=True).input_ids[0]
         self.assertEqual(ids[-2], 2)
         self.assertEqual(ids[-1], EN_CODE)
         self.assertEqual(len(ids), desired_max_length)
@@ -174,30 +182,36 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         new_tok = MBartTokenizer.from_pretrained(tmpdirname)
         self.assertDictEqual(new_tok.fairseq_tokens_to_ids, original_special_tokens)
 
-    # prepare_seq2seq_batch tests below
-
     @require_torch
     def test_batch_fairseq_parity(self):
-        batch: BatchEncoding = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
-        for k in batch:
-            batch[k] = batch[k].tolist()
-        # batch = {k: v.tolist() for k,v in batch.items()}
+        batch = self.tokenizer(self.src_text, padding=True)
+        with self.tokenizer.as_target_tokenizer():
+            targets = self.tokenizer(self.tgt_text, padding=True, return_tensors="pt")
+        labels = targets["input_ids"]
+        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id).tolist()
+
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
-        # batch.decoder_inputs_ids[0][0] ==
         assert batch.input_ids[1][-2:] == [2, EN_CODE]
         assert batch.decoder_input_ids[1][0] == RO_CODE
         assert batch.decoder_input_ids[1][-1] == 2
-        assert batch.labels[1][-2:] == [2, RO_CODE]
+        assert labels[1][-2:].tolist() == [2, RO_CODE]
 
     @require_torch
-    def test_enro_tokenizer_prepare_seq2seq_batch(self):
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=len(self.expected_src_tokens), return_tensors="pt"
+    def test_enro_tokenizer_prepare_batch(self):
+        batch = self.tokenizer(
+            self.src_text, padding=True, truncation=True, max_length=len(self.expected_src_tokens), return_tensors="pt"
         )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
+        with self.tokenizer.as_target_tokenizer():
+            targets = self.tokenizer(
+                self.tgt_text,
+                padding=True,
+                truncation=True,
+                max_length=len(self.expected_src_tokens),
+                return_tensors="pt",
+            )
+        labels = targets["input_ids"]
+        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
+
         self.assertIsInstance(batch, BatchEncoding)
 
         self.assertEqual((2, 14), batch.input_ids.shape)
@@ -209,17 +223,12 @@ class MBartEnroIntegrationTest(unittest.TestCase):
         self.assertEqual(self.tokenizer.prefix_tokens, [])
         self.assertEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id, EN_CODE])
 
-    def test_seq2seq_max_target_length(self):
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=3, max_target_length=10, return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
+    def test_seq2seq_max_length(self):
+        batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
+        with self.tokenizer.as_target_tokenizer():
+            targets = self.tokenizer(self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt")
+        labels = targets["input_ids"]
+        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
+
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.decoder_input_ids.shape[1], 10)
-        # max_target_length will default to max_length if not specified
-        batch = self.tokenizer.prepare_seq2seq_batch(
-            self.src_text, tgt_texts=self.tgt_text, max_length=3, return_tensors="pt"
-        )
-        batch["decoder_input_ids"] = shift_tokens_right(batch.labels, self.tokenizer.pad_token_id)
-        self.assertEqual(batch.input_ids.shape[1], 3)
-        self.assertEqual(batch.decoder_input_ids.shape[1], 3)
