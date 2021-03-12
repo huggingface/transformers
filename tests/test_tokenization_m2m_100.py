@@ -194,15 +194,15 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_tokenizer_translation(self):
-        inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en_XX", tgt_lang="ar_AR")
+        inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en", tgt_lang="ar")
 
         self.assertEqual(
             deep_round(inputs),
             {
                 # en_XX, A, test, EOS
-                "input_ids": [[250004, 62, 3034, 2]],
+                "input_ids": [[128022, 58, 4183, 2]],
                 "attention_mask": [[1, 1, 1, 1]],
                 # ar_AR
-                "forced_bos_token_id": 250001,
+                "forced_bos_token_id": 44,
             },
         )
