@@ -126,7 +126,7 @@ class HfArgumentParser(ArgumentParser):
                 ), "{} cannot be a List of mixed types".format(field.name)
                 if field.default_factory is not dataclasses.MISSING:
                     kwargs["default"] = field.default_factory()
-                else:
+                elif field.default is dataclasses.MISSING:
                     kwargs["required"] = True
             else:
                 kwargs["type"] = field.type
