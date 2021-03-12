@@ -101,6 +101,7 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    denumpify_detensorize,
     get_last_checkpoint,
     set_seed,
     speed_metrics,
@@ -143,6 +144,7 @@ if is_fairscale_available():
 
     if version.parse(fairscale.__version__) >= version.parse("0.3"):
         from fairscale.nn.data_parallel import FullyShardedDataParallel as FullyShardedDDP
+        from fairscale.nn.wrap import auto_wrap
     else:
         FullyShardedDDP = None
 
@@ -774,8 +776,13 @@ class Trainer:
                 cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
                 zero_3 = self.sharded_ddp == ShardedDDPOption.ZERO_DP_3
                 # XXX: Breaking the self.model convention but I see no way around it for now.
+                if ShardedDDPOption.AUTO_WRAP in self.args.sharded_ddp:
+                    model = auto_wrap(model)
                 self.model = model = FullyShardedDDP(
-                    model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload
+                    model,
+                    mixed_precision=mixed_precision,
+                    reshard_after_forward=zero_3,
+                    cpu_offload=cpu_offload,
                 ).to(self.args.device)
 
         elif is_sagemaker_distributed_available():
@@ -1830,6 +1837,9 @@ class Trainer:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
+
+        # To be JSON-serializable, we need to remove numpy types or zero-d tensors
+        metrics = denumpify_detensorize(metrics)
 
         if eval_loss is not None:
             metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()

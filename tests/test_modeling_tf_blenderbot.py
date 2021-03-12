@@ -309,7 +309,7 @@ class TFBlenderbot400MIntegrationTests(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         return model
 
     @slow

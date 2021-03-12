@@ -21,7 +21,7 @@ from .tokenization_longformer import LongformerTokenizer
 logger = logging.get_logger(__name__)
 
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merge_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -31,7 +31,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "allenai/longformer-base-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-base-4096-extra.pos.embd.only/resolve/main/vocab.json",
         "allenai/longformer-large-4096-extra.pos.embd.only": "https://huggingface.co/allenai/longformer-large-4096-extra.pos.embd.only/resolve/main/vocab.json",
     },
-    "merge_file": {
+    "merges_file": {
         "allenai/longformer-base-4096": "https://huggingface.co/allenai/longformer-base-4096/resolve/main/merges.txt",
         "allenai/longformer-large-4096": "https://huggingface.co/allenai/longformer-large-4096/resolve/main/merges.txt",
         "allenai/longformer-large-4096-finetuned-triviaqa": "https://huggingface.co/allenai/longformer-large-4096-finetuned-triviaqa/resolve/main/merges.txt",
