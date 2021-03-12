@@ -119,7 +119,7 @@ PROPHETNET_INPUTS_DOCSTRING = r"""
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        cross_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+        cross_attn_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
@@ -1181,7 +1181,7 @@ class ProphetNetDecoderLayer(nn.Module):
         encoder_hidden_states=None,
         encoder_attn_mask=None,
         layer_head_mask=None,
-        cross_layer_head_mask=None,
+        cross_attn_layer_head_mask=None,
         extended_predict_attention_mask=None,
         main_relative_position_buckets=None,
         predict_relative_position_buckets=None,
@@ -1214,7 +1214,7 @@ class ProphetNetDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attn_mask,
-                layer_head_mask=cross_layer_head_mask,
+                layer_head_mask=cross_attn_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
@@ -1423,7 +1423,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        cross_head_mask=None,
+        cross_attn_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         use_cache=None,
@@ -1438,7 +1438,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-        cross_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+        cross_attn_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
@@ -1552,8 +1552,8 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         all_cross_attns = () if output_attentions and self.config.add_cross_attention else None
         present_key_values = () if use_cache else None
 
-        # check if head_mask/cross_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_head_mask], ["head_mask", "cross_head_mask"]):
+        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
+        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
                 assert attn_mask.size()[0] == (
                     len(self.layers)
@@ -1590,7 +1590,7 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     encoder_hidden_states,
                     extended_encoder_attention_mask,
                     (head_mask[idx] if head_mask is not None else None),
-                    (cross_head_mask[idx] if cross_head_mask is not None else None),
+                    (cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
                     extended_predict_attention_mask,
                     main_relative_position_buckets,
                     predict_relative_position_buckets,
@@ -1604,7 +1604,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attn_mask=extended_encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    cross_layer_head_mask=(cross_head_mask[idx] if cross_head_mask is not None else None),
+                    cross_attn_layer_head_mask=(
+                        cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
+                    ),
                     extended_predict_attention_mask=extended_predict_attention_mask,
                     main_relative_position_buckets=main_relative_position_buckets,
                     predict_relative_position_buckets=predict_relative_position_buckets,
@@ -1782,7 +1784,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
-        cross_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs: Optional[Tuple] = None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1835,7 +1837,7 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
-            cross_head_mask=cross_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             output_attentions=output_attentions,
@@ -1895,7 +1897,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
-        cross_head_mask=None,
+        cross_attn_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
         inputs_embeds=None,
@@ -1941,7 +1943,7 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             decoder_attention_mask=decoder_attention_mask,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
-            cross_head_mask=cross_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
@@ -2108,7 +2110,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
-        cross_head_mask=None,
+        cross_attn_head_mask=None,
         past_key_values=None,
         inputs_embeds=None,
         labels=None,
@@ -2124,7 +2126,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
-        cross_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
+        cross_attn_head_mask (:obj:`torch.Tensor` of shape :obj:`(decoder_layers, decoder_attention_heads)`, `optional`):
             Mask to nullify selected heads of the cross-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
@@ -2191,7 +2193,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             head_mask=head_mask,
-            cross_head_mask=cross_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
