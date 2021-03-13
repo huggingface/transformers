@@ -32,6 +32,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -154,13 +155,13 @@ class RemBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.embedding_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.embedding_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.embedding_size)
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.input_embedding_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.input_embedding_size)
+        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.input_embedding_size)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.embedding_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.input_embedding_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
@@ -516,7 +517,7 @@ class RemBertEncoder(nn.Module):
         super().__init__()
         self.config = config
 
-        self.embedding_hidden_mapping_in = nn.Linear(config.embedding_size, config.hidden_size)
+        self.embedding_hidden_mapping_in = nn.Linear(config.input_embedding_size, config.hidden_size)
         self.layer = nn.ModuleList([RemBertLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
@@ -629,23 +630,26 @@ class RemBertPredictionHeadTransform(nn.Module):
 
 
 class RemBertLMPredictionHead(nn.Module):
+    # FIXME(tfevry): RemBERT's actual head adds a skip connection to the input embeddings.
+    # Loosely inspired from Albert, without the layer norm.
     def __init__(self, config):
         super().__init__()
-        self.transform = RemBertPredictionHeadTransform(config)
+        self.dense = nn.Linear(config.hidden_size, config.output_embedding_size)
+        self.decoder = nn.Linear(config.output_embedding_size, config.vocab_size)
+        self.activation = ACT2FN[config.hidden_act]
 
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
+        # FIXME(tfevery): ALBERT has the following but that breaks this one
+        #  Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        #self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.activation(hidden_states)
         hidden_states = self.decoder(hidden_states)
-        return hidden_states
+
+        prediction_scores = hidden_states
+
+        return prediction_scores
 
 
 class RemBertOnlyMLMHead(nn.Module):
@@ -911,9 +915,9 @@ class RemBertModel(RemBertPreTrainedModel):
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return BaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
@@ -998,7 +1002,7 @@ class RemBertForMaskedLM(RemBertPreTrainedModel):
             masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
@@ -1136,7 +1140,7 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
             lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
 
         if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
+            output = (prediction_scores,) + outputs[2:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
@@ -1261,7 +1265,7 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
@@ -1352,7 +1356,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
             loss = loss_fct(reshaped_logits, labels)
 
         if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
@@ -1440,7 +1444,7 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
@@ -1540,7 +1544,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
+            output = (start_logits, end_logits) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return QuestionAnsweringModelOutput(

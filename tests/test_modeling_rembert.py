@@ -53,6 +53,8 @@ class RemBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
+        input_embedding_size=18,
+        output_embedding_size=43,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -76,6 +78,8 @@ class RemBertModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.input_embedding_size = input_embedding_size
+        self.output_embedding_size = output_embedding_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -89,6 +93,9 @@ class RemBertModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+
+        # RemBERT also returns the upprojected word embeddings as an hidden layers
+        self.expected_num_hidden_layers = self.num_hidden_layers + 2
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -112,6 +119,8 @@ class RemBertModelTester:
         config = RemBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            input_embedding_size=self.input_embedding_size,
+            output_embedding_size=self.output_embedding_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,

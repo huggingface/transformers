@@ -50,6 +50,10 @@ class RemBertConfig(PretrainedConfig):
                Number of hidden layers in the Transformer encoder.
            num_attention_heads (:obj:`int`, `optional`, defaults to 18):
                Number of attention heads for each attention layer in the Transformer encoder.
+           input_embedding_size (:obj:`int`, `optional`, defaults to 256):
+               Dimensionality of the input embeddings.
+           output_embedding_size (:obj:`int`, `optional`, defaults to 1664):
+               Dimensionality of the output embeddings.
            intermediate_size (:obj:`int`, `optional`, defaults to 4608):
                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
            hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
@@ -98,7 +102,8 @@ class RemBertConfig(PretrainedConfig):
         hidden_size=1152,
         num_hidden_layers=32,
         num_attention_heads=18,
-        embedding_size=256,
+        input_embedding_size=256,
+        output_embedding_size=1664,
         intermediate_size=4608,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
@@ -117,7 +122,8 @@ class RemBertConfig(PretrainedConfig):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
-        self.embedding_size = embedding_size
+        self.input_embedding_size = input_embedding_size
+        self.output_embedding_size = output_embedding_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -130,3 +136,4 @@ class RemBertConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
+        self.tie_word_embeddings = False
