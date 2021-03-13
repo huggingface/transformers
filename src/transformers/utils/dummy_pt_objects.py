@@ -2385,6 +2385,20 @@ def load_tf_weights_in_transfo_xl(*args, **kwargs):
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class Wav2Vec2CTCTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Wav2Vec2FeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class Wav2Vec2ForCTC:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -2414,6 +2428,11 @@ class Wav2Vec2PreTrainedModel:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class Wav2Vec2Processor:
+    def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
 
