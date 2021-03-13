@@ -281,7 +281,7 @@ def init_deepspeed(trainer, num_training_steps):
     """
     import deepspeed
 
-    require_version("deepspeed>0.3.10")
+    require_version("deepspeed>=0.3.13")
 
     args = trainer.args
     ds_config_file = args.deepspeed
