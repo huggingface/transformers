@@ -859,12 +859,19 @@ Scheduler
 DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedulers. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
 
-If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a ``transformers``
-version of it.
 
-Here is an example of the pre-configured ``scheduler`` entry for WarmupLR (which is equivalent to ``transformers``' s
-``constant_with_warmup`` scheduler in the :class:`~transformers.Trainer` API):
+Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
+
+* ``WarmupLR`` via ``--lr_scheduler_type constant_with_warmup``
+* ``WarmupDecayLR`` via ``--lr_scheduler_type linear``. This is also the default value for ``--lr_scheduler_type``,
+  therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
+
+
+If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a 🤗 Transformers version
+of it.
+
+Here is an example of the pre-configured ``scheduler`` entry for ``WarmupLR``:
 
 .. code-block:: json
 
@@ -999,9 +1006,9 @@ Notes
 * While DeepSpeed has a pip installable PyPI package, it is highly recommended that it gets installed from `source
   <https://github.com/microsoft/deepspeed#installation>`__ to best match your hardware and also if you need to enable
   certain features, like 1-bit Adam, which aren't available in the pypi distribution.
-* You don't have to use the :class:`~transformers.Trainer` to use DeepSpeed with HuggingFace ``transformers`` - you can
-  use any model with your own trainer, and you will have to adapt the latter according to `the DeepSpeed integration
-  instructions <https://www.deepspeed.ai/getting-started/#writing-deepspeed-models>`__.
+* You don't have to use the :class:`~transformers.Trainer` to use DeepSpeed with 🤗 Transformers - you can use any model
+  with your own trainer, and you will have to adapt the latter according to `the DeepSpeed integration instructions
+  <https://www.deepspeed.ai/getting-started/#writing-deepspeed-models>`__.
 
 Main DeepSpeed Resources
 =======================================================================================================================
