@@ -819,14 +819,13 @@ If you don't configure the ``optimizer`` entry in the configuration file, the :c
 automatically set it to ``AdamW`` and will use the supplied values or the defaults for the following command line
 arguments: ``--learning_rate``, ``--adam_beta1``, ``--adam_beta2``, ``--adam_epsilon`` and ``--weight_decay``.
 
-Here is an example of the pre-configured ``optimizer`` entry for ``Adam`` (it behaves as ``AdamW`` internally by
-default):
+Here is an example of the pre-configured ``optimizer`` entry for ``AdamW``:
 
 .. code-block:: json
 
     {
        "optimizer": {
-           "type": "Adam",
+           "type": "AdamW",
            "params": {
              "lr": 0.001,
              "betas": [0.8, 0.999],
