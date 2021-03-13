@@ -1099,14 +1099,14 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
 
         Arguments:
             new_num_tokens (:obj:`int`, `optional`):
-                The number of new tokens in the LM Head matrix.
-                Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
-                vectors from the end. If not provided or :obj:`None`, just returns a pointer to the input tokens
-                :obj:`torch.nn.Linear` module of the model without doing anything.
+                The number of new tokens in the LM Head matrix. Increasing the size will add newly initialized vectors
+                at the end. Reducing the size will remove vectors from the end. If not provided or :obj:`None`, just
+                returns a pointer to the input tokens :obj:`torch.nn.Linear` module of the model without doing
+                anything.
 
         Return:
-            :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module
-            if :obj:`new_num_tokens` is :obj:`None`
+            :obj:`torch.nn.Linear`: Pointer to the resized Linear Module or the old Linear Module if
+            :obj:`new_num_tokens` is :obj:`None`
         """
         if new_num_tokens is None or new_num_tokens == self.config.vocab_size:
             return self.lm_head

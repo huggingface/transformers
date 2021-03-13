@@ -4,7 +4,7 @@ import pathlib
 import re
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Union
 
 import datasets
 import numpy as np
@@ -13,6 +13,7 @@ import torch.nn as nn
 from packaging import version
 
 import librosa
+from lang_trans import arabic
 from transformers import (
     HfArgumentParser,
     Trainer,
@@ -140,6 +141,8 @@ class Orthography:
             Table to use with `str.translate()` when preprocessing text (e.g., "-" -> " ").
         words_to_remove (:obj:`Set[str]`, `optional`, defaults to :obj:`set()`):
             Words to remove when preprocessing text (e.g., "sil").
+        untransliterator (:obj:`Callable[[str], str]`, `optional`, defaults to :obj:`None`):
+            Function that untransliterates text back into native writing system.
     """
 
     do_lower_case: bool = False
@@ -147,6 +150,7 @@ class Orthography:
     word_delimiter_token: Optional[str] = "|"
     translation_table: Optional[Dict[str, str]] = field(default_factory=dict)
     words_to_remove: Optional[Set[str]] = field(default_factory=set)
+    untransliterator: Optional[Callable[[str], str]] = None
 
     @classmethod
     def from_name(cls, name: str):
@@ -164,6 +168,7 @@ class Orthography:
                 word_delimiter_token="/",  # "|" is Arabic letter alef with madda above
                 translation_table=str.maketrans({"-": " "}),  # sometimes used to represent pauses
                 words_to_remove={"sil"},  # until we have a "<sil>" special token
+                untransliterator=arabic.buckwalter.untransliterate,
             )
         raise ValueError(f"Unsupported orthography: '{name}'.")
 
@@ -420,9 +425,12 @@ def main():
         # we do not want to group tokens when computing the metrics
         label_str = processor.batch_decode(pred.label_ids, group_tokens=False)
         if logger.isEnabledFor(logging.DEBUG):
-            for prediction, reference in zip(pred_str, label_str):
+            for reference, predicted in zip(label_str, pred_str):
                 logger.debug(f'reference: "{reference}"')
-                logger.debug(f'prediction: "{prediction}"')
+                logger.debug(f'predicted: "{predicted}"')
+                if orthography.untransliterator is not None:
+                    logger.debug(f'reference (untransliterated): "{orthography.untransliterator(reference)}"')
+                    logger.debug(f'predicted (untransliterated): "{orthography.untransliterator(predicted)}"')
 
         wer = wer_metric.compute(predictions=pred_str, references=label_str)
 

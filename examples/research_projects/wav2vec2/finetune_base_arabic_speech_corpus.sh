@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 python run_asr.py \
---output_dir="./wav2vec2-base-arabic-speech-corpus" \
+--output_dir="./wav2vec2-large-xlsr-53-arabic-speech-corpus" \
 --num_train_epochs="30" \
---per_device_train_batch_size="24" \
---per_device_eval_batch_size="24" \
---gradient_accumulation_steps="8" \
+--per_device_train_batch_size="1" \
+--per_device_eval_batch_size="1" \
+--gradient_accumulation_steps="4" \
 --evaluation_strategy="steps" \
---save_steps="100" \
+--save_steps="500" \
 --eval_steps="100" \
 --logging_steps="50" \
 --learning_rate="5e-4" \
