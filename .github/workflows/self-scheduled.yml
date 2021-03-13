@@ -24,7 +24,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v  1.1-slow_tests_torch_gpu-${{ hashFiles('setup.py') }}
+          key: v  1.2-slow_tests_torch_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -122,7 +122,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-slow_tests_tf_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-slow_tests_tf_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -206,7 +206,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-slow_tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-slow_tests_torch_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |
@@ -305,7 +305,7 @@ jobs:
         id: cache
         with:
           path: .env
-          key: v1.1-slow_tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
+          key: v1.2-slow_tests_tf_multi_gpu-${{ hashFiles('setup.py') }}
 
       - name: Python version
         run: |

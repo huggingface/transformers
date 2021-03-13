@@ -134,6 +134,12 @@ _import_structure = {
         "Wav2Vec2FeatureExtractor",
         "Wav2Vec2Processor",
     ],
+    "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config", "M2M100Tokenizer"],
+    "models.speech_to_text": [
+        "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Speech2TextConfig",
+        "Speech2TextFeatureExtractor",
+    ],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -245,7 +251,7 @@ _import_structure = {
         "SpecialTokensMixin",
         "TokenSpan",
     ],
-    "feature_extraction_utils": ["PreTrainedFeatureExtractor", "BatchFeature"],
+    "feature_extraction_sequence_utils": ["SequenceFeatureExtractor", "BatchFeature"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -274,6 +280,8 @@ if is_sentencepiece_available():
     _import_structure["models.mt5"].append("MT5Tokenizer")
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
+    _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
+    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -372,9 +380,23 @@ if is_torch_available():
         "TopKLogitsWarper",
         "TopPLogitsWarper",
     ]
+    _import_structure["generation_stopping_criteria"] = [
+        "StoppingCriteria",
+        "StoppingCriteriaList",
+        "MaxLengthCriteria",
+        "MaxTimeCriteria",
+    ]
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
+    _import_structure["models.speech_to_text"].extend(
+        [
+            "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Speech2TextForConditionalGeneration",
+            "Speech2TextModel",
+        ]
+    )
 
     _import_structure["models.wav2vec2"].extend(
         [
@@ -385,6 +407,14 @@ if is_torch_available():
             "Wav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.m2m_100"].extend(
+        [
+            "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "M2M100ForConditionalGeneration",
+            "M2M100Model",
+        ]
+    )
+
     _import_structure["models.convbert"].extend(
         [
             "CONVBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1121,6 +1151,13 @@ if is_tf_available():
         ]
     )
     _import_structure["models.pegasus"].extend(["TFPegasusForConditionalGeneration", "TFPegasusModel"])
+    _import_structure["models.rag"].extend(
+        [
+            "TFRagModel",
+            "TFRagSequenceForGeneration",
+            "TFRagTokenForGeneration",
+        ]
+    )
     _import_structure["models.roberta"].extend(
         [
             "TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1241,7 +1278,7 @@ if TYPE_CHECKING:
     )
 
     # Feature Extractor
-    from .feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+    from .feature_extraction_utils import BatchFeature, SequenceFeatureExtractor
 
     # Files and general utilities
     from .file_utils import (
@@ -1348,6 +1385,7 @@ if TYPE_CHECKING:
     from .models.led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig, LEDTokenizer
     from .models.longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig, LongformerTokenizer
     from .models.lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig, LxmertTokenizer
+    from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config, M2M100Tokenizer
     from .models.marian import MarianConfig
     from .models.mbart import MBartConfig
     from .models.mmbt import MMBTConfig
@@ -1362,6 +1400,11 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
+    from .models.speech_to_text import (
+        SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Speech2TextConfig,
+        Speech2TextFeatureExtractor,
+    )
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -1444,6 +1487,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
+        from .models.speech_to_text import Speech2TextProcessor, Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -1768,6 +1812,7 @@ if TYPE_CHECKING:
             LxmertVisualFeatureEncoder,
             LxmertXLayer,
         )
+        from .models.m2m_100 import M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST, M2M100ForConditionalGeneration, M2M100Model
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel
         from .models.mbart import (
             MBartForCausalLM,
@@ -1843,6 +1888,11 @@ if TYPE_CHECKING:
             RobertaForSequenceClassification,
             RobertaForTokenClassification,
             RobertaModel,
+        )
+        from .models.speech_to_text import (
+            SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Speech2TextForConditionalGeneration,
+            Speech2TextModel,
         )
         from .models.squeezebert import (
             SQUEEZEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2155,6 +2205,7 @@ if TYPE_CHECKING:
             TFOpenAIGPTPreTrainedModel,
         )
         from .models.pegasus import TFPegasusForConditionalGeneration, TFPegasusModel
+        from .models.rag import TFRagModel, TFRagSequenceForGeneration, TFRagTokenForGeneration
         from .models.roberta import (
             TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFRobertaForMaskedLM,

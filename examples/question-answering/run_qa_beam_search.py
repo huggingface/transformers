@@ -117,6 +117,20 @@ class DataTrainingArguments:
             "be faster on GPU but will be slower on TPU)."
         },
     )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
+        },
+    )
     version_2_with_negative: bool = field(
         default=False, metadata={"help": "If true, some of the examples do not have an answer."}
     )
@@ -373,13 +387,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_train:
-        train_dataset = datasets["train"].map(
+        if "train" not in datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
+        if data_args.max_train_samples is not None:
+            # Select samples from Dataset, This will help to decrease processing time
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        # Create Training Features
+        train_dataset = train_dataset.map(
             prepare_train_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_train_samples is not None:
+            # Select samples from dataset again since Feature Creation might increase number of features
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -448,13 +472,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_eval:
-        validation_dataset = datasets["validation"].map(
+        if "validation" not in datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_dataset = datasets["validation"]
+        if data_args.max_val_samples is not None:
+            # Selecting Eval Samples from Dataset
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        # Create Features from Eval Dataset
+        eval_dataset = eval_dataset.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_val_samples is not None:
+            # Selecting Samples from Dataset again since Feature Creation might increase samples size
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
@@ -501,7 +535,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=validation_dataset if training_args.do_eval else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
         eval_examples=datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
@@ -521,20 +555,26 @@ def main():
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
+
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
         trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        results = trainer.evaluate()
+        metrics = trainer.evaluate()
 
-        trainer.log_metrics("eval", results)
-        trainer.save_metrics("eval", results)
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
-    return results
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 
 def _mp_fn(index):

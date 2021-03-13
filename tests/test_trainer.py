@@ -57,7 +57,7 @@ if is_torch_available():
         Trainer,
         TrainerState,
     )
-    from transformers.trainer import _model_unwrap
+    from transformers.modeling_utils import unwrap_model
 
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
@@ -192,6 +192,20 @@ if is_torch_available():
                 return (y, y) if self.double_output else (y,)
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
+
+    class TstLayer(torch.nn.Module):
+        def __init__(self, hidden_size):
+            super().__init__()
+            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln1 = torch.nn.LayerNorm(hidden_size)
+            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln2 = torch.nn.LayerNorm(hidden_size)
+            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+
+        def forward(self, x):
+            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
+            h = torch.nn.functional.relu(self.linear2(x))
+            return self.ln2(x + h + self.bias)
 
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
         label_names = kwargs.get("label_names", None)
@@ -574,6 +588,19 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    @require_torch_multi_gpu
+    def test_run_seq2seq_double_train_wrap_once(self):
+        # test that we don't wrap the model more than once
+        # since wrapping primarily happens on multi-gpu setup we want multiple gpus to test for
+        # example DataParallel(DataParallel(model))
+
+        trainer = get_regression_trainer()
+        trainer.train()
+        model_wrapped_before = trainer.model_wrapped
+        trainer.train()
+        model_wrapped_after = trainer.model_wrapped
+        self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+
     def test_can_resume_training(self):
         if torch.cuda.device_count() > 2:
             # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
@@ -882,8 +909,8 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer = get_regression_trainer(learning_rate=0.1)
 
         def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, _model_unwrap(wrapped_model_to_check))
-            self.assertGreaterEqual(getattr(_model_unwrap(wrapped_model_to_check).config, "total_flos", 0), 0)
+            self.assertEqual(trainer.model, unwrap_model(wrapped_model_to_check))
+            self.assertGreaterEqual(getattr(unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0)
 
         # with plain model
         assert_flos_extraction(trainer, trainer.model)
@@ -977,6 +1004,18 @@ class TrainerIntegrationTest(unittest.TestCase):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    def test_no_wd_param_group(self):
+        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        trainer = Trainer(model=model)
+        trainer.create_optimizer_and_scheduler(10)
+        # fmt: off
+        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']
+        # fmt: on
+        wd_params = [p for n, p in model.named_parameters() if n in wd_names]
+        no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
+        self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
+        self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
 
 @require_torch

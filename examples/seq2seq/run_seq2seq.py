@@ -44,14 +44,21 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
+from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
-with FileLock(".lock") as lock:
-    nltk.download("punkt", quiet=True)
-
-
 logger = logging.getLogger(__name__)
+
+try:
+    nltk.data.find("tokenizers/punkt")
+except (LookupError, OSError):
+    if is_offline_mode():
+        raise LookupError(
+            "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
+        )
+    with FileLock(".lock") as lock:
+        nltk.download("punkt", quiet=True)
 
 
 @dataclass
@@ -594,7 +601,6 @@ def main():
         trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
@@ -607,6 +613,7 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # predict
     if training_args.do_predict:
         logger.info("*** Test ***")
 
@@ -632,8 +639,6 @@ def main():
                 output_test_preds_file = os.path.join(training_args.output_dir, "test_generations.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
-
-    return results
 
 
 def _mp_fn(index):

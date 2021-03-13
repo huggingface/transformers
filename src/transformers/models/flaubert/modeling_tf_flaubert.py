@@ -52,6 +52,7 @@ from .configuration_flaubert import FlaubertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 _TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
@@ -236,7 +237,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="jplu/tf-flaubert-small-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -822,7 +823,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="jplu/tf-flaubert-small-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFFlaubertWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

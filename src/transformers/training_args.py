@@ -288,8 +288,7 @@ class TrainingArguments:
 
     """
 
-    output_dir: Optional[str] = field(
-        default=None,
+    output_dir: str = field(
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
     overwrite_output_dir: bool = field(
@@ -471,10 +470,10 @@ class TrainingArguments:
     sharded_ddp: str = field(
         default="",
         metadata={
-            "choices": ["simple", "zero_dp_2", "zero_dp_3", "zero_dp_2 offload", "zero_dp_3 offload"],
             "help": "Whether or not to use sharded DDP training (in distributed training only). The base option "
             "should be `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` "
-            "like this: zero_dp_2 offload` or `zero_dp_3 offload`",
+            "like this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or "
+            "with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`.",
         },
     )
     deepspeed: Optional[str] = field(
@@ -508,18 +507,14 @@ class TrainingArguments:
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
-        if self.output_dir is None and os.getenv("SM_OUTPUT_DATA_DIR") is None:
-            raise ValueError(
-                "`output_dir` is only optional if it can get inferred from the environment. Please set a value for "
-                "`output_dir`."
-            )
-        elif os.getenv("SM_OUTPUT_DATA_DIR") is not None:
-            if self.output_dir is not None:
-                logger.warn(
-                    "`output_dir` is overwritten by the env variable 'SM_OUTPUT_DATA_DIR' "
-                    f"({os.getenv('SM_OUTPUT_DATA_DIR')})."
-                )
-            self.output_dir = os.getenv("SM_OUTPUT_DATA_DIR")
+        # expand paths, if not os.makedirs("~/bar") will make directory
+        # in the current directory instead of the actual home
+        #  see https://github.com/huggingface/transformers/issues/10628
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+        if self.logging_dir is not None:
+            self.logging_dir = os.path.expanduser(self.logging_dir)
+
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
 
@@ -583,7 +578,7 @@ class TrainingArguments:
                 "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
                 '`--sharded_ddp zero_dp_3`. For example, `--sharded_ddp "zero_dp_2 offload"`.'
             )
-        elif len(self.sharded_ddp) > 1 and ShardedDDPOption.Simple in self.sharded_ddp:
+        elif len(self.sharded_ddp) > 1 and ShardedDDPOption.SIMPLE in self.sharded_ddp:
             raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
         elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
             raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")

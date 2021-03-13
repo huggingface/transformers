@@ -23,8 +23,10 @@ import math
 import os
 import re
 import shutil
+import sys
 import time
 import warnings
+from logging import StreamHandler
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -59,8 +61,9 @@ from .file_utils import (
     is_in_notebook,
     is_sagemaker_distributed_available,
     is_torch_tpu_available,
+    is_training_run_on_sagemaker,
 )
-from .modeling_utils import PreTrainedModel
+from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
@@ -80,6 +83,7 @@ from .trainer_pt_utils import (
     SequentialDistributedSampler,
     distributed_broadcast_scalars,
     distributed_concat,
+    get_parameter_names,
     nested_concat,
     nested_detach,
     nested_numpify,
@@ -97,6 +101,7 @@ from .trainer_utils import (
     TrainOutput,
     default_compute_objective,
     default_hp_space,
+    denumpify_detensorize,
     get_last_checkpoint,
     set_seed,
     speed_metrics,
@@ -139,6 +144,7 @@ if is_fairscale_available():
 
     if version.parse(fairscale.__version__) >= version.parse("0.3"):
         from fairscale.nn.data_parallel import FullyShardedDataParallel as FullyShardedDDP
+        from fairscale.nn.wrap import auto_wrap
     else:
         FullyShardedDDP = None
 
@@ -148,18 +154,14 @@ if is_sagemaker_distributed_available():
 else:
     import torch.distributed as dist
 
+if is_training_run_on_sagemaker():
+    logging.add_handler(StreamHandler(sys.stdout))
+
+
 if TYPE_CHECKING:
     import optuna
 
 logger = logging.get_logger(__name__)
-
-
-def _model_unwrap(model: nn.Module) -> nn.Module:
-    # since there could be multiple levels of wrapping, unwrap recursively
-    if hasattr(model, "module"):
-        return _model_unwrap(model.module)
-    else:
-        return model
 
 
 class Trainer:
@@ -359,10 +361,6 @@ class Trainer:
         # Create output directory if needed
         if self.is_world_process_zero():
             os.makedirs(self.args.output_dir, exist_ok=True)
-        if is_torch_tpu_available() and isinstance(self.model, PreTrainedModel):
-            # Set an xla_device flag on the model's config.
-            # We'll find a more elegant and not need to do this in the future.
-            self.model.config.xla_device = True
         if not callable(self.data_collator) and callable(getattr(self.data_collator, "collate_batch", None)):
             raise ValueError("The `data_collator` should be a simple callable (function, class with `__call__`).")
 
@@ -625,14 +623,15 @@ class Trainer:
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
-            no_decay = ["bias", "LayerNorm.weight"]
+            decay_parameters = get_parameter_names(self.model, [torch.nn.LayerNorm])
+            decay_parameters = [name for name in decay_parameters if "bias" not in name]
             optimizer_grouped_parameters = [
                 {
-                    "params": [p for n, p in self.model.named_parameters() if not any(nd in n for nd in no_decay)],
+                    "params": [p for n, p in self.model.named_parameters() if n in decay_parameters],
                     "weight_decay": self.args.weight_decay,
                 },
                 {
-                    "params": [p for n, p in self.model.named_parameters() if any(nd in n for nd in no_decay)],
+                    "params": [p for n, p in self.model.named_parameters() if n not in decay_parameters],
                     "weight_decay": 0.0,
                 },
             ]
@@ -750,6 +749,10 @@ class Trainer:
         if self.deepspeed:
             return self.deepspeed
 
+        # train/eval could be run multiple-times - if already wrapped, don't re-wrap it again
+        if unwrap_model(model) is not model:
+            return model
+
         # Mixed precision training with apex (torch < 1.6)
         if self.use_apex and training:
             model, self.optimizer = amp.initialize(model, self.optimizer, opt_level=self.args.fp16_opt_level)
@@ -773,8 +776,13 @@ class Trainer:
                 cpu_offload = ShardedDDPOption.OFFLOAD in self.args.sharded_ddp
                 zero_3 = self.sharded_ddp == ShardedDDPOption.ZERO_DP_3
                 # XXX: Breaking the self.model convention but I see no way around it for now.
+                if ShardedDDPOption.AUTO_WRAP in self.args.sharded_ddp:
+                    model = auto_wrap(model)
                 self.model = model = FullyShardedDDP(
-                    model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload
+                    model,
+                    mixed_precision=mixed_precision,
+                    reshard_after_forward=zero_3,
+                    cpu_offload=cpu_offload,
                 ).to(self.args.device)
 
         elif is_sagemaker_distributed_available():
@@ -1194,7 +1202,7 @@ class Trainer:
     def _save_checkpoint(self, model, trial, metrics=None):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
-        # assert _model_unwrap(model) is self.model, "internal model should be a reference to self.model"
+        # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
 
         # Save model checkpoint
         checkpoint_folder = f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}"
@@ -1335,7 +1343,7 @@ class Trainer:
                 more information see:
 
                 - the documentation of `optuna.create_study
-                  <https://optuna.readthedocs.io/en/stable/reference/alias_generated/optuna.create_study.html#optuna.create_study>`__
+                  <https://optuna.readthedocs.io/en/stable/reference/generated/optuna.study.create_study.html>`__
                 - the documentation of `tune.run
                   <https://docs.ray.io/en/latest/tune/api_docs/execution.html#tune-run>`__
 
@@ -1499,18 +1507,18 @@ class Trainer:
         """
         Will save the model, so you can reload it using :obj:`from_pretrained()`.
 
-        Will only save from the world_master process (unless in TPUs).
+        Will only save from the main process.
         """
-
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
+        elif (
+            ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
+        ):
+            state_dict = self.model.state_dict()
+            if self.is_world_process_zero():
+                self._save(output_dir, state_dict=state_dict)
         elif self.is_world_process_zero():
             self._save(output_dir)
-
-        # If on sagemaker and we are saving the main model (not a checkpoint so output_dir=None), save a copy to
-        # SM_MODEL_DIR for easy deployment.
-        if output_dir is None and os.getenv("SM_MODEL_DIR") is not None:
-            self.save_model(output_dir=os.getenv("SM_MODEL_DIR"))
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1524,34 +1532,42 @@ class Trainer:
         # They can then be reloaded using `from_pretrained()`
         xm.rendezvous("saving_checkpoint")
         if not isinstance(self.model, PreTrainedModel):
-            if isinstance(_model_unwrap(self.model), PreTrainedModel):
-                if xm.is_master_ordinal():
-                    _model_unwrap(self.model).config.save_pretrained(output_dir)
+            if isinstance(unwrap_model(self.model), PreTrainedModel):
+                unwrap_model(self.model).save_pretrained(
+                    output_dir,
+                    save_config=self.is_world_process_zero(),
+                    state_dict=self.model.state_dict(),
+                    save_function=xm.save,
+                )
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            state_dict = self.model.state_dict()
-            xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                state_dict = self.model.state_dict()
+                xm.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir)
+            self.model.save_pretrained(output_dir, save_config=self.is_world_process_zero(), save_function=xm.save)
         if self.tokenizer is not None and self.is_world_process_zero():
             self.tokenizer.save_pretrained(output_dir)
 
-    def _save(self, output_dir: Optional[str] = None):
+    def _save(self, output_dir: Optional[str] = None, state_dict=None):
+        # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info("Saving model checkpoint to %s", output_dir)
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
-            if isinstance(_model_unwrap(self.model), PreTrainedModel):
-                _model_unwrap(self.model).config.save_pretrained(output_dir)
+            if isinstance(unwrap_model(self.model), PreTrainedModel):
+                if state_dict is None:
+                    state_dict = self.model.state_dict()
+                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
-            state_dict = self.model.state_dict()
-            torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
+                if state_dict is None:
+                    state_dict = self.model.state_dict()
+                torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir)
-        if self.tokenizer is not None and self.is_world_process_zero():
+            self.model.save_pretrained(output_dir, state_dict=state_dict)
+        if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
@@ -1821,6 +1837,9 @@ class Trainer:
             metrics = self.compute_metrics(EvalPrediction(predictions=preds, label_ids=label_ids))
         else:
             metrics = {}
+
+        # To be JSON-serializable, we need to remove numpy types or zero-d tensors
+        metrics = denumpify_detensorize(metrics)
 
         if eval_loss is not None:
             metrics[f"{metric_key_prefix}_loss"] = eval_loss.mean().item()

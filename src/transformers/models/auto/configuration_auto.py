@@ -45,6 +45,7 @@ from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
 from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
+from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..marian.configuration_marian import MarianConfig
 from ..mbart.configuration_mbart import MBART_PRETRAINED_CONFIG_ARCHIVE_MAP, MBartConfig
 from ..mobilebert.configuration_mobilebert import MobileBertConfig
@@ -57,6 +58,10 @@ from ..rag.configuration_rag import RagConfig
 from ..reformer.configuration_reformer import ReformerConfig
 from ..retribert.configuration_retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig
 from ..roberta.configuration_roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig
+from ..speech_to_text.configuration_speech_to_text import (
+    SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+    Speech2TextConfig,
+)
 from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
@@ -75,7 +80,9 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         LED_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -120,7 +127,9 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("speech_to_text", Speech2TextConfig),
         ("wav2vec2", Wav2Vec2Config),
+        ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
         ("led", LEDConfig),
         ("blenderbot-small", BlenderbotSmallConfig),
@@ -171,7 +180,9 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("speech_to_text", "Speech2Text"),
         ("wav2vec2", "Wav2Vec2"),
+        ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),
         ("led", "LED"),
         ("blenderbot-small", "BlenderbotSmall"),
