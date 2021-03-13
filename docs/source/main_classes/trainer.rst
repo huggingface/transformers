@@ -613,17 +613,11 @@ example ``.json`` files with:
 
 Some more examples are to be found in the `main repo <https://github.com/microsoft/DeepSpeed>`__ as well.
 
-While you always have to supply the DeepSpeed configuration file, you can configure the DeepSpeed integration in
-several ways:
-
-1. Supply most of the configuration inside the file, and just use a few required command line arguments. This is the
-   recommended way as it puts most of the configuration params in one place.
-2. Supply just the ZeRO configuration params inside the file, and configure the rest using the normal
-   :class:`~transformers.Trainer` command line arguments.
-3. Any variation of the first two ways.
+When using DeepSpeed you always need to supply a DeepSpeed configuration file, yet some configuration parameters have
+to be configured via the command line. You will find the nuances in the rest of this guide.
 
 To get an idea of what DeepSpeed configuration file looks like, here is one that activates ZeRO stage 2 features,
-enables FP16, uses AdamW optimizer and WarmupLR scheduler:
+enables FP16, uses ``AdamW`` optimizer and ``WarmupLR`` scheduler:
 
 .. code-block:: json
 
@@ -667,46 +661,18 @@ enables FP16, uses AdamW optimizer and WarmupLR scheduler:
        }
     }
 
-If you already have a command line that you have been using with :class:`transformers.Trainer` args, you can continue
-using those and the :class:`~transformers.Trainer` will automatically convert them into the corresponding DeepSpeed
-configuration at run time. For example, you could use the following configuration file:
-
-.. code-block:: json
-
-    {
-       "zero_optimization": {
-           "stage": 2,
-           "allgather_partitions": true,
-           "allgather_bucket_size": 5e8,
-           "overlap_comm": true,
-           "reduce_scatter": true,
-           "reduce_bucket_size": 5e8,
-           "contiguous_gradients": true,
-           "cpu_offload": true
-       }
-    }
-
-and the following command line arguments:
-
-.. code-block:: bash
-
-    --learning_rate 3e-5 --warmup_steps 500 --adam_beta1 0.8 --adam_beta2 0.999 --adam_epsilon 1e-8 \
-    --weight_decay 3e-7 --lr_scheduler_type constant_with_warmup --fp16 --fp16_backend amp
-
-to achieve the same configuration as provided by the longer json file in the first example.
-
 When you execute the program, DeepSpeed will log the configuration it received from the :class:`~transformers.Trainer`
-to the console, so you can see exactly what the final configuration was passed to it.
+to the console, so you can see exactly what was the final configuration passed to it.
 
 
 Passing Configuration
 =======================================================================================================================
 
 As discussed in this document normally the DeepSpeed configuration is passed as a path to a json file, but if you're
-not using the command line interface to configure the training, and instead instantiate the Trainer via
-:class:`~transformers.TrainingArguments` then for the ``deepspeed`` argument you can pass a nested ``dict``. This
-allows you to create the configuration on the fly and doesn't require you to write it to the file system before passing
-it to :class:`~transformers.TrainingArguments`.
+not using the command line interface to configure the training, and instead instantiate the
+:class:`~transformers.Trainer` via :class:`~transformers.TrainingArguments` then for the ``deepspeed`` argument you can
+pass a nested ``dict``. This allows you to create the configuration on the fly and doesn't require you to write it to
+the file system before passing it to :class:`~transformers.TrainingArguments`.
 
 To summarize you can do:
 
