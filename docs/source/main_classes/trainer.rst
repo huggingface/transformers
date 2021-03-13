@@ -545,8 +545,6 @@ cell with:
             "cpu_offload": true
         },
 
-        "zero_allow_untested_optimizer": true,
-
         "optimizer": {
             "type": "AdamW",
             "params": {
