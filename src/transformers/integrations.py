@@ -331,12 +331,36 @@ def init_deepspeed(trainer, num_training_steps):
     # 2. HF scheduler + HF optimizer: Yes
     # 3. DS scheduler + HF optimizer: Yes
     # 4. HF scheduler + DS optimizer: No
+    # Unless Offload is enabled in which case it's:
+    # 1. DS scheduler + DS optimizer: Yes
+    # 2. HF scheduler + HF optimizer: No
+    # 3. DS scheduler + HF optimizer: No
+    # 4. HF scheduler + DS optimizer: No
 
     optimizer = None
     if "optimizer" in config:
+        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
         logger.info(
             f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
         )
+
+        # to avoid inconsistent values of lr and warm up steps the command line args override config
+        if "lr" in config["optimizer"]["params"]:
+            logger.info(f"setting optimizer.params.lr to {args.learning_rate}")
+            config["optimizer"]["params"]["lr"] = args.learning_rate
+
+        if "betas" in config["optimizer"]["params"]:
+            logger.info(f"setting optimizer.params.betas to {[args.adam_beta1, args.adam_beta2]}")
+            config["optimizer"]["params"]["betas"] = [args.adam_beta1, args.adam_beta2]
+
+        if "eps" in config["optimizer"]["params"]:
+            logger.info(f"setting optimizer.params.eps to {args.adam_epsilon}")
+            config["optimizer"]["params"]["eps"] = args.adam_epsilon
+
+        if "weight_decay" in config["optimizer"]["params"]:
+            logger.info(f"setting optimizer.params.weight_decay to {args.weight_decay}")
+            config["optimizer"]["params"]["weight_decay"] = args.weight_decay
+
     else:  # override only if the ds config doesn't already have this section
         if (
             "zero_optimization" in config
@@ -363,9 +387,22 @@ def init_deepspeed(trainer, num_training_steps):
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
     lr_scheduler = None
     if "scheduler" in config:
-        logger.info(
-            f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
-        )
+        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        # the user won't easily know the correct num_training_steps should they use WarmupDecayLR,
+        # so let's set it to the correct value
+        if config["scheduler"]["type"] == "WarmupDecayLR":
+            logger.info(f"setting scheduler.params.total_num_steps to {num_training_steps}")
+            config["scheduler"]["params"]["total_num_steps"] = num_training_steps
+
+        # to avoid inconsistent values of lr and warmup steps the command line args override config
+        if "warmup_max_lr" in config["scheduler"]["params"]:
+            logger.info(f"setting scheduler.params.warmup_max_lr to {args.learning_rate}")
+            config["scheduler"]["params"]["warmup_max_lr"] = args.learning_rate
+
+        if "warmup_num_steps" in config["scheduler"]["params"]:
+            logger.info(f"setting scheduler.params.warmup_num_steps to {args.learning_rate}")
+            config["scheduler"]["params"]["warmup_num_steps"] = args.warmup_steps
+
     else:  # override only if the ds config doesn't already have this section
         if "optimizer" in config:
             # to make this option work, we need to init DS optimizer first, then init HS scheduler,
