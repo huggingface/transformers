@@ -792,8 +792,8 @@ no equivalent command line arguments.
 Optimizer and Scheduler
 =======================================================================================================================
 
-You can mix and match DeepSpeed and HuggingFace schedulers and optimizers, with the exception of HuggingFace scheduler
-and DeepSpeed optimizer:
+As long as you don't enable ``cpu_offload`` you can mix and match DeepSpeed and HuggingFace schedulers and optimizers,
+with the exception of using the combination of HuggingFace scheduler and DeepSpeed optimizer:
 
 +--------------+--------------+--------------+
 | Combos       | HF Scheduler | DS Scheduler |
@@ -803,6 +803,7 @@ and DeepSpeed optimizer:
 | DS Optimizer | No           | Yes          |
 +--------------+--------------+--------------+
 
+If ``cpu_offload`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
 
 
 
@@ -818,13 +819,14 @@ If you don't configure the ``optimizer`` entry in the configuration file, the :c
 automatically set it to ``AdamW`` and will use the supplied values or the defaults for the following command line
 arguments: ``--learning_rate``, ``--adam_beta1``, ``--adam_beta2``, ``--adam_epsilon`` and ``--weight_decay``.
 
-Here is an example of the pre-configured ``optimizer`` entry for AdamW:
+Here is an example of the pre-configured ``optimizer`` entry for ``Adam`` (it behaves as ``AdamW`` internally by
+default):
 
 .. code-block:: json
 
     {
        "optimizer": {
-           "type": "AdamW",
+           "type": "Adam",
            "params": {
              "lr": 0.001,
              "betas": [0.8, 0.999],
@@ -833,6 +835,17 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
            }
          }
     }
+
+Note that the command line arguments will override the values in the configuration file. This is so that there is one
+definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
+different values in different places. Command line rules. The values that get overridden are:
+
+- ``lr`` with the value of ``--learning_rate``
+- ``betas`` with the value of ``--adam_beta1 --adam_beta2``
+- ``eps`` with the value of ``--adam_epsilon``
+- ``weight_decay`` with the value of ``--weight_decay``
+
+Therefore please remember to tune the shared hyperparameters on the command line.
 
 If you want to use another optimizer which is not listed above, you will have to add ``"zero_allow_untested_optimizer":
 true`` to the top level configuration.
@@ -848,35 +861,11 @@ DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedule
 <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
 
 If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the value of ``--lr_scheduler_type`` to configure it. Currently the :class:`~transformers.Trainer` supports only 2 LR
-schedulers that are also supported by DeepSpeed:
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a ``transformers``
+version of it.
 
-* ``WarmupLR`` via ``--lr_scheduler_type constant_with_warmup``
-* ``WarmupDecayLR`` via ``--lr_scheduler_type linear``. This is also the default value for ``--lr_scheduler_type``,
-  therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
-
-In either case, the values of ``--learning_rate`` and ``--warmup_steps`` will be used for the configuration.
-
-In other words, if you don't use the configuration file to set the ``scheduler`` entry, provide either:
-
-.. code-block:: bash
-
-    --lr_scheduler_type constant_with_warmup --learning_rate 3e-5 --warmup_steps 500
-
-or
-
-.. code-block:: bash
-
-    --lr_scheduler_type linear --learning_rate 3e-5 --warmup_steps 500
-
-with the desired values. If you don't pass these arguments, reasonable default values will be used instead.
-
-In the case of WarmupDecayLR ``total_num_steps`` gets set either via the ``--max_steps`` command line argument, or if
-it is not provided, derived automatically at run time based on the environment and the size of the dataset and other
-command line arguments.
-
-Here is an example of the pre-configured ``scheduler`` entry for WarmupLR (``constant_with_warmup`` in the
-:class:`~transformers.Trainer` API):
+Here is an example of the pre-configured ``scheduler`` entry for WarmupLR (which is equivalent to ``transformers``' s
+``constant_with_warmup`` scheduler in the :class:`~transformers.Trainer` API):
 
 .. code-block:: json
 
@@ -890,6 +879,39 @@ Here is an example of the pre-configured ``scheduler`` entry for WarmupLR (``con
              }
          }
     }
+
+Note that the command line arguments will override the values in the configuration file. This is so that there is one
+definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
+different values in different places. Command line rules. The values that get overridden are:
+
+- ``warmup_max_lr`` with the value of ``--learning_rate``
+- ``warmup_num_steps`` with the value of ``--warmup_steps``
+- ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
+  time based on the environment and the size of the dataset and other command line arguments (needed for
+  ``WarmupDecayLR``).
+
+Therefore please remember to tune the shared hyperparameters on the command line.
+
+For example, for ``WarmupDecayLR``, you can use the following entry:
+
+.. code-block:: json
+
+    {
+       "scheduler": {
+             "type": "WarmupDecayLR",
+             "params": {
+                 "total_num_steps": 10,
+                 "last_batch_iteration": -1,
+                 "warmup_min_lr": 0,
+                 "warmup_max_lr": 0.001,
+                 "warmup_num_steps": 1000
+             }
+         }
+    }
+
+and ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_steps`` will be corrected at loading time.
+
+
 
 Automatic Mixed Precision
 =======================================================================================================================
