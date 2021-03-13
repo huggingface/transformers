@@ -49,6 +49,8 @@ class TFRemBertModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
+        input_embedding_size=18,
+        output_embedding_size=43,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -72,6 +74,8 @@ class TFRemBertModelTester:
         self.use_labels = True
         self.vocab_size = 99
         self.hidden_size = 32
+        self.input_embedding_size = input_embedding_size
+        self.output_embedding_size = output_embedding_size
         self.num_hidden_layers = 5
         self.num_attention_heads = 4
         self.intermediate_size = 37
@@ -85,6 +89,9 @@ class TFRemBertModelTester:
         self.num_labels = 3
         self.num_choices = 4
         self.scope = None
+
+        # RemBERT also returns the upprojected word embeddings as an hidden layers
+        self.expected_num_hidden_layers = self.num_hidden_layers + 2
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -108,6 +115,8 @@ class TFRemBertModelTester:
         config = RemBertConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            input_embedding_size=self.input_embedding_size,
+            output_embedding_size=self.output_embedding_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -303,8 +312,7 @@ class TFRemBertModelIntegrationTest(unittest.TestCase):
         input_ids = tf.constant([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 250300
 
         expected_shape = [1, 6, vocab_size]
         self.assertEqual(output.shape, expected_shape)

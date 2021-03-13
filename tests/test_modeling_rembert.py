@@ -470,7 +470,7 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         output = model(input_ids)[0]
 
         # TODO Replace vocab size
-        vocab_size = 32000
+        vocab_size = 250300
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)

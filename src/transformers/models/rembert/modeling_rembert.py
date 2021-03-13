@@ -638,7 +638,7 @@ class RemBertLMPredictionHead(nn.Module):
         self.decoder = nn.Linear(config.output_embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
 
-        # FIXME(tfevery): ALBERT has the following but that breaks this one
+        # FIXME(tfevry): ALBERT has the following but that breaks this one
         #  Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         #self.decoder.bias = self.bias
 

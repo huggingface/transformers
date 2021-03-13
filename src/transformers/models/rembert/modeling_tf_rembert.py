@@ -76,7 +76,7 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.type_vocab_size = config.type_vocab_size
-        self.hidden_size = config.hidden_size
+        self.input_embedding_size = config.input_embedding_size
         self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
         self.embeddings_sum = tf.keras.layers.Add()
@@ -87,21 +87,21 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         with tf.name_scope("word_embeddings"):
             self.weight = self.add_weight(
                 name="weight",
-                shape=[self.vocab_size, self.hidden_size],
+                shape=[self.vocab_size, self.input_embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         with tf.name_scope("token_type_embeddings"):
             self.token_type_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.type_vocab_size, self.hidden_size],
+                shape=[self.type_vocab_size, self.input_embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
         with tf.name_scope("position_embeddings"):
             self.position_embeddings = self.add_weight(
                 name="embeddings",
-                shape=[self.max_position_embeddings, self.hidden_size],
+                shape=[self.max_position_embeddings, self.input_embedding_size],
                 initializer=get_initializer(self.initializer_range),
             )
 
@@ -350,6 +350,11 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
+        self.embedding_hidden_mapping_in = tf.keras.layers.Dense(
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="embedding_hidden_mapping_in",
+        )
         self.layer = [TFRemBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
 
     def call(
@@ -362,7 +367,8 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         return_dict: bool,
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-        all_hidden_states = () if output_hidden_states else None
+        hidden_states = self.embedding_hidden_mapping_in(inputs=hidden_states)
+        all_hidden_states = (hidden_states,) if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
         for i, layer_module in enumerate(self.layer):
@@ -393,29 +399,24 @@ class TFRemBertEncoder(tf.keras.layers.Layer):
         )
 
 
-class TFRemBertPredictionHeadTransform(tf.keras.layers.Layer):
+class TFRemBertPooler(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
             name="dense",
         )
 
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = get_tf_activation(config.hidden_act)
-        else:
-            self.transform_act_fn = config.hidden_act
-
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
-
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(inputs=hidden_states)
+        # We "pool" the model by simply taking the hidden state corresponding
+        # to the first token.
+        first_token_tensor = hidden_states[:, 0]
+        pooled_output = self.dense(inputs=first_token_tensor)
 
-        return hidden_states
+        return pooled_output
 
 
 class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
@@ -423,41 +424,51 @@ class TFRemBertLMPredictionHead(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.vocab_size = config.vocab_size
-        self.hidden_size = config.hidden_size
-
-        self.transform = TFRemBertPredictionHeadTransform(config, name="transform")
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.input_embeddings = input_embeddings
+        self.initializer_range = config.initializer_range
+        self.output_embedding_size = config.output_embedding_size
+        self.dense = tf.keras.layers.Dense(
+            config.output_embedding_size, kernel_initializer=get_initializer(self.initializer_range), name="dense"
+        )
+        if isinstance(config.hidden_act, str):
+            self.activation = get_tf_activation(config.hidden_act)
+        else:
+            self.activation = config.hidden_act
 
     def build(self, input_shape: tf.TensorShape):
-        self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+        self.decoder = self.add_weight(
+            name="output_embeddings",
+            shape=[self.vocab_size, self.output_embedding_size],
+            initializer=get_initializer(self.initializer_range),
+        )
+        self.decoder_bias = self.add_weight(
+            shape=(self.vocab_size,), initializer="zeros", trainable=True, name="decoder/bias"
+        )
 
         super().build(input_shape)
 
     def get_output_embeddings(self) -> tf.keras.layers.Layer:
-        return self.input_embeddings
+        return self.decoder
 
     def set_output_embeddings(self, value: tf.Variable):
-        self.input_embeddings.weight = value
-        self.input_embeddings.vocab_size = shape_list(value)[0]
+        self.decoder.weight = value
+        self.decoder.vocab_size = shape_list(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
-        return {"bias": self.bias}
+        return {"decoder_bias": self.decoder_bias}
 
     def set_bias(self, value: tf.Variable):
-        self.bias = value["bias"]
-        self.vocab_size = shape_list(value["bias"])[0]
+        self.decoder_bias = value["decoder_bias"]
+        self.vocab_size = shape_list(value["decoder_bias"])[0]
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
-        hidden_states = self.transform(hidden_states=hidden_states)
-        seq_length = shape_list(hidden_states)[1]
-        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.activation(hidden_states)
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.output_embedding_size])
+        # import pdb; pdb.set_trace()
+        hidden_states = tf.matmul(a=hidden_states, b=self.decoder, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
-        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
-
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.decoder_bias)
         return hidden_states
 
 
@@ -484,6 +495,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
 
         self.embeddings = TFRemBertEmbeddings(config, name="embeddings")
         self.encoder = TFRemBertEncoder(config, name="encoder")
+        self.pooler = TFRemBertPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         return self.embeddings
@@ -590,12 +602,14 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         )
 
         sequence_output = encoder_outputs[0]
+        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not inputs["return_dict"]:
-            return (sequence_output,) + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return TFBaseModelOutput(
+        return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
