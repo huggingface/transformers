@@ -11,7 +11,7 @@ python run_asr.py \
 --logging_steps="50" \
 --learning_rate="5e-4" \
 --warmup_steps="3000" \
---model_name_or_path="facebook/wav2vec2-base" \
+--model_name_or_path="facebook/wav2vec2-large-xlsr" \
 --fp16 \
 --dataset_name="arabic_speech_corpus" \
 --train_split_name="train" \
