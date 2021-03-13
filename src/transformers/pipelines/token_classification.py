@@ -86,7 +86,7 @@ class TokenClassificationPipeline(Pipeline):
         task: str = "",
         grouped_entities: bool = False,
         subword_label_re_alignment: Union[bool, str] = False,
-        ignore_subwords: bool = False
+        ignore_subwords: bool = False,
     ):
         super().__init__(
             model=model,
@@ -182,9 +182,7 @@ class TokenClassificationPipeline(Pipeline):
 
             entities = []
             # Filter special_tokens
-            filtered_labels_idx = [
-                idx for idx in range(score.shape[0]) if not special_tokens_mask[idx]
-            ]
+            filtered_labels_idx = [idx for idx in range(score.shape[0]) if not special_tokens_mask[idx]]
 
             for idx in filtered_labels_idx:
                 if offset_mapping is not None:
@@ -205,19 +203,18 @@ class TokenClassificationPipeline(Pipeline):
                 entity = {
                     "word": word,
                     "score": score[idx],
-                    "is_subword": is_subword,
                     "index": idx,
                     "start": start_ind,
                     "end": end_ind,
                 }
 
+                if self.grouped_entities or self.subword_label_re_alignment:
+                    entity["is_subword"] = is_subword
+
                 entities += [entity]
 
             if self.subword_label_re_alignment:
-                self.set_subwords_label(
-                    entities,
-                    self.subword_label_re_alignment
-                )
+                self.set_subwords_label(entities, self.subword_label_re_alignment)
             else:
                 for entity in entities:
                     label_idx = entity["score"].argmax()
@@ -225,6 +222,8 @@ class TokenClassificationPipeline(Pipeline):
                     entity["entity"] = label
                     entity["score"] = entity["score"][label_idx]
 
+            # I think we should check self.subword_label_re_alignment here too
+            # because we can't use self.grouped_entities if self.subword_label_re_alignment is false
             if self.grouped_entities:
                 answers += [self.group_entities(entities)]
             # Append ungrouped entities
@@ -236,7 +235,6 @@ class TokenClassificationPipeline(Pipeline):
         return answers
 
     def set_subwords_label(self, entities: List[dict], strategy: str) -> dict:
-
         def sub_words_label(sub_words: List[dict]) -> dict:
             score = np.stack([sub["score"] for sub in sub_words])
             if strategy == "default":
