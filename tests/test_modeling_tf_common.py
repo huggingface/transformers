@@ -172,8 +172,12 @@ class TFModelTesterMixin:
                     "decoder_attention_mask",
                 ]
                 expected_arg_names.extend(
-                    ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
-                    if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
+                    ["head_mask", "decoder_head_mask"] if "head_mask" and "decoder_head_mask" in arg_names else []
+                )
+                # Necessary to handle BART with newly added cross_attn_head_mask
+                expected_arg_names.extend(
+                    ["cross_attn_head_mask", "encoder_outputs"]
+                    if "cross_attn_head_mask" in arg_names
                     else ["encoder_outputs"]
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
@@ -620,7 +624,7 @@ class TFModelTesterMixin:
 
         def check_decoder_attentions_output(outputs):
             out_len = len(outputs)
-            self.assertEqual(out_len % 2, 0)
+            self.assertEqual(min(out_len % 2, out_len % 5), 0)  # differentiation due to newly added cross_attentions
             decoder_attentions = outputs.decoder_attentions
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
@@ -740,7 +744,8 @@ class TFModelTesterMixin:
             if model.config.is_encoder_decoder:
                 check_attentions_validity(outputs.encoder_attentions)
                 check_attentions_validity(outputs.decoder_attentions)
-                check_attentions_validity(outputs.cross_attentions)
+                if "cross_attn_head_mask" in arg_names:
+                    check_attentions_validity(outputs.cross_attentions)
             else:
                 check_attentions_validity(outputs.attentions)
 
