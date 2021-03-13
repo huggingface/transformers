@@ -281,7 +281,7 @@ def init_deepspeed(trainer, num_training_steps):
     """
     import deepspeed
 
-    require_version("deepspeed>=0.3.13")
+    require_version("deepspeed>0.3.12")
 
     args = trainer.args
     ds_config_file = args.deepspeed
@@ -340,26 +340,18 @@ def init_deepspeed(trainer, num_training_steps):
     optimizer = None
     if "optimizer" in config:
         logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
-        logger.info(
-            f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
-        )
 
         # to avoid inconsistent values of lr and warm up steps the command line args override config
-        if "lr" in config["optimizer"]["params"]:
-            logger.info(f"setting optimizer.params.lr to {args.learning_rate}")
-            config["optimizer"]["params"]["lr"] = args.learning_rate
-
-        if "betas" in config["optimizer"]["params"]:
-            logger.info(f"setting optimizer.params.betas to {[args.adam_beta1, args.adam_beta2]}")
-            config["optimizer"]["params"]["betas"] = [args.adam_beta1, args.adam_beta2]
-
-        if "eps" in config["optimizer"]["params"]:
-            logger.info(f"setting optimizer.params.eps to {args.adam_epsilon}")
-            config["optimizer"]["params"]["eps"] = args.adam_epsilon
-
-        if "weight_decay" in config["optimizer"]["params"]:
-            logger.info(f"setting optimizer.params.weight_decay to {args.weight_decay}")
-            config["optimizer"]["params"]["weight_decay"] = args.weight_decay
+        params = dict(
+            lr=args.learning_rate,
+            betas=[args.adam_beta1, args.adam_beta2],
+            eps=args.adam_epsilon,
+            weight_decay=args.weight_decay,
+        )
+        for k, v in params.items():
+            if k in config["optimizer"]["params"]:
+                logger.info(f"setting optimizer.params.{k} to {v}")
+                config["optimizer"]["params"][k] = v
 
     else:  # override only if the ds config doesn't already have this section
         if (
@@ -395,13 +387,14 @@ def init_deepspeed(trainer, num_training_steps):
             config["scheduler"]["params"]["total_num_steps"] = num_training_steps
 
         # to avoid inconsistent values of lr and warmup steps the command line args override config
-        if "warmup_max_lr" in config["scheduler"]["params"]:
-            logger.info(f"setting scheduler.params.warmup_max_lr to {args.learning_rate}")
-            config["scheduler"]["params"]["warmup_max_lr"] = args.learning_rate
-
-        if "warmup_num_steps" in config["scheduler"]["params"]:
-            logger.info(f"setting scheduler.params.warmup_num_steps to {args.learning_rate}")
-            config["scheduler"]["params"]["warmup_num_steps"] = args.warmup_steps
+        params = dict(
+            warmup_max_lr=args.learning_rate,
+            warmup_num_steps=args.warmup_steps,
+        )
+        for k, v in params.items():
+            if k in config["scheduler"]["params"]:
+                logger.info(f"setting scheduler.params.{k} to {v}")
+                config["scheduler"]["params"][k] = v
 
     else:  # override only if the ds config doesn't already have this section
         if "optimizer" in config:
@@ -439,6 +432,9 @@ def init_deepspeed(trainer, num_training_steps):
 
     # for clarity extract the specific cl args that are being passed to deepspeed
     ds_args = dict(local_rank=args.local_rank)
+
+    # keep for quick debug:
+    # from pprint import pprint; pprint(config)
 
     # init that takes part of the config via `args`, and the bulk of it via `config_params`
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
