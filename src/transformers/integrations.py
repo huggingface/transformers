@@ -338,13 +338,20 @@ def init_deepspeed(trainer, num_training_steps):
             f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
-        # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-        # But trainer uses AdamW by default.
-        # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
-        trainer.create_optimizer()
-        optimizer = trainer.optimizer
-        # flag that this is non-native optimizer
-        config["zero_allow_untested_optimizer"] = True
+        if (
+            "zero_optimization" in config
+            and "cpu_offload" in config["zero_optimization"]
+            and config["zero_optimization"]["cpu_offload"] is True
+        ):
+            raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
+        else:
+            # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+            # But trainer uses AdamW by default.
+            # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+            trainer.create_optimizer()
+            optimizer = trainer.optimizer
+            # flag that this is non-native optimizer
+            config["zero_allow_untested_optimizer"] = True
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
@@ -362,8 +369,8 @@ def init_deepspeed(trainer, num_training_steps):
     else:  # override only if the ds config doesn't already have this section
         if "optimizer" in config:
             # to make this option work, we need to init DS optimizer first, then init HS scheduler,
-            # then pass the HS scheduler to DS init
-            raise ValueError("At the moment HF Scheduler + DeepSpeed Optimizer combination is not possible")
+            # then pass the HS scheduler to DS init, which is not possible at the moment
+            raise ValueError("At the moment HF scheduler + DeepSpeed optimizer combination is not possible")
         else:
             trainer.create_scheduler(num_training_steps=num_training_steps)
             lr_scheduler = trainer.lr_scheduler

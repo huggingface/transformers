@@ -92,6 +92,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
             ds_config_dict = deepcopy(self.ds_config_dict)
             del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
             del ds_config_dict["scheduler"]  # force default HF Trainer scheduler
+            ds_config_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
             trainer.train()
@@ -103,6 +104,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = deepcopy(self.ds_config_dict)
             del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
+            ds_config_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
             trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
             trainer.train()
@@ -111,15 +113,31 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
 
     def test_hf_scheduler_ds_optimizer(self):
         # this combo is not possible at the moment
-        a = 0
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = deepcopy(self.ds_config_dict)
             del ds_config_dict["scheduler"]  # force default HF Trainer scheduler
+            ds_config_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            trainer = get_regression_trainer(a=a, local_rank=0, deepspeed=ds_config_dict)
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
             with self.assertRaises(Exception) as context:
                 trainer.train()
-        self.assertTrue("HF Scheduler + DeepSpeed Optimizer combination is not possible" in str(context.exception))
+        self.assertTrue("HF scheduler + DeepSpeed optimizer combination is not possible" in str(context.exception))
+
+    def test_hf_optimizer_with_offload(self):
+        # must not allow non-DS optimizer when using ZERO-offload
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_dict = deepcopy(self.ds_config_dict)
+            del ds_config_dict["optimizer"]  # force default HF Trainer optimizer
+            ds_config_dict["zero_optimization"]["cpu_offload"] = False
+            # sanity check - should the default config change
+            assert (
+                "cpu_offload" in ds_config_dict["zero_optimization"]
+                and ds_config_dict["zero_optimization"]["cpu_offload"] is True
+            )
+            trainer = get_regression_trainer(local_rank=0, deepspeed=ds_config_dict)
+            with self.assertRaises(Exception) as context:
+                trainer.train()
+        self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
 
     def test_early_get_last_lr(self):
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
