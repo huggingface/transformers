@@ -529,8 +529,8 @@ BART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
 
-        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')

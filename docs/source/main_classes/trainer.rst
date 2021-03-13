@@ -21,7 +21,7 @@ Before instantiating your :class:`~transformers.Trainer`/:class:`~transformers.T
 customization during training.
 
 The API supports distributed training on multiple GPUs/TPUs, mixed precision through `NVIDIA Apex
-<https://github.com/NVIDIA/apex>`__ for PyTorch and :obj:`tf.keras.mixed_precision` for TensorFlow.
+<https://github.com/NVIDIA/apex>`__ and Native AMP for PyTorch and :obj:`tf.keras.mixed_precision` for TensorFlow.
 
 Both :class:`~transformers.Trainer` and :class:`~transformers.TFTrainer` contain the basic training loop which supports
 the above features. To inject custom behavior you can subclass them and override the following methods:
@@ -38,6 +38,18 @@ the above features. To inject custom behavior you can subclass them and override
 - **run_model** (TensorFlow only) -- Basic pass through the model.
 - **evaluate** -- Runs an evaluation loop and returns metrics.
 - **predict** -- Returns predictions (with metrics if labels are available) on a test set.
+
+.. warning::
+
+    The :class:`~transformers.Trainer` class is optimized for 🤗 Transformers models and can have surprising behaviors
+    when you use it on other models. When using it on your own model, make sure:
+
+    - your model always return tuples or subclasses of :class:`~transformers.file_utils.ModelOutput`.
+    - your model can compute the loss if a :obj:`labels` argument is provided and that loss is returned as the first
+      element of the tuple (if your model returns tuples)
+    - your model can accept multiple label arguments (use the :obj:`label_names` in your
+      :class:`~transformers.TrainingArguments` to indicate their name to the :class:`~transformers.Trainer`) but none
+      of them should be named :obj:`"label"`.
 
 Here is an example of how to customize :class:`~transformers.Trainer` using a custom loss function for multi-label
 classification:
@@ -323,8 +335,8 @@ Known caveats:
 
 - This feature is incompatible with :obj:`--predict_with_generate` in the `run_seq2seq.py` script.
 - Using :obj:`--sharded_ddp zero_dp_3` requires wrapping each layer of the model in the special container
-  :obj:`FullyShardedDataParallelism` of fairscale. This is not done automatically by any of the example scripts of the
-  :class:`~transformers.Trainer`.
+  :obj:`FullyShardedDataParallelism` of fairscale. It should be used with the option :obj:`auto_wrap` if you are not
+  doing this yourself: :obj:`--sharded_ddp "zero_dp_3 auto_wrap"`.
 
 
 DeepSpeed
@@ -643,7 +655,6 @@ enables FP16, uses AdamW optimizer and WarmupLR scheduler:
            "weight_decay": 3e-7
          }
        },
-       "zero_allow_untested_optimizer": true,
 
        "scheduler": {
          "type": "WarmupLR",
@@ -754,8 +765,8 @@ Optimizer
 =======================================================================================================================
 
 
-DeepSpeed's main optimizers are Adam, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are thus
-recommended to be used. It, however, can import other optimizers from ``torch``. The full documentation is `here
+DeepSpeed's main optimizers are Adam, AdamW, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are
+thus recommended to be used. It, however, can import other optimizers from ``torch``. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#optimizer-parameters>`__.
 
 If you don't configure the ``optimizer`` entry in the configuration file, the :class:`~transformers.Trainer` will
@@ -767,7 +778,6 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
 .. code-block:: json
 
     {
-       "zero_allow_untested_optimizer": true,
        "optimizer": {
            "type": "AdamW",
            "params": {
@@ -779,8 +789,8 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
          }
     }
 
-Since AdamW isn't on the list of tested with DeepSpeed/ZeRO optimizers, we have to add
-``zero_allow_untested_optimizer`` flag.
+If you want to use another optimizer which is not listed above, you will have to add ``"zero_allow_untested_optimizer":
+true`` to the top level configuration.
 
 If you want to use one of the officially supported optimizers, configure them explicitly in the configuration file, and
 make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` around ``0.01``.

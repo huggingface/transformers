@@ -2,7 +2,7 @@ tensorboard
 scikit-learn
 seqeval
 psutil
-sacrebleu
+sacrebleu >= 1.4.12
 rouge-score
 tensorflow_datasets
 matplotlib

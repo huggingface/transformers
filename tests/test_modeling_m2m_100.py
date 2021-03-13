@@ -71,6 +71,8 @@ class M2M100ModelTester:
         hidden_act="relu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
+        encoder_layerdrop=0.0,
+        decoder_layerdrop=0.0,
         max_position_embeddings=20,
         eos_token_id=2,
         pad_token_id=1,
@@ -89,6 +91,8 @@ class M2M100ModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
         self.max_position_embeddings = max_position_embeddings
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
@@ -96,12 +100,18 @@ class M2M100ModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
-
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        # we need to clamp the input ids here to avoid having pad token in between
+        # this is because for M2M100 the position_ids are prepared such that
+        # all pad tokens have pos id = 2 and rest are between 2..seq_length
+        # and the seq_length here is seq_length - num_pad_tokens
+        # but when using past, there is no way of knowing if the past input ids had
+        # pad tokens in them, which results in incorrect seq_lenth and which in turn results in
+        # position_ids being off by num_pad_tokens in past input
+        input_ids = input_ids.clamp(self.pad_token_id + 1)
+        decoder_input_ids = decoder_input_ids.clamp(self.pad_token_id + 1)
 
         config = M2M100Config(
             vocab_size=self.vocab_size,
@@ -114,6 +124,8 @@ class M2M100ModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
+            encoder_layerdrop=self.encoder_layerdrop,
+            decoder_layerdrop=self.decoder_layerdrop,
             max_position_embeddings=self.max_position_embeddings,
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
