@@ -352,7 +352,7 @@ def main():
 
     def prepare_example(example):  # TODO(elgeish) make use of caching and/or multiprocessing
         example["speech"], example["sampling_rate"] = librosa.load(example["file"], sr=target_sr)
-        example["duration_in_seconds"] = len(example["speech"]) / target_sr
+        example["duration_in_seconds"] = len(example["speech"]) / example["sampling_rate"]
         # Normalize and clean up text; order matters!
         updated_text = orthography.preprocess_for_training(example["text"])
         updated_text = vocabulary_text_cleaner.sub("", updated_text)
