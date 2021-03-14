@@ -352,7 +352,8 @@ def main():
 
     def prepare_example(example):  # TODO(elgeish) make use of caching and/or multiprocessing
         example["speech"], example["sampling_rate"] = librosa.load(example["file"], sr=target_sr)
-        example["duration_in_seconds"] = len(example["speech"]) / example["sampling_rate"]
+        if data_args.max_duration_in_seconds is not None:
+            example["duration_in_seconds"] = len(example["speech"]) / example["sampling_rate"]
         # Normalize and clean up text; order matters!
         updated_text = orthography.preprocess_for_training(example["text"])
         updated_text = vocabulary_text_cleaner.sub("", updated_text)
@@ -371,8 +372,8 @@ def main():
 
         old_train_size = len(train_dataset)
         old_val_size = len(val_dataset)
-        train_dataset = train_dataset.filter(filter_by_max_duration)
-        val_dataset = val_dataset.filter(filter_by_max_duration)
+        train_dataset = train_dataset.filter(filter_by_max_duration, remove_columns=["duration_in_seconds"])
+        val_dataset = val_dataset.filter(filter_by_max_duration, remove_columns=["duration_in_seconds"])
         if len(train_dataset) > old_train_size:
             logger.warning(
                 f"Filtered out {len(train_dataset) - old_train_size} train example(s) longer than {data_args.max_duration_in_seconds} second(s)."
