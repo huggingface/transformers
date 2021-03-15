@@ -163,11 +163,15 @@ class Orthography:
                 translation_table=str.maketrans({"-": " "}),
             )
         if name == "buckwalter":
+            translation_table = {
+                "-": " ",  # sometimes used to represent pauses
+                "^": "v",  # fixing "tha" in arabic_speech_corpus dataset
+            }
             return cls(
                 vocab_file=pathlib.Path(__file__).parent.joinpath("vocab/buckwalter.json"),
                 word_delimiter_token="/",  # "|" is Arabic letter alef with madda above
-                translation_table=str.maketrans({"-": " "}),  # sometimes used to represent pauses
-                words_to_remove={"sil"},  # until we have a "<sil>" special token
+                translation_table=str.maketrans(translation_table),
+                words_to_remove={"sil"},  # fixing "sil" in arabic_speech_corpus dataset
                 untransliterator=arabic.buckwalter.untransliterate,
             )
         raise ValueError(f"Unsupported orthography: '{name}'.")
@@ -177,7 +181,7 @@ class Orthography:
         if len(self.translation_table) > 0:
             text = text.translate(self.translation_table)
         if len(self.words_to_remove) == 0:
-            text = " ".join(text.split())  # clean up whilespaces
+            text = " ".join(text.split())  # clean up whitespaces
         else:
             text = " ".join(w for w in text.split() if w not in self.words_to_remove)  # and clean up whilespaces
         return text
