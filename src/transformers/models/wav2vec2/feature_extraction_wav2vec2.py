@@ -33,8 +33,9 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2 feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.Wav2Vec2FeatureExtractor` which contains most of the
-    main methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from
+    :class:`~transformers.feature_extraction_sequence_utils.SequenceFeatureExtractor` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         feature_size (:obj:`int`, defaults to 1):
@@ -102,7 +103,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
             raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
