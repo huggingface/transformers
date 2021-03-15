@@ -64,7 +64,6 @@ To browse the examples corresponding to released versions of 🤗 Transformers, 
   - [v1.1.0](https://github.com/huggingface/transformers/tree/v1.1.0/examples)
   - [v1.0.0](https://github.com/huggingface/transformers/tree/v1.0.0/examples)
 </details>
-<br>
 
 Alternatively, you can find switch your cloned 🤗 Transformers to a specific version (for instance with v3.5.1) with
 ```bash
