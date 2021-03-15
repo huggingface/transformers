@@ -114,7 +114,7 @@ def is_pt_flax_cross_test(test_case):
     variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
 
     """
-    if not _run_pt_tf_cross_tests or not is_torch_available() or not is_flax_available():
+    if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
         return unittest.skip("test is PT+FLAX test")(test_case)
     else:
         try:
