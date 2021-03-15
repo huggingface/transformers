@@ -162,7 +162,12 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, tokenizer.eos_token_id]
         batch = tokenizer(src_text, padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch, BatchEncoding)
-        result = list(batch.input_ids.numpy()[0])
+
+        if FRAMEWORK != "jax":
+            result = list(batch.input_ids.numpy()[0])
+        else:
+            result = list(batch.input_ids.tolist()[0])
+
         self.assertListEqual(expected_src_tokens, result)
 
         self.assertEqual((2, 9), batch.input_ids.shape)
