@@ -40,6 +40,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "rembert-large": 256,
 }
 
+SPIECE_UNDERLINE = "▁"
+
 
 class RemBertTokenizer(PreTrainedTokenizer):
     """
