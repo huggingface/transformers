@@ -1,4 +1,5 @@
-.. 
+
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -51,21 +52,12 @@ Tips:
   as Google's `Tesseract <https://github.com/tesseract-ocr/tesseract>`__ (there's a `Python wrapper
   <https://pypi.org/project/pytesseract/>`__ available). Each bounding box should be in (x0, y0, x1, y1) format, where
   (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1, y1) represents the
-  position of the lower right corner. Note that one first needs to normalize the bounding boxes to be on a 0-1000
-  scale. To normalize, you can use the following function:
-
-.. code-block::
-
-   def normalize_bbox(bbox, width, height):
-        return [
-            int(1000 * (bbox[0] / width)),
-            int(1000 * (bbox[1] / height)),
-            int(1000 * (bbox[2] / width)),
-            int(1000 * (bbox[3] / height)),
-        ]
-
-Here, :obj:`width` and :obj:`height` correspond to the width and height of the original document in which the token
-occurs. Those can be obtained using the Python Image Library (PIL) library for example, as follows:
+  position of the lower right corner. Those values must be normalized to integer values. LayoutLMTokenizer takes care
+  of this rounding. Additionally, it may scale the bounding boxes to an expected target width and height (supplied as
+  parameter for the tokenizer class with :obj:`target_height_and_width`, default is 1000x1000). When encoding the
+  input, you may provide an :obj:`orig_height_and_width` parameter correspond to the width and height of the original
+  document in which the token occurs. Width and height can be obtained using the Python Image Library (PIL) library for
+  example, as follows:
 
 .. code-block::
 
@@ -82,6 +74,10 @@ occurs. Those can be obtained using the Python Image Library (PIL) library for e
 
 The original code can be found `here <https://github.com/microsoft/unilm/tree/master/layoutlm>`_.
 
+- the LayoutLMTokenizer may split some of the tokens passed in input_ids further according to the wordpiece algorithm
+  the corresponding bounding boxes will be repeated accordingly for all these tokens, this leads to a larger amount of
+  bounding boxes and outputs!
+
 
 LayoutLMConfig
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -94,13 +90,6 @@ LayoutLMTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.LayoutLMTokenizer
-    :members:
-
-
-LayoutLMTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.LayoutLMTokenizerFast
     :members:
 
 

@@ -2258,15 +2258,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def _check_input_type(self, text, input_name: str):
         # Input type checking for clearer error
         assert isinstance(text, str) or (
-                isinstance(text, (list, tuple))
-                and (
-                        len(text) == 0
-                        or (
-                                isinstance(text[0], str)
-                                or (isinstance(text[0], (list, tuple)) and (
-                                    len(text[0]) == 0 or isinstance(text[0][0], str)))
-                        )
+            isinstance(text, (list, tuple))
+            and (
+                len(text) == 0
+                or (
+                    isinstance(text[0], str)
+                    or (isinstance(text[0], (list, tuple)) and (len(text[0]) == 0 or isinstance(text[0][0], str)))
                 )
+            )
         ), (
             f"{input_name} input must be of type `str` (single example),"
             " `List[str]` (batch or single pretokenized example) "

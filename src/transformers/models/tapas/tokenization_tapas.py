@@ -2082,7 +2082,7 @@ class BasicTokenizer(object):
         # despite its name. The modern Korean Hangul alphabet is a different block,
         # as is Japanese Hiragana and Katakana. Those alphabets are used to write
         # space-separated words, so they are not treated specially and handled
-        # like the all of the other languages.
+        # like all of the other languages.
         if (
             (cp >= 0x4E00 and cp <= 0x9FFF)
             or (cp >= 0x3400 and cp <= 0x4DBF)  #
@@ -2125,7 +2125,7 @@ class WordpieceTokenizer(object):
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
 
-        For example, :obj:`input = "unaffable"` wil return as output :obj:`["un", "##aff", "##able"]`.
+        For example, :obj:`input = "unaffable"` will return as output :obj:`["un", "##aff", "##able"]`.
 
         Args:
           text: A single token or whitespace separated tokens. This should have
