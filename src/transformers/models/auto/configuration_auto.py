@@ -19,6 +19,7 @@ from collections import OrderedDict
 
 from ...configuration_utils import PretrainedConfig
 from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+from ..vit.configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
@@ -80,7 +81,11 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+<<<<<<< HEAD
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+=======
+        VIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+>>>>>>> 8352309bd... First commit - copy from modeling_vit_pytorch
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -128,6 +133,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("speech_to_text", Speech2TextConfig),
+        ("vit", ViTConfig),
         ("wav2vec2", Wav2Vec2Config),
         ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
@@ -180,7 +186,11 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+<<<<<<< HEAD
         ("speech_to_text", "Speech2Text"),
+=======
+        ("vit", "ViT"),
+>>>>>>> 8352309bd... First commit - copy from modeling_vit_pytorch
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),

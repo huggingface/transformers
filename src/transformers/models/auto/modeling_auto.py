@@ -226,6 +226,10 @@ from ..tapas.modeling_tapas import (
     TapasModel,
 )
 from ..transfo_xl.modeling_transfo_xl import TransfoXLForSequenceClassification, TransfoXLLMHeadModel, TransfoXLModel
+from ..vit.modeling_vit import (
+    ViTForImageClassification,
+    ViTModel,
+)
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2ForMaskedLM, Wav2Vec2Model
 from ..xlm.modeling_xlm import (
     XLMForMultipleChoice,
@@ -258,6 +262,7 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
+    ViTConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
@@ -316,6 +321,7 @@ MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
         (Speech2TextConfig, Speech2TextModel),
+        (ViTConfig, ViTModel),
         (Wav2Vec2Config, Wav2Vec2Model),
         (M2M100Config, M2M100Model),
         (ConvBertConfig, ConvBertModel),

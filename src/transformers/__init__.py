@@ -126,6 +126,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
+    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTImageProcessor"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -397,6 +398,14 @@ if is_torch_available():
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Speech2TextForConditionalGeneration",
             "Speech2TextModel",
+    _import_structure["models.vit"].extend(
+        [
+            "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ViTForImageClassification",
+            "ViTLayer",
+            "ViTModel",
+            "ViTPreTrainedModel",
+            "load_tf_weights_in_vit",
         ]
     )
 
@@ -1334,6 +1343,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTImageProcessor
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1536,6 +1546,15 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.vit import (
+            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTForImageClassification,
+            ViTLayer,
+            ViTModel,
+            ViTPreTrainedModel,
+            load_tf_weights_in_vit,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
