@@ -81,11 +81,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
-<<<<<<< HEAD
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-=======
         VIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
->>>>>>> 8352309bd... First commit - copy from modeling_vit_pytorch
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -186,11 +183,8 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-<<<<<<< HEAD
         ("speech_to_text", "Speech2Text"),
-=======
         ("vit", "ViT"),
->>>>>>> 8352309bd... First commit - copy from modeling_vit_pytorch
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),
