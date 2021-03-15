@@ -25,7 +25,6 @@ from typing import Optional
 
 import numpy as np
 from datasets import load_dataset, load_metric
-from packaging import version
 
 import transformers
 from transformers import (
