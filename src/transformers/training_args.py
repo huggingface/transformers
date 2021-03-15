@@ -526,6 +526,8 @@ class TrainingArguments:
                 "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `IntervalStrategy` instead",
                 FutureWarning,
             )
+            # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
+            self.evaluation_strategy = self.evaluation_strategy.value
 
         self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
