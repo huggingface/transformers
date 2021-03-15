@@ -35,7 +35,7 @@ from transformers.trainer_utils import set_seed
 
 bindir = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(f"{bindir}/../../seq2seq")
-from run_seq2seq import main  # noqa
+from run_translation import main  # noqa
 
 
 set_seed(42)
@@ -209,7 +209,6 @@ class TestTrainerExt(TestCasePlus):
             --group_by_length
             --label_smoothing_factor 0.1
             --adafactor
-            --task translation
             --target_lang ro_RO
             --source_lang en_XX
         """
@@ -226,12 +225,12 @@ class TestTrainerExt(TestCasePlus):
             distributed_args = f"""
                 -m torch.distributed.launch
                 --nproc_per_node={n_gpu}
-                {self.examples_dir_str}/seq2seq/run_seq2seq.py
+                {self.examples_dir_str}/seq2seq/run_translation.py
             """.split()
             cmd = [sys.executable] + distributed_args + args
             execute_subprocess_async(cmd, env=self.get_env())
         else:
-            testargs = ["run_seq2seq.py"] + args
+            testargs = ["run_translation.py"] + args
             with patch.object(sys, "argv", testargs):
                 main()
 
