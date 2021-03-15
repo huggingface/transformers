@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...file_utils import is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import is_tf_available, is_tokenizers_available, is_torch_available
 from .configuration_electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig
 from .tokenization_electra import ElectraTokenizer
 
@@ -50,6 +50,3 @@ if is_tf_available():
         TFElectraModel,
         TFElectraPreTrainedModel,
     )
-
-if is_flax_available():
-    from .modeling_flax_electra import FlaxElectraForMaskedLM, FlaxElectraForPreTraining, FlaxElectraModel
