@@ -49,8 +49,7 @@ Library:
 Documentation: @sgugger
 
 Model hub: 
-- UI : XXX?
-- code: XXX?
+- for issues with a model report at https://discuss.huggingface.co/ and tag the model's creator.
 
 HF projects:
 
