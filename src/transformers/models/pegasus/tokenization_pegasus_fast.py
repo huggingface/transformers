@@ -54,8 +54,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
