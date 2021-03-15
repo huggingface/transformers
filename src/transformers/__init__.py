@@ -398,6 +398,8 @@ if is_torch_available():
             "SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Speech2TextForConditionalGeneration",
             "Speech2TextModel",
+        ]
+    )
     _import_structure["models.vit"].extend(
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
