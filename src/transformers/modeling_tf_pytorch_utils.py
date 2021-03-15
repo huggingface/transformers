@@ -57,7 +57,7 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
 
     # When should we transpose the weights
     transpose = bool(
-        tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
+        tf_name[-1] in ["kernel", "recurrent_kernel", "pointwise_kernel", "depthwise_kernel"]
         or "emb_projs" in tf_name
         or "out_projs" in tf_name
     )
