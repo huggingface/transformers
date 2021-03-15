@@ -515,6 +515,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         import soundfile as sf
 
+        ids = [f"1272-141231-000{i}" for i in range(num_samples)]
+
         # map files to raw
         def map_to_array(batch):
             speech, _ = sf.read(batch["file"])
@@ -522,7 +524,8 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             return batch
 
         ds = load_dataset("patrickvonplaten/librispeech_asr_dummy", "clean", split="validation")
-        ds = ds.select(range(num_samples)).map(map_to_array)
+
+        ds = ds.filter(lambda x: x["id"] in ids).sort("id").map(map_to_array)
 
         return ds["speech"][:num_samples]
 
