@@ -2201,41 +2201,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 :obj:`is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
-        # Input type checking for clearer error
-        assert isinstance(text, str) or (
-            isinstance(text, (list, tuple))
-            and (
-                len(text) == 0
-                or (
-                    isinstance(text[0], str)
-                    or (isinstance(text[0], (list, tuple)) and (len(text[0]) == 0 or isinstance(text[0][0], str)))
-                )
-            )
-        ), (
-            "text input must of type `str` (single example), `List[str]` (batch or single pretokenized example) "
-            "or `List[List[str]]` (batch of pretokenized examples)."
-        )
-
-        assert (
-            text_pair is None
-            or isinstance(text_pair, str)
-            or (
-                isinstance(text_pair, (list, tuple))
-                and (
-                    len(text_pair) == 0
-                    or (
-                        isinstance(text_pair[0], str)
-                        or (
-                            isinstance(text_pair[0], (list, tuple))
-                            and (len(text_pair[0]) == 0 or isinstance(text_pair[0][0], str))
-                        )
-                    )
-                )
-            )
-        ), (
-            "text_pair input must of type `str` (single example), `List[str]` (batch or single pretokenized example) "
-            "or `List[List[str]]` (batch of pretokenized examples)."
-        )
+        self._check_input_type(text, input_name="text")
+        if text_pair is not None:
+            self._check_input_type(text_pair, input_name="text_pair")
 
         is_batched = bool(
             (not is_split_into_words and isinstance(text, (list, tuple)))
@@ -2286,6 +2254,24 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 verbose=verbose,
                 **kwargs,
             )
+
+    def _check_input_type(self, text, input_name: str):
+        # Input type checking for clearer error
+        assert isinstance(text, str) or (
+                isinstance(text, (list, tuple))
+                and (
+                        len(text) == 0
+                        or (
+                                isinstance(text[0], str)
+                                or (isinstance(text[0], (list, tuple)) and (
+                                    len(text[0]) == 0 or isinstance(text[0][0], str)))
+                        )
+                )
+        ), (
+            f"{input_name} input must be of type `str` (single example),"
+            " `List[str]` (batch or single pretokenized example) "
+            "or `List[List[str]]` (batch of pretokenized examples)."
+        )
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
