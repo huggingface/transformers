@@ -244,7 +244,6 @@ def main():
             data_files["validation"] = data_args.validation_file
             extension = data_args.validation_file.split(".")[-1]
 
-        assert extension, "Must provide train and/or valiation file."
         datasets = load_dataset(extension, data_files=data_files, field="data")
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
