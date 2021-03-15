@@ -50,7 +50,7 @@ if __name__ == "__main__":
     >>> # config for bigbird base
     >>> config = BigBirdConfig()
 
-    >>> # config for bigbird trivia ckpts (both ITC & ETC)
+    >>> # config for bigbird trivia ITC ckpt
     >>> config = BigBirdConfig(type_vocab_size=16)
 
     >>> # config for bigbird large
