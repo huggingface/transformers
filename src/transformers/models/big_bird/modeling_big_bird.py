@@ -861,7 +861,6 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         if output_attentions:
             # TODO: need to verify if below code is correct
-
             attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device)
 
             # corresponding to `first_context_layer`
@@ -918,12 +917,19 @@ class BigBirdBlockSparseAttention(nn.Module):
 
     @staticmethod
     def torch_gather_b2(params, indices):
-        batch_dims = 2
-        assert params.shape[:batch_dims] == indices.shape[:batch_dims]
 
-        out = torch.stack(
-            [torch.stack([p2[i2.flatten()] for p2, i2 in zip(p1, i1)]) for p1, i1 in zip(params, indices)]
-        )
+        assert params.shape[:2] == indices.shape[:2], f"Make sure that the first two dimensions of params and indices are identical, but they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
+        num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
+        num_indices_to_pick_from = params.shape[2]
+
+        indices_shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device) // num_indices_to_gather * num_indices_to_pick_from
+
+        flattened_indices = indices.view(-1) + indices_shift
+        flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])
+
+        out_flattened = flattened_params.index_select(0, flattened_indices)
+
+        out = out_flattened.reshape(params.shape[:2] + (num_indices_to_gather,) + params.shape[3:])
         return out
 
     @staticmethod

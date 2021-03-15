@@ -517,6 +517,22 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
             config_and_inputs[0].attention_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skipIf(torch_device == "cpu", "Fast integration only compatible on GPU")
+    def test_fast_integration(self):
+        torch.manual_seed(0)
+
+        input_ids = torch.randint(self.model_tester.vocab_size, (self.model_tester.batch_size, self.model_tester.seq_length), device=torch_device)
+        attention_mask = torch.ones((self.model_tester.batch_size, self.model_tester.seq_length), device=torch_device)
+        attention_mask[:, :-10] = 0
+        token_type_ids = torch.randint(self.model_tester.type_vocab_size, (self.model_tester.batch_size, self.model_tester.seq_length), device=torch_device)
+
+        config, _, _, _, _, _, _ = self.model_tester.prepare_config_and_inputs()
+        model = BigBirdModel(config).to(torch_device).eval()
+
+        with torch.no_grad():
+            hidden_states = model(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask).last_hidden_state
+            self.assertTrue(torch.allclose(hidden_states[0, 0, :5], torch.tensor([-0.6326,  0.6124, -0.0844,  0.6698, -1.7155], device=torch_device), atol=1e-3))
+
 
 @require_torch
 @slow
@@ -897,6 +913,8 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             truncation=True,
         )
 
+        inputs = {k: v.to(torch_device) for k,v in inputs.items()}
+
         start_logits, end_logits = model(**inputs).to_tuple()
 
         target_start_logits = torch.tensor(
@@ -1049,7 +1067,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(start_logits[:, 64:96], target_start_logits, atol=1e-4))
         self.assertTrue(torch.allclose(end_logits[:, 64:96], target_end_logits, atol=1e-4))
 
-        input_ids = inputs.input_ids.tolist()
+        input_ids = inputs["input_ids"].tolist()
         answer = [
             input_ids[i][torch.argmax(start_logits, dim=-1)[i] : torch.argmax(end_logits, dim=-1)[i] + 1]
             for i in range(len(input_ids))
