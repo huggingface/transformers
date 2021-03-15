@@ -742,8 +742,8 @@ Summarization
 -----------------------------------------------------------------------------------------------------------------------
 
 Summarization is the task of summarizing a document or an article into a shorter text. If you would like to fine-tune a
-model on a summarization task, you may leverage the `run_seq2seq.py
-<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_seq2seq.py>`__ script.
+model on a summarization task, you may leverage the `run_summarization.py
+<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_summarization.py>`__ script.
 
 An example of a summarization dataset is the CNN / Daily Mail dataset, which consists of long news articles and was
 created for the task of summarization. If you would like to fine-tune a model on a summarization task, various
@@ -822,8 +822,8 @@ Translation
 -----------------------------------------------------------------------------------------------------------------------
 
 Translation is the task of translating a text from one language to another. If you would like to fine-tune a model on a
-translation task, you may leverage the `run_seq2seq.py
-<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_seq2seq.py>`__ script.
+translation task, you may leverage the `run_translation.py
+<https://github.com/huggingface/transformers/tree/master/examples/seq2seq/run_translation.py>`__ script.
 
 An example of a translation dataset is the WMT English to German dataset, which has sentences in English as the input
 data and the corresponding sentences in German as the target data. If you would like to fine-tune a model on a

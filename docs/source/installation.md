@@ -168,13 +168,13 @@ Here is an example of how this can be used on a filesystem that is shared betwee
 On the instance with the normal network run your program which will download and cache models (and optionally datasets if you use 🤗 Datasets). For example:
 
 ```
-python examples/seq2seq/run_seq2seq.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/seq2seq/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 
 and then with the same filesystem you can now run the same program on a firewalled instance:
 ```
 HF_DATASETS_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
-python examples/seq2seq/run_seq2seq.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
+python examples/seq2seq/run_translation.py --model_name_or_path t5-small --dataset_name wmt16 --dataset_config ro-en ...
 ```
 and it should succeed without any hanging waiting to timeout.
 
