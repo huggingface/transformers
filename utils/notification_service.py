@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import os
+import re
 import sys
 
-import requests
+from slack_sdk import WebClient
 
 
 def handle_test_results(test_results):
@@ -112,46 +112,51 @@ if __name__ == "__main__":
         # The scheduled run has several artifacts for each job.
         file_paths = {
             "TF Single GPU": {
-                "common": "run_all_tests_tf_gpu_test_reports/tests_tf_gpu_stats.txt",
-                "pipeline": "run_all_tests_tf_gpu_test_reports/tests_tf_pipeline_gpu_stats.txt",
+                "common": "run_all_tests_tf_gpu_test_reports/tests_tf_gpu_[].txt",
+                "pipeline": "run_all_tests_tf_gpu_test_reports/tests_tf_pipeline_gpu_[].txt",
             },
             "Torch Single GPU": {
-                "common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_stats.txt",
-                "pipeline": "run_all_tests_torch_gpu_test_reports/tests_torch_pipeline_gpu_stats.txt",
-                "examples": "run_all_tests_torch_gpu_test_reports/examples_torch_gpu_stats.txt",
+                "common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_[].txt",
+                "pipeline": "run_all_tests_torch_gpu_test_reports/tests_torch_pipeline_gpu_[].txt",
+                "examples": "run_all_tests_torch_gpu_test_reports/examples_torch_gpu_[].txt",
             },
             "TF Multi GPU": {
-                "common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_stats.txt",
-                "pipeline": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_pipeline_multi_gpu_stats.txt",
+                "common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_[].txt",
+                "pipeline": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_pipeline_multi_gpu_[].txt",
             },
             "Torch Multi GPU": {
-                "common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_stats.txt",
-                "pipeline": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_pipeline_multi_gpu_stats.txt",
+                "common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt",
+                "pipeline": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_pipeline_multi_gpu_[].txt",
             },
         }
     else:
         file_paths = {
-            "TF Single GPU": {"common": "run_all_tests_tf_gpu_test_reports/tests_tf_gpu_stats.txt"},
-            "Torch Single GPU": {"common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_stats.txt"},
-            "TF Multi GPU": {"common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_stats.txt"},
-            "Torch Multi GPU": {
-                "common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_stats.txt"
-            },
+            "TF Single GPU": {"common": "run_all_tests_tf_gpu_test_reports/tests_tf_gpu_[].txt"},
+            "Torch Single GPU": {"common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_[].txt"},
+            "TF Multi GPU": {"common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_[].txt"},
+            "Torch Multi GPU": {"common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt"},
         }
+
+    client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
+    channel_id = os.environ["CI_SLACK_CHANNEL_ID"]
 
     try:
         results = {}
         for job, file_dict in file_paths.items():
 
             # Single return value for failed/success across steps of a same job
-            results[job] = {"failed": 0, "success": 0, "time_spent": ""}
+            results[job] = {"failed": 0, "success": 0, "time_spent": "", "failures": ""}
 
             for key, file_path in file_dict.items():
-                with open(file_path) as f:
+                with open(file_path.replace("[]", "stats")) as f:
                     failed, success, time_spent = handle_test_results(f.read())
                     results[job]["failed"] += failed
                     results[job]["success"] += success
                     results[job]["time_spent"] += time_spent[1:-1] + ", "
+                with open(file_path.replace("[]", "summary_short")) as f:
+                    for line in f:
+                        if re.search("FAILED", line):
+                            results[job]["failures"] += line
 
             # Remove the trailing ", "
             results[job]["time_spent"] = results[job]["time_spent"][:-2]
@@ -164,9 +169,17 @@ if __name__ == "__main__":
 
         to_be_sent_to_slack = format_for_slack(total, results, scheduled)
 
-        url = os.environ["CI_SLACK_WEBHOOK_URL"]
-        headers = {"content-type": "application/json", "Accept-Charset": "UTF-8"}
-        r = requests.post(url, data=json.dumps(to_be_sent_to_slack), headers=headers)
+        result = client.chat_postMessage(
+            channel=channel_id,
+            blocks=to_be_sent_to_slack["blocks"],
+        )
+
+        for job, job_result in results.items():
+            if len(job_result["failures"]):
+                client.chat_postMessage(
+                    channel=channel_id, text=f"{job}\n{job_result['failures']}", thread_ts=result["ts"]
+                )
+
     except Exception as e:
         # Voluntarily catch every exception and send it to Slack.
         raise Exception(f"Setup error: no artifacts were found. Error: {e}") from e
