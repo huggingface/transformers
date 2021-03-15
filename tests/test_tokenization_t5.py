@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, T5Tokenizer, T5TokenizerFast
-from transformers.file_utils import cached_property, is_torch_available
+from transformers.file_utils import cached_property, is_tf_available, is_torch_available
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers
 
 from .test_tokenization_common import TokenizerTesterMixin
@@ -25,7 +25,12 @@ from .test_tokenization_common import TokenizerTesterMixin
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
-FRAMEWORK = "pt" if is_torch_available() else "tf"
+if is_torch_available():
+    FRAMEWORK = "pt"
+elif is_tf_available():
+    FRAMEWORK = "tf"
+else:
+    FRAMEWORK = "jax"
 
 
 @require_sentencepiece
