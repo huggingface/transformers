@@ -18,10 +18,15 @@ import re
 
 
 PATH_TO_EXAMPLES = "examples/"
+replace_patterns = {
+    "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
+    "init": (re.compile(r'^__version__\s+=\s+"[^"]+"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
+    "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), '\1version="VERSION",'),
+}
 _re_min_version = re.compile(r'^check_min_version\("([^"]+)"\)\s*$', re.MULTILINE)
 
 
-def bump_version_in_file(file, version):
+def update_version_in_file(file, version):
     with open(file, "r") as f:
         code = f.read()
     code = _re_min_version.sub(f'check_min_version("{version}")\n', code)
@@ -29,7 +34,7 @@ def bump_version_in_file(file, version):
         f.write(code)
 
 
-def bump_version_in_examples(version):
+def update_version_in_examples(version):
     for folder, directories, files in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
         if "research_projects" in directories:
@@ -38,5 +43,9 @@ def bump_version_in_examples(version):
             directories.remove("legacy")
         for file in files:
             if file.endswith(".py"):
-                print(os.path.join(folder, file))
                 bump_version_in_file(os.path.join(folder, file), version)
+
+
+def global_version_update(version):
+
+    bump_version_in_examples(version)
