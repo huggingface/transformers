@@ -40,7 +40,6 @@ def main():
         last_comment = comments[0] if len(comments) > 0 else None
         if (
             last_comment is not None and last_comment.user.login == "github-actions[bot]"
-            and not issue.assignees
             and (dt.utcnow() - issue.updated_at).days > 7
             and (dt.utcnow() - issue.created_at).days >= 30
             and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
@@ -48,8 +47,7 @@ def main():
             print(f"Would close issue {issue.number} since it has been 7 days of inactivity since bot mention.")
             # issue.edit(state="closed")
         elif (
-            not issue.assignees
-            and (dt.utcnow() - issue.updated_at).days > 23
+            (dt.utcnow() - issue.updated_at).days > 23
             and (dt.utcnow() - issue.created_at).days >= 30
             and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
         ):
@@ -61,15 +59,6 @@ def main():
             #     "[contributing guidelines](https://github.com/huggingface/transformers/blob/master/CONTRIBUTING.md) "
             #     "are likely to be ignored."
             # )
-        elif (
-            len(issue.assignees) > 0
-            and (dt.utcnow() - issue.updated_at).days > 21
-            and (dt.utcnow() - issue.created_at).days >= 30
-            and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
-        ):
-            for assignee in issue.assignees:
-                print(f"This issue ({issue.number}) has been stale for a while, ping @{assignee.login}")
-                # issue.create_comment(f"This issue has been stale for a while, ping @{assignee.login}")
 
 
 if __name__ == "__main__":
