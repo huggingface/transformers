@@ -786,13 +786,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             "when is the last time the philadelphia won the superbowl",
             "what is the most current adobe flash player version",
             "how many episodes are there in dragon ball z",
-            "what is the first step in the evolution of the eye",
-            "where is gall bladder situated in human body",
-            "what is the main mineral in lithium batteries",
-            "who is the president of usa right now",
-            "where do the greasers live in the outsiders",
-            "panda is a national animal of which country",
-            "what is the name of manchester united stadium",
         ]
 
     @slow
@@ -861,13 +854,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " the 1970s",
             " 7.1. 2",
             " 13",
-            " evolution",
-            " stomach",
-            " spodumene",
-            " obama",
-            " northern new jersey",
-            " india",
-            " united stadium",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
@@ -905,13 +891,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " 1980",
             " 7.0",
             " 8",
-            " reticular formation",
-            " walls of the abdomen",
-            " spodumene",
-            " obama",
-            " new orleans",
-            " japan",
-            " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
@@ -957,13 +936,6 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             " 1980",
             " 7.0",
             " 8",
-            " reticular formation",
-            " walls of the abdomen",
-            " spodumene",
-            " obama",
-            " new orleans",
-            " japan",
-            " old trafford",
         ]
         self.assertListEqual(outputs, EXPECTED_OUTPUTS)
 
