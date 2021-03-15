@@ -179,6 +179,7 @@ jobs:
           HF_HOME: /mnt/cache
           OMP_NUM_THREADS: 16
           MKL_NUM_THREADS: 16
+          MKL_SERVICE_FORCE_INTEL: 1
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
 
@@ -285,4 +286,7 @@ jobs:
           CI_SLACK_BOT_TOKEN: ${{ secrets.CI_SLACK_BOT_TOKEN }}
           CI_SLACK_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID }}
 
-        run: python utils/notification_service.py scheduled
+
+        run: |
+          pip install slack_sdk
+          python utils/notification_service.py scheduled
