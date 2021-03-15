@@ -22,7 +22,7 @@ REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"[^"]+"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
     "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
-    "doc": (re.compile(r"^(\s*)release\s*=\s*u'[^']+'", re.MULTILINE), re.MULTILINE), "release = u'VERSION'"),
+    "doc": (re.compile(r"^(\s*)release\s*=\s*u'[^']+'$", re.MULTILINE), "release = u'VERSION'\n"),
 }
 REPLACE_FILES = {
     "init": "src/transformers/__init__.py",
@@ -36,6 +36,7 @@ def update_version_in_file(fname, version, pattern):
     with open(fname, "r") as f:
         code = f.read()
     re_pattern, replace = REPLACE_PATTERNS[pattern]
+    replace = replace.replace("VERSION", version)
     code = re_pattern.sub(replace, code)
     with open(fname, "w") as f:
         f.write(code)
