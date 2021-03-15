@@ -17,7 +17,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
       image: pytorch/pytorch:1.8.0-cuda11.1-cudnn8-runtime
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -33,17 +33,16 @@ jobs:
           pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
 
       - name: Are GPUs recognized by our DL frameworks
-        env:
-          CUDA_VISIBLE_DEVICES: 0
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Cuda version:', torch.version.cuda)"
+          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
       - name: Run all non-slow tests on GPU
         env:
           OMP_NUM_THREADS: 8
-          CUDA_VISIBLE_DEVICES: 0
+          MKL_NUM_THREADS: 8
           HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_gpu tests
@@ -63,7 +62,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
       image: tensorflow/tensorflow:2.4.1-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -78,8 +77,6 @@ jobs:
           pip install .[sklearn,testing,onnxruntime,sentencepiece]
 
       - name: Are GPUs recognized by our DL frameworks
-        env:
-          CUDA_VISIBLE_DEVICES: 0
         run: |
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
           TF_CPP_MIN_LOG_LEVEL=3 python -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
@@ -87,7 +84,9 @@ jobs:
       - name: Run all non-slow tests on GPU
         env:
           OMP_NUM_THREADS: 8
-          CUDA_VISIBLE_DEVICES: 0
+          MKL_NUM_THREADS: 8
+          TF_NUM_INTRAOP_THREADS: 8
+          TF_NUM_INTEROP_THREADS: 1
           HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_gpu tests
@@ -127,11 +126,13 @@ jobs:
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
           python -c "import torch; print('Cuda version:', torch.version.cuda)"
+          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
       - name: Run all non-slow tests on GPU
         env:
           OMP_NUM_THREADS: 8
+          MKL_NUM_THREADS: 8
           HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
@@ -173,6 +174,9 @@ jobs:
       - name: Run all non-slow tests on GPU
         env:
           OMP_NUM_THREADS: 8
+          MKL_NUM_THREADS: 8
+          TF_NUM_INTRAOP_THREADS: 8
+          TF_NUM_INTEROP_THREADS: 1
           HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_multi_gpu tests

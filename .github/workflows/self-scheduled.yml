@@ -13,7 +13,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
       image: pytorch/pytorch:1.8.0-cuda11.1-cudnn8-runtime
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -31,11 +31,14 @@ jobs:
       - name: Are GPUs recognized by our DL frameworks
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+          python -c "import torch; print('Cuda version:', torch.version.cuda)"
+          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
       - name: Run all tests on GPU
         env:
           OMP_NUM_THREADS: 16
+          MKL_NUM_THREADS: 16
           RUN_SLOW: yes
           HF_HOME: /mnt/cache
         run: |
@@ -49,6 +52,7 @@ jobs:
         if: ${{ always() }}
         env:
           OMP_NUM_THREADS: 16
+          MKL_NUM_THREADS: 16
           RUN_SLOW: yes
           HF_HOME: /mnt/cache
         run: |
@@ -63,6 +67,7 @@ jobs:
         if: ${{ always() }}
         env:
           OMP_NUM_THREADS: 16
+          MKL_NUM_THREADS: 16
           RUN_SLOW: yes
           RUN_PIPELINE_TESTS: yes
           HF_HOME: /mnt/cache
@@ -84,7 +89,7 @@ jobs:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
       image: tensorflow/tensorflow:2.4.1-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
         uses: actions/checkout@v2
@@ -105,11 +110,12 @@ jobs:
 
       - name: Run all tests on GPU
         env:
-          OMP_NUM_THREADS: 16
           RUN_SLOW: yes
+          HF_HOME: /mnt/cache
+          OMP_NUM_THREADS: 16
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
-          HF_HOME: /mnt/cache
+          MKL_NUM_THREADS: 16
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
 
@@ -120,12 +126,13 @@ jobs:
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
-          OMP_NUM_THREADS: 16
           RUN_SLOW: yes
+          HF_HOME: /mnt/cache
+          OMP_NUM_THREADS: 16
           RUN_PIPELINE_TESTS: yes
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
-          HF_HOME: /mnt/cache
+          MKL_NUM_THREADS: 16
         run: |
           python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
 
@@ -162,13 +169,16 @@ jobs:
       - name: Are GPUs recognized by our DL frameworks
         run: |
           python -c "import torch; print('Cuda available:', torch.cuda.is_available())"
+          python -c "import torch; print('Cuda version:', torch.version.cuda)"
+          python -c "import torch; print('CuDNN version:', torch.backends.cudnn.version())"
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
       - name: Run all tests on GPU
         env:
-          OMP_NUM_THREADS: 16
           RUN_SLOW: yes
           HF_HOME: /mnt/cache
+          OMP_NUM_THREADS: 16
+          MKL_NUM_THREADS: 16
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
 
@@ -180,6 +190,7 @@ jobs:
         if: ${{ always() }}
         env:
           OMP_NUM_THREADS: 16
+          MKL_NUM_THREADS: 16
           RUN_SLOW: yes
           RUN_PIPELINE_TESTS: yes
           HF_HOME: /mnt/cache
@@ -224,6 +235,7 @@ jobs:
         env:
           OMP_NUM_THREADS: 16
           RUN_SLOW: yes
+          MKL_NUM_THREADS: 16
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
           HF_HOME: /mnt/cache
@@ -240,6 +252,7 @@ jobs:
           OMP_NUM_THREADS: 16
           RUN_SLOW: yes
           RUN_PIPELINE_TESTS: yes
+          MKL_NUM_THREADS: 16
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
           HF_HOME: /mnt/cache
