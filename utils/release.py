@@ -18,34 +18,48 @@ import re
 
 
 PATH_TO_EXAMPLES = "examples/"
-replace_patterns = {
+REPLACE_PATTERNS = {
     "examples": (re.compile(r'^check_min_version\("[^"]+"\)\s*$', re.MULTILINE), 'check_min_version("VERSION")\n'),
     "init": (re.compile(r'^__version__\s+=\s+"[^"]+"\s*$', re.MULTILINE), '__version__ = "VERSION"\n'),
-    "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), '\1version="VERSION",'),
+    "setup": (re.compile(r'^(\s*)version\s*=\s*"[^"]+",', re.MULTILINE), r'\1version="VERSION",'),
+    "doc": (re.compile(r"^(\s*)release\s*=\s*u'[^']+'", re.MULTILINE), re.MULTILINE), "release = u'VERSION'"),
 }
-_re_min_version = re.compile(r'^check_min_version\("([^"]+)"\)\s*$', re.MULTILINE)
+REPLACE_FILES = {
+    "init": "src/transformers/__init__.py",
+    "setup": "setup.py",
+    "doc": "docs/source/conf.py",
+}
 
 
-def update_version_in_file(file, version):
-    with open(file, "r") as f:
+def update_version_in_file(fname, version, pattern):
+    """Update the version in one file using a specific pattern."""
+    with open(fname, "r") as f:
         code = f.read()
-    code = _re_min_version.sub(f'check_min_version("{version}")\n', code)
-    with open(file, "w") as f:
+    re_pattern, replace = REPLACE_PATTERNS[pattern]
+    code = re_pattern.sub(replace, code)
+    with open(fname, "w") as f:
         f.write(code)
 
 
 def update_version_in_examples(version):
-    for folder, directories, files in os.walk(PATH_TO_EXAMPLES):
+    """Update the version in all examples files."""
+    for folder, directories, fnames in os.walk(PATH_TO_EXAMPLES):
         # Removing some of the folders with non-actively maintained examples from the walk
         if "research_projects" in directories:
             directories.remove("research_projects")
         if "legacy" in directories:
             directories.remove("legacy")
-        for file in files:
-            if file.endswith(".py"):
-                bump_version_in_file(os.path.join(folder, file), version)
+        for fname in fnames:
+            if fname.endswith(".py"):
+                bump_version_in_file(os.path.join(folder, fname), version, pattern="examples")
 
 
 def global_version_update(version):
+    """Update the version in all needed files."""
+    for pattern, fname in REPLACE_FILES.items():
+        update_version_in_file(fname, version, pattern)
+    update_version_in_examples(version)
 
-    bump_version_in_examples(version)
+
+if __name__ == "__main__":
+    global_version_update("4.4.0")
