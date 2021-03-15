@@ -189,6 +189,7 @@ class TFLayoutLMEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->LayoutLM
 class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -245,7 +246,7 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.divide(attention_scores, dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFLayoutLMModel call() function)
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
@@ -269,6 +270,7 @@ class TFLayoutLMSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfOutput with Bert->LayoutLM
 class TFLayoutLMSelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -287,6 +289,7 @@ class TFLayoutLMSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->LayoutLM
 class TFLayoutLMAttention(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -320,6 +323,7 @@ class TFLayoutLMAttention(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->LayoutLM
 class TFLayoutLMIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -340,6 +344,7 @@ class TFLayoutLMIntermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertOutput with Bert->LayoutLM
 class TFLayoutLMOutput(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -358,13 +363,14 @@ class TFLayoutLMOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->LayoutLM
 class TFLayoutLMLayer(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
 
         self.attention = TFLayoutLMAttention(config, name="attention")
         self.intermediate = TFLayoutLMIntermediate(config, name="intermediate")
-        self.layoutlm_output = TFLayoutLMOutput(config, name="output")
+        self.bert_output = TFLayoutLMOutput(config, name="output")
 
     def call(
         self,
@@ -383,7 +389,7 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         )
         attention_output = attention_outputs[0]
         intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.layoutlm_output(
+        layer_output = self.bert_output(
             hidden_states=intermediate_output, input_tensor=attention_output, training=training
         )
         outputs = (layer_output,) + attention_outputs[1:]  # add attentions if we output them
@@ -391,6 +397,7 @@ class TFLayoutLMLayer(tf.keras.layers.Layer):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->LayoutLM
 class TFLayoutLMEncoder(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -438,6 +445,7 @@ class TFLayoutLMEncoder(tf.keras.layers.Layer):
         )
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->LayoutLM
 class TFLayoutLMPooler(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -458,6 +466,7 @@ class TFLayoutLMPooler(tf.keras.layers.Layer):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPredictionHeadTransform with Bert->LayoutLM
 class TFLayoutLMPredictionHeadTransform(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, **kwargs):
         super().__init__(**kwargs)
@@ -483,6 +492,7 @@ class TFLayoutLMPredictionHeadTransform(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertLMPredictionHead with Bert->LayoutLM
 class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
@@ -526,6 +536,7 @@ class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertMLMHead with Bert->LayoutLM
 class TFLayoutLMMLMHead(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMConfig, input_embeddings: tf.keras.layers.Layer, **kwargs):
         super().__init__(**kwargs)
