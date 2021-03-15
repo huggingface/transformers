@@ -10,7 +10,7 @@ deps = {
     "fastapi": "fastapi",
     "filelock": "filelock",
     "flake8": "flake8>=3.8.3",
-    "flax": "flax>=0.2.2",
+    "flax": "flax>=0.3.2",
     "fugashi": "fugashi>=1.0",
     "importlib_metadata": "importlib_metadata",
     "ipadic": "ipadic>=1.0.0,<2.0",
