@@ -115,6 +115,7 @@ _deps = [
     "psutil",
     "pydantic",
     "pytest",
+    "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
     "recommonmark",
@@ -225,6 +226,7 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
+extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
@@ -232,7 +234,7 @@ extras["speech"] = deps_list("soundfile", "torchaudio")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar")
     + extras["retrieval"]
     + extras["modelcreation"]
 )
