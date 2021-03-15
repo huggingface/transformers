@@ -94,7 +94,7 @@ jobs:
     run_tests_torch_and_flax:
         working_directory: ~/transformers
         docker:
-            - image: circleci/python:3.7
+            - image: circleci/python:3.6
         environment:
             OMP_NUM_THREADS: 1
         resource_class: xlarge
@@ -188,7 +188,7 @@ jobs:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,sklearn,testing,sentencepiece]
+            - run: sudo pip install .[flax,testing]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
