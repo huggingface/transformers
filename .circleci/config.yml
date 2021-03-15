@@ -103,7 +103,7 @@ jobs:
             - checkout
             - restore_cache:
                   keys:
-                      - v0.4-torch_and_tf-{{ checksum "setup.py" }}
+                      - v0.4-torch_and_flax-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip

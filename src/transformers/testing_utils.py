@@ -110,8 +110,8 @@ def is_pt_flax_cross_test(test_case):
     """
     Decorator marking a test as a test that control interactions between PyTorch and Flax
 
-    PT+TF tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment variable
-    to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
+    PT+FLAX tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment
+    variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
 
     """
     if not _run_pt_tf_cross_tests or not is_torch_available() or not is_flax_available():
