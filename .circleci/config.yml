@@ -188,7 +188,7 @@ jobs:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,testing]
+            - run: sudo pip install .[flax,testing,sentencepiece]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
