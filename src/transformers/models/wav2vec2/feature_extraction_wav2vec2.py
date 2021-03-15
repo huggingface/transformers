@@ -33,7 +33,7 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2 feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.SequenceFeatureExtractor` which contains most of the
+    This feature extractor inherits from :class:`~transformers.feature_extraction_sequence_utils.SequenceFeatureExtractor` which contains most of the
     main methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
