@@ -34,7 +34,7 @@ Models:
 - funnel: @sgugger
 - gpt2: @patrickvonplaten, @LysandreJik
 - rag: @patrickvonplaten, @lhoestq
-- tensorflow: @jplu
+- tensorflow: XXX?
 
 Library:
 
@@ -47,6 +47,10 @@ Library:
 - pipelines: @LysandreJik
 
 Documentation: @sgugger
+
+Model hub: 
+- UI : XXX?
+- code: XXX?
 
 HF projects:
 
