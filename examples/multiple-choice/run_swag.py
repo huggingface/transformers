@@ -42,7 +42,10 @@ from transformers import (
 from transformers.file_utils import PaddingStrategy
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
 
+
+check_min_version("4.4.0.dev0")
 
 logger = logging.getLogger(__name__)
 

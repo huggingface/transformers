@@ -44,7 +44,10 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
 
+
+check_min_version("4.4.0.dev0")
 
 logger = logging.getLogger(__name__)
 
