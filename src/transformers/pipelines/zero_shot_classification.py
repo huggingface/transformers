@@ -107,7 +107,8 @@ class ZeroShotClassificationPipeline(Pipeline):
         sequences: Union[str, List[str]],
         candidate_labels,
         hypothesis_template="This example is {}.",
-        multi_class=False,
+        multi_label=False,
+        **kwargs,
     ):
         """
         Classify the sequence(s) given as inputs. See the :obj:`~transformers.ZeroShotClassificationPipeline`
@@ -126,7 +127,7 @@ class ZeroShotClassificationPipeline(Pipeline):
                 into the model like :obj:`"<cls> sequence to classify <sep> This example is sports . <sep>"`. The
                 default template works well in many cases, but it may be worthwhile to experiment with different
                 templates depending on the task setting.
-            multi_class (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            multi_label (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether or not multiple candidate labels can be true. If :obj:`False`, the scores are normalized such
                 that the sum of the label likelihoods for each sequence is 1. If :obj:`True`, the labels are considered
                 independent and probabilities are normalized for each candidate by doing a softmax of the entailment
@@ -139,6 +140,13 @@ class ZeroShotClassificationPipeline(Pipeline):
             - **labels** (:obj:`List[str]`) -- The labels sorted by order of likelihood.
             - **scores** (:obj:`List[float]`) -- The probabilities for each of the labels.
         """
+        if "multi_class" in kwargs and kwargs["multi_class"] is not None:
+            multi_label = kwargs.pop("multi_class")
+            logger.warn(
+                "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
+                "`multi_class` will be removed in a future version of Transformers."
+            )
+
         if sequences and isinstance(sequences, str):
             sequences = [sequences]
 
@@ -148,9 +156,9 @@ class ZeroShotClassificationPipeline(Pipeline):
         reshaped_outputs = outputs.reshape((num_sequences, len(candidate_labels), -1))
 
         if len(candidate_labels) == 1:
-            multi_class = True
+            multi_label = True
 
-        if not multi_class:
+        if not multi_label:
             # softmax the "entailment" logits over all candidate labels
             entail_logits = reshaped_outputs[..., self.entailment_id]
             scores = np.exp(entail_logits) / np.exp(entail_logits).sum(-1, keepdims=True)
