@@ -566,7 +566,9 @@ class BigBirdBlockSparseAttention(nn.Module):
         #     3) Number of global blocks are fixed (2 blocks here) & global tokens can be
         #     controlled only by `block_size`.
 
-        assert from_seq_length // from_block_size == to_seq_length // to_block_size, "Error the number of blocks needs to be same!"
+        assert (
+            from_seq_length // from_block_size == to_seq_length // to_block_size
+        ), "Error the number of blocks needs to be same!"
 
         # Define shorthands
         h = num_attention_heads
@@ -881,11 +883,17 @@ class BigBirdBlockSparseAttention(nn.Module):
     @staticmethod
     def torch_gather_b2(params, indices):
 
-        assert params.shape[:2] == indices.shape[:2], f"Make sure that the first two dimensions of params and indices are identical, but they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
+        assert (
+            params.shape[:2] == indices.shape[:2]
+        ), f"Make sure that the first two dimensions of params and indices are identical, but they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]
 
-        indices_shift = torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device) // num_indices_to_gather * num_indices_to_pick_from
+        indices_shift = (
+            torch.arange(indices.shape[0] * indices.shape[1] * num_indices_to_gather, device=indices.device)
+            // num_indices_to_gather
+            * num_indices_to_pick_from
+        )
 
         flattened_indices = indices.view(-1) + indices_shift
         flattened_params = params.reshape(-1, params.shape[-2], params.shape[-1])

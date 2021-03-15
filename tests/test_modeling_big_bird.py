@@ -521,17 +521,33 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
     def test_fast_integration(self):
         torch.manual_seed(0)
 
-        input_ids = torch.randint(self.model_tester.vocab_size, (self.model_tester.batch_size, self.model_tester.seq_length), device=torch_device)
+        input_ids = torch.randint(
+            self.model_tester.vocab_size,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+            device=torch_device,
+        )
         attention_mask = torch.ones((self.model_tester.batch_size, self.model_tester.seq_length), device=torch_device)
         attention_mask[:, :-10] = 0
-        token_type_ids = torch.randint(self.model_tester.type_vocab_size, (self.model_tester.batch_size, self.model_tester.seq_length), device=torch_device)
+        token_type_ids = torch.randint(
+            self.model_tester.type_vocab_size,
+            (self.model_tester.batch_size, self.model_tester.seq_length),
+            device=torch_device,
+        )
 
         config, _, _, _, _, _, _ = self.model_tester.prepare_config_and_inputs()
         model = BigBirdModel(config).to(torch_device).eval()
 
         with torch.no_grad():
-            hidden_states = model(input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask).last_hidden_state
-            self.assertTrue(torch.allclose(hidden_states[0, 0, :5], torch.tensor([-0.6326,  0.6124, -0.0844,  0.6698, -1.7155], device=torch_device), atol=1e-3))
+            hidden_states = model(
+                input_ids, token_type_ids=token_type_ids, attention_mask=attention_mask
+            ).last_hidden_state
+            self.assertTrue(
+                torch.allclose(
+                    hidden_states[0, 0, :5],
+                    torch.tensor([-0.6326, 0.6124, -0.0844, 0.6698, -1.7155], device=torch_device),
+                    atol=1e-3,
+                )
+            )
 
 
 @require_torch
@@ -679,9 +695,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         )
 
     def test_inference_block_sparse_pretraining(self):
-        model = BigBirdForPreTraining.from_pretrained(
-            "google/bigbird-roberta-base", attention_type="block_sparse"
-        )
+        model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base", attention_type="block_sparse")
         model.to(torch_device)
 
         input_ids = torch.tensor([[20920, 232, 328, 1437] * 1024], dtype=torch.long, device=torch_device)
@@ -709,9 +723,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(seq_relationship_logits, expected_seq_relationship_logits, atol=1e-4))
 
     def test_inference_full_pretraining(self):
-        model = BigBirdForPreTraining.from_pretrained(
-            "google/bigbird-roberta-base", attention_type="original_full"
-        )
+        model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base", attention_type="original_full")
         model.to(torch_device)
 
         input_ids = torch.tensor([[20920, 232, 328, 1437] * 512], dtype=torch.long, device=torch_device)
@@ -913,7 +925,7 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             truncation=True,
         )
 
-        inputs = {k: v.to(torch_device) for k,v in inputs.items()}
+        inputs = {k: v.to(torch_device) for k, v in inputs.items()}
 
         start_logits, end_logits = model(**inputs).to_tuple()
 

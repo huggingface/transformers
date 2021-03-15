@@ -43,18 +43,17 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, p
 
 
 if __name__ == "__main__":
-    """Initializing config for various checkpoints
+    """
+    Initializing config for various checkpoints
 
     >>> from transformers import BigBirdConfig
 
-    >>> # config for bigbird base
-    >>> config = BigBirdConfig()
+    >>> # config for bigbird base >>> config = BigBirdConfig()
 
-    >>> # config for bigbird trivia ITC ckpt
-    >>> config = BigBirdConfig(type_vocab_size=16)
+    >>> # config for bigbird trivia ITC ckpt >>> config = BigBirdConfig(type_vocab_size=16)
 
-    >>> # config for bigbird large
-    >>> config = BigBirdConfig(hidden_size=1024, num_hidden_layers=24, num_attention_heads=16, intermediate_size=4096)
+    >>> # config for bigbird large >>> config = BigBirdConfig(hidden_size=1024, num_hidden_layers=24,
+    num_attention_heads=16, intermediate_size=4096)
     """
 
     parser = argparse.ArgumentParser()
