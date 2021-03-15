@@ -114,9 +114,9 @@ class RemBertConfig(PretrainedConfig):
         layer_norm_eps=1e-12,
         use_cache=True,
         is_encoder_decoder=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        pad_token_id=0,
+        bos_token_id=312,
+        eos_token_id=313,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
