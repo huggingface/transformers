@@ -22,6 +22,52 @@ ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:p
 BASE_NAME = "sm-pt-transfromers-test"
 TEST_PATH = "./tests/sagemaker/scripts/pytorch"
 
+HYPERPARAMETER = {
+    "task_name": "mnli",
+    "per_device_train_batch_size": 32,
+    "per_device_eval_batch_size": 32,
+    "do_train": True,
+    "do_eval": True,
+    "do_predict": True,
+    "output_dir": "/opt/ml/model",
+    "overwrite_output_dir": True,
+    "max_steps": 500,
+    "save_steps": 5500,
+}
+
+DISTRIBUTED_HYPERPARAMETER = {
+    "task_name": "mnli",
+    "per_device_train_batch_size": 32,
+    "per_device_eval_batch_size": 32,
+    "do_train": True,
+    "do_eval": True,
+    "do_predict": True,
+    "output_dir": "/opt/ml/model",
+    "overwrite_output_dir": True,
+    "save_steps": 5500,
+    "num_train_epochs": 1,
+}
+
+METRIC_DEFINITIONS = [
+    {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
+    {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
+    {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
+]
+DISTRIBUTED_METRIC_DEFINITIONS = METRIC_DEFINITIONS + [
+    {
+        "Name": "total_batch_size",
+        "Regex": "Total train batch size \(w\. parallel, distributed & accumulation\).*=\D*(.*?)$",
+    },
+]
+
+
+def copy_script():
+    subprocess.run(
+        f"cp ./examples/text-classification/run_glue.py {TEST_PATH}/run_glue.py".split(),
+        encoding="utf-8",
+        check=True,
+    )
+
 
 @pytest.mark.skipif(
     literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
@@ -32,31 +78,12 @@ TEST_PATH = "./tests/sagemaker/scripts/pytorch"
 @pytest.mark.parametrize("instance_type", ["ml.g4dn.xlarge"])
 def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
-    subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/pytorch/run_glue.py".split(),
-        encoding="utf-8",
-        check=True,
-    )
+    copy_script()
     # defines hyperparameters
     hyperparameters = {
+        **HYPERPARAMETER,
         "model_name_or_path": model_name_or_path,
-        "task_name": "mnli",
-        "per_device_train_batch_size": 32,
-        "per_device_eval_batch_size": 32,
-        "do_train": True,
-        "do_eval": True,
-        "do_predict": True,
-        "output_dir": "/opt/ml/model",
-        "overwrite_output_dir": True,
-        "max_steps": 500,
-        "save_steps": 5500,
     }
-    # metric definition to extract the results
-    metric_definitions = [
-        {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-        {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
-        {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
-    ]
     # creates estimator
     estimator = HuggingFace(
         entry_point="run_glue.py",
@@ -68,7 +95,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
         instance_type=instance_type,
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
-        metric_definitions=metric_definitions,
+        metric_definitions=METRIC_DEFINITIONS,
         py_version="py3",
     )
     # run training
@@ -99,35 +126,12 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
 @pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
 def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
-    subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/pytorch/run_glue.py".split(),
-        encoding="utf-8",
-        check=True,
-    )
+    copy_script()
     # defines hyperparameters
     hyperparameters = {
+        **DISTRIBUTED_HYPERPARAMETER,
         "model_name_or_path": model_name_or_path,
-        "task_name": "mnli",
-        "per_device_train_batch_size": 32,
-        "per_device_eval_batch_size": 32,
-        "do_train": True,
-        "do_eval": True,
-        "do_predict": True,
-        "num_train_epochs": 1,
-        "output_dir": "/opt/ml/model",
-        "overwrite_output_dir": True,
-        "save_steps": 5500,
     }
-    # metric definition to extract the results
-    metric_definitions = [
-        {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-        {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
-        {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
-        {
-            "Name": "total_batch_size",
-            "Regex": "Total train batch size \(w\. parallel, distributed & accumulation\).*=\D*(.*?)$",
-        },
-    ]
     # distributed data settings
     distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
 
@@ -142,7 +146,7 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
         instance_type=instance_type,
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
-        metric_definitions=metric_definitions,
+        metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
         distribution=distribution,
         py_version="py3",
     )
@@ -176,35 +180,12 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
 @pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
 def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
-    subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/pytorch/run_glue.py".split(),
-        encoding="utf-8",
-        check=True,
-    )
+    copy_script()
     # defines hyperparameters
     hyperparameters = {
+        **DISTRIBUTED_HYPERPARAMETER,
         "model_name_or_path": model_name_or_path,
-        "task_name": "mnli",
-        "per_device_train_batch_size": 32,
-        "per_device_eval_batch_size": 32,
-        "do_train": True,
-        "do_eval": True,
-        "do_predict": True,
-        "num_train_epochs": 1,
-        "output_dir": "/opt/ml/model",
-        "overwrite_output_dir": True,
-        "save_steps": 5500,
     }
-    # metric definition to extract the results
-    metric_definitions = [
-        {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-        {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
-        {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
-        {
-            "Name": "total_batch_size",
-            "Regex": "Total train batch size \(w\. parallel, distributed & accumulation\).*=\D*(.*?)$",
-        },
-    ]
 
     # creates estimator
     estimator = HuggingFace(
@@ -217,7 +198,7 @@ def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_pat
         instance_type=instance_type,
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
-        metric_definitions=metric_definitions,
+        metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
         py_version="py3",
     )
     # run training

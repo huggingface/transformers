@@ -22,6 +22,22 @@ ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:t
 BASE_NAME = "sm-tf-transfromers-test"
 TEST_PATH = "./tests/sagemaker/scripts/tensorflow"
 
+HYPERPARAMETER = {
+    "per_device_train_batch_size": 16,
+    "per_device_eval_batch_size": 16,
+    "epochs": 1,
+    "output_dir": "/opt/ml/model",
+}
+
+DISTRIBUTED_HYPERPARAMETER = {}
+
+METRIC_DEFINITIONS = [
+    {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
+    {"Name": "eval_loss", "Regex": "loss.*=\D*(.*?)]$"},
+    {"Name": "eval_accuracy", "Regex": "sparse_categorical_accuracy.*=\D*(.*?)]$"},
+]
+DISTRIBUTED_METRIC_DEFINITIONS = METRIC_DEFINITIONS + []
+
 
 @pytest.mark.skipif(
     literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
@@ -31,26 +47,10 @@ TEST_PATH = "./tests/sagemaker/scripts/tensorflow"
 @pytest.mark.parametrize("instance_count", [1])
 @pytest.mark.parametrize("instance_type", ["ml.g4dn.xlarge"])
 def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_path):
-    # cannot use git since, we need the requirements.txt to install the newest transformers version
-    # subprocess.run(
-    #     "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/tensorflow/run_glue.py".split(),
-    #     encoding="utf-8",
-    #     check=True,
-    # )
+
     # defines hyperparameters
-    hyperparameters = {
-        "model_name_or_path": model_name_or_path,
-        "per_device_train_batch_size": 16,
-        "per_device_eval_batch_size": 16,
-        "epochs": 1,
-        "output_dir": "/opt/ml/model",
-    }
-    # metric definition to extract the results
-    metric_definitions = [
-        {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-        {"Name": "eval_loss", "Regex": "loss.*=\D*(.*?)]$"},
-        {"Name": "eval_accuracy", "Regex": "sparse_categorical_accuracy.*=\D*(.*?)]$"},
-    ]
+    hyperparameters = {"model_name_or_path": model_name_or_path, **HYPERPARAMETER}
+
     # creates estimator
     estimator = HuggingFace(
         entry_point="run_tf.py",
@@ -62,7 +62,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
         instance_type=instance_type,
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
-        metric_definitions=metric_definitions,
+        metric_definitions=METRIC_DEFINITIONS,
         py_version="py3",
     )
     # run training
@@ -81,4 +81,4 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
 
     assert all(t <= 300 for t in train_runtime)
     assert all(t >= 0.7 for t in eval_accuracy)
-    assert all(t <= 0.4 for t in eval_loss)
+    assert all(t <= 0.5 for t in eval_loss)
