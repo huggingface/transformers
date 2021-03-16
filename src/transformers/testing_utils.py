@@ -39,6 +39,7 @@ from .file_utils import (
     is_torch_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_torchvision_available,
 )
 from .integrations import is_optuna_available, is_ray_available
 
@@ -236,6 +237,19 @@ def require_torchaudio(test_case):
     """
     if not is_torchaudio_available:
         return unittest.skip("test requires torchaudio")(test_case)
+    else:
+        return test_case
+
+
+def require_torchvision(test_case):
+    """
+    Decorator marking a test that requires torchvision.
+
+    These tests are skipped when torchvision isn't installed.
+
+    """
+    if not is_torchvision_available:
+        return unittest.skip("test requires torchvision")(test_case)
     else:
         return test_case
 

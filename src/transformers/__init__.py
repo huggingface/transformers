@@ -126,7 +126,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTImageProcessor"],
+    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTFeatureExtractor"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -1425,7 +1425,11 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTImageProcessor
+    from .models.vit import (
+        VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
+        ViTConfig, 
+        ViTFeatureExtractor,
+    )
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,

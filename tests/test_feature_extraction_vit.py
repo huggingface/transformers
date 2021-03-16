@@ -21,14 +21,13 @@ import unittest
 import numpy as np
 import torch
 
-from transformers import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, ViTConfig, ViTImageProcessor
-from transformers.testing_utils import slow
+from transformers import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, ViTConfig, ViTFeatureExtractor
+from transformers.testing_utils import require_torch, require_torchvision, slow
 
-from .test_image_processor_common import ImageProcessorMixin
-from .test_modeling_common import floats_tensor
+from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
 
-class ViTImageProcessorTester(unittest.TestCase):
+class ViTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -39,8 +38,6 @@ class ViTImageProcessorTester(unittest.TestCase):
         max_resolution=400,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.5, 0.5, 0.5],
-        padding_value=0.0,
-        return_attention_mask=True,
         do_normalize=True,
         do_resize=True,
         size=18,
@@ -53,75 +50,74 @@ class ViTImageProcessorTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.image_mean = image_mean
         self.image_std = image_std
-        self.padding_value = padding_value
-        self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
 
-    def prepare_image_processor_dict(self):
+    @property
+    def feat_extract_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
-            "padding_value": self.padding_value,
-            "return_attention_mask": self.return_attention_mask,
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
         }
 
     def prepare_inputs_numpy_for_common(self, equal_resolution=False):
+        # TO DO 
         input_size = (self.num_channels, self.image_size, self.image_size)
         image_inputs = torch.randn((self.batch_size, *input_size))
 
         return image_inputs
 
     def prepare_inputs_pytorch_for_common(self, equal_resolution=False):
+        # TO DO
         input_size = (self.num_channels, self.image_size, self.image_size)
         image_inputs = torch.randn((self.batch_size, *input_size))
 
         return image_inputs
 
 
-class ViTImageProcessorTest(ImageProcessorMixin, unittest.TestCase):
+class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    image_processor_class = ViTImageProcessor
-
+    feature_extraction_class = ViTFeatureExtractor
+    
     def setUp(self):
-        self.image_processor_tester = VitImageProcessorTester(self)
+        self.feature_extract_tester = ViTFeatureExtractionTester(self)
 
     def test_call_numpy(self):
-        # Initialize image_processor
-        image_processor = self.image_processor_class(**self.image_processor_tester.prepare_image_processor_dict())
+        # Initialize feature_extractor
+        feature_extract = self.feature_extraction_class(**self.feature_extract_tester.feat_extract_dict())
         # create three inputs of resolution 800, 1000, and 1200
         image_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_image_inputs = [np.asarray(speech_input) for speech_input in image_inputs]
 
         # Test not batched input
-        encoded_images_1 = image_processor(image_inputs[0], return_tensors="np").input_values
-        encoded_images_2 = image_processor(np_image_inputs[0], return_tensors="np").input_values
+        encoded_images_1 = feature_extractor(image_inputs[0], return_tensors="np").input_values
+        encoded_images_2 = feature_extractor(np_image_inputs[0], return_tensors="np").input_values
         self.assertTrue(np.allclose(encoded_images_1, encoded_images_2, atol=1e-3))
 
         # Test batched
-        encoded_images_1 = image_processor(image_inputs, return_tensors="np").input_values
-        encoded_images_2 = image_processor(np_image_inputs, return_tensors="np").input_values
+        encoded_images_1 = feature_extractor(image_inputs, return_tensors="np").input_values
+        encoded_images_2 = feature_extractor(np_image_inputs, return_tensors="np").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_images_1, encoded_images_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_call_pytorch(self):
-        # Initialize image_processor
-        image_processor = self.image_processor_class(**self.image_processor_tester.prepare_image_processor_dict())
+        # Initialize feature_extractor
+        feature_extract = self.feature_extraction_class(**self.feature_extract_tester.feat_extract_dict())
         # create three inputs of resolution 800, 1000, and 1200
         image_inputs = floats_tensor()
 
         # Test not batched input
-        encoded_images_1 = image_processor(image_inputs[0], return_tensors="pt").input_values
-        encoded_images_2 = image_processor(np_image_inputs[0], return_tensors="pt").input_values
+        encoded_images_1 = feature_extractor(image_inputs[0], return_tensors="pt").input_values
+        encoded_images_2 = feature_extractor(np_image_inputs[0], return_tensors="pt").input_values
         self.assertTrue(np.allclose(encoded_images_1, encoded_images_2, atol=1e-3))
 
         # Test batched
-        encoded_images_1 = image_processor(image_inputs, return_tensors="pt").input_values
-        encoded_images_2 = image_processor(np_image_inputs, return_tensors="pt").input_values
+        encoded_images_1 = feature_extractor(image_inputs, return_tensors="pt").input_values
+        encoded_images_2 = feature_extractor(np_image_inputs, return_tensors="pt").input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_images_1, encoded_images_2):
             self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 

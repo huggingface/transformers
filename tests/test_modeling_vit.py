@@ -17,6 +17,7 @@
 
 import unittest
 
+import torchvision
 import torchvision.transforms as T
 from PIL import Image
 

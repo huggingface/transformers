@@ -182,12 +182,21 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
+
 _torchaudio_available = importlib.util.find_spec("torchaudio")
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
-    logger.debug(f"Successfully imported soundfile version {_torchaudio_version}")
+    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
 except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
+
+
+_torchvision_available = importlib.util.find_spec("torchvision")
+try:
+    _torchvision_version = importlib_metadata.version("torchvision")
+    logger.debug(f"Successfully imported torchvision version {_torchvision_version}")
+except importlib_metadata.PackageNotFoundError:
+    _torchvision_available = False
 
 
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
@@ -379,6 +388,10 @@ def is_soundfile_availble():
 
 def is_torchaudio_available():
     return _torchaudio_available
+
+
+def is_torchvision_available():
+    return _torchvision_available
 
 
 def torch_only_method(fn):
