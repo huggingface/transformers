@@ -55,7 +55,7 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         self.size = size
 
     @property
-    def feat_extract_dict(self):
+    def prepare_feat_extract_dict(self):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
@@ -64,14 +64,14 @@ class ViTFeatureExtractionTester(unittest.TestCase):
             "size": self.size,
         }
 
-    def prepare_inputs_numpy_for_common(self, equal_resolution=False):
+    def prepare_inputs_numpy(self, equal_resolution=False):
         # TO DO 
         input_size = (self.num_channels, self.image_size, self.image_size)
         image_inputs = torch.randn((self.batch_size, *input_size))
 
         return image_inputs
 
-    def prepare_inputs_pytorch_for_common(self, equal_resolution=False):
+    def prepare_inputs_pytorch(self, equal_resolution=False):
         # TO DO
         input_size = (self.num_channels, self.image_size, self.image_size)
         image_inputs = torch.randn((self.batch_size, *input_size))
@@ -86,6 +86,40 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
     def setUp(self):
         self.feature_extract_tester = ViTFeatureExtractionTester(self)
 
+    @property
+    def feat_extract_dict(self):
+        return self.feat_extract_tester.prepare_feat_extract_dict()
+    
+    def test_feat_extract_properties(self):
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+        self.assertTrue(hasattr(feat_extract, "image_mean"))
+        self.assertTrue(hasattr(feat_extract, "image_std"))
+        self.assertTrue(hasattr(feat_extract, "do_normalize"))
+        self.assertTrue(hasattr(feat_extract, "do_resize"))
+        self.assertTrue(hasattr(feat_extract, "size"))
+
+    def test_batch_feature(self):
+        image_inputs = self.feat_extract_tester.prepare_inputs_for_common()
+        feat_extract = self.feature_extraction_class(**self.feat_extract_dict)
+        input_name = feat_extract.model_input_names[0]
+
+        processed_features = BatchFeature({input_name: image_inputs})
+
+        self.assertTrue(all(len(x) == len(y) for x, y in zip(image_inputs, processed_features[input_name])))
+
+        image_inputs = self.feat_extract_tester.prepare_inputs_for_common(equal_length=True)
+        processed_features = BatchFeature({input_name: image_inputs}, tensor_type="np")
+
+        batch_features_input = processed_features[input_name]
+
+        if len(batch_features_input.shape) < 3:
+            batch_features_input = batch_features_input[:, :, None]
+
+        self.assertTrue(
+            batch_features_input.shape
+            == (self.feat_extract_tester.batch_size, len(image_inputs[0]), self.feat_extract_tester.feature_size)
+        )
+    
     def test_call_numpy(self):
         # Initialize feature_extractor
         feature_extract = self.feature_extraction_class(**self.feature_extract_tester.feat_extract_dict())
@@ -122,8 +156,4 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             self.assertTrue(torch.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
     def test_normalization(self):
-        pass
-
-    @slow
-    def test_pretrained_checkpoints_are_set_correctly(self):
         pass
