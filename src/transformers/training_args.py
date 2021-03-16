@@ -743,6 +743,20 @@ class TrainingArguments:
         return 1
 
     @property
+    @torch_required
+    def process_index(self):
+        """
+        The number of processes used in parallel.
+        """
+        if is_torch_tpu_available():
+            return xm.get_ordinal()
+        elif is_sagemaker_distributed_available():
+            return sm_dist.get_rank()
+        elif self.local_rank != -1:
+            return torch.distributed.get_rank()
+        return 0
+
+    @property
     def place_model_on_device(self):
         """
         Can be subclassed and overridden for some specific integrations.

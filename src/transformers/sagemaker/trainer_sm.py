@@ -26,6 +26,7 @@ from ..modeling_utils import PreTrainedModel, unwrap_model
 from ..trainer import Trainer
 from ..trainer_pt_utils import (
     DistributedLengthGroupedSampler,
+    DistributedSamplerWithLoop,
     SequentialDistributedSampler,
     nested_detach,
     nested_numpify,
@@ -96,6 +97,13 @@ class SageMakerTrainer(Trainer):
             if self.args.group_by_length:
                 return DistributedLengthGroupedSampler(
                     self.train_dataset, self.args.train_batch_size, num_replicas=smp.dp_size(), rank=smp.dp_rank()
+                )
+            elif not self.args.dataloader_drop_last:
+                return DistributedSamplerWithLoop(
+                    self.train_dataset,
+                    self.args.per_device_train_batch_size,
+                    num_replicas=smp.dp_size(),
+                    rank=smp.dp_rank(),
                 )
             else:
                 return DistributedSampler(self.train_dataset, num_replicas=smp.dp_size(), rank=smp.dp_rank())
