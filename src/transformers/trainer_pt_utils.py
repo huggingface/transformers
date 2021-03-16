@@ -220,7 +220,7 @@ class SequentialDistributedSampler(Sampler):
     or `reduce` resulting tensors at the end of the loop.
     """
 
-    def __init__(self, dataset, num_replicas=None, rank=None):
+    def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -234,27 +234,31 @@ class SequentialDistributedSampler(Sampler):
         self.rank = rank
         self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
         self.total_size = self.num_samples * self.num_replicas
-        print("###### Length of dataset, ", len(self.dataset))
-        print("###### Num_samples, ", self.num_samples)
-        print("###### total_size, ", self.total_size)
+        self.batch_size = batch_size
+
 
     def __iter__(self):
         indices = list(range(len(self.dataset)))
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
+
         assert (
             len(indices) == self.total_size
         ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        print("###### Indie iter, num_samples ", self.num_samples)
-        print("###### len(indices, ", len(indices))
 
         assert (
             len(indices) == self.num_samples
         ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
+
+        # Add extra samples to be multiple of batch size
+        if self.batch_size is not None:
+            remainder = 0 if len(indices) % self.batch_size == 0 else self.batch_size - len(indices) % self.batch_size
+            start_remainder = 0
+            indices += indices[start_remainder: start_remainder + remainder]
 
         return iter(indices)
 
