@@ -25,8 +25,8 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/layoutlm-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/vocab.txt",
-        "microsoft/layoutlm-large-uncased": "https://huggingface.co/bert-large-uncased/resolve/main/vocab.txt",
+        "microsoft/layoutlm-base-uncased": "https://huggingface.co/microsoft/layoutlm-base-uncased/resolve/main/vocab.txt",
+        "microsoft/layoutlm-large-uncased": "https://huggingface.co/microsoft/layoutlm-large-uncased/resolve/main/vocab.txt",
     }
 }
 

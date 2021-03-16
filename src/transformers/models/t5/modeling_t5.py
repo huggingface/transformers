@@ -18,6 +18,7 @@
 import copy
 import math
 import os
+import warnings
 
 import torch
 import torch.nn.functional as F
@@ -179,6 +180,8 @@ def load_tf_weights_in_t5(model, config, tf_checkpoint_path):
 # - PreTrainedModel for the models (it-self a sub-class of torch.nn.Module)
 ####################################################
 PARALLELIZE_DOCSTRING = r"""
+    This is an experimental feature and is a subject to change at a moment's notice.
+
     Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
     it will evenly distribute blocks across all devices.
 
@@ -407,7 +410,7 @@ class T5Attention(nn.Module):
         key_value_states=None,
         position_bias=None,
         past_key_value=None,
-        head_mask=None,
+        layer_head_mask=None,
         query_length=None,
         use_cache=False,
         output_attentions=False,
@@ -502,8 +505,8 @@ class T5Attention(nn.Module):
         )  # (batch_size, n_heads, seq_length, key_length)
 
         # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
+        if layer_head_mask is not None:
+            attn_weights = attn_weights * layer_head_mask
 
         attn_output = unshape(torch.matmul(attn_weights, value_states))  # (batch_size, seq_length, dim)
         attn_output = self.o(attn_output)
@@ -528,7 +531,7 @@ class T5LayerSelfAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        head_mask=None,
+        layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
@@ -538,7 +541,7 @@ class T5LayerSelfAttention(nn.Module):
             normed_hidden_states,
             mask=attention_mask,
             position_bias=position_bias,
-            head_mask=head_mask,
+            layer_head_mask=layer_head_mask,
             past_key_value=past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -561,7 +564,7 @@ class T5LayerCrossAttention(nn.Module):
         key_value_states,
         attention_mask=None,
         position_bias=None,
-        head_mask=None,
+        layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         query_length=None,
@@ -573,7 +576,7 @@ class T5LayerCrossAttention(nn.Module):
             mask=attention_mask,
             key_value_states=key_value_states,
             position_bias=position_bias,
-            head_mask=head_mask,
+            layer_head_mask=layer_head_mask,
             past_key_value=past_key_value,
             use_cache=use_cache,
             query_length=query_length,
@@ -603,7 +606,8 @@ class T5Block(nn.Module):
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
-        head_mask=None,
+        layer_head_mask=None,
+        encoder_layer_head_mask=None,
         past_key_value=None,
         use_cache=False,
         output_attentions=False,
@@ -630,13 +634,18 @@ class T5Block(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            head_mask=head_mask,
+            layer_head_mask=layer_head_mask,
             past_key_value=self_attn_past_key_value,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
+
+        # clamp inf values to enable fp16 training
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
         do_cross_attention = self.is_decoder and encoder_hidden_states is not None
         if do_cross_attention:
@@ -652,13 +661,19 @@ class T5Block(nn.Module):
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
                 position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask,
+                layer_head_mask=encoder_layer_head_mask,
                 past_key_value=cross_attn_past_key_value,
                 query_length=query_length,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
             )
             hidden_states = cross_attention_outputs[0]
+
+            # clamp inf values to enable fp16 training
+            if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
             # Combine self attn and cross attn key value states
             if present_key_value_state is not None:
                 present_key_value_state = present_key_value_state + cross_attention_outputs[1]
@@ -668,6 +683,12 @@ class T5Block(nn.Module):
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
+
+        # clamp inf values to enable fp16 training
+        if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
         outputs = (hidden_states,)
 
         outputs = outputs + (present_key_value_state,) + attention_outputs
@@ -683,6 +704,7 @@ class T5PreTrainedModel(PreTrainedModel):
     config_class = T5Config
     load_tf_weights = load_tf_weights_in_t5
     base_model_prefix = "transformer"
+    is_parallelizable = True
 
     @property
     def dummy_inputs(self):
@@ -824,6 +846,7 @@ class T5Stack(T5PreTrainedModel):
         encoder_attention_mask=None,
         inputs_embeds=None,
         head_mask=None,
+        encoder_head_mask=None,
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
@@ -891,6 +914,7 @@ class T5Stack(T5PreTrainedModel):
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_layers)
+        encoder_head_mask = self.get_head_mask(encoder_head_mask, self.config.num_layers)
         present_key_value_states = () if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -901,6 +925,8 @@ class T5Stack(T5PreTrainedModel):
         hidden_states = self.dropout(inputs_embeds)
 
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
+            layer_head_mask = head_mask[i]
+            encoder_layer_head_mask = encoder_head_mask[i]
             # Model parallel
             if self.model_parallel:
                 torch.cuda.set_device(hidden_states.device)
@@ -915,6 +941,10 @@ class T5Stack(T5PreTrainedModel):
                     encoder_extended_attention_mask = encoder_extended_attention_mask.to(hidden_states.device)
                 if encoder_decoder_position_bias is not None:
                     encoder_decoder_position_bias = encoder_decoder_position_bias.to(hidden_states.device)
+                if layer_head_mask is not None:
+                    layer_head_mask = layer_head_mask.to(hidden_states.device)
+                if encoder_layer_head_mask is not None:
+                    encoder_layer_head_mask = encoder_layer_head_mask.to(hidden_states.device)
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -925,7 +955,8 @@ class T5Stack(T5PreTrainedModel):
                 encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_extended_attention_mask,
                 encoder_decoder_position_bias=encoder_decoder_position_bias,
-                head_mask=head_mask[i],
+                layer_head_mask=layer_head_mask,
+                encoder_layer_head_mask=encoder_layer_head_mask,
                 past_key_value=past_key_value,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -1015,6 +1046,8 @@ T5_INPUTS_DOCSTRING = r"""
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             detail.
 
+            `What are input IDs? <../glossary.html#input-ids>`__
+
             To know more on how to prepare :obj:`input_ids` for pretraining take a look a `T5 Training
             <./t5.html#training>`__.
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
@@ -1025,16 +1058,38 @@ T5_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for sequence to sequence training. T5 uses the :obj:`pad_token_id` as the starting token for
-            :obj:`decoder_input_ids` generation. If :obj:`past_key_values` is used, optionally only the last
-            :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.BartTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            T5 uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
 
             To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
             <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
             :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
-        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, tgt_seq_len)`, `optional`):
+        decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
+        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in ``[0,
+            1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        decoder_head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
+            Mask to nullify selected heads of the self-attention modules. in the decoder Mask values selected in ``[0,
+            1]``:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
         encoder_outputs (:obj:`tuple(tuple(torch.FloatTensor)`, `optional`):
             Tuple consists of (:obj:`last_hidden_state`, :obj:`optional`: `hidden_states`, :obj:`optional`:
             `attentions`) :obj:`last_hidden_state` of shape :obj:`(batch_size, sequence_length, hidden_size)` is a
@@ -1046,12 +1101,6 @@ T5_INPUTS_DOCSTRING = r"""
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
             instead of all :obj:`decoder_input_ids` of shape :obj:`(batch_size, sequence_length)`.
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
         inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert :obj:`input_ids` indices into associated
@@ -1118,6 +1167,14 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
 
+# Warning messafe for FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+__HEAD_MASK_WARNING_MSG = """
+The input argument `head_mask` was split into two arguments `head_mask` and `decoder_head_mask`. Currently,
+`decoder_head_mask` is set to copy `head_mask`, but this feature is deprecated and will be removed in future versions.
+If you do not want to use any `decoder_head_mask` now, please set `decoder_head_mask = torch.ones(num_layers,
+num_heads)`.
+"""
+
 
 @add_start_docstrings(
     "The bare T5 Model transformer outputting raw hidden-states" "without any specific head on top.",
@@ -1127,6 +1184,8 @@ class T5Model(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
+    ]
+    _keys_to_ignore_on_load_unexpected = [
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
@@ -1135,6 +1194,7 @@ class T5Model(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
@@ -1203,9 +1263,10 @@ class T5Model(T5PreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        head_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         use_cache=None,
@@ -1231,6 +1292,12 @@ class T5Model(T5PreTrainedModel):
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if self.config.num_layers == self.config.num_decoder_layers:
+                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1272,7 +1339,8 @@ class T5Model(T5PreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
+            head_mask=decoder_head_mask,
+            encoder_head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1300,6 +1368,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         r"encoder\.embed_tokens\.weight",
         r"decoder\.embed_tokens\.weight",
         r"lm_head\.weight",
+    ]
+    _keys_to_ignore_on_load_unexpected = [
         r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
     ]
 
@@ -1310,6 +1380,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         self.shared = nn.Embedding(config.vocab_size, config.d_model)
 
         encoder_config = copy.deepcopy(config)
+        encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
         self.encoder = T5Stack(encoder_config, self.shared)
@@ -1380,9 +1451,10 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        head_mask=None,
+        decoder_head_mask=None,
         encoder_outputs=None,
         past_key_values=None,
-        head_mask=None,
         inputs_embeds=None,
         decoder_inputs_embeds=None,
         labels=None,
@@ -1417,6 +1489,12 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         """
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
+        if head_mask is not None and decoder_head_mask is None:
+            if self.config.num_layers == self.config.num_decoder_layers:
+                warnings.warn(__HEAD_MASK_WARNING_MSG, FutureWarning)
+                decoder_head_mask = head_mask
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
@@ -1474,7 +1552,8 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             past_key_values=past_key_values,
             encoder_hidden_states=hidden_states,
             encoder_attention_mask=attention_mask,
-            head_mask=head_mask,
+            head_mask=decoder_head_mask,
+            encoder_head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1534,6 +1613,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
             "use_cache": use_cache,
         }
 
+    def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
+        return self._shift_right(labels)
+
     def _reorder_cache(self, past, beam_idx):
         # if decoder past is not included in output
         # speedy decoding is disabled and no need to reorder
@@ -1578,6 +1660,10 @@ class T5EncoderModel(T5PreTrainedModel):
         self.encoder = T5Stack(encoder_config, self.shared)
 
         self.init_weights()
+
+        # Model parallel
+        self.model_parallel = False
+        self.device_map = None
 
     @add_start_docstrings(PARALLELIZE_DOCSTRING)
     def parallelize(self, device_map=None):

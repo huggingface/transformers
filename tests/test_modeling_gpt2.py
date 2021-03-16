@@ -14,6 +14,7 @@
 # limitations under the License.
 
 
+import datetime
 import unittest
 
 from transformers import is_torch_available
@@ -131,6 +132,7 @@ class GPT2ModelTester:
             n_ctx=self.max_position_embeddings,
             # type_vocab_size=self.type_vocab_size,
             # initializer_range=self.initializer_range,
+            use_cache=not gradient_checkpointing,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
@@ -278,22 +280,26 @@ class GPT2ModelTester:
         model.eval()
 
         # first forward pass
-        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs = model(input_ids, token_type_ids=token_type_ids, attention_mask=input_mask, use_cache=True)
 
         output, past = outputs.to_tuple()
 
         # create hypothetical next token and extent to next_input_ids
         next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
         next_token_types = ids_tensor([self.batch_size, 3], self.type_vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
 
         # append to next input_ids and token_type_ids
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
-            "last_hidden_state"
-        ]
+        output_from_no_past = model(
+            next_input_ids, token_type_ids=next_token_type_ids, attention_mask=next_attention_mask
+        )["last_hidden_state"]
+        output_from_past = model(
+            next_tokens, token_type_ids=next_token_types, attention_mask=next_attention_mask, past_key_values=past
+        )["last_hidden_state"]
         self.parent.assertTrue(output_from_past.shape[1] == next_tokens.shape[1])
 
         # select random slice
@@ -392,7 +398,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     all_generative_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GPT2LMHeadModel,) if is_torch_available() else ()
+    all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
     test_missing_keys = False
     test_model_parallel = True
 
@@ -644,3 +650,44 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         self.assertTrue(
             all([output_seq_strs[idx] != output_seq_tt_strs[idx] for idx in range(len(output_seq_tt_strs))])
         )  # token_type_ids should change output
+
+    @slow
+    def test_gpt2_sample_max_time(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model.to(torch_device)
+
+        torch.manual_seed(0)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+        input_ids = tokenized.input_ids.to(torch_device)
+
+        MAX_TIME = 0.5
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, num_beams=2, max_time=MAX_TIME, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=None, max_length=256)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))

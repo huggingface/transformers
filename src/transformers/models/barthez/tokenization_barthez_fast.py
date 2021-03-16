@@ -19,8 +19,8 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from ...file_utils import add_start_docstrings, is_sentencepiece_available
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
+from ...file_utils import is_sentencepiece_available
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -99,15 +99,12 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
-
-    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
-    conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BarthezTokenizer
 
     def __init__(
@@ -123,6 +120,9 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
         mask_token="<mask>",
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,
@@ -228,45 +228,3 @@ class BarthezTokenizerFast(PreTrainedTokenizerFast):
             copyfile(self.vocab_file, out_vocab_file)
 
         return (out_vocab_file,)
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        padding: str = "longest",
-        return_tensors: str = "None",
-        truncation=True,
-        **kwargs,
-    ) -> BatchEncoding:
-        kwargs.pop("src_lang", None)
-        kwargs.pop("tgt_lang", None)
-        if max_length is None:
-            max_length = self.model_max_length
-        model_inputs: BatchEncoding = self(
-            src_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            padding=padding,
-            truncation=truncation,
-            **kwargs,
-        )
-        if tgt_texts is None:
-            return model_inputs
-        # Process tgt_texts
-        if max_target_length is None:
-            max_target_length = max_length
-        labels = self(
-            tgt_texts,
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            padding=padding,
-            max_length=max_target_length,
-            truncation=truncation,
-            **kwargs,
-        )["input_ids"]
-        model_inputs["labels"] = labels
-        return model_inputs

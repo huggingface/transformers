@@ -344,3 +344,20 @@ class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in ELECTRA_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ElectraModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_torch
+class ElectraModelIntegrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head_absolute_embedding(self):
+        model = ElectraModel.from_pretrained("google/electra-small-discriminator")
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
+        expected_shape = torch.Size((1, 11, 256))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[[0.4471, 0.6821, -0.3265], [0.4627, 0.5255, -0.3668], [0.4532, 0.3313, -0.4344]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))

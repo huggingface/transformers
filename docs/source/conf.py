@@ -26,8 +26,13 @@ author = u'huggingface'
 # The short X.Y version
 version = u''
 # The full version, including alpha/beta/rc tags
-release = u'4.1.1'
+release = u'4.5.0.dev0'
 
+
+# Prefix link to point to master, comment this during version release and uncomment below line
+extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/master/%s', '')}
+# Prefix link to always point to corresponding version, uncomment this during version release
+# extlinks = {'prefix_link': ('https://github.com/huggingface/transformers/blob/v'+ release + '/%s', '')}
 
 # -- General configuration ---------------------------------------------------
 
@@ -40,6 +45,7 @@ release = u'4.1.1'
 # ones.
 extensions = [
     'sphinx.ext.autodoc',
+    'sphinx.ext.extlinks',
     'sphinx.ext.coverage',
     'sphinx.ext.napoleon',
     'recommonmark',
@@ -91,7 +97,8 @@ html_theme = 'sphinx_rtd_theme'
 # documentation.
 #
 html_theme_options = {
-    'analytics_id': 'UA-83738774-2'
+    'analytics_id': 'UA-83738774-2',
+    'navigation_with_keys': True
 }
 
 # Add any paths that contain custom static files (such as style sheets) here,

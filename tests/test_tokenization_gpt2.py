@@ -32,6 +32,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     rust_tokenizer_class = GPT2TokenizerFast
     test_rust_tokenizer = True
     from_pretrained_kwargs = {"add_prefix_space": True}
+    test_seq2seq = False
 
     def setUp(self):
         super().setUp()
@@ -173,3 +174,7 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     max_length=max_length,
                     padding="max_length",
                 )
+
+    # tokenizer has no padding token
+    def test_padding_different_model_input_name(self):
+        pass

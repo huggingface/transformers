@@ -13,11 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-import random
 import unittest
-
-import numpy as np
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
@@ -29,9 +25,12 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import (  # XxxForMaskedLM,; XxxForQuestionAnswering,; XxxForTokenClassification,
+    from transformers import (
         DebertaConfig,
+        DebertaForMaskedLM,
+        DebertaForQuestionAnswering,
         DebertaForSequenceClassification,
+        DebertaForTokenClassification,
         DebertaModel,
     )
     from transformers.models.deberta.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -43,8 +42,11 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DebertaModel,
+            DebertaForMaskedLM,
             DebertaForSequenceClassification,
-        )  # , DebertaForMaskedLM, DebertaForQuestionAnswering, DebertaForTokenClassification)
+            DebertaForTokenClassification,
+            DebertaForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -164,6 +166,16 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
                 list(sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size]
             )
 
+        def create_and_check_deberta_for_masked_lm(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = DebertaForMaskedLM(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
         def create_and_check_deberta_for_sequence_classification(
             self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
@@ -174,6 +186,32 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
             result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
             self.parent.assertListEqual(list(result.logits.size()), [self.batch_size, self.num_labels])
             self.check_loss_output(result)
+
+        def create_and_check_deberta_for_token_classification(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            config.num_labels = self.num_labels
+            model = DebertaForTokenClassification(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
+        def create_and_check_deberta_for_question_answering(
+            self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+        ):
+            model = DebertaForQuestionAnswering(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
+            )
+            self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+            self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
         def prepare_config_and_inputs_for_common(self):
             config_and_inputs = self.prepare_config_and_inputs()
@@ -204,17 +242,14 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_sequence_classification(*config_and_inputs)
 
-    @unittest.skip(reason="Model not available yet")
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_masked_lm(*config_and_inputs)
 
-    @unittest.skip(reason="Model not available yet")
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_question_answering(*config_and_inputs)
 
-    @unittest.skip(reason="Model not available yet")
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_deberta_for_token_classification(*config_and_inputs)
@@ -236,16 +271,13 @@ class DebertaModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        random.seed(0)
-        np.random.seed(0)
-        torch.manual_seed(0)
-        torch.cuda.manual_seed_all(0)
         model = DebertaModel.from_pretrained("microsoft/deberta-base")
 
         input_ids = torch.tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        output = model(input_ids)[0]
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-0.0218, -0.6641, -0.3665], [-0.3907, -0.4716, -0.6640], [0.7461, 1.2570, -0.9063]]]
+            [[[-0.5986, -0.8055, -0.8462], [1.4484, -0.9348, -0.8059], [0.3123, 0.0032, -1.4131]]]
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4), f"{output[:, :3, :3]}")
+        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4), f"{output[:, 1:4, 1:4]}")

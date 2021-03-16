@@ -16,16 +16,53 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...file_utils import is_torch_available
-from .configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
-from .tokenization_tapas import TapasTokenizer
+from typing import TYPE_CHECKING
 
+from ...file_utils import _BaseLazyModule, is_torch_available
+
+
+_import_structure = {
+    "configuration_tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig"],
+    "tokenization_tapas": ["TapasTokenizer"],
+}
 
 if is_torch_available():
-    from .modeling_tapas import (
-        TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
-        TapasForMaskedLM,
-        TapasForQuestionAnswering,
-        TapasForSequenceClassification,
-        TapasModel,
-    )
+    _import_structure["modeling_tapas"] = [
+        "TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TapasForMaskedLM",
+        "TapasForQuestionAnswering",
+        "TapasForSequenceClassification",
+        "TapasModel",
+    ]
+
+
+if TYPE_CHECKING:
+    from .configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
+    from .tokenization_tapas import TapasTokenizer
+
+    if is_torch_available():
+        from .modeling_tapas import (
+            TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TapasForMaskedLM,
+            TapasForQuestionAnswering,
+            TapasForSequenceClassification,
+            TapasModel,
+        )
+
+else:
+    import importlib
+    import os
+    import sys
+
+    class _LazyModule(_BaseLazyModule):
+        """
+        Module class that surfaces all objects but only performs associated imports when the objects are requested.
+        """
+
+        __file__ = globals()["__file__"]
+        __path__ = [os.path.dirname(__file__)]
+
+        def _get_module(self, module_name: str):
+            return importlib.import_module("." + module_name, self.__name__)
+
+    sys.modules[__name__] = _LazyModule(__name__, _import_structure)

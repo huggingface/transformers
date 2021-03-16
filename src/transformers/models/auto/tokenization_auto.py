@@ -24,7 +24,9 @@ from ..bart.tokenization_bart import BartTokenizer
 from ..bert.tokenization_bert import BertTokenizer
 from ..bert_japanese.tokenization_bert_japanese import BertJapaneseTokenizer
 from ..bertweet.tokenization_bertweet import BertweetTokenizer
-from ..blenderbot.tokenization_blenderbot import BlenderbotSmallTokenizer
+from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
+from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
+from ..convbert.tokenization_convbert import ConvBertTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
 from ..distilbert.tokenization_distilbert import DistilBertTokenizer
@@ -36,6 +38,7 @@ from ..funnel.tokenization_funnel import FunnelTokenizer
 from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
 from ..herbert.tokenization_herbert import HerbertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
+from ..led.tokenization_led import LEDTokenizer
 from ..longformer.tokenization_longformer import LongformerTokenizer
 from ..lxmert.tokenization_lxmert import LxmertTokenizer
 from ..mobilebert.tokenization_mobilebert import MobileBertTokenizer
@@ -49,6 +52,7 @@ from ..roberta.tokenization_roberta import RobertaTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
+from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 from ..xlm.tokenization_xlm import XLMTokenizer
 from .configuration_auto import (
     AlbertConfig,
@@ -57,9 +61,12 @@ from .configuration_auto import (
     BertConfig,
     BertGenerationConfig,
     BlenderbotConfig,
+    BlenderbotSmallConfig,
     CamembertConfig,
+    ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
+    DebertaV2Config,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -68,9 +75,12 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    IBertConfig,
     LayoutLMConfig,
+    LEDConfig,
     LongformerConfig,
     LxmertConfig,
+    M2M100Config,
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
@@ -83,10 +93,12 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    Speech2TextConfig,
     SqueezeBertConfig,
     T5Config,
     TapasConfig,
     TransfoXLConfig,
+    Wav2Vec2Config,
     XLMConfig,
     XLMProphetNetConfig,
     XLMRobertaConfig,
@@ -100,11 +112,15 @@ if is_sentencepiece_available():
     from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
+    from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
+    from ..m2m_100 import M2M100Tokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
+    from ..mbart.tokenization_mbart50 import MBart50Tokenizer
     from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
     from ..reformer.tokenization_reformer import ReformerTokenizer
+    from ..speech_to_text import Speech2TextTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
     from ..xlm_prophetnet.tokenization_xlm_prophetnet import XLMProphetNetTokenizer
     from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
@@ -114,8 +130,10 @@ else:
     BarthezTokenizer = None
     BertGenerationTokenizer = None
     CamembertTokenizer = None
+    DebertaV2Tokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
+    MBart50Tokenizer = None
     MT5Tokenizer = None
     PegasusTokenizer = None
     ReformerTokenizer = None
@@ -123,6 +141,8 @@ else:
     XLMRobertaTokenizer = None
     XLNetTokenizer = None
     XLMProphetNetTokenizer = None
+    M2M100Tokenizer = None
+    Speech2TextTokenizer = None
 
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
@@ -130,6 +150,7 @@ if is_tokenizers_available():
     from ..barthez.tokenization_barthez_fast import BarthezTokenizerFast
     from ..bert.tokenization_bert_fast import BertTokenizerFast
     from ..camembert.tokenization_camembert_fast import CamembertTokenizerFast
+    from ..convbert.tokenization_convbert_fast import ConvBertTokenizerFast
     from ..distilbert.tokenization_distilbert_fast import DistilBertTokenizerFast
     from ..dpr.tokenization_dpr_fast import DPRQuestionEncoderTokenizerFast
     from ..electra.tokenization_electra_fast import ElectraTokenizerFast
@@ -137,8 +158,10 @@ if is_tokenizers_available():
     from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
     from ..herbert.tokenization_herbert_fast import HerbertTokenizerFast
     from ..layoutlm.tokenization_layoutlm_fast import LayoutLMTokenizerFast
+    from ..led.tokenization_led_fast import LEDTokenizerFast
     from ..longformer.tokenization_longformer_fast import LongformerTokenizerFast
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
+    from ..mbart.tokenization_mbart50_fast import MBart50TokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
     from ..mobilebert.tokenization_mobilebert_fast import MobileBertTokenizerFast
     from ..mpnet.tokenization_mpnet_fast import MPNetTokenizerFast
@@ -158,6 +181,7 @@ else:
     BarthezTokenizerFast = None
     BertTokenizerFast = None
     CamembertTokenizerFast = None
+    ConvBertTokenizerFast = None
     DistilBertTokenizerFast = None
     DPRQuestionEncoderTokenizerFast = None
     ElectraTokenizerFast = None
@@ -165,9 +189,11 @@ else:
     GPT2TokenizerFast = None
     HerbertTokenizerFast = None
     LayoutLMTokenizerFast = None
+    LEDTokenizerFast = None
     LongformerTokenizerFast = None
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
+    MBart50TokenizerFast = None
     MobileBertTokenizerFast = None
     MPNetTokenizerFast = None
     MT5TokenizerFast = None
@@ -180,6 +206,7 @@ else:
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
+
 
 logger = logging.get_logger(__name__)
 
@@ -197,9 +224,9 @@ TOKENIZER_MAPPING = OrderedDict(
         (MBartConfig, (MBartTokenizer, MBartTokenizerFast)),
         (XLMRobertaConfig, (XLMRobertaTokenizer, XLMRobertaTokenizerFast)),
         (MarianConfig, (MarianTokenizer, None)),
-        (BlenderbotConfig, (BlenderbotSmallTokenizer, None)),
+        (BlenderbotSmallConfig, (BlenderbotSmallTokenizer, None)),
+        (BlenderbotConfig, (BlenderbotTokenizer, None)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
-        (BartConfig, (BarthezTokenizer, BarthezTokenizerFast)),
         (BartConfig, (BartTokenizer, BartTokenizerFast)),
         (LongformerConfig, (LongformerTokenizer, LongformerTokenizerFast)),
         (RobertaConfig, (RobertaTokenizer, RobertaTokenizerFast)),
@@ -221,11 +248,18 @@ TOKENIZER_MAPPING = OrderedDict(
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
         (DebertaConfig, (DebertaTokenizer, None)),
+        (DebertaV2Config, (DebertaV2Tokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
+        (Speech2TextConfig, (Speech2TextTokenizer, None)),
+        (M2M100Config, (M2M100Tokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
+        (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
+        (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
+        (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
     ]
 )
 
@@ -236,6 +270,10 @@ NO_CONFIG_TOKENIZER = [
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
+    BarthezTokenizer,
+    BarthezTokenizerFast,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
 ]
 
 

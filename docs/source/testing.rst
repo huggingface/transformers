@@ -25,25 +25,22 @@ How transformers are tested
 -----------------------------------------------------------------------------------------------------------------------
 
 1. Once a PR is submitted it gets tested with 9 CircleCi jobs. Every new commit to that PR gets retested. These jobs
-   are defined in this `config file <https://github.com/huggingface/transformers/blob/master/.circleci/config.yml>`__,
-   so that if needed you can reproduce the same environment on your machine.
+   are defined in this :prefix_link:`config file <.circleci/config.yml>`, so that if needed you can reproduce the same
+   environment on your machine.
 
    These CI jobs don't run ``@slow`` tests.
 
 2. There are 3 jobs run by `github actions <https://github.com/huggingface/transformers/actions>`__:
 
-   * `torch hub integration
-     <https://github.com/huggingface/transformers/blob/master/.github/workflows/github-torch-hub.yml>`__: checks
-     whether torch hub integration works.
+   * :prefix_link:`torch hub integration <.github/workflows/github-torch-hub.yml>`: checks whether torch hub
+     integration works.
 
-   * `self-hosted (push) <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-push.yml>`__:
-     runs fast tests on GPU only on commits on ``master``. It only runs if a commit on ``master`` has updated the code
-     in one of the following folders: ``src``, ``tests``, ``.github`` (to prevent running on added model cards,
-     notebooks, etc.)
+   * :prefix_link:`self-hosted (push) <.github/workflows/self-push.yml>`: runs fast tests on GPU only on commits on
+     ``master``. It only runs if a commit on ``master`` has updated the code in one of the following folders: ``src``,
+     ``tests``, ``.github`` (to prevent running on added model cards, notebooks, etc.)
 
-   * `self-hosted runner
-     <https://github.com/huggingface/transformers/blob/master/.github/workflows/self-scheduled.yml>`__: runs normal and
-     slow tests on GPU in ``tests`` and ``examples``:
+   * :prefix_link:`self-hosted runner <.github/workflows/self-scheduled.yml>`: runs normal and slow tests on GPU in
+     ``tests`` and ``examples``:
 
    .. code-block:: bash
 
@@ -492,12 +489,9 @@ spawns a normal process that then spawns off multiple workers and manages the IO
 
 This is still under development but you can study 2 different tests that perform this successfully:
 
-* `test_seq2seq_examples_multi_gpu.py
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_seq2seq_examples_multi_gpu.py>`__ - a
+* :prefix_link:`test_seq2seq_examples_multi_gpu.py <examples/seq2seq/test_seq2seq_examples_multi_gpu.py>` - a
   ``pytorch-lightning``-running test (had to use PL's ``ddp`` spawning method which is the default)
-* `test_finetune_trainer.py
-  <https://github.com/huggingface/transformers/blob/master/examples/seq2seq/test_finetune_trainer.py>`__ - a normal
-  (non-PL) test
+* :prefix_link:`test_finetune_trainer.py <examples/seq2seq/test_finetune_trainer.py>` - a normal (non-PL) test
 
 To jump right into the execution point, search for the ``execute_subprocess_async`` function in those tests.
 
@@ -940,10 +934,9 @@ slow models to do qualitative testing. To see the use of these simply look for *
 
     grep tiny tests examples
 
-Here is a an example of a `script
-<https://github.com/huggingface/transformers/blob/master/scripts/fsmt/fsmt-make-tiny-model.py>`__ that created the tiny
-model `stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your
-specific model's architecture.
+Here is a an example of a :prefix_link:`script <scripts/fsmt/fsmt-make-tiny-model.py>` that created the tiny model
+`stas/tiny-wmt19-en-de <https://huggingface.co/stas/tiny-wmt19-en-de>`__. You can easily adjust it to your specific
+model's architecture.
 
 It's easy to measure the run-time incorrectly if for example there is an overheard of downloading a huge model, but if
 you test it locally the downloaded files would be cached and thus the download time not measured. Hence check the

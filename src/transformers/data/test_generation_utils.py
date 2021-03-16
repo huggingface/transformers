@@ -17,15 +17,14 @@ import unittest
 
 import timeout_decorator
 
-from transformers import is_torch_available
-from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch
+from ..file_utils import cached_property, is_torch_available
+from ..testing_utils import require_torch
 
 
 if is_torch_available():
     import torch
 
-    from transformers import MarianConfig, MarianMTModel
+    from ..models.marian import MarianConfig, MarianMTModel
 
 
 @require_torch

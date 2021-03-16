@@ -23,9 +23,7 @@ from typing import Dict, List, Optional, Tuple
 
 import sacremoses as sm
 
-from ...file_utils import add_start_docstrings
-from ...tokenization_utils import BatchEncoding, PreTrainedTokenizer
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -38,9 +36,13 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "src_vocab_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-src.json"},
-    "tgt_vocab_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/vocab-tgt.json"},
-    "merges_file": {"stas/tiny-wmt19-en-de": "https://cdn.huggingface.co/stas/tiny-wmt19-en-de/merges.txt"},
+    "src_vocab_file": {
+        "stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/vocab-src.json"
+    },
+    "tgt_vocab_file": {
+        "stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/vocab-tgt.json"
+    },
+    "merges_file": {"stas/tiny-wmt19-en-de": "https://huggingface.co/stas/tiny-wmt19-en-de/resolve/main/merges.txt"},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"stas/tiny-wmt19-en-de": 1024}
@@ -179,6 +181,7 @@ class FSMTTokenizer(PreTrainedTokenizer):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -483,40 +486,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
         if token_ids_1 is None:
             return len(token_ids_0 + sep) * [0]
         return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        return_tensors: Optional[str] = None,
-        truncation=True,
-        padding="longest",
-        **unused,
-    ) -> BatchEncoding:
-        if type(src_texts) is not list:
-            raise ValueError("src_texts is expected to be a list")
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-
-        tokenizer_kwargs = dict(
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
-
-        if tgt_texts is None:
-            return model_inputs
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-
-        model_inputs["labels"] = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
-        return model_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

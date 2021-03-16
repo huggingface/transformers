@@ -241,7 +241,7 @@ class AutoModelTest(unittest.TestCase):
                 for parent_config, parent_model in mapping[: index + 1]:
                     assert not issubclass(
                         child_config, parent_config
-                    ), "{child_config.__name__} is child of {parent_config.__name__}"
+                    ), f"{child_config.__name__} is child of {parent_config.__name__}"
                     assert not issubclass(
                         child_model, parent_model
-                    ), "{child_config.__name__} is child of {parent_config.__name__}"
+                    ), f"{child_config.__name__} is child of {parent_config.__name__}"

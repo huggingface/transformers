@@ -56,13 +56,21 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
+    transpose = bool(
+        tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
+        or "emb_projs" in tf_name
+        or "out_projs" in tf_name
+    )
 
     # Convert standard TF2.0 names in PyTorch names
     if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":
         tf_name[-1] = "weight"
     if tf_name[-1] == "beta":
         tf_name[-1] = "bias"
+
+    # The SeparableConv1D TF layer contains two weights that are translated to PyTorch Conv1D here
+    if tf_name[-1] == "pointwise_kernel" or tf_name[-1] == "depthwise_kernel":
+        tf_name[-1] = tf_name[-1].replace("_kernel", ".weight")
 
     # Remove prefix if needed
     tf_name = ".".join(tf_name)
@@ -127,7 +135,6 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if tf_inputs is not None:
         tf_model(tf_inputs, training=False)  # Make sure model is built
-
     # Adapt state dict - TODO remove this and update the AWS weights files instead
     # Convert old format to new format if needed from a PyTorch state_dict
     old_keys = []

@@ -593,6 +593,60 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         # xlnet cannot keep gradients in attentions or hidden states
         return
 
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
+        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+
+        for idx, iter_hidden_states in enumerate(hidden_states):
+            # check hidden size
+            for i, layer_hidden_states in enumerate(iter_hidden_states):
+                # every 2nd tensor is from extra stream
+                if i % 2 != 0:
+                    seq_len = 1
+                else:
+                    # for first item dummy PAD token is appended so need one more
+                    seq_len = (min_length + 1) if idx == 0 else min_length
+
+                expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+                self.assertEqual(layer_hidden_states.shape, expected_shape)
+
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+
+        for idx, attentions_item in enumerate(attentions):
+            for iter_attentions in attentions_item:
+                tgt_len = min_length
+
+                # for first item dummy PAD token is appended so need one more
+                if idx == 0:
+                    tgt_len += 1
+
+                src_len = min_length + idx + 1
+
+                expected_shape = (
+                    batch_size * num_beam_groups,
+                    config.num_attention_heads,
+                    tgt_len,
+                    src_len,
+                )
+                # check attn size
+                self.assertListEqual(
+                    [layer_attention.shape for layer_attention in iter_attentions],
+                    [expected_shape] * len(iter_attentions),
+                )
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in XLNET_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:

@@ -60,7 +60,7 @@ ModelOutput
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.file_utils.ModelOutput
-    :members:
+    :members: to_tuple
 
 
 BaseModelOutput
@@ -123,13 +123,6 @@ CausalLMOutputWithCrossAttentions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.modeling_outputs.CausalLMOutputWithCrossAttentions
-    :members:
-
-
-CausalLMOutputWithPastAndCrossAttentions
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.modeling_outputs.CausalLMOutputWithPastAndCrossAttentions
     :members:
 
 

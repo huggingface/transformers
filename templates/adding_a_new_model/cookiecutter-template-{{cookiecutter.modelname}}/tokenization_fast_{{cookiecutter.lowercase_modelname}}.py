@@ -56,6 +56,50 @@ class {{cookiecutter.camelcase_modelname}}TokenizerFast(BertTokenizerFast):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     slow_tokenizer_class = {{cookiecutter.camelcase_modelname}}Tokenizer
+
+{%- elif cookiecutter.tokenizer_type == "Based on BART" %}
+from ...utils import logging
+from ..bart.tokenization_bart_fast import BartTokenizerFast
+from .tokenization_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Tokenizer
+
+
+logger = logging.get_logger(__name__)
+
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.json",
+    },
+    "merges_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/merges.txt",
+    },
+    "tokenizer_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/tokenizer.json",
+    },
+}
+
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
+    "{{cookiecutter.checkpoint_identifier}}": 1024,
+}
+
+
+class {{cookiecutter.camelcase_modelname}}TokenizerFast(BartTokenizerFast):
+    r"""
+    Construct a "fast" {{cookiecutter.modelname}} tokenizer (backed by HuggingFace's `tokenizers` library).
+
+    :class:`~transformers.{{cookiecutter.camelcase_modelname}}TokenizerFast` is identical to :class:`~transformers.BartTokenizerFast` and runs
+    end-to-end tokenization: punctuation splitting and wordpiece.
+
+    Refer to superclass :class:`~transformers.BartTokenizerFast` for usage examples and documentation concerning
+    parameters.
+    """
+
+    vocab_files_names = VOCAB_FILES_NAMES
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
+    slow_tokenizer_class = {{cookiecutter.camelcase_modelname}}Tokenizer
+
 {%- elif cookiecutter.tokenizer_type == "Standalone" %}
 from typing import List, Optional
 
@@ -68,9 +112,16 @@ from .tokenization_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.ca
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
-PRETRAINED_VOCAB_FILES_MAP = {}
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/vocab.txt",
+    },
+    "tokenizer_file": {
+        "{{cookiecutter.checkpoint_identifier}}": "https://huggingface.co/{{cookiecutter.checkpoint_identifier}}/resolve/main/tokenizer.json",
+    },
+}
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "{{cookiecutter.checkpoint_identifier}}": 1024,

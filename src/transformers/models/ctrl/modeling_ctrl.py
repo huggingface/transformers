@@ -15,6 +15,8 @@
 # limitations under the License.
 """ PyTorch CTRL model."""
 
+from typing import Tuple
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -29,6 +31,7 @@ from .configuration_ctrl import CTRLConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "ctrl"
 _CONFIG_FOR_DOC = "CTRLConfig"
 _TOKENIZER_FOR_DOC = "CTRLTokenizer"
 
@@ -219,12 +222,16 @@ class CTRLPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Embedding, Conv1D)):
+        if isinstance(module, (nn.Linear, Conv1D)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if isinstance(module, (nn.Linear, Conv1D)) and module.bias is not None:
+            if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -262,7 +269,7 @@ CTRL_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        past_key_values (:obj:`List[torch.FloatTensor]` of length :obj:`config.n_layers`):
+        past_key_values (:obj:`Tuple[Tuple[torch.FloatTensor]]` of length :obj:`config.n_layers`):
             Contains pre-computed hidden-states (key and values in the attention blocks) as computed by the model (see
             :obj:`past_key_values` output below). Can be used to speed up sequential decoding. The ``input_ids`` which
             have their past given to this model should not be passed as input ids as they have already been computed.
@@ -349,7 +356,7 @@ class CTRLModel(CTRLPreTrainedModel):
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ctrl",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -389,7 +396,7 @@ class CTRLModel(CTRLPreTrainedModel):
 
         if past_key_values is None:
             past_length = 0
-            past_key_values = [None] * len(self.h)
+            past_key_values = tuple([None] * len(self.h))
         else:
             past_length = past_key_values[0][0].size(-2)
         if position_ids is None:
@@ -509,7 +516,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ctrl",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -575,6 +582,18 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
             attentions=transformer_outputs.attentions,
         )
 
+    @staticmethod
+    def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
+        """
+        This function is used to re-order the :obj:`past_key_values` cache if
+        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
+        called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
+        """
+        return tuple(
+            tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
+            for layer_past in past
+        )
+
 
 @add_start_docstrings(
     """
@@ -600,7 +619,7 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
     @add_start_docstrings_to_model_forward(CTRL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="ctrl",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )

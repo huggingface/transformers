@@ -14,7 +14,7 @@ Training and fine-tuning
 =======================================================================================================================
 
 Model classes in 🤗 Transformers are designed to be compatible with native PyTorch and TensorFlow 2 and can be used
-seemlessly with either. In this quickstart, we will show how to fine-tune (or train from scratch) a model using the
+seamlessly with either. In this quickstart, we will show how to fine-tune (or train from scratch) a model using the
 standard training tools available in either framework. We will also show how to use our included
 :func:`~transformers.Trainer` class which handles much of the complexity of training for you.
 
@@ -277,6 +277,7 @@ pass it to the trainer.
 
 Finally, you can view the results, including any calculated metrics, by launching tensorboard in your specified
 ``logging_dir`` directory.
+
 
 
 .. _additional-resources:

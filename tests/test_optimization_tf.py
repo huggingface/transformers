@@ -14,8 +14,6 @@
 
 import unittest
 
-from packaging import version
-
 from transformers import is_tf_available
 from transformers.testing_utils import require_tf
 
@@ -78,18 +76,12 @@ class OptimizationFTest(unittest.TestCase):
                 local_variables = strategy.experimental_local_results(gradient_placeholder)
                 local_variables[0].assign(grad1)
                 local_variables[1].assign(grad2)
-                if version.parse(tf.version.VERSION) >= version.parse("2.2"):
-                    strategy.run(accumulate_on_replica, args=(gradient_placeholder,))
-                else:
-                    strategy.experimental_run_v2(accumulate_on_replica, args=(gradient_placeholder,))
+                strategy.run(accumulate_on_replica, args=(gradient_placeholder,))
 
         @tf.function
         def apply_grad():
             with strategy.scope():
-                if version.parse(tf.version.VERSION) >= version.parse("2.2"):
-                    strategy.run(apply_on_replica)
-                else:
-                    strategy.experimental_run_v2(apply_on_replica)
+                strategy.run(apply_on_replica)
 
         def _check_local_values(grad1, grad2):
             values = strategy.experimental_local_results(accumulator._gradients[0])

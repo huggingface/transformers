@@ -27,13 +27,12 @@ from tokenizers import Tokenizer as TokenizerFast
 from tokenizers.decoders import Decoder as DecoderFast
 
 from .convert_slow_tokenizer import convert_slow_tokenizer
-from .file_utils import add_end_docstrings
+from .file_utils import PaddingStrategy, add_end_docstrings
 from .tokenization_utils import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     AddedToken,
     BatchEncoding,
-    PaddingStrategy,
     PreTokenizedInput,
     PreTokenizedInputPair,
     PreTrainedTokenizerBase,
@@ -56,12 +55,7 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 
 
-@add_end_docstrings(
-    INIT_TOKENIZER_DOCSTRING,
-    """
-    .. automethod:: __call__
-    """,
-)
+@add_end_docstrings(INIT_TOKENIZER_DOCSTRING)
 class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     """
     Base class for all fast tokenizers (wrapping HuggingFace tokenizers library).
@@ -80,8 +74,15 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
     def __init__(self, *args, **kwargs):
         slow_tokenizer = kwargs.pop("__slow_tokenizer", None)
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
+        from_slow = kwargs.pop("from_slow", False)
 
-        if fast_tokenizer_file is not None:
+        if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
+            raise ValueError(
+                "Cannot instantiate this tokenizer from a slow version. If it's based on sentencepiece, make sure you "
+                "have sentencepiece installed."
+            )
+
+        if fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif slow_tokenizer is not None:
@@ -104,6 +105,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
 
         if slow_tokenizer is not None:
             kwargs.update(slow_tokenizer.init_kwargs)
+
+        self._decode_use_source_tokenizer = False
 
         # We call this after having initialized the backend tokenizer because we update it.
         super().__init__(**kwargs)
@@ -306,7 +309,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         section.
 
         Args:
-            padding_strategy (:class:`~transformers.tokenization_utils_base.PaddingStrategy`):
+            padding_strategy (:class:`~transformers.file_utils.PaddingStrategy`):
                 The kind of padding that will be applied to the input
             truncation_strategy (:class:`~transformers.tokenization_utils_base.TruncationStrategy`):
                 The kind of truncation that will be applied to the input
@@ -490,6 +493,8 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         clean_up_tokenization_spaces: bool = True,
         **kwargs
     ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
         if isinstance(token_ids, int):
             token_ids = [token_ids]
         text = self._tokenizer.decode(token_ids, skip_special_tokens=skip_special_tokens)

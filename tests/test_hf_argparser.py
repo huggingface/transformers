@@ -20,6 +20,7 @@ from enum import Enum
 from typing import List, Optional
 
 from transformers import HfArgumentParser, TrainingArguments
+from transformers.hf_argparser import string_to_bool
 
 
 def list_field(default=None, metadata=None):
@@ -44,6 +45,7 @@ class WithDefaultExample:
 class WithDefaultBoolExample:
     foo: bool = False
     baz: bool = True
+    opt: Optional[bool] = None
 
 
 class BasicEnum(Enum):
@@ -53,7 +55,10 @@ class BasicEnum(Enum):
 
 @dataclass
 class EnumExample:
-    foo: BasicEnum = BasicEnum.toto
+    foo: BasicEnum = "toto"
+
+    def __post_init__(self):
+        self.foo = BasicEnum(self.foo)
 
 
 @dataclass
@@ -71,6 +76,16 @@ class ListExample:
     bar_int: List[int] = list_field(default=[1, 2, 3])
     foo_str: List[str] = list_field(default=["Hallo", "Bonjour", "Hello"])
     foo_float: List[float] = list_field(default=[0.1, 0.2, 0.3])
+
+
+@dataclass
+class RequiredExample:
+    required_list: List[int] = field()
+    required_str: str = field()
+    required_enum: BasicEnum = field()
+
+    def __post_init__(self):
+        self.required_enum = BasicEnum(self.required_enum)
 
 
 class HfArgumentParserTest(unittest.TestCase):
@@ -91,7 +106,7 @@ class HfArgumentParserTest(unittest.TestCase):
         expected.add_argument("--foo", type=int, required=True)
         expected.add_argument("--bar", type=float, required=True)
         expected.add_argument("--baz", type=str, required=True)
-        expected.add_argument("--flag", action="store_true")
+        expected.add_argument("--flag", type=string_to_bool, default=True, const=True, nargs="?")
         self.argparsersEqual(parser, expected)
 
     def test_with_default(self):
@@ -106,28 +121,43 @@ class HfArgumentParserTest(unittest.TestCase):
         parser = HfArgumentParser(WithDefaultBoolExample)
 
         expected = argparse.ArgumentParser()
-        expected.add_argument("--foo", action="store_true")
+        expected.add_argument("--foo", type=string_to_bool, default=False, const=True, nargs="?")
         expected.add_argument("--no_baz", action="store_false", dest="baz")
+        expected.add_argument("--baz", type=string_to_bool, default=True, const=True, nargs="?")
+        expected.add_argument("--opt", type=string_to_bool, default=None)
         self.argparsersEqual(parser, expected)
 
         args = parser.parse_args([])
-        self.assertEqual(args, Namespace(foo=False, baz=True))
+        self.assertEqual(args, Namespace(foo=False, baz=True, opt=None))
 
         args = parser.parse_args(["--foo", "--no_baz"])
-        self.assertEqual(args, Namespace(foo=True, baz=False))
+        self.assertEqual(args, Namespace(foo=True, baz=False, opt=None))
+
+        args = parser.parse_args(["--foo", "--baz"])
+        self.assertEqual(args, Namespace(foo=True, baz=True, opt=None))
+
+        args = parser.parse_args(["--foo", "True", "--baz", "True", "--opt", "True"])
+        self.assertEqual(args, Namespace(foo=True, baz=True, opt=True))
+
+        args = parser.parse_args(["--foo", "False", "--baz", "False", "--opt", "False"])
+        self.assertEqual(args, Namespace(foo=False, baz=False, opt=False))
 
     def test_with_enum(self):
         parser = HfArgumentParser(EnumExample)
 
         expected = argparse.ArgumentParser()
-        expected.add_argument("--foo", default=BasicEnum.toto, choices=list(BasicEnum), type=BasicEnum)
+        expected.add_argument("--foo", default="toto", choices=["titi", "toto"], type=str)
         self.argparsersEqual(parser, expected)
 
         args = parser.parse_args([])
-        self.assertEqual(args.foo, BasicEnum.toto)
+        self.assertEqual(args.foo, "toto")
+        enum_ex = parser.parse_args_into_dataclasses([])[0]
+        self.assertEqual(enum_ex.foo, BasicEnum.toto)
 
         args = parser.parse_args(["--foo", "titi"])
-        self.assertEqual(args.foo, BasicEnum.titi)
+        self.assertEqual(args.foo, "titi")
+        enum_ex = parser.parse_args_into_dataclasses(["--foo", "titi"])[0]
+        self.assertEqual(enum_ex.foo, BasicEnum.titi)
 
     def test_with_list(self):
         parser = HfArgumentParser(ListExample)
@@ -165,6 +195,15 @@ class HfArgumentParserTest(unittest.TestCase):
 
         args = parser.parse_args("--foo 12 --bar 3.14 --baz 42 --ces a b c --des 1 2 3".split())
         self.assertEqual(args, Namespace(foo=12, bar=3.14, baz="42", ces=["a", "b", "c"], des=[1, 2, 3]))
+
+    def test_with_required(self):
+        parser = HfArgumentParser(RequiredExample)
+
+        expected = argparse.ArgumentParser()
+        expected.add_argument("--required_list", nargs="+", type=int, required=True)
+        expected.add_argument("--required_str", type=str, required=True)
+        expected.add_argument("--required_enum", type=str, choices=["titi", "toto"], required=True)
+        self.argparsersEqual(parser, expected)
 
     def test_parse_dict(self):
         parser = HfArgumentParser(BasicExample)

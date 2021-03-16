@@ -6,5 +6,6 @@
   "authors": "The HuggingFace Team",
   "checkpoint_identifier": "brand-new-bert-base-cased",
   "tokenizer_type": "Based on BERT",
-  "generate_tensorflow_and_pytorch": "PyTorch"
+  "generate_tensorflow_and_pytorch": "PyTorch",
+  "is_encoder_decoder_model": "False"
 }

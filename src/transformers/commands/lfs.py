@@ -25,9 +25,9 @@ from contextlib import AbstractContextManager
 from typing import Dict, List, Optional
 
 import requests
-from transformers.commands import BaseTransformersCLICommand
 
 from ..utils import logging
+from . import BaseTransformersCLICommand
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

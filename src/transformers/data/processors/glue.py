@@ -98,7 +98,7 @@ if is_tf_available():
                 label = d.pop("label")
                 yield (d, label)
 
-        input_names = ["input_ids"] + tokenizer.model_input_names
+        input_names = tokenizer.model_input_names
 
         return tf.data.Dataset.from_generator(
             gen,
@@ -116,7 +116,7 @@ def _glue_convert_examples_to_features(
     output_mode=None,
 ):
     if max_length is None:
-        max_length = tokenizer.max_len
+        max_length = tokenizer.model_max_length
 
     if task is not None:
         processor = glue_processors[task]()

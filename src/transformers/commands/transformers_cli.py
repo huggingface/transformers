@@ -15,14 +15,14 @@
 
 from argparse import ArgumentParser
 
-from transformers.commands.add_new_model import AddNewModelCommand
-from transformers.commands.convert import ConvertCommand
-from transformers.commands.download import DownloadCommand
-from transformers.commands.env import EnvironmentCommand
-from transformers.commands.lfs import LfsCommands
-from transformers.commands.run import RunCommand
-from transformers.commands.serving import ServeCommand
-from transformers.commands.user import UserCommands
+from .add_new_model import AddNewModelCommand
+from .convert import ConvertCommand
+from .download import DownloadCommand
+from .env import EnvironmentCommand
+from .lfs import LfsCommands
+from .run import RunCommand
+from .serving import ServeCommand
+from .user import UserCommands
 
 
 def main():

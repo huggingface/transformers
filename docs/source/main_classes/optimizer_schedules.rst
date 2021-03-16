@@ -43,6 +43,10 @@ Schedules
 Learning Rate Schedules (Pytorch)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+.. autoclass:: transformers.SchedulerType
+
+.. autofunction:: transformers.get_scheduler
+
 .. autofunction:: transformers.get_constant_schedule
 
 

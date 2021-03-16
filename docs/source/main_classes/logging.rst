@@ -65,6 +65,10 @@ Other functions
 
 .. autofunction:: transformers.logging.get_logger
 
+.. autofunction:: transformers.logging.enable_default_handler
+
+.. autofunction:: transformers.logging.disable_default_handler
+
 .. autofunction:: transformers.logging.enable_explicit_format
 
 .. autofunction:: transformers.logging.reset_format

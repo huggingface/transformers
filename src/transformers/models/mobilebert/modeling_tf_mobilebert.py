@@ -15,8 +15,9 @@
 # limitations under the License.
 """ TF 2.0 MobileBERT model. """
 
+import warnings
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
@@ -58,6 +59,7 @@ from .configuration_mobilebert import MobileBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
@@ -111,25 +113,15 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
 
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
+
         self.trigram_input = config.trigram_input
         self.embedding_size = config.embedding_size
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
+        self.type_vocab_size = config.type_vocab_size
+        self.max_position_embeddings = config.max_position_embeddings
         self.initializer_range = config.initializer_range
-
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
-            name="position_embeddings",
-        )
-        self.token_type_embeddings = tf.keras.layers.Embedding(
-            config.type_vocab_size,
-            config.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range),
-            name="token_type_embeddings",
-        )
-
+        self.embeddings_sum = tf.keras.layers.Add()
         self.embedding_transformation = tf.keras.layers.Dense(config.hidden_size, name="embedding_transformation")
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
@@ -137,71 +129,48 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = NORM2FN[config.normalization_type](
             config.hidden_size, epsilon=config.layer_norm_eps, name="LayerNorm"
         )
-        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape):
-        """Build shared word embedding layer """
         with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight",
+            self.weight = self.add_weight(
+                name="weight",
                 shape=[self.vocab_size, self.embedding_size],
-                initializer=get_initializer(self.initializer_range),
+                initializer=get_initializer(initializer_range=self.initializer_range),
             )
+
+        with tf.name_scope("token_type_embeddings"):
+            self.token_type_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.type_vocab_size, self.hidden_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.hidden_size],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
         super().build(input_shape)
 
-    def call(
-        self,
-        input_ids=None,
-        position_ids=None,
-        token_type_ids=None,
-        inputs_embeds=None,
-        mode="embedding",
-        training=False,
-    ):
+    def call(self, input_ids=None, position_ids=None, token_type_ids=None, inputs_embeds=None, training=False):
         """
-        Get token embeddings of inputs.
-
-        Args:
-            inputs: list of three int64 tensors with shape [batch_size, length]: (input_ids, position_ids, token_type_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
-        if mode == "embedding":
-            return self._embedding(input_ids, position_ids, token_type_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, position_ids, token_type_ids, inputs_embeds, training=False):
-        """Applies embedding based on inputs tensor."""
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            input_shape = shape_list(input_ids)
-        else:
-            input_shape = shape_list(inputs_embeds)[:-1]
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        seq_length = input_shape[1]
-        if position_ids is None:
-            position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
+        input_shape = shape_list(inputs_embeds)[:-1]
+
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
-
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
+            token_type_ids = tf.fill(dims=input_shape, value=0)
 
         if self.trigram_input:
             # From the paper MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited
@@ -223,32 +192,17 @@ class TFMobileBertEmbeddings(tf.keras.layers.Layer):
         if self.trigram_input or self.embedding_size != self.hidden_size:
             inputs_embeds = self.embedding_transformation(inputs_embeds)
 
-        position_embeddings = self.position_embeddings(position_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+        if position_ids is None:
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
-        embeddings = inputs_embeds + position_embeddings + token_type_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings, training=training)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        token_type_embeds = tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
+        final_embeddings = self.LayerNorm(inputs=final_embeddings)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-        return embeddings
-
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer.
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-
-        x = tf.reshape(inputs, [-1, self.hidden_size])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
 class TFMobileBertSelfAttention(tf.keras.layers.Layer):
@@ -279,6 +233,7 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x, batch_size):
+        # Reshape from [batch_size, seq_length, all_head_size] to [batch_size, seq_length, num_attention_heads, attention_head_size]
         x = tf.reshape(x, (batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
@@ -297,11 +252,12 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.matmul(
             query_layer, key_layer, transpose_b=True
         )  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)  # scale attention_scores
+        dk = tf.cast(shape_list(key_layer)[-1], dtype=attention_scores.dtype)  # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFMobileBertModel call() function)
+            attention_mask = tf.cast(attention_mask, dtype=attention_scores.dtype)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -665,6 +621,20 @@ class TFMobileBertLMPredictionHead(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self
+
+    def set_output_embeddings(self, value):
+        self.decoder = value
+        self.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
         hidden_states = self.transform(hidden_states)
         hidden_states = tf.matmul(hidden_states, tf.concat([tf.transpose(self.decoder), self.dense], axis=0))
@@ -703,11 +673,8 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
-        self.embeddings.vocab_size = value.shape[0]
-
-    def _resize_token_embeddings(self, new_num_tokens):
-        raise NotImplementedError
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
         """
@@ -761,21 +728,30 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(input_shape, 0)
 
+        embedding_output = self.embeddings(
+            inputs["input_ids"],
+            inputs["position_ids"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            training=inputs["training"],
+        )
+
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
         # this attention mask is more simple than the triangular masking of causal attention
         # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-        extended_attention_mask = inputs["attention_mask"][:, tf.newaxis, tf.newaxis, :]
+        extended_attention_mask = tf.reshape(inputs["attention_mask"], (input_shape[0], 1, 1, input_shape[1]))
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
         # masked positions, this operation will create a tensor which is 0.0 for
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -787,13 +763,6 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         else:
             inputs["head_mask"] = [None] * self.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            inputs["input_ids"],
-            inputs["position_ids"],
-            inputs["token_type_ids"],
-            inputs["inputs_embeds"],
-            training=inputs["training"],
-        )
         encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,
@@ -940,12 +909,15 @@ MOBILEBERT_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -964,7 +936,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1012,6 +984,18 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
 
         return outputs
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertModel.serving_output
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings(
     """
@@ -1027,13 +1011,11 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
         self.seq_relationship = TFMobileBertOnlyNSPHead(2, name="seq_relationship___cls")
 
-    def get_output_embeddings(self):
-        return self.predictions.predictions
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.predictions.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.predictions.name + "/" + self.predictions.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1109,6 +1091,17 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMobileBertForPreTrainingOutput(
+            prediction_logits=output.prediction_logits,
+            seq_relationship_logits=output.seq_relationship_logits,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top. """, MOBILEBERT_START_DOCSTRING)
 class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModelingLoss):
@@ -1116,7 +1109,6 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     _keys_to_ignore_on_load_unexpected = [
         r"pooler",
         r"seq_relationship___cls",
-        r"predictions___cls",
         r"cls.seq_relationship",
     ]
 
@@ -1124,21 +1116,19 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
         super().__init__(config, *inputs, **kwargs)
 
         self.mobilebert = TFMobileBertMainLayer(config, add_pooling_layer=False, name="mobilebert")
-        self.mlm = TFMobileBertMLMHead(config, name="mlm___cls")
+        self.predictions = TFMobileBertMLMHead(config, name="predictions___cls")
 
-    def get_output_embeddings(self):
-        return self.mlm.predictions
-
-    def get_output_layer_with_bias(self):
-        return self.mlm.predictions
+    def get_lm_head(self):
+        return self.predictions.predictions
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1192,7 +1182,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             training=inputs["training"],
         )
         sequence_output = outputs[0]
-        prediction_scores = self.mlm(sequence_output, training=inputs["training"])
+        prediction_scores = self.predictions(sequence_output, training=inputs["training"])
 
         loss = None if inputs["labels"] is None else self.compute_loss(inputs["labels"], prediction_scores)
 
@@ -1206,6 +1196,13 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
 class TFMobileBertOnlyNSPHead(tf.keras.layers.Layer):
@@ -1314,6 +1311,13 @@ class TFMobileBertForNextSentencePrediction(TFMobileBertPreTrainedModel, TFNextS
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForNextSentencePrediction.serving_output
+    def serving_output(self, output: TFNextSentencePredictorOutput) -> TFNextSentencePredictorOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFNextSentencePredictorOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1345,7 +1349,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1416,6 +1420,13 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1446,7 +1457,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1530,6 +1541,15 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
+        )
+
 
 @add_start_docstrings(
     """
@@ -1572,7 +1592,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1666,6 +1686,28 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
             attentions=outputs.attentions,
         )
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving
+    def serving(self, inputs: Dict[str, tf.Tensor]):
+        output = self.call(input_ids=inputs)
+
+        return self.serving_output(output)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1698,7 +1740,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1767,3 +1809,10 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)

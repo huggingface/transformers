@@ -111,12 +111,20 @@ def prepare_fsmt_inputs_dict(
     config,
     input_ids,
     attention_mask=None,
+    head_mask=None,
+    decoder_head_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
+    if head_mask is None:
+        head_mask = torch.ones(config.encoder_layers, config.encoder_attention_heads, device=torch_device)
+    if decoder_head_mask is None:
+        decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
+        "head_mask": head_mask,
+        "decoder_head_mask": decoder_head_mask,
     }
 
 
@@ -126,7 +134,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_generative_model_classes = (FSMTForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
 
     def setUp(self):
@@ -213,6 +220,20 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
+
+    @unittest.skip("Test has a segmentation fault on torch 1.8.0")
+    def test_export_to_onnx(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
+        model = FSMTModel(config).to(torch_device)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            torch.onnx.export(
+                model,
+                (inputs_dict["input_ids"], inputs_dict["attention_mask"]),
+                f"{tmpdirname}/fsmt_test.onnx",
+                export_params=True,
+                opset_version=12,
+                input_names=["input_ids", "attention_mask"],
+            )
 
     @unittest.skip("can't be implemented for FSMT due to dual vocab.")
     def test_resize_tokens_embeddings(self):

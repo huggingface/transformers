@@ -18,9 +18,7 @@ from typing import Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 
-from ...file_utils import add_start_docstrings
 from ...tokenization_utils import PreTrainedTokenizer
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
 from ...utils import logging
 
 
@@ -29,7 +27,7 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/spiece.model"}
+    "vocab_file": {"google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/spiece.model"}
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -86,7 +84,7 @@ class PegasusTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -249,36 +247,6 @@ class PegasusTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        return_tensors: str = None,
-        truncation=True,
-        padding="longest",
-        **unused,
-    ) -> BatchEncoding:
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        tokenizer_kwargs = dict(
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
-        if tgt_texts is None:
-            return model_inputs
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-        labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
-        model_inputs["labels"] = labels
-        return model_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

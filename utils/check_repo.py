@@ -24,14 +24,29 @@ from pathlib import Path
 # python utils/check_repo.py
 PATH_TO_TRANSFORMERS = "src/transformers"
 PATH_TO_TESTS = "tests"
-PATH_TO_DOC = "docs/source/model_doc"
+PATH_TO_DOC = "docs/source"
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
-    "BartDecoder",  # Building part of bigger (tested) model.
+    # models to ignore for not tested
+    "M2M100Encoder",  # Building part of bigger (tested) model.
+    "M2M100Decoder",  # Building part of bigger (tested) model.
+    "Speech2TextEncoder",  # Building part of bigger (tested) model.
+    "Speech2TextDecoder",  # Building part of bigger (tested) model.
+    "LEDEncoder",  # Building part of bigger (tested) model.
+    "LEDDecoder",  # Building part of bigger (tested) model.
+    "BartDecoderWrapper",  # Building part of bigger (tested) model.
     "BartEncoder",  # Building part of bigger (tested) model.
     "BertLMHeadModel",  # Needs to be setup as decoder.
+    "BlenderbotSmallEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotSmallDecoderWrapper",  # Building part of bigger (tested) model.
+    "BlenderbotEncoder",  # Building part of bigger (tested) model.
+    "BlenderbotDecoderWrapper",  # Building part of bigger (tested) model.
+    "MBartEncoder",  # Building part of bigger (tested) model.
+    "MBartDecoderWrapper",  # Building part of bigger (tested) model.
+    "PegasusEncoder",  # Building part of bigger (tested) model.
+    "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "DPRSpanPredictor",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
@@ -41,6 +56,7 @@ IGNORE_NON_TESTED = [
     "TFDPRSpanPredictor",  # Building part of bigger (tested) model.
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
+    "SeparableConv1D",  # Building part of bigger (tested) model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -62,8 +78,22 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # Update this list for models that are not in any of the auto MODEL_XXX_MAPPING. Being in this list is an exception and
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
+    # models to ignore for model xxx mapping
+    "M2M100Encoder",
+    "M2M100Decoder",
+    "Speech2TextEncoder",
+    "Speech2TextDecoder",
+    "LEDEncoder",
+    "LEDDecoder",
     "BartDecoder",
+    "BartDecoderWrapper",
     "BartEncoder",
+    "BlenderbotSmallEncoder",
+    "BlenderbotSmallDecoder",
+    "BlenderbotSmallDecoderWrapper",
+    "BlenderbotEncoder",
+    "BlenderbotDecoder",
+    "BlenderbotDecoderWrapper",
     "DPRContextEncoder",
     "DPREncoder",
     "DPRReader",
@@ -72,7 +102,13 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
     "MT5EncoderModel",
+    "MBartEncoder",
+    "MBartDecoder",
+    "MBartDecoderWrapper",
     "OpenAIGPTDoubleHeadsModel",
+    "PegasusEncoder",
+    "PegasusDecoder",
+    "PegasusDecoderWrapper",
     "ProphetNetDecoder",
     "ProphetNetEncoder",
     "ProphetNetDecoderWrapper",
@@ -89,11 +125,16 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "TFGPT2DoubleHeadsModel",
     "TFMT5EncoderModel",
     "TFOpenAIGPTDoubleHeadsModel",
+    "TFRagModel",
+    "TFRagSequenceForGeneration",
+    "TFRagTokenForGeneration",
     "TFT5EncoderModel",
+    "Wav2Vec2ForCTC",
     "XLMForQuestionAnswering",
     "XLMProphetNetDecoder",
     "XLMProphetNetEncoder",
     "XLNetForQuestionAnswering",
+    "SeparableConv1D",
 ]
 
 # This is to make sure the transformers module imported is the one in the repo.
@@ -181,9 +222,8 @@ def find_tested_models(test_file):
     with open(os.path.join(PATH_TO_TESTS, test_file), "r", encoding="utf-8", newline="\n") as f:
         content = f.read()
     all_models = re.findall(r"all_model_classes\s+=\s+\(\s*\(([^\)]*)\)", content)
-    # Check with one less parenthesis
-    if len(all_models) == 0:
-        all_models = re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
+    # Check with one less parenthesis as well
+    all_models += re.findall(r"all_model_classes\s+=\s+\(([^\)]*)\)", content)
     if len(all_models) > 0:
         model_tested = []
         for entry in all_models:
@@ -313,7 +353,7 @@ def find_all_documented_objects():
     """ Parse the content of all doc files to detect which classes and functions it documents"""
     documented_obj = []
     for doc_file in Path(PATH_TO_DOC).glob("**/*.rst"):
-        with open(doc_file) as f:
+        with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"(?:autoclass|autofunction):: transformers.(\S+)\s+", content)
         documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
@@ -323,6 +363,7 @@ def find_all_documented_objects():
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
     "AutoModelWithLMHead",
+    "BartPretrainedModel",
     "GlueDataset",
     "GlueDataTrainingArguments",
     "LineByLineTextDataset",
@@ -338,8 +379,11 @@ DEPRECATED_OBJECTS = [
     "SquadV1Processor",
     "SquadV2Processor",
     "TFAutoModelWithLMHead",
+    "TFBartPretrainedModel",
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
+    "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
@@ -378,13 +422,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "BertJapaneseTokenizer",
     "CharacterTokenizer",
     "MecabTokenizer",
-    # Bertweet
-    "BertweetTokenizer",
-    # Herbert
-    "HerbertTokenizer",
-    "HerbertTokenizerFast",
-    # Phoebus
-    "PhobertTokenizer",
     # Benchmarks
     "PyTorchBenchmark",
     "PyTorchBenchmarkArguments",
@@ -396,9 +433,6 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
 def ignore_undocumented(name):
     """Rules to determine if `name` should be undocumented."""
     # NOT DOCUMENTED ON PURPOSE.
-    # Magic attributes are not documented.
-    if name.startswith("__"):
-        return True
     # Constants uppercase are not documented.
     if name.isupper():
         return True
@@ -442,7 +476,9 @@ def ignore_undocumented(name):
 def check_all_objects_are_documented():
     """ Check all models are properly documented."""
     documented_objs = find_all_documented_objects()
-    undocumented_objs = [c for c in dir(transformers) if c not in documented_objs and not ignore_undocumented(c)]
+    modules = transformers._modules
+    objects = [c for c in dir(transformers) if c not in modules and not c.startswith("_")]
+    undocumented_objs = [c for c in objects if c not in documented_objs and not ignore_undocumented(c)]
     if len(undocumented_objs) > 0:
         raise Exception(
             "The following objects are in the public init so should be documented:\n - "
@@ -456,7 +492,7 @@ def check_repo_quality():
     check_all_decorator_order()
     check_all_models_are_tested()
     print("Checking all objects are properly documented.")
-    check_all_objects_are_documented
+    check_all_objects_are_documented()
     print("Checking all models are in at least one auto class.")
     check_all_models_are_auto_configured()
 

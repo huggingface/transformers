@@ -24,6 +24,8 @@ from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DistilBertConfig,
@@ -209,7 +211,6 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = True
     test_torchscript = True
     test_resize_embeddings = True
-    test_head_masking = True
 
     def setUp(self):
         self.model_tester = DistilBertModelTester(self)
@@ -247,3 +248,20 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = DistilBertModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+@require_torch
+class DistilBertModelIntergrationTest(unittest.TestCase):
+    @slow
+    def test_inference_no_head_absolute_embedding(self):
+        model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+        input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 1588, 2]])
+        attention_mask = torch.tensor([[0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]])
+        output = model(input_ids, attention_mask=attention_mask)[0]
+        expected_shape = torch.Size((1, 11, 768))
+        self.assertEqual(output.shape, expected_shape)
+        expected_slice = torch.tensor(
+            [[[-0.1639, 0.3299, 0.1648], [-0.1746, 0.3289, 0.1710], [-0.1884, 0.3357, 0.1810]]]
+        )
+
+        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))

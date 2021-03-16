@@ -20,8 +20,9 @@ from getpass import getpass
 from typing import List, Union
 
 from requests.exceptions import HTTPError
-from transformers.commands import BaseTransformersCLICommand
-from transformers.hf_api import HfApi, HfFolder
+
+from ..hf_api import HfApi, HfFolder
+from . import BaseTransformersCLICommand
 
 
 UPLOAD_MAX_FILES = 15

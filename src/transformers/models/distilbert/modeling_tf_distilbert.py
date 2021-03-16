@@ -16,6 +16,8 @@
  TF 2.0 DistilBERT model
 """
 
+import warnings
+
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
@@ -39,7 +41,6 @@ from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
-    TFSharedEmbeddings,
     TFTokenClassificationLoss,
     get_initializer,
     input_processing,
@@ -52,6 +53,7 @@ from .configuration_distilbert import DistilBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "distilbert-base-uncased"
 _CONFIG_FOR_DOC = "DistilBertConfig"
 _TOKENIZER_FOR_DOC = "DistilBertTokenizer"
 
@@ -67,106 +69,60 @@ TF_DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 class TFEmbeddings(tf.keras.layers.Layer):
+    """Construct the embeddings from word, position and token_type embeddings."""
+
     def __init__(self, config, **kwargs):
         super().__init__(**kwargs)
         self.vocab_size = config.vocab_size
         self.dim = config.dim
         self.initializer_range = config.initializer_range
-        self.word_embeddings = TFSharedEmbeddings(
-            config.vocab_size, config.dim, initializer_range=config.initializer_range, name="word_embeddings"
-        )  # padding_idx=0)
-        self.position_embeddings = tf.keras.layers.Embedding(
-            config.max_position_embeddings,
-            config.dim,
-            embeddings_initializer=get_initializer(config.initializer_range),
-            name="position_embeddings",
-        )
+        self.max_position_embeddings = config.max_position_embeddings
 
+        self.embeddings_sum = tf.keras.layers.Add()
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="LayerNorm")
-        self.dropout = tf.keras.layers.Dropout(config.dropout)
+        self.dropout = tf.keras.layers.Dropout(rate=config.dropout)
 
-    def build(self, input_shape):
-        """Build shared word embedding layer """
+    def build(self, input_shape: tf.TensorShape):
         with tf.name_scope("word_embeddings"):
-            # Create and initialize weights. The random normal initializer was chosen
-            # arbitrarily, and works well.
-            self.word_embeddings = self.add_weight(
-                "weight", shape=[self.vocab_size, self.dim], initializer=get_initializer(self.initializer_range)
+            self.weight = self.add_weight(
+                name="weight",
+                shape=[self.vocab_size, self.dim],
+                initializer=get_initializer(initializer_range=self.initializer_range),
             )
+
+        with tf.name_scope("position_embeddings"):
+            self.position_embeddings = self.add_weight(
+                name="embeddings",
+                shape=[self.max_position_embeddings, self.dim],
+                initializer=get_initializer(initializer_range=self.initializer_range),
+            )
+
         super().build(input_shape)
 
-    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, mode="embedding", training=False):
+    def call(self, input_ids=None, position_ids=None, inputs_embeds=None, training=False):
         """
-        Get token embeddings of inputs.
-
-        Args:
-            inputs: list of two int64 tensors with shape [batch_size, length]: (input_ids, position_ids)
-            mode: string, a valid value is one of "embedding" and "linear".
+        Applies embedding based on inputs tensor.
 
         Returns:
-            outputs: If mode == "embedding", output embedding tensor, float32 with shape [batch_size, length,
-            embedding_size]; if mode == "linear", output linear tensor, float32 with shape [batch_size, length,
-            vocab_size].
-
-        Raises:
-            ValueError: if mode is not valid.
-
-        Shared weights logic adapted from
-        https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
-        """
-        if mode == "embedding":
-            return self._embedding(input_ids, position_ids, inputs_embeds, training=training)
-        elif mode == "linear":
-            return self._linear(input_ids)
-        else:
-            raise ValueError("mode {} is not valid.".format(mode))
-
-    def _embedding(self, input_ids, position_ids, inputs_embeds, training=False):
-        """
-        Parameters:
-            input_ids: tf.Tensor(bs, max_seq_length) The token ids to embed.
-
-        Returns:
-            tf.Tensor(bs, max_seq_length, dim) The embedded tokens (plus position embeddings, no token_type embeddings)
+            final_embeddings (:obj:`tf.Tensor`): output embedding tensor.
         """
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            seq_length = shape_list(input_ids)[1]
-        else:
-            seq_length = shape_list(inputs_embeds)[1]
+            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if position_ids is None:
-            position_ids = tf.range(seq_length, dtype=tf.int32)[tf.newaxis, :]
+            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
-        if inputs_embeds is None:
-            inputs_embeds = tf.gather(self.word_embeddings, input_ids)
-        position_embeddings = tf.cast(
-            self.position_embeddings(position_ids), inputs_embeds.dtype
-        )  # (bs, max_seq_length, dim)
+        position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds])
+        final_embeddings = self.LayerNorm(inputs=final_embeddings)
+        final_embeddings = self.dropout(inputs=final_embeddings, training=training)
 
-        embeddings = inputs_embeds + position_embeddings  # (bs, max_seq_length, dim)
-        embeddings = self.LayerNorm(embeddings)  # (bs, max_seq_length, dim)
-        embeddings = self.dropout(embeddings, training=training)  # (bs, max_seq_length, dim)
-        return embeddings
-
-    def _linear(self, inputs):
-        """
-        Computes logits by running inputs through a linear layer
-
-        Args:
-            inputs: A float32 tensor with shape [batch_size, length, hidden_size]
-
-        Returns:
-            float32 tensor with shape [batch_size, length, vocab_size].
-        """
-        batch_size = shape_list(inputs)[0]
-        length = shape_list(inputs)[1]
-
-        x = tf.reshape(inputs, [-1, self.dim])
-        logits = tf.matmul(x, self.word_embeddings, transpose_b=True)
-
-        return tf.reshape(logits, [batch_size, length, self.vocab_size])
+        return final_embeddings
 
 
 class TFMultiHeadSelfAttention(tf.keras.layers.Layer):
@@ -402,7 +358,7 @@ class TFDistilBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+        self.embeddings.weight = value
         self.embeddings.vocab_size = value.shape[0]
 
     def _prune_heads(self, heads_to_prune):
@@ -484,6 +440,19 @@ class TFDistilBertPreTrainedModel(TFPreTrainedModel):
     config_class = DistilBertConfig
     base_model_prefix = "distilbert"
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
 
 DISTILBERT_START_DOCSTRING = r"""
 
@@ -550,12 +519,15 @@ DISTILBERT_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
-            tensors for more detail.
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
-            more detail.
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
         return_dict (:obj:`bool`, `optional`):
-            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple. This
+            argument can be used in eager mode, in graph mode the value will always be set to True.
         training (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
@@ -574,7 +546,7 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -615,11 +587,19 @@ class TFDistilBertModel(TFDistilBertPreTrainedModel):
         )
         return outputs
 
+    def serving_output(self, output):
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+
 
 class TFDistilBertLMHead(tf.keras.layers.Layer):
     def __init__(self, config, input_embeddings, **kwargs):
         super().__init__(**kwargs)
+
         self.vocab_size = config.vocab_size
+        self.dim = config.dim
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -627,11 +607,30 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
     def build(self, input_shape):
         self.bias = self.add_weight(shape=(self.vocab_size,), initializer="zeros", trainable=True, name="bias")
+
         super().build(input_shape)
 
+    def get_output_embeddings(self):
+        return self.input_embeddings
+
+    def set_output_embeddings(self, value):
+        self.input_embeddings.weight = value
+        self.input_embeddings.vocab_size = shape_list(value)[0]
+
+    def get_bias(self):
+        return {"bias": self.bias}
+
+    def set_bias(self, value):
+        self.bias = value["bias"]
+        self.vocab_size = shape_list(value["bias"])[0]
+
     def call(self, hidden_states):
-        hidden_states = self.input_embeddings(hidden_states, mode="linear")
-        hidden_states = hidden_states + self.bias
+        seq_length = shape_list(tensor=hidden_states)[1]
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.dim])
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
+        hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
+
         return hidden_states
 
 
@@ -652,19 +651,17 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
         self.vocab_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-12, name="vocab_layer_norm")
         self.vocab_projector = TFDistilBertLMHead(config, self.distilbert.embeddings, name="vocab_projector")
 
-    def get_output_embeddings(self):
-        return self.vocab_projector.input_embeddings
-
-    def get_output_layer_with_bias(self):
+    def get_lm_head(self):
         return self.vocab_projector
 
     def get_prefix_bias_name(self):
+        warnings.warn("The method get_prefix_bias_name is deprecated. Please use `get_bias` instead.", FutureWarning)
         return self.name + "/" + self.vocab_projector.name
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -730,6 +727,13 @@ class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModel
             attentions=distilbert_output.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
+    def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -758,7 +762,7 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -824,6 +828,13 @@ class TFDistilBertForSequenceClassification(TFDistilBertPreTrainedModel, TFSeque
             attentions=distilbert_output.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -846,7 +857,7 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -908,6 +919,13 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -947,7 +965,7 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1031,6 +1049,26 @@ class TFDistilBertForMultipleChoice(TFDistilBertPreTrainedModel, TFMultipleChoic
             attentions=distilbert_output.attentions,
         )
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
+    def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
 
 @add_start_docstrings(
     """
@@ -1053,7 +1091,7 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="distilbert-base-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1129,4 +1167,13 @@ class TFDistilBertForQuestionAnswering(TFDistilBertPreTrainedModel, TFQuestionAn
             end_logits=end_logits,
             hidden_states=distilbert_output.hidden_states,
             attentions=distilbert_output.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
         )

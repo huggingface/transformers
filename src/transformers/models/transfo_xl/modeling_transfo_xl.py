@@ -39,6 +39,7 @@ from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 
@@ -872,7 +873,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1053,7 +1054,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1137,6 +1138,15 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         self.crit.cutoff_ends = [0] + new_cutoffs
         self.crit.n_token = new_num_tokens
 
+    @staticmethod
+    def _reorder_cache(mems: List[torch.Tensor], beam_idx: torch.Tensor) -> List[torch.Tensor]:
+        """
+        This function is used to re-order the :obj:`mems` cache if :meth:`~transformers.PretrainedModel.beam_search` or
+        :meth:`~transformers.PretrainedModel.beam_sample` is called. This is required to match :obj:`mems` with the
+        correct beam_idx at every generation step.
+        """
+        return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]
+
 
 @add_start_docstrings(
     """
@@ -1166,7 +1176,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )

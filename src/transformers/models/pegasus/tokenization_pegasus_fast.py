@@ -19,8 +19,7 @@ import os
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
-from ...file_utils import add_start_docstrings, is_sentencepiece_available
-from ...tokenization_utils_base import PREPARE_SEQ2SEQ_BATCH_DOCSTRING, BatchEncoding
+from ...file_utils import is_sentencepiece_available
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -39,8 +38,10 @@ SPIECE_UNDERLINE = "▁"
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/spiece.model"},
-    "tokenizer_file": {"google/pegasus-xsum": "https://cdn.huggingface.co/google/pegasus-xsum/tokenizer.json"},
+    "vocab_file": {"google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/spiece.model"},
+    "tokenizer_file": {
+        "google/pegasus-xsum": "https://huggingface.co/google/pegasus-xsum/resolve/main/tokenizer.json"
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -53,8 +54,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     Construct a "fast" PEGASUS tokenizer (backed by HuggingFace's `tokenizers` library). Based on `Unigram
     <https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models>`__.
 
-    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizer` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This tokenizer inherits from :class:`~transformers.PreTrainedTokenizerFast` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         vocab_file (:obj:`str`):
@@ -94,7 +95,7 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = PegasusTokenizer
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,
@@ -187,36 +188,6 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
             return token_ids_0 + [self.eos_token_id]
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
-
-    @add_start_docstrings(PREPARE_SEQ2SEQ_BATCH_DOCSTRING)
-    def prepare_seq2seq_batch(
-        self,
-        src_texts: List[str],
-        tgt_texts: Optional[List[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
-        return_tensors: str = None,
-        truncation=True,
-        padding="longest",
-        **unused,
-    ) -> BatchEncoding:
-        if "" in src_texts:
-            raise ValueError(f"found empty string in src_texts: {src_texts}")
-        tokenizer_kwargs = dict(
-            add_special_tokens=True,
-            return_tensors=return_tensors,
-            max_length=max_length,
-            truncation=truncation,
-            padding=padding,
-        )
-        model_inputs: BatchEncoding = self(src_texts, **tokenizer_kwargs)
-        if tgt_texts is None:
-            return model_inputs
-        if max_target_length is not None:
-            tokenizer_kwargs["max_length"] = max_target_length
-        labels: BatchEncoding = self(tgt_texts, **tokenizer_kwargs)["input_ids"]
-        model_inputs["labels"] = labels
-        return model_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):

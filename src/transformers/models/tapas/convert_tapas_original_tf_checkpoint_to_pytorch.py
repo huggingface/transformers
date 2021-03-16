@@ -17,15 +17,15 @@
 
 import argparse
 
-from transformers.models.tapas.modeling_tapas import (
+from transformers import (
     TapasConfig,
     TapasForMaskedLM,
     TapasForQuestionAnswering,
     TapasForSequenceClassification,
     TapasModel,
+    TapasTokenizer,
     load_tf_weights_in_tapas,
 )
-from transformers.models.tapas.tokenization_tapas import TapasTokenizer
 from transformers.utils import logging
 
 

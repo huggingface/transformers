@@ -27,28 +27,17 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
+
 SPIECE_UNDERLINE = "▁"
 
-
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to file names for serializing Tokenizer instances
-####################################################
 VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
 
-####################################################
-# Mapping from the keyword arguments names of Tokenizer `__init__`
-# to pretrained vocabulary URL for all the model ids.
-####################################################
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/spiece.model"
+        "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/resolve/main/spiece.model"
     }
 }
 
-####################################################
-# Mapping from model ids to max length of inputs
-####################################################
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "google/reformer-crime-and-punishment": 524288,
 }
@@ -84,7 +73,7 @@ class ReformerTokenizer(PreTrainedTokenizer):
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(self, vocab_file, eos_token="</s>", unk_token="<unk>", additional_special_tokens=[], **kwargs):
         super().__init__(

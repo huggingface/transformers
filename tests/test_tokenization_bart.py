@@ -86,18 +86,12 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
         return BartTokenizerFast.from_pretrained("facebook/bart-large")
 
     @require_torch
-    def test_prepare_seq2seq_batch(self):
+    def test_prepare_batch(self):
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
-        tgt_text = [
-            "Summary of the text.",
-            "Another summary.",
-        ]
         expected_src_tokens = [0, 250, 251, 17818, 13, 39186, 1938, 4, 2]
 
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer.prepare_seq2seq_batch(
-                src_text, tgt_texts=tgt_text, max_length=len(expected_src_tokens), return_tensors="pt"
-            )
+            batch = tokenizer(src_text, max_length=len(expected_src_tokens), padding=True, return_tensors="pt")
             self.assertIsInstance(batch, BatchEncoding)
 
             self.assertEqual((2, 9), batch.input_ids.shape)
@@ -106,12 +100,11 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             self.assertListEqual(expected_src_tokens, result)
             # Test that special tokens are reset
 
-    # Test Prepare Seq
     @require_torch
-    def test_seq2seq_batch_empty_target_text(self):
+    def test_prepare_batch_empty_target_text(self):
         src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer.prepare_seq2seq_batch(src_text, return_tensors="pt")
+            batch = tokenizer(src_text, padding=True, return_tensors="pt")
             # check if input_ids are returned and no labels
             self.assertIn("input_ids", batch)
             self.assertIn("attention_mask", batch)
@@ -119,29 +112,21 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             self.assertNotIn("decoder_attention_mask", batch)
 
     @require_torch
-    def test_seq2seq_batch_max_target_length(self):
-        src_text = ["A long paragraph for summarization.", "Another paragraph for summarization."]
+    def test_as_target_tokenizer_target_length(self):
         tgt_text = [
             "Summary of the text.",
             "Another summary.",
         ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer.prepare_seq2seq_batch(
-                src_text, tgt_texts=tgt_text, max_target_length=32, padding="max_length", return_tensors="pt"
-            )
-            self.assertEqual(32, batch["labels"].shape[1])
-
-            # test None max_target_length
-            batch = tokenizer.prepare_seq2seq_batch(
-                src_text, tgt_texts=tgt_text, max_length=32, padding="max_length", return_tensors="pt"
-            )
-            self.assertEqual(32, batch["labels"].shape[1])
+            with tokenizer.as_target_tokenizer():
+                targets = tokenizer(tgt_text, max_length=32, padding="max_length", return_tensors="pt")
+            self.assertEqual(32, targets["input_ids"].shape[1])
 
     @require_torch
-    def test_seq2seq_batch_not_longer_than_maxlen(self):
+    def test_prepare_batch_not_longer_than_maxlen(self):
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer.prepare_seq2seq_batch(
-                ["I am a small frog" * 1024, "I am a small frog"], return_tensors="pt"
+            batch = tokenizer(
+                ["I am a small frog" * 1024, "I am a small frog"], padding=True, truncation=True, return_tensors="pt"
             )
             self.assertIsInstance(batch, BatchEncoding)
             self.assertEqual(batch.input_ids.shape, (2, 1024))
@@ -154,9 +139,11 @@ class TestTokenizationBart(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
         ]
         for tokenizer in [self.default_tokenizer, self.default_tokenizer_fast]:
-            batch = tokenizer.prepare_seq2seq_batch(src_text, tgt_texts=tgt_text, return_tensors="pt")
-            input_ids = batch["input_ids"]
-            labels = batch["labels"]
+            inputs = tokenizer(src_text, return_tensors="pt")
+            with tokenizer.as_target_tokenizer():
+                targets = tokenizer(tgt_text, return_tensors="pt")
+            input_ids = inputs["input_ids"]
+            labels = targets["input_ids"]
             self.assertTrue((input_ids[:, 0] == tokenizer.bos_token_id).all().item())
             self.assertTrue((labels[:, 0] == tokenizer.bos_token_id).all().item())
             self.assertTrue((input_ids[:, -1] == tokenizer.eos_token_id).all().item())

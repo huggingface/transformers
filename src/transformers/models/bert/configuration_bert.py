@@ -98,6 +98,9 @@ class BertConfig(PretrainedConfig):
             <https://arxiv.org/abs/1803.02155>`__. For more information on :obj:`"relative_key_query"`, please refer to
             `Method 4` in `Improve Transformer Models with Better Relative Position Embeddings (Huang et al.)
             <https://arxiv.org/abs/2009.13658>`__.
+        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if ``config.is_decoder=True``.
 
     Examples::
 
@@ -131,6 +134,7 @@ class BertConfig(PretrainedConfig):
         pad_token_id=0,
         gradient_checkpointing=False,
         position_embedding_type="absolute",
+        use_cache=True,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -149,3 +153,4 @@ class BertConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
+        self.use_cache = use_cache

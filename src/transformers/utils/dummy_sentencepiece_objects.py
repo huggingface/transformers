@@ -47,6 +47,15 @@ class MarianTokenizer:
         requires_sentencepiece(self)
 
 
+class MBart50Tokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
 class MBartTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)
@@ -75,6 +84,20 @@ class PegasusTokenizer:
 
 
 class ReformerTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class Speech2TextProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class Speech2TextTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)
 

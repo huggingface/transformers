@@ -18,7 +18,7 @@ On this page, we will have a closer look at tokenization. As we saw in :doc:`the
 look-up table. Converting words or subwords to ids is straightforward, so in this summary, we will focus on splitting a
 text into words or subwords (i.e. tokenizing a text). More specifically, we will look at the three main types of
 tokenizers used in 🤗 Transformers: :ref:`Byte-Pair Encoding (BPE) <byte-pair-encoding>`, :ref:`WordPiece <wordpiece>`,
-and :ref:`SentencePiece <sentencepiece>`, and show exemplary which tokenizer type is used by which model.
+and :ref:`SentencePiece <sentencepiece>`, and show examples of which tokenizer type is used by which model.
 
 Note that on each model page, you can look at the documentation of the associated tokenizer to know which tokenizer
 type was used by the pretrained model. For instance, if we look at :class:`~transformers.BertTokenizer`, we can see
@@ -72,7 +72,7 @@ greater than 50,000, especially if they are pretrained only on a single language
 So if simple space and punctuation tokenization is unsatisfactory, why not simply tokenize on characters? While
 character tokenization is very simple and would greatly reduce memory and time complexity it makes it much harder for
 the model to learn meaningful input representations. *E.g.* learning a meaningful context-independent representation
-for the letter ``"t"`` is much harder as learning a context-independent representation for the word ``"today"``.
+for the letter ``"t"`` is much harder than learning a context-independent representation for the word ``"today"``.
 Therefore, character tokenization is often accompanied by a loss of performance. So to get the best of both worlds,
 transformers models use a hybrid between word-level and character-level tokenization called **subword** tokenization.
 
@@ -202,10 +202,10 @@ WordPiece
 
 WordPiece is the subword tokenization algorithm used for :doc:`BERT <model_doc/bert>`, :doc:`DistilBERT
 <model_doc/distilbert>`, and :doc:`Electra <model_doc/electra>`. The algorithm was outlined in `Japanese and Korean
-Voice Seach (Schuster et al., 2012)
+Voice Search (Schuster et al., 2012)
 <https://static.googleusercontent.com/media/research.google.com/ja//pubs/archive/37842.pdf>`__ and is very similar to
 BPE. WordPiece first initializes the vocabulary to include every character present in the training data and
-progressively learn a given number of merge rules. In contrast to BPE, WordPiece does not choose the most frequent
+progressively learns a given number of merge rules. In contrast to BPE, WordPiece does not choose the most frequent
 symbol pair, but the one that maximizes the likelihood of the training data once added to the vocabulary.
 
 So what does this mean exactly? Referring to the previous example, maximizing the likelihood of the training data is

@@ -304,6 +304,50 @@ class TransfoXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         # transfo-xl requires special resize for lm-head
         return
 
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+
+        for idx, iter_attentions in enumerate(attentions):
+            tgt_len = min_length if idx == 0 else (min_length - 2)
+            src_len = (min_length + config.mem_len) if idx == 0 else (min_length + config.mem_len - 2)
+
+            expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                tgt_len,
+                src_len,
+            )
+
+            # check attn size
+            self.assertListEqual(
+                [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
+            )
+
+    def _check_hidden_states_for_generate(
+        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        self.assertIsInstance(hidden_states, tuple)
+        self.assertListEqual(
+            [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
+            [True] * len(hidden_states),
+        )
+        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+
+        for idx, iter_hidden_states in enumerate(hidden_states):
+            seq_len = min_length if idx == 0 else min_length - 2
+            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            # check hidden size
+            self.assertListEqual(
+                [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
+                [expected_shape] * len(iter_hidden_states),
+            )
+
 
 @require_torch
 class TransfoXLModelLanguageGenerationTest(unittest.TestCase):

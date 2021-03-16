@@ -20,6 +20,7 @@ from shutil import copyfile
 from typing import List, Optional, Tuple
 
 from ...file_utils import is_sentencepiece_available
+from ...tokenization_utils import AddedToken
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
 
@@ -88,8 +89,11 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
             Whether or not to keep accents when tokenizing.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-            .. note:: When building a sequence using special tokens, this is not the token that is used for the
-            beginning of sequence. The token used is the :obj:`cls_token`.
+
+            .. note::
+
+               When building a sequence using special tokens, this is not the token that is used for the beginning of
+               sequence. The token used is the :obj:`cls_token`.
         eos_token (:obj:`str`, `optional`, defaults to :obj:`"[SEP]"`):
             The end of sequence token. .. note:: When building a sequence using special tokens, this is not the token
             that is used for the end of sequence. The token used is the :obj:`sep_token`.
@@ -107,9 +111,7 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
             instead of per-token classification). It is the first token of the sequence when built with special tokens.
         mask_token (:obj:`str`, `optional`, defaults to :obj:`"[MASK]"`):
             The token used for masking values. This is the token used when training this model with masked language
-            modeling. This is the token which the model will try to predict. Attributes:
-        sp_model (:obj:`SentencePieceProcessor`):
-            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
+            modeling. This is the token which the model will try to predict.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -133,6 +135,9 @@ class AlbertTokenizerFast(PreTrainedTokenizerFast):
         mask_token="[MASK]",
         **kwargs
     ):
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+
         super().__init__(
             vocab_file,
             tokenizer_file=tokenizer_file,

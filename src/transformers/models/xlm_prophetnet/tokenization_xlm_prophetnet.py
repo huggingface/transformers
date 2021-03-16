@@ -30,7 +30,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/xprophetnet-large-wiki100-cased": "https://cdn.huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer",
+        "microsoft/xprophetnet-large-wiki100-cased": "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/resolve/main/prophetnet.tokenizer",
     }
 }
 
@@ -97,14 +97,15 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
 
-    Attributes: sp_model (:obj:`SentencePieceProcessor`): The `SentencePiece` processor that is used for every
-    conversion (string, tokens and IDs).
+    Attributes:
+        sp_model (:obj:`SentencePieceProcessor`):
+            The `SentencePiece` processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    model_input_names = ["attention_mask"]
+    model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
         self,

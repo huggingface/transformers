@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import copy
+import gc
 import inspect
 import os.path
 import random
@@ -203,9 +204,13 @@ class ModelTesterMixin:
                     "attention_mask",
                     "decoder_input_ids",
                     "decoder_attention_mask",
-                    "encoder_outputs",
                 ]
-                self.assertListEqual(arg_names[:5], expected_arg_names)
+                expected_arg_names.extend(
+                    ["head_mask", "decoder_head_mask", "encoder_outputs"]
+                    if "head_mask" and "decoder_head_mask" in arg_names
+                    else ["encoder_outputs"]
+                )
+                self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
@@ -233,6 +238,7 @@ class ModelTesterMixin:
             return
 
         config.gradient_checkpointing = True
+        config.use_cache = False
         config.return_dict = True
 
         for model_class in self.all_model_classes:
@@ -393,7 +399,6 @@ class ModelTesterMixin:
                     attention_mask = inputs["attention_mask"]
                     decoder_input_ids = inputs["decoder_input_ids"]
                     decoder_attention_mask = inputs["decoder_attention_mask"]
-
                     traced_model = torch.jit.trace(
                         model, (input_ids, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
@@ -463,7 +468,11 @@ class ModelTesterMixin:
             head_mask.requires_grad_(requires_grad=True)
             inputs = self._prepare_for_class(inputs_dict, model_class).copy()
             inputs["head_mask"] = head_mask
-
+            if model.config.is_encoder_decoder:
+                signature = inspect.signature(model.forward)
+                arg_names = [*signature.parameters.keys()]
+                if "decoder_head_mask" in arg_names:  # necessary diferentiation because of T5 model
+                    inputs["decoder_head_mask"] = head_mask
             outputs = model(**inputs, return_dict=True)
 
             # Test that we can get a gradient back for importance score computation
@@ -472,24 +481,31 @@ class ModelTesterMixin:
             output.backward()
             multihead_outputs = head_mask.grad
 
-            attentions = outputs[-1]
-
-            # Remove Nan
-            for t in attentions:
-                self.assertLess(
-                    torch.sum(torch.isnan(t)), t.numel() / 4
-                )  # Check we don't have more than 25% nans (arbitrary)
-            attentions = [
-                t.masked_fill(torch.isnan(t), 0.0) for t in attentions
-            ]  # remove them (the test is less complete)
-
             self.assertIsNotNone(multihead_outputs)
             self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
-            self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
-            self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
-            self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
-            self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
-            self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            def check_attentions_validity(attentions):
+                # Remove Nan
+                for t in attentions:
+                    self.assertLess(
+                        torch.sum(torch.isnan(t)), t.numel() / 4
+                    )  # Check we don't have more than 25% nans (arbitrary)
+                attentions = [
+                    t.masked_fill(torch.isnan(t), 0.0) for t in attentions
+                ]  # remove them (the test is less complete)
+
+                self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
+                if len(attentions) > 2:  # encoder-decoder models have only 2 layers in each module
+                    self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            if model.config.is_encoder_decoder:
+                check_attentions_validity(outputs.encoder_attentions)
+                check_attentions_validity(outputs.decoder_attentions)
+            else:
+                check_attentions_validity(outputs.attentions)
 
     def test_head_pruning(self):
         if not self.test_pruning:
@@ -719,6 +735,8 @@ class ModelTesterMixin:
         inputs = self._prepare_for_class(inputs_dict, model_class)
 
         outputs = model(**inputs)
+
+        print(outputs)
         output = outputs[0]
 
         if config.is_encoder_decoder:
@@ -1056,7 +1074,7 @@ class ModelTesterMixin:
 
         # some params shouldn't be scattered by nn.DataParallel
         # so just remove them if they are present.
-        blacklist_non_batched_params = ["head_mask"]
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask"]
         for k in blacklist_non_batched_params:
             inputs_dict.pop(k, None)
 
@@ -1080,15 +1098,15 @@ class ModelTesterMixin:
         if not self.test_model_parallel:
             return
 
-        import subprocess
-
+        # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            run_process = subprocess.Popen(
-                "nvidia-smi --query-gpu=memory.used --format=csv,nounits,noheader", shell=True, stdout=subprocess.PIPE
-            )
+            """ returns a list of cuda memory allocations per GPU in MBs"""
 
-            memory_usage = run_process.stdout.read().decode("utf-8").strip()
-            per_device_memory = [int(memory) for memory in memory_usage.split("\n")]
+            per_device_memory = []
+            for id in range(torch.cuda.device_count()):
+                with torch.cuda.device(id):
+                    per_device_memory.append(torch.cuda.memory_allocated() >> 20)
+
             return per_device_memory
 
         # Needs a large model to see the difference.
@@ -1097,39 +1115,44 @@ class ModelTesterMixin:
         for model_class in self.all_parallelizable_model_classes:
             torch.cuda.empty_cache()
 
-            # Retrieve initial memory usage (should be close to 0)
-            initial_memory = get_current_gpu_memory_use()
+            # 1. single gpu memory load + unload + memory measurements
+            # Retrieve initial memory usage (can easily be ~0.6-1.5GB if cuda-kernels have been preloaded by previous tests)
+            memory_at_start = get_current_gpu_memory_use()
 
-            # Put model on device
-            model = model_class(config.from_pretrained("gpt2"))
+            # Put model on device 0 and take a memory snapshot
+            model = model_class(config)
             model.to("cuda:0")
-
-            # Retrieve the memory after the model is put on the device
             memory_after_model_load = get_current_gpu_memory_use()
 
+            # The memory use on device 0 should be higher than it was initially.
+            self.assertGreater(memory_after_model_load[0], memory_at_start[0])
+
             del model
+            gc.collect()
             torch.cuda.empty_cache()
 
-            # The memory use on that device should be higher than it was initially.
-            self.assertGreater(memory_after_model_load[0], initial_memory[0])
+            # 2. MP test
+            # it's essential to re-calibrate the usage before the next stage
+            memory_at_start = get_current_gpu_memory_use()
 
             # Spread model layers over multiple devices
-            model = model_class(config.from_pretrained("gpt2"))
+            model = model_class(config)
             model.parallelize()
             memory_after_parallelization = get_current_gpu_memory_use()
 
             # Assert that the memory use on all devices is higher than it was when loaded only on CPU
             for n in range(torch.cuda.device_count()):
-                self.assertGreater(memory_after_parallelization[n], initial_memory[n])
+                self.assertGreater(memory_after_parallelization[n], memory_at_start[n])
 
-            # Assert that the memory use of the first device is lower than it was when the entire model was loaded on it
+            # Assert that the memory use of device 0 is lower than it was when the entire model was loaded on it
             self.assertLess(memory_after_parallelization[0], memory_after_model_load[0])
 
-            # Assert that the memory use of the second device is higher than it was when the entire model was loaded
-            # on the other device.
+            # Assert that the memory use of device 1 is higher than it was when the entire model was loaded
+            # on device 0 and device 1 wasn't used at all
             self.assertGreater(memory_after_parallelization[1], memory_after_model_load[1])
 
             del model
+            gc.collect()
             torch.cuda.empty_cache()
 
     @require_torch_multi_gpu
@@ -1165,6 +1188,34 @@ class ModelTesterMixin:
                 elif isinstance(value, (Tuple, List)):
                     for value_, parallel_value_ in zip(value, parallel_value):
                         self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
+
+    @require_torch_multi_gpu
+    def test_model_parallel_beam_search(self):
+        if not self.test_model_parallel:
+            return
+
+        all_generative_and_parallelizable_model_classes = tuple(
+            set(self.all_generative_model_classes).intersection(self.all_parallelizable_model_classes)
+        )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in all_generative_and_parallelizable_model_classes:
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config)
+
+            def cast_to_device(dictionary, device):
+                output = {}
+                for k, v in dictionary.items():
+                    if isinstance(v, torch.Tensor):
+                        output[k] = v.to(device)
+                    else:
+                        output[k] = v
+
+                return output
+
+            model.parallelize()
+            model.generate(**cast_to_device(inputs_dict, "cuda:0"), num_beams=2)
 
 
 global_rng = random.Random()

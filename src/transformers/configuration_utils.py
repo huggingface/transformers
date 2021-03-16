@@ -21,7 +21,8 @@ import json
 import os
 from typing import Any, Dict, Tuple, Union
 
-from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
+from . import __version__
+from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
 
 
@@ -74,8 +75,6 @@ class PretrainedConfig(object):
             heads to prune in said layer.
 
             For instance ``{1: [0, 2], 2: [2, 3]}`` will prune heads 0 and 2 on layer 1 and heads 2 and 3 on layer 2.
-        xla_device (:obj:`bool`, `optional`):
-            A flag to indicate if TPU are available or not.
         chunk_size_feed_forward (:obj:`int`, `optional`, defaults to :obj:`0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of :obj:`0` means
             that the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes
@@ -116,6 +115,9 @@ class PretrainedConfig(object):
         - **no_repeat_ngram_size** (:obj:`int`, `optional`, defaults to 0) -- Value that will be used by default in the
           :obj:`generate` method of the model for ``no_repeat_ngram_size``. If set to int > 0, all ngrams of that size
           can only occur once.
+        - **encoder_no_repeat_ngram_size** (:obj:`int`, `optional`, defaults to 0) -- Value that will be used by
+          default in the :obj:`generate` method of the model for ``encoder_no_repeat_ngram_size``. If set to int > 0,
+          all ngrams of that size that occur in the ``encoder_input_ids`` cannot occur in the ``decoder_input_ids``.
         - **bad_words_ids** (:obj:`List[int]`, `optional`) -- List of token ids that are not allowed to be generated
           that will be used by default in the :obj:`generate` method of the model. In order to get the tokens of the
           words that should not appear in the generated text, use :obj:`tokenizer.encode(bad_word,
@@ -123,6 +125,16 @@ class PretrainedConfig(object):
         - **num_return_sequences** (:obj:`int`, `optional`, defaults to 1) -- Number of independently computed returned
           sequences for each element in the batch that will be used by default in the :obj:`generate` method of the
           model.
+        - **output_scores** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should return the
+          logits when used for generation
+        - **return_dict_in_generate** (:obj:`bool`, `optional`, defaults to :obj:`False`) -- Whether the model should
+          return a :class:`~transformers.file_utils.ModelOutput` instead of a :obj:`torch.LongTensor`
+        - **forced_bos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the first generated token
+          after the :obj:`decoder_start_token_id`. Useful for multilingual models like :doc:`mBART
+          <../model_doc/mbart>` where the first generated token needs to be the target language token.
+        - **forced_eos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the last generated token
+          when :obj:`max_length` is reached.
+
 
     Parameters for fine-tuning tasks
 
@@ -199,9 +211,14 @@ class PretrainedConfig(object):
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
+        self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
         self.bad_words_ids = kwargs.pop("bad_words_ids", None)
         self.num_return_sequences = kwargs.pop("num_return_sequences", 1)
         self.chunk_size_feed_forward = kwargs.pop("chunk_size_feed_forward", 0)
+        self.output_scores = kwargs.pop("output_scores", False)
+        self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
+        self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
+        self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
@@ -229,10 +246,17 @@ class PretrainedConfig(object):
         self.task_specific_params = kwargs.pop("task_specific_params", None)
 
         # TPU arguments
-        self.xla_device = kwargs.pop("xla_device", None)
+        if kwargs.pop("xla_device", None) is not None:
+            logger.warn(
+                "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
+                "safely remove it from your `config.json` file."
+            )
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
+
+        # Drop the transformers version info
+        kwargs.pop("transformers_version", None)
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -267,8 +291,9 @@ class PretrainedConfig(object):
 
     @num_labels.setter
     def num_labels(self, num_labels: int):
-        self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
-        self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
+        if self.id2label is None or len(self.id2label) != num_labels:
+            self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
+            self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
         """
@@ -286,7 +311,7 @@ class PretrainedConfig(object):
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
 
         self.to_json_file(output_config_file, use_diff=True)
-        logger.info("Configuration saved in {}".format(output_config_file))
+        logger.info(f"Configuration saved in {output_config_file}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
@@ -339,6 +364,7 @@ class PretrainedConfig(object):
 
             Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
+
         Returns:
             :class:`PretrainedConfig`: The configuration object instantiated from this pretrained model.
 
@@ -368,6 +394,8 @@ class PretrainedConfig(object):
         From a ``pretrained_model_name_or_path``, resolve to a dictionary of parameters, to be used for instantiating a
         :class:`~transformers.PretrainedConfig` using ``from_dict``.
 
+
+
         Parameters:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 The identifier of the pre-trained checkpoint from which we want the dictionary of parameters.
@@ -383,6 +411,10 @@ class PretrainedConfig(object):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
@@ -520,6 +552,7 @@ class PretrainedConfig(object):
         for key, value in config_dict.items():
             if (
                 key not in default_config_dict
+                or key == "transformers_version"
                 or value != default_config_dict[key]
                 or (key in class_config_dict and value != class_config_dict[key])
             ):
@@ -537,6 +570,10 @@ class PretrainedConfig(object):
         output = copy.deepcopy(self.__dict__)
         if hasattr(self.__class__, "model_type"):
             output["model_type"] = self.__class__.model_type
+
+        # Transformers version when serializing the model
+        output["transformers_version"] = __version__
+
         return output
 
     def to_json_string(self, use_diff: bool = True) -> str:
