@@ -22,8 +22,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/reformer-crime-and-punishment": "https://cdn.huggingface.co/google/reformer-crime-and-punishment/config.json",
-    "google/reformer-enwik8": "https://cdn.huggingface.co/google/reformer-enwik8/config.json",
+    "google/reformer-crime-and-punishment": "https://huggingface.co/google/reformer-crime-and-punishment/config.json",
+    "google/reformer-enwik8": "https://huggingface.co/google/reformer-enwik8/config.json",
 }
 
 
