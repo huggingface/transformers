@@ -159,9 +159,9 @@ python examples/seq2seq/run_translation.py \
     --max_val_samples 50 
 ```
 
-T5 and MBart types of models require special handling.
+MBart and some T5 models require special handling.
 
-T5 models must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
+T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "translate {source_lang} to {target_lang}"`. For example:
 
 ```bash
 python examples/seq2seq/run_translation.py \
@@ -184,7 +184,7 @@ python examples/seq2seq/run_translation.py \
 
 If you get a terrible BLEU score, make sure that you didn't forget to use the `--source_prefix` argument.
 
-For T5 it's important to remember that if you switch to a different language pair, make sure to adjust the source and target values in all 3 language-specific command line argument: `--source_lang`, `--target_lang` and `--source_prefix`.
+For the aforementioned group of T5 models it's important to remember that if you switch to a different language pair, make sure to adjust the source and target values in all 3 language-specific command line argument: `--source_lang`, `--target_lang` and `--source_prefix`.
 
 MBart models require a different format for `--source_lang` and `--target_lang` values, e.g. instead of `en` it expects `en_XX`, for `ro` it expects `ro_RO`. The full MBart specification for language codes can be found [here](https://huggingface.co/facebook/mbart-large-cc25). For example:
 
