@@ -42,16 +42,14 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
         "model_name_or_path": model_name_or_path,
         "per_device_train_batch_size": 16,
         "per_device_eval_batch_size": 16,
-        "do_train": True,
-        "do_eval": True,
         "epochs": 1,
         "output_dir": "/opt/ml/model",
     }
     # metric definition to extract the results
     metric_definitions = [
         {"Name": "train_runtime", "Regex": "train_runtime.*=\D*(.*?)$"},
-        {"Name": "eval_accuracy", "Regex": "eval_accuracy.*=\D*(.*?)$"},
-        {"Name": "eval_loss", "Regex": "eval_loss.*=\D*(.*?)$"},
+        {"Name": "eval_loss", "Regex": "loss.*=\D*(.*?)]$"},
+        {"Name": "eval_accuracy", "Regex": "sparse_categorical_accuracy.*=\D*(.*?)]$"},
     ]
     # creates estimator
     estimator = HuggingFace(

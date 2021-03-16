@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import time
 import sys
 
 import tensorflow as tf
@@ -76,32 +77,11 @@ if __name__ == "__main__":
     metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
     model.compile(optimizer=optimizer, loss=loss, metrics=metrics)
 
-    # Training
-    if args.do_train:
+    start_train_time = time.time()
+    train_results = model.fit(tf_train_dataset, epochs=args.epochs, batch_size=args.per_device_train_batch_size)
+    end_train_time = time.time() - start_train_time
 
-        train_results = model.fit(tf_train_dataset, epochs=args.epochs, batch_size=args.per_device_train_batch_size)
-        logger.info("*** Train ***")
-
-        output_eval_file = os.path.join(args.output_dir, "train_results.txt")
-
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Train results *****")
-            logger.info(train_results)
-            for key, value in train_results.history.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
-
-    # Evaluation
-    if args.do_eval:
-
-        result = model.evaluate(tf_test_dataset, batch_size=args.per_device_eval_batch_size, return_dict=True)
-        logger.info("*** Evaluate ***")
-
-        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
-
-        with open(output_eval_file, "w") as writer:
-            logger.info("***** Eval results *****")
-            logger.info(result)
-            for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+    logger.info("*** Train ***")
+    logger.info("train_runtime = %s", end_train_time)
+    for key, value in train_results.history.items():
+        logger.info("  %s = %s", key, value)
