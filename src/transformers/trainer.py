@@ -77,6 +77,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedLengthGroupedSampler,
+    DistributedSamplerWithLoop,
     DistributedTensorGatherer,
     LabelSmoother,
     LengthGroupedSampler,
@@ -311,6 +312,12 @@ class Trainer:
                 self.sharded_ddp = ShardedDDPOption.ZERO_DP_3
 
         # one place to sort out whether to place the model on device or not
+        # postpone switching model to cuda when:
+        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        #    and we only use deepspeed for training at the moment
+        # 3. full fp16 eval - since the model needs to be half'ed first
+        # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
@@ -326,10 +333,6 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # postpone switching model to cuda when:
-        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
-        #    and we only use deepspeed for training at the moment
         if self.place_model_on_device:
             model = model.to(args.device)
 
@@ -491,24 +494,10 @@ class Trainer:
         ):
             return None
 
-        # Gather the number of processes and this process index.
-        if self.args.parallel_mode == ParallelMode.TPU:
-            num_processes = xm.xrt_world_size()
-            process_index = xm.get_ordinal()
-        elif (
-            self.args.parallel_mode == ParallelMode.DISTRIBUTED
-            or self.args.parallel_mode == ParallelMode.SAGEMAKER_DISTRIBUTED
-        ):
-            num_processes = dist.get_world_size()
-            process_index = dist.get_rank()
-        else:
-            num_processes = 1
-            process_index = 0
-
         # Build the sampler.
         if self.args.group_by_length:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
-            if num_processes <= 1:
+            if self.args.world_size <= 1:
                 return LengthGroupedSampler(
                     self.train_dataset, self.args.train_batch_size, model_input_name=model_input_name
                 )
@@ -516,16 +505,26 @@ class Trainer:
                 return DistributedLengthGroupedSampler(
                     self.train_dataset,
                     self.args.train_batch_size,
-                    num_replicas=num_processes,
-                    rank=process_index,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
                     model_input_name=model_input_name,
                 )
 
         else:
-            if num_processes <= 1:
+            if self.args.world_size <= 1:
                 return RandomSampler(self.train_dataset)
+            elif self.args.parallel_mode == ParallelMode.TPU and not self.args.dataloader_drop_last:
+                # Use a loop for TPUs when drop_last is False to have all batches have the same size.
+                return DistributedSamplerWithLoop(
+                    self.train_dataset,
+                    batch_size=self.args.per_device_train_batch_size,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                )
             else:
-                return DistributedSampler(self.train_dataset, num_replicas=num_processes, rank=process_index)
+                return DistributedSampler(
+                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                )
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -620,6 +619,17 @@ class Trainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer`
+        and/or :obj:`create_scheduler`) in a subclass.
+        """
+        self.create_optimizer()
+        self.create_scheduler(num_training_steps)
+
+    def create_optimizer(self):
+        """
+        Setup the optimizer.
+
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
@@ -655,6 +665,13 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
+    def create_scheduler(self, num_training_steps: int):
+        """
+        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+
+        Args:
+            num_training_steps (int): The number of training steps to do.
+        """
         if self.lr_scheduler is None:
             warmup_steps = (
                 self.args.warmup_steps
