@@ -131,8 +131,9 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
             transformations.append(normalization)
         transforms = T.Compose(transformations)
 
-        # step 3: apply transformations to images
+        # step 3: apply transformations to images and stack
         pixel_values = [transforms(image) for image in images]
+        pixel_values = torch.stack(pixel_values)
 
         # return as BatchFeature
         data = {"pixel_values": pixel_values}
