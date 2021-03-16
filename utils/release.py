@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import git
 import os
 import packaging.version
 import re
@@ -31,6 +32,8 @@ REPLACE_FILES = {
     "doc": "docs/source/conf.py",
 }
 README_FILE = "README.md"
+CUSTOM_JS_FILE = "docs/source/_static/js/custom.js"
+DEPLOY_SH_FILE = ".circleci/deploy.sh"
 
 
 def update_version_in_file(fname, version, pattern):
@@ -57,11 +60,12 @@ def update_version_in_examples(version):
                 update_version_in_file(os.path.join(folder, fname), version, pattern="examples")
 
 
-def global_version_update(version):
+def global_version_update(version, patch=False):
     """Update the version in all needed files."""
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
-    update_version_in_examples(version)
+    if not patch:
+        pdate_version_in_examples(version)
 
 
 def clean_master_ref_in_model_list():
@@ -83,7 +87,7 @@ def clean_master_ref_in_model_list():
     index = start_index
     
     # Update the lines in the model list.
-    while not linesindex].startswith(_end_prompt):
+    while not lines[index].startswith(_end_prompt):
         if lines[index].startswith("1."):
             lines[index] = lines[index].replace(
                 "https://huggingface.co/transformers/master/model_doc",
@@ -95,54 +99,150 @@ def clean_master_ref_in_model_list():
         f.writelines(lines)
 
 
-def _find_text_in_file(filename, start_prompt, end_prompt):
-    """
-    Find the text in `filename` between a line beginning with `start_prompt` and before `end_prompt`, removing empty
-    lines.
-    """
-    with open(filename, "r", encoding="utf-8", newline="\n") as f:
-        lines = f.readlines()
-    # Find the start prompt.
-    start_index = 0
-    while not lines[start_index].startswith(start_prompt):
-        start_index += 1
-    start_index += 1
-
-    end_index = start_index
-    while not lines[end_index].startswith(end_prompt):
-        end_index += 1
-    end_index -= 1
-
-    while len(lines[start_index]) <= 1:
-        start_index += 1
-    while len(lines[end_index]) <= 1:
-        end_index -= 1
-    end_index += 1
-    return "".join(lines[start_index:end_index]), start_index, end_index, lines
-
-
-def pre_release_work():
-    """Do all the necessary pre-release steps."""
-    # First lest grap the current version in the init.
+def get_version():
+    """Reads the current version in the __init__."""
     with open(REPLACE_FILES["init"], "r") as f:
         code = f.read()
     default_version = REPLACE_PATTERNS["init"][0].search(code).groups()[0]
-    default_version = packaging.version.parse(default_version)
+    return packaging.version.parse(default_version)
+
+
+def pre_release_work(patch=False):
+    """Do all the necessary pre-release steps."""
+    # First let's get the default version: base version if we are in dev, bump minor otherwise.
+    default_version = get_version()
+    if patch and default_version.is_devrelease:
+        raise ValueError("Can't create a patch version from the dev branch, checkout a released version!")
     if default_version.is_devrelease:
         default_version = default_version.base_version
+    elif patch:
+        default_version = f"{default_version.major}.{default_version.minor}.{default_version.micro + 1}"
     else:
-        default_version = f"{default_version.major}.{default_version.minor+1}.0"
+        default_version = f"{default_version.major}.{default_version.minor + 1}.0"
 
-    # Now let's ask nicely if that's the right one
+    # Now let's ask nicely if that's the right one.
     version = input(f"Which version are you releasing? [{default_version}]")
     if len(version) == 0:
         version = default_version
 
     print(f"Updating version to {version}.")
-    # global_version_update(version)
-    print("Cleaning main README")
-    clean_master_ref_in_model_list()
+    global_version_update(version, patch=patch)
+    if not patch:
+        print("Cleaning main README")
+        clean_master_ref_in_model_list()
+
+
+def update_custom_js(version, patch=False):
+    """Update the version table in the custom.js file."""
+    with open(CUSTOM_JS_FILE, "r", encoding="utf-8", newline="\n") as f:
+        lines = f.readlines()
+    index = 0
+    
+    # First let's put the right version
+    while not lines[index].startswith("const stableVersion ="):
+        index += 1
+    lines[index] = f'const stableVersion = "{version}"\n'
+    
+    # Then update the dictionary
+    while not lines[index].startswith("const versionMapping = {"):
+        index += 1
+    
+    # We go until the end
+    while not lines[index].startswith("}"):
+        search = re.search(r'^(\s+)"": "([^"]+) \(stable\)",\s*\n$', lines[index])
+        if search is not None:
+            indent, old_versions = search.groups()
+            if patch:
+                # We add the patch to the current stable doc
+                old_versions = f"{old_versions}/v{version}"
+                lines[index] = f'{indent}"": "{old_versions} (stable)"\n'
+            else:
+                # We only keep the last of the micro versions associated to that particular release
+                old_version = old_versions.split("/")[-1]    
+                lines[index] = f'{indent}"": "v{version} (stable)"\n{indent}"{old_version}": "{old_versions}"\n'
+        index += 1
+    
+    with open(CUSTOM_JS_FILE, "w", encoding="utf-8", newline="\n") as f:
+        lines = f.writelines(lines)
+
+
+def update_deploy_sh(version, commit):
+    with open(DEPLOY_SH_FILE, "r", encoding="utf-8", newline="\n") as f:
+        lines = f.readlines()
+    
+    index = len(lines)-1
+    while len(lines[index]) <= 1:
+        index -= 1
+    
+    search = re.search(r'^deploy_doc\s+"(\S+)"\s+#\s+(v\S+)\s+', lines[index])
+    old_commit, old_version = search.groups()
+    lines[index] = f'deploy_doc "{old_commit}" {old_version}\ndeploy_doc "{commit}"  # v{version} Latest stable release'
+
+    with open(DEPLOY_SH_FILE, "w", encoding="utf-8", newline="\n") as f:
+        f.writelines(lines)
+
+
+def post_release_work():
+    """Do all the necesarry post-release steps."""
+    # First let's get the current version
+    current_version = get_version()
+    dev_version = f"{current_version.major}.{current_version.minor + 1}.0.dev0"
+    current_version = current_version.base_version
+    # Get the current commit hash
+    repo = git.Repo(".", search_parent_directories=True)
+    version_commit = repo.head.object.hexsha[:7]
+
+    # Check with the user we got that right.
+    version = input(f"Which version are we developing now? [{dev_version}]")
+    commit = input(f"Commit hash to associate to {current_version}? [{version_commit}]")
+    if len(version) == 0:
+        version = dev_version
+    if len(commit == 0):
+        commit = version_commit
+    
+    print(f"Updating version to {version}.")
+    global_version_update(version)
+
+    print["Updating doc deployment and version navbar in the source documentation."]
+    update_custom_js(version)
+    update_deploy_sh(version, commit)
+
+
+def post_patch_work():
+    """Do all the necesarry post-patch steps."""
+    # Try to guess the right info: last patch in the minor release before current version and its commit hash.
+    current_version = get_version()
+    repo = git.Repo(".", search_parent_directories=True)
+    repo_tags = repo.tags()
+    default_version = None
+    version_commit = None
+    for tag in repo_tags:
+        if str(tag).startswith(f"v{current_version.major - 1}"):
+            if default_version is None:
+                default_version = packaging.version.parse(str(tag)[1:])
+                version_commit = tag.commit[:7]
+            elif packaging.version.parse(str(tag)[1:]) > default_version:
+                default_version = packaging.version.parse(str(tag)[1:])
+                version_commit = tag.commit[:7]
+
+    # Confirm with the user or ask for the info if not found.
+    if default_version is None:
+        version = input(f"Which patch version was just released?")
+        commit = input(f"Commit hash to associated to it?")
+    else:
+        version = input(f"Which patch version was just released? [{default_version}]")
+        commit = input(f"Commit hash to associated to it? [{version_commit}]")
+        if len(version) == 0:
+            version = dev_version
+        if len(commit == 0):
+            commit = version_commit
+
+    print["Updating doc deployment and version navbar in the source documentation."]
+    update_custom_js(version, patch=True)
+    update_deploy_sh(version, commit)
 
 
 if __name__ == "__main__":
-    pre_release_work()
+    # pre_release_work()
+    # post_release_work()
+    post_patch_work()
