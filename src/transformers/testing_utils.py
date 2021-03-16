@@ -491,10 +491,14 @@ def assert_screenout(out, what):
 class CaptureStd:
     """
     Context manager to capture:
-        stdout, clean it up and make it available via obj.out stderr, and make it available via obj.err
 
-        init arguments: - out - capture stdout: True/False, default True - err - capture stdout: True/False, default
-        True
+        - stdout, clean it up and make it available via obj.out
+        - stderr, and make it available via obj.err
+
+        init arguments:
+
+        - out - capture stdout: True/False, default True
+        - err - capture stdout: True/False, default True
 
         Examples::
 

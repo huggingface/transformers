@@ -31,7 +31,10 @@ the above features. To inject custom behavior you can subclass them and override
 - **get_test_dataloader**/**get_test_tfdataset** -- Creates the test DataLoader (PyTorch) or TF Dataset.
 - **log** -- Logs information on the various objects watching training.
 - **create_optimizer_and_scheduler** -- Sets up the optimizer and learning rate scheduler if they were not passed at
-  init.
+  init. Note, that you can also subclass or override the ``create_optimizer`` and ``create_scheduler`` methods
+  separately.
+- **create_optimizer** -- Sets up the optimizer if it wasn't passed at init.
+- **create_scheduler** -- Sets up the learning rate scheduler if it wasn't passed at init.
 - **compute_loss** - Computes the loss on a batch of training inputs.
 - **training_step** -- Performs a training step.
 - **prediction_step** -- Performs an evaluation/test step.
@@ -542,8 +545,6 @@ cell with:
             "cpu_offload": true
         },
 
-        "zero_allow_untested_optimizer": true,
-
         "optimizer": {
             "type": "AdamW",
             "params": {
@@ -612,17 +613,11 @@ example ``.json`` files with:
 
 Some more examples are to be found in the `main repo <https://github.com/microsoft/DeepSpeed>`__ as well.
 
-While you always have to supply the DeepSpeed configuration file, you can configure the DeepSpeed integration in
-several ways:
-
-1. Supply most of the configuration inside the file, and just use a few required command line arguments. This is the
-   recommended way as it puts most of the configuration params in one place.
-2. Supply just the ZeRO configuration params inside the file, and configure the rest using the normal
-   :class:`~transformers.Trainer` command line arguments.
-3. Any variation of the first two ways.
+When using DeepSpeed you always need to supply a DeepSpeed configuration file, yet some configuration parameters have
+to be configured via the command line. You will find the nuances in the rest of this guide.
 
 To get an idea of what DeepSpeed configuration file looks like, here is one that activates ZeRO stage 2 features,
-enables FP16, uses AdamW optimizer and WarmupLR scheduler:
+enables FP16, uses ``AdamW`` optimizer and ``WarmupLR`` scheduler:
 
 .. code-block:: json
 
@@ -666,36 +661,33 @@ enables FP16, uses AdamW optimizer and WarmupLR scheduler:
        }
     }
 
-If you already have a command line that you have been using with :class:`transformers.Trainer` args, you can continue
-using those and the :class:`~transformers.Trainer` will automatically convert them into the corresponding DeepSpeed
-configuration at run time. For example, you could use the following configuration file:
-
-.. code-block:: json
-
-    {
-       "zero_optimization": {
-           "stage": 2,
-           "allgather_partitions": true,
-           "allgather_bucket_size": 5e8,
-           "overlap_comm": true,
-           "reduce_scatter": true,
-           "reduce_bucket_size": 5e8,
-           "contiguous_gradients": true,
-           "cpu_offload": true
-       }
-    }
-
-and the following command line arguments:
-
-.. code-block:: bash
-
-    --learning_rate 3e-5 --warmup_steps 500 --adam_beta1 0.8 --adam_beta2 0.999 --adam_epsilon 1e-8 \
-    --weight_decay 3e-7 --lr_scheduler_type constant_with_warmup --fp16 --fp16_backend amp
-
-to achieve the same configuration as provided by the longer json file in the first example.
-
 When you execute the program, DeepSpeed will log the configuration it received from the :class:`~transformers.Trainer`
-to the console, so you can see exactly what the final configuration was passed to it.
+to the console, so you can see exactly what was the final configuration passed to it.
+
+
+Passing Configuration
+=======================================================================================================================
+
+As discussed in this document normally the DeepSpeed configuration is passed as a path to a json file, but if you're
+not using the command line interface to configure the training, and instead instantiate the
+:class:`~transformers.Trainer` via :class:`~transformers.TrainingArguments` then for the ``deepspeed`` argument you can
+pass a nested ``dict``. This allows you to create the configuration on the fly and doesn't require you to write it to
+the file system before passing it to :class:`~transformers.TrainingArguments`.
+
+To summarize you can do:
+
+.. code-block:: python
+
+    TrainingArguments(..., deespeed="/path/to/ds_config.json")
+
+or:
+
+.. code-block:: python
+
+    ds_config_dict=dict(scheduler=scheduler_params, optimizer=optimizer_params)
+    TrainingArguments(..., deespeed=ds_config_dict)
+
+
 
 Shared Configuration
 =======================================================================================================================
@@ -761,8 +753,26 @@ no equivalent command line arguments.
 
 
 
-Optimizer
+Optimizer and Scheduler
 =======================================================================================================================
+
+As long as you don't enable ``cpu_offload`` you can mix and match DeepSpeed and HuggingFace schedulers and optimizers,
+with the exception of using the combination of HuggingFace scheduler and DeepSpeed optimizer:
+
++--------------+--------------+--------------+
+| Combos       | HF Scheduler | DS Scheduler |
++--------------+--------------+--------------+
+| HF Optimizer | Yes          | Yes          |
++--------------+--------------+--------------+
+| DS Optimizer | No           | Yes          |
++--------------+--------------+--------------+
+
+If ``cpu_offload`` is enabled you must use both DeepSpeed scheduler and DeepSpeed optimizer.
+
+
+
+Optimizer
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 
 DeepSpeed's main optimizers are Adam, AdamW, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are
@@ -773,7 +783,7 @@ If you don't configure the ``optimizer`` entry in the configuration file, the :c
 automatically set it to ``AdamW`` and will use the supplied values or the defaults for the following command line
 arguments: ``--learning_rate``, ``--adam_beta1``, ``--adam_beta2``, ``--adam_epsilon`` and ``--weight_decay``.
 
-Here is an example of the pre-configured ``optimizer`` entry for AdamW:
+Here is an example of the pre-configured ``optimizer`` entry for ``AdamW``:
 
 .. code-block:: json
 
@@ -789,6 +799,17 @@ Here is an example of the pre-configured ``optimizer`` entry for AdamW:
          }
     }
 
+Note that the command line arguments will override the values in the configuration file. This is so that there is one
+definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
+different values in different places. Command line rules. The values that get overridden are:
+
+- ``lr`` with the value of ``--learning_rate``
+- ``betas`` with the value of ``--adam_beta1 --adam_beta2``
+- ``eps`` with the value of ``--adam_epsilon``
+- ``weight_decay`` with the value of ``--weight_decay``
+
+Therefore please remember to tune the shared hyperparameters on the command line.
+
 If you want to use another optimizer which is not listed above, you will have to add ``"zero_allow_untested_optimizer":
 true`` to the top level configuration.
 
@@ -797,41 +818,24 @@ make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` 
 
 
 Scheduler
-=======================================================================================================================
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
 DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedulers. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
 
-If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
-the value of ``--lr_scheduler_type`` to configure it. Currently the :class:`~transformers.Trainer` supports only 2 LR
-schedulers that are also supported by DeepSpeed:
+
+Here is where the schedulers overlap between 🤗 Transformers and DeepSpeed:
 
 * ``WarmupLR`` via ``--lr_scheduler_type constant_with_warmup``
 * ``WarmupDecayLR`` via ``--lr_scheduler_type linear``. This is also the default value for ``--lr_scheduler_type``,
   therefore, if you don't configure the scheduler this is scheduler that will get configured by default.
 
-In either case, the values of ``--learning_rate`` and ``--warmup_steps`` will be used for the configuration.
 
-In other words, if you don't use the configuration file to set the ``scheduler`` entry, provide either:
+If you don't configure the ``scheduler`` entry in the configuration file, the :class:`~transformers.Trainer` will use
+the values of ``--lr_scheduler_type``, ``--learning_rate`` and ``--warmup_steps`` to configure a 🤗 Transformers version
+of it.
 
-.. code-block:: bash
-
-    --lr_scheduler_type constant_with_warmup --learning_rate 3e-5 --warmup_steps 500
-
-or
-
-.. code-block:: bash
-
-    --lr_scheduler_type linear --learning_rate 3e-5 --warmup_steps 500
-
-with the desired values. If you don't pass these arguments, reasonable default values will be used instead.
-
-In the case of WarmupDecayLR ``total_num_steps`` gets set either via the ``--max_steps`` command line argument, or if
-it is not provided, derived automatically at run time based on the environment and the size of the dataset and other
-command line arguments.
-
-Here is an example of the pre-configured ``scheduler`` entry for WarmupLR (``constant_with_warmup`` in the
-:class:`~transformers.Trainer` API):
+Here is an example of the pre-configured ``scheduler`` entry for ``WarmupLR``:
 
 .. code-block:: json
 
@@ -845,6 +849,39 @@ Here is an example of the pre-configured ``scheduler`` entry for WarmupLR (``con
              }
          }
     }
+
+Note that the command line arguments will override the values in the configuration file. This is so that there is one
+definitive source of the values and to avoid hard to find errors when for example, the learning rate is set to
+different values in different places. Command line rules. The values that get overridden are:
+
+- ``warmup_max_lr`` with the value of ``--learning_rate``
+- ``warmup_num_steps`` with the value of ``--warmup_steps``
+- ``total_num_steps`` with either the value of ``--max_steps`` or if it is not provided, derived automatically at run
+  time based on the environment and the size of the dataset and other command line arguments (needed for
+  ``WarmupDecayLR``).
+
+Therefore please remember to tune the shared hyperparameters on the command line.
+
+For example, for ``WarmupDecayLR``, you can use the following entry:
+
+.. code-block:: json
+
+    {
+       "scheduler": {
+             "type": "WarmupDecayLR",
+             "params": {
+                 "total_num_steps": 10,
+                 "last_batch_iteration": -1,
+                 "warmup_min_lr": 0,
+                 "warmup_max_lr": 0.001,
+                 "warmup_num_steps": 1000
+             }
+         }
+    }
+
+and ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_steps`` will be corrected at loading time.
+
+
 
 Automatic Mixed Precision
 =======================================================================================================================
@@ -933,9 +970,9 @@ Notes
 * While DeepSpeed has a pip installable PyPI package, it is highly recommended that it gets installed from `source
   <https://github.com/microsoft/deepspeed#installation>`__ to best match your hardware and also if you need to enable
   certain features, like 1-bit Adam, which aren't available in the pypi distribution.
-* You don't have to use the :class:`~transformers.Trainer` to use DeepSpeed with HuggingFace ``transformers`` - you can
-  use any model with your own trainer, and you will have to adapt the latter according to `the DeepSpeed integration
-  instructions <https://www.deepspeed.ai/getting-started/#writing-deepspeed-models>`__.
+* You don't have to use the :class:`~transformers.Trainer` to use DeepSpeed with 🤗 Transformers - you can use any model
+  with your own trainer, and you will have to adapt the latter according to `the DeepSpeed integration instructions
+  <https://www.deepspeed.ai/getting-started/#writing-deepspeed-models>`__.
 
 Main DeepSpeed Resources
 =======================================================================================================================
