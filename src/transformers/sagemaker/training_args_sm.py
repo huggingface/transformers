@@ -42,7 +42,16 @@ class SageMakerTrainingArguments(TrainingArguments):
     def __post_init__(self):
         super().__post_init__()
         if is_smdistributed_available() and self.mp_parameters != "":
-            smp.init()
+            cfg = {
+                "microbatches": 2,
+                "placement_strategy": "spread",
+                "pipeline": "interleaved",
+                "optimize": "speed",
+                "partitions": 4,
+                "horovod": 0,
+                "ddp": 1,
+            }
+            smp.init(cfg)
 
     @cached_property
     def _setup_devices(self) -> "torch.device":
