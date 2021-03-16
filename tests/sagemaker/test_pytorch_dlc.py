@@ -20,6 +20,7 @@ os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed 
 SAGEMAKER_ROLE = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
 ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:pytorch1.6.0-transformers4.3.1-tokenizers0.10.1-datasets1.2.1-py36-gpu-cu110"
 BASE_NAME = "sm-pt-transfromers-test"
+TEST_PATH = "./tests/sagemaker/scripts/pytorch"
 
 
 @pytest.mark.skipif(
@@ -32,7 +33,7 @@ BASE_NAME = "sm-pt-transfromers-test"
 def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
     subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/run_glue.py".split(),
+        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/pytorch/run_glue.py".split(),
         encoding="utf-8",
         check=True,
     )
@@ -59,7 +60,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     # creates estimator
     estimator = HuggingFace(
         entry_point="run_glue.py",
-        source_dir="./tests/sagemaker/scripts",
+        source_dir=TEST_PATH,
         role=SAGEMAKER_ROLE,
         image_uri=ECR_IMAGE,
         base_job_name=f"{BASE_NAME}-single-node",
@@ -74,7 +75,9 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     estimator.fit()
 
     # test csv
-    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(f"{BASE_NAME}_single_node_metrics.csv")
+    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
+        f"{TEST_PATH}/{BASE_NAME}_single_node_metrics.csv"
+    )
 
     result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
 
@@ -97,7 +100,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
 def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
     subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/run_glue.py".split(),
+        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/pytorch/run_glue.py".split(),
         encoding="utf-8",
         check=True,
     )
@@ -131,7 +134,7 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
     # creates estimator
     estimator = HuggingFace(
         entry_point="run_glue.py",
-        source_dir="./tests/sagemaker/scripts",
+        source_dir=TEST_PATH,
         role=SAGEMAKER_ROLE,
         image_uri=ECR_IMAGE,
         base_job_name=f"{BASE_NAME}-{instance_count}-sm-data",
@@ -148,7 +151,7 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
 
     # test csv
     TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
-        f"{BASE_NAME}_{instance_count}_sm_data_metrics.csv"
+        f"{TEST_PATH}/{BASE_NAME}_{instance_count}_sm_data_metrics.csv"
     )
 
     result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
@@ -174,7 +177,7 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
 def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
     subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/run_glue.py".split(),
+        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/pytorch/run_glue.py".split(),
         encoding="utf-8",
         check=True,
     )
@@ -206,7 +209,7 @@ def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_pat
     # creates estimator
     estimator = HuggingFace(
         entry_point="run_ddp.py",
-        source_dir="./tests/sagemaker/scripts",
+        source_dir=TEST_PATH,
         role=SAGEMAKER_ROLE,
         image_uri=ECR_IMAGE,
         base_job_name=f"{BASE_NAME}-{instance_count}-ddp-data",
@@ -222,7 +225,7 @@ def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_pat
 
     # test csv
     TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
-        f"{BASE_NAME}_{instance_count}_ddp_data_metrics.csv"
+        f"{TEST_PATH}/{BASE_NAME}_{instance_count}_ddp_data_metrics.csv"
     )
 
     result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
