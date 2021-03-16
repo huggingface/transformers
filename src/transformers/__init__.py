@@ -1263,7 +1263,7 @@ else:
 
 # Torchvision-backed objects
 if is_torchvision_available():
-    _import_structure["models.vit"].extend(["ViTFeatureExtractor"])
+    _import_structure["models.vit"].append("ViTFeatureExtractor")
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
