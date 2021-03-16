@@ -203,7 +203,10 @@ class DistributedSamplerWithLoop(DistributedSampler):
     def __iter__(self):
         indices = list(super().__iter__())
         remainder = 0 if len(indices) % self.batch_size == 0 else self.batch_size - len(indices) % self.batch_size
-        indices += indices[:remainder]
+        # DistributedSampler already added samples from the beginning to make the number of samples a round multiple
+        # of the world size, so we skip those.
+        start_remainder = 1 if self.rank < len(self.dataset) % self.num_replicas else 0
+        indices += indices[start_remainder : start_remainder + remainder]
         return iter(indices)
 
 
