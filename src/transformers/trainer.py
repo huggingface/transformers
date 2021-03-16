@@ -77,6 +77,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedLengthGroupedSampler,
+    DistributedSamplerWithLoop,
     DistributedTensorGatherer,
     LabelSmoother,
     LengthGroupedSampler,
@@ -491,24 +492,10 @@ class Trainer:
         ):
             return None
 
-        # Gather the number of processes and this process index.
-        if self.args.parallel_mode == ParallelMode.TPU:
-            num_processes = xm.xrt_world_size()
-            process_index = xm.get_ordinal()
-        elif (
-            self.args.parallel_mode == ParallelMode.DISTRIBUTED
-            or self.args.parallel_mode == ParallelMode.SAGEMAKER_DISTRIBUTED
-        ):
-            num_processes = dist.get_world_size()
-            process_index = dist.get_rank()
-        else:
-            num_processes = 1
-            process_index = 0
-
         # Build the sampler.
         if self.args.group_by_length:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
-            if num_processes <= 1:
+            if self.args.world_size <= 1:
                 return LengthGroupedSampler(
                     self.train_dataset, self.args.train_batch_size, model_input_name=model_input_name
                 )
@@ -516,16 +503,26 @@ class Trainer:
                 return DistributedLengthGroupedSampler(
                     self.train_dataset,
                     self.args.train_batch_size,
-                    num_replicas=num_processes,
-                    rank=process_index,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
                     model_input_name=model_input_name,
                 )
 
         else:
-            if num_processes <= 1:
+            if self.args.world_size <= 1:
                 return RandomSampler(self.train_dataset)
+            elif self.args.parallel_mode == ParallelMode.TPU and not self.args.dataloader_drop_last:
+                # Use a loop for TPUs when drop_last is False to have all batches have the same size.
+                return DistributedSamplerWithLoop(
+                    self.train_dataset,
+                    batch_size=self.args.per_device_train_batch_size,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                )
             else:
-                return DistributedSampler(self.train_dataset, num_replicas=num_processes, rank=process_index)
+                return DistributedSampler(
+                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                )
 
     def get_train_dataloader(self) -> DataLoader:
         """
