@@ -197,7 +197,7 @@ def post_release_work():
     commit = input(f"Commit hash to associate to {current_version}? [{version_commit}]")
     if len(version) == 0:
         version = dev_version
-    if len(commit == 0):
+    if len(commit) == 0:
         commit = version_commit
     
     print(f"Updating version to {version}.")
@@ -213,17 +213,17 @@ def post_patch_work():
     # Try to guess the right info: last patch in the minor release before current version and its commit hash.
     current_version = get_version()
     repo = git.Repo(".", search_parent_directories=True)
-    repo_tags = repo.tags()
+    repo_tags = repo.tags
     default_version = None
     version_commit = None
     for tag in repo_tags:
-        if str(tag).startswith(f"v{current_version.major - 1}"):
+        if str(tag).startswith(f"v{current_version.major}.{current_version.minor - 1}"):
             if default_version is None:
                 default_version = packaging.version.parse(str(tag)[1:])
-                version_commit = tag.commit[:7]
+                version_commit = str(tag.commit)[:7]
             elif packaging.version.parse(str(tag)[1:]) > default_version:
                 default_version = packaging.version.parse(str(tag)[1:])
-                version_commit = tag.commit[:7]
+                version_commit = str(tag.commit)[:7]
 
     # Confirm with the user or ask for the info if not found.
     if default_version is None:
@@ -233,8 +233,8 @@ def post_patch_work():
         version = input(f"Which patch version was just released? [{default_version}]")
         commit = input(f"Commit hash to associated to it? [{version_commit}]")
         if len(version) == 0:
-            version = dev_version
-        if len(commit == 0):
+            version = default_version
+        if len(commit) == 0:
             commit = version_commit
 
     print["Updating doc deployment and version navbar in the source documentation."]
