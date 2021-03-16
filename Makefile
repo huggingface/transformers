@@ -69,3 +69,18 @@ test-examples:
 
 docs:
 	cd docs && make html SPHINXOPTS="-W -j 4"
+
+# Release stuff
+
+pre-release:
+	python utils/release.py
+
+pre-patch:
+	python utils/release.py --patch
+
+post-release:
+	python utils/release.py --post_release
+
+post-patch:
+	python utils/release.py --post_release --patch
+
