@@ -54,7 +54,7 @@ python examples/seq2seq/run_summarization.py \
     --max_val_samples 50
 ```
 
-Only T5 models must use an additional argument: `--source_prefix "summarize: "`.
+Only T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "summarize: "`.
 
 CNN/DailyMail dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name xsum` with `--dataset_name cnn_dailymail --dataset_config "3.0.0"`.
 
