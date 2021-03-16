@@ -126,7 +126,7 @@ _import_structure = {
     ],
     "models": [],
     # Models
-    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig", "ViTFeatureExtractor"],
+    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -296,7 +296,7 @@ else:
         name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
     ]
 
-# tokenziers-backed objects
+# tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -407,7 +407,6 @@ if is_torch_available():
             "ViTLayer",
             "ViTModel",
             "ViTPreTrainedModel",
-            "load_tf_weights_in_vit",
         ]
     )
 
@@ -1550,6 +1549,9 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_tokenizers_objects import *
 
+    if is_torchvision_available():
+        from .models.vit import ViTFeatureExtractor
+    
     # Modeling
     if is_torch_available():
 
@@ -1953,7 +1955,6 @@ if TYPE_CHECKING:
             ViTLayer,
             ViTModel,
             ViTPreTrainedModel,
-            load_tf_weights_in_vit,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
