@@ -65,7 +65,7 @@ def global_version_update(version, patch=False):
     for pattern, fname in REPLACE_FILES.items():
         update_version_in_file(fname, version, pattern)
     if not patch:
-        pdate_version_in_examples(version)
+        update_version_in_examples(version)
 
 
 def clean_master_ref_in_model_list():
@@ -203,7 +203,7 @@ def post_release_work():
     print(f"Updating version to {version}.")
     global_version_update(version)
 
-    print["Updating doc deployment and version navbar in the source documentation."]
+    print("Updating doc deployment and version navbar in the source documentation.")
     update_custom_js(version)
     update_deploy_sh(version, commit)
 
