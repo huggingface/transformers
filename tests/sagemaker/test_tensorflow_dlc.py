@@ -20,6 +20,7 @@ os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed 
 SAGEMAKER_ROLE = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
 ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:tensorflow2.3.1-transformers4.3.1-tokenizers0.10.1-datasets1.2.1-py37-gpu-cu110"
 BASE_NAME = "sm-tf-transfromers-test"
+TEST_PATH = "./tests/sagemaker/scripts/tensorflow"
 
 
 @pytest.mark.skipif(
@@ -39,8 +40,8 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     # defines hyperparameters
     hyperparameters = {
         "model_name_or_path": model_name_or_path,
-        "per_device_train_batch_size": 32,
-        "per_device_eval_batch_size": 32,
+        "per_device_train_batch_size": 16,
+        "per_device_eval_batch_size": 16,
         "do_train": True,
         "do_eval": True,
         "epochs": 1,
@@ -54,7 +55,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     # creates estimator
     estimator = HuggingFace(
         entry_point="run_tf.py",
-        source_dir="./tests/sagemaker/scripts",
+        source_dir=TEST_PATH,
         role=SAGEMAKER_ROLE,
         image_uri=ECR_IMAGE,
         base_job_name=f"{BASE_NAME}-single-node",
@@ -69,7 +70,9 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     estimator.fit()
 
     # test csv
-    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(f"{BASE_NAME}_single_node_metrics.csv")
+    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
+        f"{TEST_PATH}/{BASE_NAME}_single_node_metrics.csv"
+    )
 
     result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
 
