@@ -43,6 +43,9 @@ multilingual it expects the sequences in a certain format: A special language id
 source and target text. The source text format is :obj:`[lang_code] X [eos]`, where :obj:`lang_code` is source language
 id for source text and target language id for target text, with :obj:`X` being the source or target text.
 
+The :class:`~transformers.M2M100Tokenizer` depends on :obj:`sentencepiece` so be sure to install it before running the
+examples. To install :obj:`sentencepiece` run ``pip install sentencepiece``.
+
 - Supervised Training
 
 .. code-block::
@@ -87,7 +90,7 @@ id for source text and target language id for target text, with :obj:`X` being t
     "La vie est comme une boîte de chocolat."
 
     >>> # translate Chinese to English
-    >>> tokenizer.src_lang = "ar_AR"
+    >>> tokenizer.src_lang = "zh"
     >>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
     >>> generated_tokens = model.generate(**encoded_zh, forced_bos_token_id=tokenizer.get_lang_id("en"))
     >>> tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
