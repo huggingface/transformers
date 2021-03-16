@@ -24,7 +24,6 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
-from .trainer_utils import SchedulerType
 from .utils import logging
 from .utils.versions import require_version
 
@@ -282,14 +281,19 @@ def init_deepspeed(trainer, num_training_steps):
     """
     import deepspeed
 
-    require_version("deepspeed>0.3.10")
+    require_version("deepspeed>0.3.12")
 
     args = trainer.args
     ds_config_file = args.deepspeed
     model = trainer.model
 
-    with io.open(ds_config_file, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    if isinstance(args.deepspeed, dict):
+        config = args.deepspeed
+    elif isinstance(args.deepspeed, str):
+        with io.open(ds_config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    else:
+        raise ValueError("expecting either a path to a config file or a pre-populated dict")
 
     # The following code translates relevant trainer's cl args into the DS config
 
@@ -321,28 +325,49 @@ def init_deepspeed(trainer, num_training_steps):
     else:  # override only if the ds config doesn't already have this section
         config["gradient_clipping"] = args.max_grad_norm
 
+    # Optimizer + Scheduler
+    # Currently support combos:
+    # 1. DS scheduler + DS optimizer: Yes
+    # 2. HF scheduler + HF optimizer: Yes
+    # 3. DS scheduler + HF optimizer: Yes
+    # 4. HF scheduler + DS optimizer: No
+    # Unless Offload is enabled in which case it's:
+    # 1. DS scheduler + DS optimizer: Yes
+    # 2. HF scheduler + HF optimizer: No
+    # 3. DS scheduler + HF optimizer: No
+    # 4. HF scheduler + DS optimizer: No
+
+    optimizer = None
     if "optimizer" in config:
-        logger.info(
-            f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
+        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+
+        # to avoid inconsistent values of lr and warm up steps the command line args override config
+        params = dict(
+            lr=args.learning_rate,
+            betas=[args.adam_beta1, args.adam_beta2],
+            eps=args.adam_epsilon,
+            weight_decay=args.weight_decay,
         )
+        for k, v in params.items():
+            if k in config["optimizer"]["params"]:
+                logger.info(f"setting optimizer.params.{k} to {v}")
+                config["optimizer"]["params"][k] = v
+
     else:  # override only if the ds config doesn't already have this section
-        # ds supports Adam, AdamW, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-        # To use other optimizers requires voiding warranty with: `"zero_allow_untested_optimizer": true"`
-
-        optimizer_configs = {
-            "AdamW": {
-                "lr": args.learning_rate,
-                "betas": [args.adam_beta1, args.adam_beta2],
-                "eps": args.adam_epsilon,
-                "weight_decay": args.weight_decay,
-            }
-        }
-        optimizer = "AdamW"
-
-        config["optimizer"] = {
-            "type": optimizer,
-            "params": optimizer_configs[optimizer],
-        }
+        if (
+            "zero_optimization" in config
+            and "cpu_offload" in config["zero_optimization"]
+            and config["zero_optimization"]["cpu_offload"] is True
+        ):
+            raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
+        else:
+            # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+            # But trainer uses AdamW by default.
+            # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+            trainer.create_optimizer()
+            optimizer = trainer.optimizer
+            # flag that this is non-native optimizer
+            config["zero_allow_untested_optimizer"] = True
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
@@ -352,34 +377,33 @@ def init_deepspeed(trainer, num_training_steps):
     # OneCycle     | na                   | na                                | 1CLR
     # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
+    lr_scheduler = None
     if "scheduler" in config:
-        logger.info(
-            f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
-        )
-    else:  # override only if the ds config doesn't already have this section
-        if args.lr_scheduler_type == SchedulerType.LINEAR:
-            scheduler = "WarmupDecayLR"
-            params = {
-                "last_batch_iteration": -1,
-                "total_num_steps": num_training_steps,
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            }
-        elif args.lr_scheduler_type == SchedulerType.CONSTANT_WITH_WARMUP:
-            scheduler = "WarmupLR"
-            params = {
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            }
-        else:
-            raise ValueError(f"{args.lr_scheduler_type} scheduler type is not supported by DeepSpeed")
+        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        # the user won't easily know the correct num_training_steps should they use WarmupDecayLR,
+        # so let's set it to the correct value
+        if config["scheduler"]["type"] == "WarmupDecayLR":
+            logger.info(f"setting scheduler.params.total_num_steps to {num_training_steps}")
+            config["scheduler"]["params"]["total_num_steps"] = num_training_steps
 
-        config["scheduler"] = {
-            "type": scheduler,
-            "params": params,
-        }
+        # to avoid inconsistent values of lr and warmup steps the command line args override config
+        params = dict(
+            warmup_max_lr=args.learning_rate,
+            warmup_num_steps=args.warmup_steps,
+        )
+        for k, v in params.items():
+            if k in config["scheduler"]["params"]:
+                logger.info(f"setting scheduler.params.{k} to {v}")
+                config["scheduler"]["params"][k] = v
+
+    else:  # override only if the ds config doesn't already have this section
+        if "optimizer" in config:
+            # to make this option work, we need to init DS optimizer first, then init HS scheduler,
+            # then pass the HS scheduler to DS init, which is not possible at the moment
+            raise ValueError("At the moment HF scheduler + DeepSpeed optimizer combination is not possible")
+        else:
+            trainer.create_scheduler(num_training_steps=num_training_steps)
+            lr_scheduler = trainer.lr_scheduler
 
     # fp16
     if trainer.fp16_backend is not None:
@@ -409,6 +433,9 @@ def init_deepspeed(trainer, num_training_steps):
     # for clarity extract the specific cl args that are being passed to deepspeed
     ds_args = dict(local_rank=args.local_rank)
 
+    # keep for quick debug:
+    # from pprint import pprint; pprint(config)
+
     # init that takes part of the config via `args`, and the bulk of it via `config_params`
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
@@ -416,6 +443,8 @@ def init_deepspeed(trainer, num_training_steps):
         model=model,
         model_parameters=model_parameters,
         config_params=config,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
     )
 
     return model, optimizer, lr_scheduler
