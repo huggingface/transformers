@@ -652,10 +652,8 @@ if is_torch_available():
             "IBertForQuestionAnswering",
             "IBertForSequenceClassification",
             "IBertForTokenClassification",
-            "IBertLayer",
             "IBertModel",
             "IBertPreTrainedModel",
-            "load_tf_weights_in_ibert",
         ]
     )
     _import_structure["models.layoutlm"].extend(
