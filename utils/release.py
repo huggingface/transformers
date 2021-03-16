@@ -155,7 +155,7 @@ def update_custom_js(version, patch=False):
             if patch:
                 # We add the patch to the current stable doc
                 old_versions = f"{old_versions}/v{version}"
-                lines[index] = f'{indent}"": "{old_versions} (stable),"\n'
+                lines[index] = f'{indent}"": "{old_versions} (stable)",\n'
             else:
                 # We only keep the last of the micro versions associated to that particular release
                 old_version = old_versions.split("/")[-1]    
@@ -244,5 +244,5 @@ def post_patch_work():
 
 if __name__ == "__main__":
     # pre_release_work()
-    # post_release_work()
-    post_patch_work()
+    post_release_work()
+    # post_patch_work()
