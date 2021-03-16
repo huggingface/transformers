@@ -137,6 +137,17 @@ def slow(test_case):
         return test_case
 
 
+def tooslow(test_case):
+    """
+    Decorator marking a test as too slow.
+
+    Slow tests are skipped while they're in the process of being fixed. No test should stay tagged as "tooslow" as
+    these will not be tested by the CI.
+
+    """
+    return unittest.skip("test is too slow")(test_case)
+
+
 def custom_tokenizers(test_case):
     """
     Decorator marking a test for a custom tokenizer.

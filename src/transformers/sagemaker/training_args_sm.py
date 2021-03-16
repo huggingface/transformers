@@ -85,6 +85,13 @@ class SageMakerTrainingArguments(TrainingArguments):
         return device
 
     @property
+    def world_size(self):
+        if is_smdistributed_available() and self.mp_parameters != "":
+            return smp.dp_size()
+
+        return super().world_size
+
+    @property
     def place_model_on_device(self):
         return not (is_smdistributed_available() and self.mp_parameters != "")
 
