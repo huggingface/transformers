@@ -40,6 +40,7 @@ from test_trainer import get_regression_trainer  # noqa
 
 set_seed(42)
 MBART_TINY = "sshleifer/tiny-mbart"
+T5_SMALL = "t5-small"
 
 
 def load_json(path):
@@ -60,7 +61,7 @@ def require_deepspeed(test_case):
 
 @require_deepspeed
 @require_torch_gpu
-class TrainerIntegrationDeepSpeed(TestCasePlus):
+class TestDeepSpeedWithoutLauncher(TestCasePlus):
     """
 
     This class is for testing directly via get_regression_trainer
@@ -248,7 +249,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus):
 @slow
 @require_deepspeed
 @require_torch_gpu
-class TestDeepSpeed(TestCasePlus):
+class TestDeepSpeedWithLauncher(TestCasePlus):
     """ This class is for testing via an external script """
 
     # Tests to devise #
@@ -292,8 +293,10 @@ class TestDeepSpeed(TestCasePlus):
         extra_args_str=None,
         remove_args_str=None,
     ):
+
+        # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
-            model_name=MBART_TINY,
+            model_name=T5_SMALL,
             eval_steps=eval_steps,
             num_train_epochs=1,
             do_train=do_train,
@@ -331,7 +334,7 @@ class TestDeepSpeed(TestCasePlus):
         # output_dir = self.get_auto_remove_tmp_dir()
         output_dir = "/tmp/zero3"
         args = f"""
-            --model_name_or_path t5-small
+            --model_name_or_path {model_name}
             --train_file {data_dir}/train.json
             --validation_file {data_dir}/val.json
             --output_dir {output_dir}
