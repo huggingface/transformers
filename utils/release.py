@@ -248,7 +248,7 @@ if __name__ == "__main__":
     parser.add_argument("--post_release", action="store_true", help="Whether this is pre or post release.")
     parser.add_argument("--patch", action="store_true", help="Whether or not this is a patch release.")
     args = parser.parse_args()
-    if args.pre:
+    if not args.post_release:
         pre_release_work(patch=args.patch)
     elif args.patch:
         post_patch_work()
