@@ -184,7 +184,9 @@ class FlaxBertEmbeddings(nn.Module):
             name="token_type_embeddings",
             dtype=self.dtype,
         )
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
@@ -216,7 +218,9 @@ class FlaxBertAttention(nn.Module):
             name="self",
             dtype=self.dtype,
         )
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
 
     def __call__(self, hidden_states, attention_mask, deterministic=True):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
@@ -260,7 +264,9 @@ class FlaxBertOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -336,7 +342,9 @@ class FlaxBertPredictionHeadTransform(nn.Module):
     def setup(self):
         self.dense = nn.Dense(self.config.hidden_size, name="dense", dtype=self.dtype)
         self.activation = ACT2FN[self.config.hidden_act]
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
 
     def __call__(self, hidden_states):
         hidden_states = self.dense(hidden_states)
