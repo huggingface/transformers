@@ -182,6 +182,31 @@ def torch_distributed_zero_first(local_rank: int):
         dist.barrier()
 
 
+class DistributedSamplerWithLoop(DistributedSampler):
+    """
+    Like a :obj:torch.utils.data.distributed.DistributedSampler` but loops at the end back to the beginning of the
+    shuffled samples to make each process have a round multiple of batch_size samples.
+
+    Args:
+        dataset (:obj:`torch.utils.data.Dataset`):
+            Dataset used for sampling.
+        batch_size (:obj:`int`):
+            The batch size used with this sampler
+        kwargs:
+            All other keyword arguments passed to :obj:`DistributedSampler`.
+    """
+
+    def __init__(self, dataset, batch_size, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        indices = list(super().__iter__())
+        remainder = 0 if len(indices) % self.batch_size == 0 else self.batch_size - len(indices) % self.batch_size
+        indices += indices[:remainder]
+        return iter(indices)
+
+
 class SequentialDistributedSampler(Sampler):
     """
     Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
@@ -228,7 +253,7 @@ class SequentialDistributedSampler(Sampler):
         return self.num_samples
 
 
-def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset):
+def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
     if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
