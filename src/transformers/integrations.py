@@ -418,6 +418,38 @@ def init_deepspeed(trainer, num_training_steps):
         config_params=config,
     )
 
+    from deepspeed import DeepSpeedEngine
+
+    orig_getattr = DeepSpeedEngine.__getattr__
+    module = model.module
+
+    def delegate_to_module_getattr(self, attr):
+        """ delegate transformers's model calls to model.module """
+        print(f"got {attr}")
+        # return super().__getattribute__(attr)
+
+        if attr == "module":
+            return orig_getattr(self, attr)
+        # return orig_getattr
+
+        # if hasattr(module.__getattribute__(attr):
+        if hasattr(module, attr):
+            return getattr(module, attr)
+            attr = getattr(module, attr)
+            # return module
+            # def wrapper(*args, **kwargs):
+            #    return attr(*args, **kwargs)
+            # return wrapper
+        else:
+            return orig_getattr(module, attr)
+            # Default behaviour
+            # raise AttributeError
+
+    # print(model.module)
+    # if not DeepSpeedEngine.__getattr__ is delegate_to_module_getattr:
+    #    DeepSpeedEngine.__getattr__ = delegate_to_module_getattr
+    # print(model.module)
+
     return model, optimizer, lr_scheduler
 
 

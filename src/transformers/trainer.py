@@ -903,10 +903,10 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
-            model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
-            self.model = model.module
-            self.model_wrapped = model  # will get further wrapped in DDP
-            self.deepspeed = model  # DeepSpeedEngine object
+            deepspeed_engine, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
+            self.model = deepspeed_engine.module
+            self.model_wrapped = deepspeed_engine
+            self.deepspeed = deepspeed_engine
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
         elif not delay_optimizer_creation:
@@ -1163,17 +1163,17 @@ class Trainer:
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
 
-        if self.deepspeed:
-            # free up any memory that might be useful for eval
-            self.deepspeed = None
-            self.optimizer = None
-            self.lr_scheduler = None
-            self.model_wrapped = self.model
-            gc.collect()  # force memory release
-            # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
-            self.place_model_on_device = self.args.place_model_on_device
-            if self.is_model_parallel:
-                self.place_model_on_device = False
+        # if self.deepspeed:
+        #     # free up any memory that might be useful for eval
+        #     # self.deepspeed = None
+        #     # self.optimizer = None
+        #     # self.lr_scheduler = None
+        #     self.model_wrapped = self.model
+        #     gc.collect()  # force memory release
+        #     # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
+        #     self.place_model_on_device = self.args.place_model_on_device
+        #     if self.is_model_parallel:
+        #         self.place_model_on_device = False
 
         self.is_in_train = False
 
@@ -1438,6 +1438,9 @@ class Trainer:
         """
         model.train()
         inputs = self._prepare_inputs(inputs)
+
+        # print(model)
+        # die
 
         if self.use_amp:
             with autocast():
@@ -1761,12 +1764,27 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        if self.args.deepspeed and not self.args.do_train:
-            # no harm, but flagging to the user that deepspeed config is ignored for eval
-            # flagging only for when --do_train wasn't passed as only then it's redundant
-            logger.info("Detected the deepspeed argument but it will not be used for evaluation")
+        # if self.args.deepspeed and not self.args.do_train:
+        #     # no harm, but flagging to the user that deepspeed config is ignored for eval
+        #     # flagging only for when --do_train wasn't passed as only then it's redundant
+        #     logger.info("Detected the deepspeed argument but it will not be used for evaluation")
 
         model = self._wrap_model(self.model, training=False)
+        # self.deepspeed.optimizer.param_coordinator.reset_step()
+        # for p in model.parameters():
+        #    p.all_gather()
+        # from deepspeed import DeepSpeedEngine
+        # from transformers import T5ForConditionalGeneration
+        # old_forward = T5ForConditionalGeneration.forward
+        # def new_forward(*args, **kwargs):
+        #     self.deepspeed.optimizer.param_coordinator.reset_step()
+        #     return old_forward(*args, **kwargs)
+        # T5ForConditionalGeneration.forward = new_forward
+
+        # self.model = model
+
+        # print(model)
+        # die
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
         # ``train`` is running, half it first and then put on device
@@ -1913,6 +1931,8 @@ class Trainer:
             labels = None
 
         with torch.no_grad():
+            # self.deepspeed.optimizer.param_coordinator.reset_step()
+            # die
             if has_labels:
                 loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                 loss = loss.mean().detach()

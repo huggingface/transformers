@@ -744,7 +744,7 @@ which ZeRO stages you want to enable and how to configure them.
        }
     }
 
-Notes:
+Performance tuning:
 
 - enabling ``cpu_offload`` should reduce GPU RAM usage (it requires ``"stage": 2``)
 - ``"overlap_comm": true`` trades off increased GPU RAM usage to lower all-reduce latency. ``overlap_comm`` uses 4.5x
@@ -759,6 +759,31 @@ Notes:
 This section has to be configured exclusively via DeepSpeed configuration - the :class:`~transformers.Trainer` provides
 no equivalent command line arguments.
 
+
+ZeRO-3
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""￼
+
+
+Performance tuning:
+￼
+- ``stage3_max_live_parameters``: ``1e9``
+- ``stage3_max_reuse_distance``:  ``1e9``
+- ``stage3_prefetch_bucket_size``:  ``0.9 * hidden_size*hidden_size``
+- ``stage3_param_persitance_threshold``:  ``10*hidden_size``
+- ``reduce_bucket_size``: ``hidden_size*hidden_size``
+- ``sub_group_size`` ~``1e15``
+
+If hitting OOM reduce ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``. They should have minimal impact on perf unless you are doing activation checkpointing. ``1e9`` would consume ~2GB.
+The memory is shared by ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``, so its not additive, its just 2GB total.
+
+``stage3_max_live_parameters`` is the upper limit on how many full parameters you want to keep on the GPU at any given time.  ``reuse_distance`` is a metric we are using to figure out when will a parameter be used again in the future, and we use the ``stage3_max_reuse_distance`` to decide whether to throw away the parameter or to keep it. If a parameter is going to be used again in near future (less than  ``stage3_max_reuse_distance``) then we keep it to reduce communication overhead. This is super helpful when you have activation check-pointing enabled, where we do a forward recompute and backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
+
+
+If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persitance_threshold``: as recommended above, they will already be fairly small so you wont have to tune those much.
+
+Other:
+
+``allgather_partitions``, ``allgather_bucket_size`` and ``reduce_scatter`` are not used in ZeRO-3.
 
 
 Optimizer

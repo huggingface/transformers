@@ -658,6 +658,7 @@ class GenerationMixin:
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        deepspeed=None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
         do_sample: Optional[bool] = None,
@@ -687,6 +688,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -789,7 +791,8 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
-
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -867,6 +870,9 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
+
+        # print(self.__class__)
+        # diaea
 
         # set init values
         num_beams = num_beams if num_beams is not None else self.config.num_beams
@@ -981,6 +987,7 @@ class GenerationMixin:
             # greedy search
             return self.greedy_search(
                 input_ids,
+                deepspeed=deepspeed,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 max_length=max_length,
@@ -988,6 +995,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1016,6 +1024,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1044,6 +1053,7 @@ class GenerationMixin:
             return self.beam_search(
                 input_ids,
                 beam_scorer,
+                synced_gpus=synced_gpus,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 max_length=max_length,
@@ -1135,6 +1145,7 @@ class GenerationMixin:
     def greedy_search(
         self,
         input_ids: torch.LongTensor,
+        deepspeed=None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
@@ -1144,12 +1155,11 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
         Generates sequences for models with a language modeling head using greedy decoding.
-
-
 
         Parameters:
 
@@ -1163,6 +1173,7 @@ class GenerationMixin:
             stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
                 An instance of :class:`~transformers.StoppingCriteriaList`. List of instances of class derived from
                 :class:`~transformers.StoppingCriteria` used to tell if the generation loop should stop.
+
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             pad_token_id (:obj:`int`, `optional`):
@@ -1179,6 +1190,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the :obj:`forward` function of the
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1258,6 +1271,14 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
+            # print(self)
+            # die
+            #deepspeed.optimizer.param_coordinator.reset_step()
+            # print(torch._C.is_grad_enabled())
+            # die
+            import torch.distributed as dist
+            print(f"{dist.get_rank()} generate {cur_len}/{max_length}")
+            #outputs = deepspeed(
             outputs = self(
                 **model_inputs,
                 return_dict=True,
@@ -1309,15 +1330,32 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
+            # increase cur_len
+            cur_len = cur_len + 1
+
             # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
+                print(f"{dist.get_rank()} unfinished_sequences")
                 break
 
             if stopping_criteria(input_ids, scores):
+                print(f"{dist.get_rank()} hit stopping_criteria")
                 break
 
-            # increase cur_len
-            cur_len = cur_len + 1
+        if synced_gpus:
+            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
+            # must continue running forward so that the other gpus who may have not finished their
+            # generate yet, can complete as they rely on this gpu to received its slice of params
+            for _ in range(max_length-cur_len):
+                #_ = deepspeed(
+                _ = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+
+        print(f"{dist.get_rank()} finished {cur_len}/{max_length}")
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -1353,6 +1391,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
@@ -1390,6 +1429,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1540,6 +1581,19 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
+        if synced_gpus:
+            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
+            # must continue running forward so that the other gpus who may have not finished their
+            # generate yet, can complete as they rely on this gpu to received its slice of params
+            for _ in range(max_length-cur_len):
+                #_ = deepspeed(
+                _ = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
                 return SampleEncoderDecoderOutput(
@@ -1574,6 +1628,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -1611,6 +1666,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1793,6 +1850,19 @@ class GenerationMixin:
             if stopping_criteria(input_ids, scores):
                 break
 
+        if synced_gpus:
+            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
+            # must continue running forward so that the other gpus who may have not finished their
+            # generate yet, can complete as they rely on this gpu to received its slice of params
+            for _ in range(max_length-cur_len):
+                #_ = deepspeed(
+                _ = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
         )
@@ -1836,6 +1906,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1877,6 +1948,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -2063,6 +2136,19 @@ class GenerationMixin:
             if stopping_criteria(input_ids, scores):
                 break
 
+        if synced_gpus:
+            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
+            # must continue running forward so that the other gpus who may have not finished their
+            # generate yet, can complete as they rely on this gpu to received its slice of params
+            for _ in range(max_length-cur_len):
+                #_ = deepspeed(
+                _ = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
+
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
         )
@@ -2105,6 +2191,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ):
         r"""
@@ -2142,6 +2229,9 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+
             model_kwargs:
                 Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -2371,6 +2461,19 @@ class GenerationMixin:
 
             if stopping_criteria(input_ids, scores):
                 break
+
+        if synced_gpus:
+            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
+            # must continue running forward so that the other gpus who may have not finished their
+            # generate yet, can complete as they rely on this gpu to received its slice of params
+            for _ in range(max_length-cur_len):
+                #_ = deepspeed(
+                _ = self(
+                    **model_inputs,
+                    return_dict=True,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                )
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
