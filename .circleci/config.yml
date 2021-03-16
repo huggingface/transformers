@@ -91,6 +91,34 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
+    run_tests_torch_and_flax:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch_and_flax-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,flax,torch,testing,sentencepiece,speech]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
+            - save_cache:
+                key: v0.4-{{ checksum "setup.py" }}
+                paths:
+                    - '~/.cache/pip'
+            - run: RUN_PT_FLAX_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax ./tests/ -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -159,9 +187,8 @@ jobs:
                 keys:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,sklearn,torch,testing,sentencepiece,speech]
+            - run: sudo pip install .[flax,testing,sentencepiece]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
@@ -418,6 +445,7 @@ workflows:
             - run_examples_torch
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
+            - run_tests_torch_and_flax
             - run_tests_torch
             - run_tests_tf
             - run_tests_flax
