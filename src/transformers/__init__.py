@@ -48,6 +48,7 @@ from .file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    is_torchvision_available,
 )
 from .utils import logging
 
@@ -104,6 +105,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_tpu_available",
+        "is_torchvision_available",
     ],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
@@ -1259,6 +1261,9 @@ else:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 
+# Torchvision-backed objects
+if is_torchvision_available():
+    _import_structure["models.vit"] = ["ViTFeatureExtractor"]
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -1427,7 +1432,6 @@ if TYPE_CHECKING:
     from .models.vit import (
         VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
         ViTConfig, 
-        ViTFeatureExtractor,
     )
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
