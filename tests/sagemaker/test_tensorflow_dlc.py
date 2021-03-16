@@ -45,6 +45,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
         "do_train": True,
         "do_eval": True,
         "epochs": 1,
+        "output_dir": "/opt/ml/model",
     }
     # metric definition to extract the results
     metric_definitions = [

@@ -20,6 +20,7 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=str, default=5e-5)
     parser.add_argument("--do_train", type=bool, default=True)
     parser.add_argument("--do_eval", type=bool, default=True)
+    parser.add_argument("--output_dir", type=str)
 
     args, _ = parser.parse_known_args()
 
@@ -79,7 +80,7 @@ if __name__ == "__main__":
         train_results = model.fit(tf_train_dataset, epochs=args.epochs, batch_size=args.per_device_train_batch_size)
         logger.info("*** Train ***")
 
-        output_eval_file = os.path.join(args.output_data_dir, "train_results.txt")
+        output_eval_file = os.path.join(args.output_dir, "train_results.txt")
 
         with open(output_eval_file, "w") as writer:
             logger.info("***** Train results *****")
@@ -94,7 +95,7 @@ if __name__ == "__main__":
         result = model.evaluate(tf_test_dataset, batch_size=args.per_device_eval_batch_size, return_dict=True)
         logger.info("*** Evaluate ***")
 
-        output_eval_file = os.path.join(args.output_data_dir, "eval_results.txt")
+        output_eval_file = os.path.join(args.output_dir, "eval_results.txt")
 
         with open(output_eval_file, "w") as writer:
             logger.info("***** Eval results *****")
