@@ -234,6 +234,9 @@ class SequentialDistributedSampler(Sampler):
         self.rank = rank
         self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
         self.total_size = self.num_samples * self.num_replicas
+        print("###### Length of dataset, ", len(self.dataset))
+        print("###### Num_samples, ", self.num_samples)
+        print("###### total_size, ", self.total_size)
 
     def __iter__(self):
         indices = list(range(len(self.dataset)))
@@ -246,6 +249,9 @@ class SequentialDistributedSampler(Sampler):
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
+        print("###### Indie iter, num_samples ", self.num_samples)
+        print("###### len(indices, ", len(indices))
+
         assert (
             len(indices) == self.num_samples
         ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
