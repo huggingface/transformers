@@ -24,7 +24,13 @@ from collections import OrderedDict
 from itertools import takewhile
 from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast, is_torch_available
+from transformers import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerBase,
+    PreTrainedTokenizerFast,
+    is_tf_available,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     get_tests_dir,
     is_pt_tf_cross_test,
@@ -2283,7 +2289,12 @@ class TokenizerTesterMixin:
                 "{} ({}, {})".format(tokenizer.__class__.__name__, pretrained_name, tokenizer.__class__.__name__)
             ):
 
-                returned_tensor = "pt" if is_torch_available() else "tf"
+                if is_torch_available():
+                    returned_tensor = "pt"
+                elif is_tf_available():
+                    returned_tensor = "tf"
+                else:
+                    returned_tensor = "jax"
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
                     return
