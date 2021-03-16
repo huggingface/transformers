@@ -16,6 +16,7 @@
 
 
 import unittest
+import inspect
 
 import torchvision
 import torchvision.transforms as T
@@ -26,7 +27,9 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+
+torch_device = 'cpu'
 
 
 if is_torch_available():
@@ -45,7 +48,6 @@ class ViTModelTester:
         patch_size=2,
         num_channels=3,
         is_training=True,
-        use_input_mask=True,
         use_labels=True,
         hidden_size=32,
         num_hidden_layers=5,
@@ -65,7 +67,6 @@ class ViTModelTester:
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
         self.use_labels = use_labels
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -81,10 +82,6 @@ class ViTModelTester:
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         image_labels = None
         if self.use_labels:
@@ -105,22 +102,22 @@ class ViTModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return config, pixel_values, input_mask, image_labels
+        return config, pixel_values, image_labels
 
-    def create_and_check_model(self, config, pixel_values, input_mask, image_labels):
+    def create_and_check_model(self, config, pixel_values, image_labels):
         model = ViTModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, attention_mask=input_mask)
+        result = model(pixel_values)
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, input_mask, image_labels):
+    def create_and_check_for_image_classification(self, config, pixel_values, image_labels):
         config.num_labels = self.num_labels
         model = ViTForImageClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, attention_mask=input_mask, labels=image_labels)
+        result = model(pixel_values, labels=image_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -128,10 +125,9 @@ class ViTModelTester:
         (
             config,
             pixel_values,
-            input_mask,
             image_labels,
         ) = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values, "attention_mask": input_mask}
+        inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
 
@@ -159,6 +155,22 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_inputs_embeds(self):
+        # ViT does not use inputs_embeds
+        pass
+    
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+    
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
