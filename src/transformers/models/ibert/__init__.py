@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_torch_available
 
 
 _import_structure = {
@@ -28,6 +28,7 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_ibert"] = [
         "IBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "IBertPreTrainedModel",
         "IBertForMaskedLM",
         "IBertForMultipleChoice",
         "IBertForQuestionAnswering",
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
             IBertForSequenceClassification,
             IBertForTokenClassification,
             IBertModel,
+            IBertPreTrainedModel,
         )
 
 else:

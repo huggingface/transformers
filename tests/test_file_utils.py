@@ -15,6 +15,9 @@
 import unittest
 
 import requests
+
+# Try to import everything from transformers to ensure every object can be loaded.
+from transformers import *  # noqa F406
 from transformers.file_utils import CONFIG_NAME, WEIGHTS_NAME, filename_to_url, get_from_cache, hf_bucket_url
 from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER
 
