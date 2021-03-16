@@ -107,16 +107,13 @@ class RemBertTokenizer(PreTrainedTokenizer):
         keep_accents=False,
         bos_token="[CLS]",
         eos_token="[SEP]",
-        unk_token="<unk>",
+        unk_token="[UNK]",
         sep_token="[SEP]",
-        pad_token="<pad>",
+        pad_token="[PAD]",
         cls_token="[CLS]",
         mask_token="[MASK]",
         **kwargs
     ):
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
-
         super().__init__(
             do_lower_case=do_lower_case,
             remove_space=remove_space,
