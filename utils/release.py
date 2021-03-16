@@ -14,10 +14,11 @@
 # limitations under the License.
 
 import argparse
-import git
 import os
-import packaging.version
 import re
+
+import git
+import packaging.version
 
 
 PATH_TO_EXAMPLES = "examples/"
@@ -83,10 +84,7 @@ def clean_master_ref_in_model_list():
         start_index += 1
     start_index += 1
 
-    result = []
-    current_line = ""
     index = start_index
-    
     # Update the lines in the model list.
     while not lines[index].startswith(_end_prompt):
         if lines[index].startswith("1."):
@@ -95,7 +93,7 @@ def clean_master_ref_in_model_list():
                 "https://huggingface.co/transformers/model_doc",
             )
         index += 1
-    
+
     with open(README_FILE, "w", encoding="utf-8", newline="\n") as f:
         f.writelines(lines)
 
@@ -138,16 +136,16 @@ def update_custom_js(version, patch=False):
     with open(CUSTOM_JS_FILE, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
     index = 0
-    
+
     # First let's put the right version
     while not lines[index].startswith("const stableVersion ="):
         index += 1
     lines[index] = f'const stableVersion = "v{version}"\n'
-    
+
     # Then update the dictionary
     while not lines[index].startswith("const versionMapping = {"):
         index += 1
-    
+
     # We go until the end
     while not lines[index].startswith("}"):
         search = re.search(r'^(\s+)"": "([^"]+) \(stable\)",\s*\n$', lines[index])
@@ -159,10 +157,10 @@ def update_custom_js(version, patch=False):
                 lines[index] = f'{indent}"": "{old_versions} (stable)",\n'
             else:
                 # We only keep the last of the micro versions associated to that particular release
-                old_version = old_versions.split("/")[-1]    
+                old_version = old_versions.split("/")[-1]
                 lines[index] = f'{indent}"": "v{version} (stable)",\n{indent}"{old_version}": "{old_versions}",\n'
         index += 1
-    
+
     with open(CUSTOM_JS_FILE, "w", encoding="utf-8", newline="\n") as f:
         lines = f.writelines(lines)
 
@@ -170,14 +168,16 @@ def update_custom_js(version, patch=False):
 def update_deploy_sh(version, commit):
     with open(DEPLOY_SH_FILE, "r", encoding="utf-8", newline="\n") as f:
         lines = f.readlines()
-    
-    index = len(lines)-1
+
+    index = len(lines) - 1
     while len(lines[index]) <= 1:
         index -= 1
-    
+
     search = re.search(r'^deploy_doc\s+"(\S+)"\s+#\s+(v\S+)\s+', lines[index])
     old_commit, old_version = search.groups()
-    lines[index] = f'deploy_doc "{old_commit}" {old_version}\ndeploy_doc "{commit}"  # v{version} Latest stable release'
+    lines[
+        index
+    ] = f'deploy_doc "{old_commit}" {old_version}\ndeploy_doc "{commit}"  # v{version} Latest stable release'
 
     with open(DEPLOY_SH_FILE, "w", encoding="utf-8", newline="\n") as f:
         f.writelines(lines)
@@ -200,7 +200,7 @@ def post_release_work():
         version = dev_version
     if len(commit) == 0:
         commit = version_commit
-    
+
     print(f"Updating version to {version}.")
     global_version_update(version)
 
@@ -228,8 +228,8 @@ def post_patch_work():
 
     # Confirm with the user or ask for the info if not found.
     if default_version is None:
-        version = input(f"Which patch version was just released?")
-        commit = input(f"Commit hash to associated to it?")
+        version = input("Which patch version was just released?")
+        commit = input("Commit hash to associated to it?")
     else:
         version = input(f"Which patch version was just released? [{default_version}]")
         commit = input(f"Commit hash to associated to it? [{version_commit}]")
