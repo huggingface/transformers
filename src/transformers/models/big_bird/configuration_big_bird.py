@@ -128,7 +128,6 @@ class BigBirdConfig(PretrainedConfig):
         rescale_embeddings=False,
         block_size=64,
         num_random_blocks=3,
-        position_embedding_type="absolute",
         gradient_checkpointing=False,
         **kwargs
     ):
@@ -161,4 +160,3 @@ class BigBirdConfig(PretrainedConfig):
         self.use_bias = use_bias
         self.block_size = block_size
         self.num_random_blocks = num_random_blocks
-        self.position_embedding_type = position_embedding_type
