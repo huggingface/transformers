@@ -1053,7 +1053,6 @@ class GenerationMixin:
             return self.beam_search(
                 input_ids,
                 beam_scorer,
-                synced_gpus=synced_gpus,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 max_length=max_length,
