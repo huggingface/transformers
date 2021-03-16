@@ -17,19 +17,17 @@ Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/m
 
 To create the package for pypi.
 
-1. Change the version in __init__.py, setup.py as well as docs/source/conf.py. Remove the master from the links in
-   the new models of the README:
-   (https://huggingface.co/transformers/master/model_doc/ -> https://huggingface.co/transformers/model_doc/)
-   then run `make fix-copies` to fix the index of the documentation.
+1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
+   documentation.
 
 2. Unpin specific versions from setup.py that use a git install.
 
-2. Commit these changes with the message: "Release: VERSION"
+3. Commit these changes with the message: "Release: VERSION"
 
-3. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
+4. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
    Push the tag to git: git push --tags origin master
 
-4. Build both the sources and the wheel. Do not change anything in setup.py between
+5. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
    For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
@@ -38,7 +36,7 @@ To create the package for pypi.
    For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
-5. Check that everything looks correct by uploading the package to the pypi test server:
+6. Check that everything looks correct by uploading the package to the pypi test server:
 
    twine upload dist/* -r pypitest
    (pypi suggest using twine as other methods upload files via plaintext.)
@@ -48,16 +46,12 @@ To create the package for pypi.
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
 
-6. Upload the final version to actual pypi:
+7. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
 
-7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
+8. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
-
-9. Update README.md to redirect to correct documentation.
-
-10. Update the version in __init__.py, setup.py to the new version "-dev" and push to master.
+9. Run `make post-release` (or `make post-patch` for a patch release).
 """
 
 import os
