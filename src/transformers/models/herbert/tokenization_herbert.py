@@ -26,8 +26,12 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/vocab.json"},
-    "merges_file": {"allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/merges.txt"},
+    "vocab_file": {
+        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/vocab.json"
+    },
+    "merges_file": {
+        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/merges.txt"
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"allegro/herbert-base-cased": 514}
