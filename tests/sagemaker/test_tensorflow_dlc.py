@@ -79,6 +79,6 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
     eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
 
-    assert all(t <= 200 for t in train_runtime)
-    assert all(t >= 0.6 for t in eval_accuracy)
-    assert all(t <= 0.9 for t in eval_loss)
+    assert all(t <= 300 for t in train_runtime)
+    assert all(t >= 0.7 for t in eval_accuracy)
+    assert all(t <= 0.4 for t in eval_loss)
