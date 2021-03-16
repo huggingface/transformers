@@ -30,7 +30,7 @@ VOCAB_FILES_NAMES = {"vocab_file": "prophetnet.tokenizer"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "microsoft/xprophetnet-large-wiki100-cased": "https://cdn.huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer",
+        "microsoft/xprophetnet-large-wiki100-cased": "https://huggingface.co/microsoft/xprophetnet-large-wiki100-cased/prophetnet.tokenizer",
     }
 }
 
