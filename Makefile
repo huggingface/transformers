@@ -73,14 +73,14 @@ docs:
 # Release stuff
 
 pre-release:
-    python utils/release.py
+	python utils/release.py
 
 pre-patch:
-    python utils/release.py --patch
+	python utils/release.py --patch
 
 post-release:
-    python utils/release.py --post_release
+	python utils/release.py --post_release
 
 post-patch:
-    python utils/release.py --post_release --patch
+	python utils/release.py --post_release --patch
 
