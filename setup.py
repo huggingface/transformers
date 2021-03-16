@@ -97,7 +97,7 @@ _deps = [
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.2.2",
+    "flax>=0.3.2",
     "fugashi>=1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -115,6 +115,7 @@ _deps = [
     "psutil",
     "pydantic",
     "pytest",
+    "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
     "recommonmark",
@@ -134,6 +135,7 @@ _deps = [
     "timeout-decorator",
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
+    "torchaudio",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -224,17 +226,17 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
+extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["speech"] = deps_list("soundfile")
+extras["speech"] = deps_list("soundfile", "torchaudio")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar")
     + extras["retrieval"]
     + extras["modelcreation"]
-    + extras["speech"]
 )
 extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
 extras["quality"] = deps_list("black", "isort", "flake8")

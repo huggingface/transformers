@@ -21,12 +21,12 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
-from transformers.file_utils import is_sentencepiece_available, is_torch_available
+from transformers.file_utils import is_sentencepiece_available, is_tf_available, is_torch_available
 from transformers.testing_utils import require_sentencepiece
 
 
 if is_sentencepiece_available():
-    from transformers.models.marian.tokenization_marian import save_json, vocab_files_names
+    from transformers.models.marian.tokenization_marian import VOCAB_FILES_NAMES, save_json
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -36,7 +36,13 @@ SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/t
 mock_tokenizer_config = {"target_lang": "fi", "source_lang": "en"}
 zh_code = ">>zh<<"
 ORG_NAME = "Helsinki-NLP/"
-FRAMEWORK = "pt" if is_torch_available() else "tf"
+
+if is_torch_available():
+    FRAMEWORK = "pt"
+elif is_tf_available():
+    FRAMEWORK = "tf"
+else:
+    FRAMEWORK = "jax"
 
 
 @require_sentencepiece
@@ -50,11 +56,11 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab = ["</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est", "\u0120", "<pad>"]
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         save_dir = Path(self.tmpdirname)
-        save_json(vocab_tokens, save_dir / vocab_files_names["vocab"])
-        save_json(mock_tokenizer_config, save_dir / vocab_files_names["tokenizer_config_file"])
-        if not (save_dir / vocab_files_names["source_spm"]).exists():
-            copyfile(SAMPLE_SP, save_dir / vocab_files_names["source_spm"])
-            copyfile(SAMPLE_SP, save_dir / vocab_files_names["target_spm"])
+        save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab"])
+        save_json(mock_tokenizer_config, save_dir / VOCAB_FILES_NAMES["tokenizer_config_file"])
+        if not (save_dir / VOCAB_FILES_NAMES["source_spm"]).exists():
+            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["source_spm"])
+            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["target_spm"])
 
         tokenizer = MarianTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
@@ -70,7 +76,7 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     def test_tokenizer_equivalence_en_de(self):
         en_de_tokenizer = MarianTokenizer.from_pretrained(f"{ORG_NAME}opus-mt-en-de")
-        batch = en_de_tokenizer.prepare_seq2seq_batch(["I am a small frog"], return_tensors=None)
+        batch = en_de_tokenizer(["I am a small frog"], return_tensors=None)
         self.assertIsInstance(batch, BatchEncoding)
         expected = [38, 121, 14, 697, 38848, 0]
         self.assertListEqual(expected, batch.input_ids[0])
@@ -84,12 +90,14 @@ class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_outputs_not_longer_than_maxlen(self):
         tok = self.get_tokenizer()
 
-        batch = tok.prepare_seq2seq_batch(["I am a small frog" * 1000, "I am a small frog"], return_tensors=FRAMEWORK)
+        batch = tok(
+            ["I am a small frog" * 1000, "I am a small frog"], padding=True, truncation=True, return_tensors=FRAMEWORK
+        )
         self.assertIsInstance(batch, BatchEncoding)
         self.assertEqual(batch.input_ids.shape, (2, 512))
 
     def test_outputs_can_be_shorter(self):
         tok = self.get_tokenizer()
-        batch_smaller = tok.prepare_seq2seq_batch(["I am a tiny frog", "I am a small frog"], return_tensors=FRAMEWORK)
+        batch_smaller = tok(["I am a tiny frog", "I am a small frog"], padding=True, return_tensors=FRAMEWORK)
         self.assertIsInstance(batch_smaller, BatchEncoding)
         self.assertEqual(batch_smaller.input_ids.shape, (2, 10))

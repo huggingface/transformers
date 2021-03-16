@@ -14,6 +14,7 @@
 
 import json
 import os
+import warnings
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -25,7 +26,7 @@ from .file_utils import (
     is_torch_tpu_available,
     torch_required,
 )
-from .trainer_utils import EvaluationStrategy, SchedulerType
+from .trainer_utils import EvaluationStrategy, IntervalStrategy, SchedulerType, ShardedDDPOption
 from .utils import logging
 
 
@@ -34,6 +35,9 @@ if is_torch_available():
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
+
+if is_sagemaker_distributed_available():
+    import smdistributed.dataparallel.torch.distributed as sm_dist
 
 
 logger = logging.get_logger(__name__)
@@ -84,7 +88,7 @@ class TrainingArguments:
             :class:`~transformers.Trainer`, it's intended to be used by your training/evaluation scripts instead. See
             the `example scripts <https://github.com/huggingface/transformers/tree/master/examples>`__ for more
             details.
-        evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.EvaluationStrategy`, `optional`, defaults to :obj:`"no"`):
+        evaluation_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"no"`):
             The evaluation strategy to adopt during training. Possible values are:
 
                 * :obj:`"no"`: No evaluation is done during training.
@@ -131,17 +135,34 @@ class TrainingArguments:
         lr_scheduler_type (:obj:`str` or :class:`~transformers.SchedulerType`, `optional`, defaults to :obj:`"linear"`):
             The scheduler type to use. See the documentation of :class:`~transformers.SchedulerType` for all possible
             values.
+        warmup_ratio (:obj:`float`, `optional`, defaults to 0.0):
+            Ratio of total training steps used for a linear warmup from 0 to :obj:`learning_rate`.
         warmup_steps (:obj:`int`, `optional`, defaults to 0):
-            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`.
+            Number of steps used for a linear warmup from 0 to :obj:`learning_rate`. Overrides any effect of
+            :obj:`warmup_ratio`.
         logging_dir (:obj:`str`, `optional`):
             `TensorBoard <https://www.tensorflow.org/tensorboard>`__ log directory. Will default to
             `runs/**CURRENT_DATETIME_HOSTNAME**`.
+        logging_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
+            The logging strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No logging is done during training.
+                * :obj:`"epoch"`: Logging is done at the end of each epoch.
+                * :obj:`"steps"`: Logging is done every :obj:`logging_steps`.
+
         logging_first_step (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to log and evaluate the first :obj:`global_step` or not.
         logging_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of update steps between two logs.
+            Number of update steps between two logs if :obj:`logging_strategy="steps"`.
+        save_strategy (:obj:`str` or :class:`~transformers.trainer_utils.IntervalStrategy`, `optional`, defaults to :obj:`"steps"`):
+            The checkpoint save strategy to adopt during training. Possible values are:
+
+                * :obj:`"no"`: No save is done during training.
+                * :obj:`"epoch"`: Save is done at the end of each epoch.
+                * :obj:`"steps"`: Save is done every :obj:`save_steps`.
+
         save_steps (:obj:`int`, `optional`, defaults to 500):
-            Number of updates steps before two checkpoint saves.
+            Number of updates steps before two checkpoint saves if :obj:`save_strategy="steps"`.
         save_total_limit (:obj:`int`, `optional`):
             If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in
             :obj:`output_dir`.
@@ -152,7 +173,7 @@ class TrainingArguments:
             :func:`~transformers.Trainer.model_init` function to instantiate the model if it has some randomly
             initialized parameters.
         fp16 (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether to use 16-bit (mixed) precision training (through NVIDIA Apex) instead of 32-bit training.
+            Whether to use 16-bit (mixed) precision training instead of 32-bit training.
         fp16_opt_level (:obj:`str`, `optional`, defaults to 'O1'):
             For :obj:`fp16` training, Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']. See details
             on the `Apex documentation <https://nvidia.github.io/apex/amp.html>`__.
@@ -160,6 +181,9 @@ class TrainingArguments:
             The backend to use for mixed precision training. Must be one of :obj:`"auto"`, :obj:`"amp"` or
             :obj:`"apex"`. :obj:`"auto"` will use AMP or APEX depending on the PyTorch version detected, while the
             other choices will force the requested backend.
+        fp16_full_eval (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use full 16-bit precision evaluation instead of 32-bit. This will be faster and save memory but
+            can harm metric values.
         local_rank (:obj:`int`, `optional`, defaults to -1):
             Rank of the process during distributed training.
         tpu_num_cores (:obj:`int`, `optional`):
@@ -202,8 +226,8 @@ class TrainingArguments:
 
             .. note::
 
-                When set to :obj:`True`, the parameters :obj:`save_steps` will be ignored and the model will be saved
-                after each evaluation.
+                When set to :obj:`True`, the parameters :obj:`save_strategy` and :obj:`save_steps` will be ignored and
+                the model will be saved after each evaluation.
         metric_for_best_model (:obj:`str`, `optional`):
             Use in conjunction with :obj:`load_best_model_at_end` to specify the metric to use to compare two different
             models. Must be the name of a metric returned by the evaluation with or without the prefix :obj:`"eval_"`.
@@ -223,9 +247,22 @@ class TrainingArguments:
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
-        sharded_ddp (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        sharded_ddp (:obj:`bool`, :obj:`str` or list of :class:`~transformers.trainer_utils.ShardedDDPOption`, `optional`, defaults to :obj:`False`):
             Use Sharded DDP training from `FairScale <https://github.com/facebookresearch/fairscale>`__ (in distributed
             training only). This is an experimental feature.
+
+            A list of options along the following:
+
+            - :obj:`"simple"`: to use first instance of sharded DDP released by fairscale (:obj:`ShardedDDP`) similar
+              to ZeRO-2.
+            - :obj:`"zero_dp_2"`: to use the second instance of sharded DPP released by fairscale
+              (:obj:`FullyShardedDDP`) in Zero-2 mode (with :obj:`reshard_after_forward=False`).
+            - :obj:`"zero_dp_3"`: to use the second instance of sharded DPP released by fairscale
+              (:obj:`FullyShardedDDP`) in Zero-3 mode (with :obj:`reshard_after_forward=True`).
+            - :obj:`"offload"`: to add ZeRO-offload (only compatible with :obj:`"zero_dp_2"` and :obj:`"zero_dp_3"`).
+
+            If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
+            list for :obj:`False` and :obj:`["simple"]` for :obj:`True`.
         deepspeed (:obj:`str`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
             evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
@@ -249,10 +286,12 @@ class TrainingArguments:
             otherwise.
         dataloader_pin_memory (:obj:`bool`, `optional`, defaults to :obj:`True`)):
             Whether you want to pin memory in data loaders or not. Will default to :obj:`True`.
+        skip_memory_metrics (:obj:`bool`, `optional`, defaults to :obj:`False`)):
+            Whether to skip adding of memory profiler reports to metrics. Defaults to :obj:`False`.
+
     """
 
-    output_dir: Optional[str] = field(
-        default=None,
+    output_dir: str = field(
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
     overwrite_output_dir: bool = field(
@@ -268,7 +307,7 @@ class TrainingArguments:
     do_train: bool = field(default=False, metadata={"help": "Whether to run training."})
     do_eval: bool = field(default=None, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
-    evaluation_strategy: EvaluationStrategy = field(
+    evaluation_strategy: IntervalStrategy = field(
         default="no",
         metadata={"help": "The evaluation strategy to use."},
     )
@@ -324,11 +363,22 @@ class TrainingArguments:
         default="linear",
         metadata={"help": "The scheduler type to use."},
     )
+    warmup_ratio: float = field(
+        default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
+    )
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
 
     logging_dir: Optional[str] = field(default_factory=default_logdir, metadata={"help": "Tensorboard log dir."})
+    logging_strategy: IntervalStrategy = field(
+        default="steps",
+        metadata={"help": "The logging strategy to use."},
+    )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
+    save_strategy: IntervalStrategy = field(
+        default="steps",
+        metadata={"help": "The checkpoint save strategy to use."},
+    )
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
     save_total_limit: Optional[int] = field(
         default=None,
@@ -344,7 +394,7 @@ class TrainingArguments:
 
     fp16: bool = field(
         default=False,
-        metadata={"help": "Whether to use 16-bit (mixed) precision (through NVIDIA Apex) instead of 32-bit"},
+        metadata={"help": "Whether to use 16-bit (mixed) precision instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
@@ -358,6 +408,10 @@ class TrainingArguments:
     fp16_backend: str = field(
         default="auto",
         metadata={"help": "The backend to be used for mixed precision.", "choices": ["auto", "amp", "apex"]},
+    )
+    fp16_full_eval: bool = field(
+        default=False,
+        metadata={"help": "Whether to use full 16-bit precision evaluation instead of 32-bit"},
     )
     local_rank: int = field(default=-1, metadata={"help": "For distributed training: local_rank"})
 
@@ -416,9 +470,14 @@ class TrainingArguments:
             "help": "When resuming training, whether or not to skip the first epochs and batches to get to the same training data."
         },
     )
-    sharded_ddp: bool = field(
-        default=False,
-        metadata={"help": "Whether or not to use sharded DDP training (in distributed training only)."},
+    sharded_ddp: str = field(
+        default="",
+        metadata={
+            "help": "Whether or not to use sharded DDP training (in distributed training only). The base option "
+            "should be `simple`, `zero_dp_2` or `zero_dp_3` and you can add CPU-offload to `zero_dp_2` or `zero_dp_3` "
+            "like this: zero_dp_2 offload` or `zero_dp_3 offload`. You can add auto-wrap to `zero_dp_2` or "
+            "with the same syntax: zero_dp_2 auto_wrap` or `zero_dp_3 auto_wrap`.",
+        },
     )
     deepspeed: Optional[str] = field(
         default=None,
@@ -445,26 +504,37 @@ class TrainingArguments:
     dataloader_pin_memory: bool = field(
         default=True, metadata={"help": "Whether or not to pin memory for DataLoader."}
     )
+    skip_memory_metrics: bool = field(
+        default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
 
     def __post_init__(self):
-        if self.output_dir is None and os.getenv("SM_OUTPUT_DATA_DIR") is None:
-            raise ValueError(
-                "`output_dir` is only optional if it can get inferred from the environment. Please set a value for "
-                "`output_dir`."
-            )
-        elif os.getenv("SM_OUTPUT_DATA_DIR") is not None:
-            if self.output_dir is not None:
-                logger.warn(
-                    "`output_dir` is overwritten by the env variable 'SM_OUTPUT_DATA_DIR' "
-                    f"({os.getenv('SM_OUTPUT_DATA_DIR')})."
-                )
-            self.output_dir = os.getenv("SM_OUTPUT_DATA_DIR")
+        # expand paths, if not os.makedirs("~/bar") will make directory
+        # in the current directory instead of the actual home
+        #  see https://github.com/huggingface/transformers/issues/10628
+        if self.output_dir is not None:
+            self.output_dir = os.path.expanduser(self.output_dir)
+        if self.logging_dir is not None:
+            self.logging_dir = os.path.expanduser(self.logging_dir)
+
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
-        self.evaluation_strategy = EvaluationStrategy(self.evaluation_strategy)
+
+        if isinstance(self.evaluation_strategy, EvaluationStrategy):
+            warnings.warn(
+                "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `IntervalStrategy` instead",
+                FutureWarning,
+            )
+            # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
+            self.evaluation_strategy = self.evaluation_strategy.value
+
+        self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
+        self.logging_strategy = IntervalStrategy(self.logging_strategy)
+        self.save_strategy = IntervalStrategy(self.save_strategy)
+
         self.lr_scheduler_type = SchedulerType(self.lr_scheduler_type)
-        if self.do_eval is False and self.evaluation_strategy != EvaluationStrategy.NO:
+        if self.do_eval is False and self.evaluation_strategy != IntervalStrategy.NO:
             self.do_eval = True
         if self.eval_steps is None:
             self.eval_steps = self.logging_steps
@@ -476,8 +546,10 @@ class TrainingArguments:
         if self.run_name is None:
             self.run_name = self.output_dir
 
-        if is_torch_available() and self.device.type != "cuda" and self.fp16:
-            raise ValueError("Mixed precision training with AMP or APEX (`--fp16`) can only be used on CUDA devices.")
+        if is_torch_available() and self.device.type != "cuda" and (self.fp16 or self.fp16_full_eval):
+            raise ValueError(
+                "Mixed precision training with AMP or APEX (`--fp16`) and FP16 evaluation can only be used on CUDA devices."
+            )
         if self.report_to is None:
             logger.info(
                 "The default value for the training argument `--report_to` will change in v5 (from all installed "
@@ -494,6 +566,27 @@ class TrainingArguments:
             self.report_to = []
         elif not isinstance(self.report_to, list):
             self.report_to = [self.report_to]
+
+        if self.warmup_ratio < 0 or self.warmup_ratio > 1:
+            raise ValueError("warmup_ratio must lie in range [0,1]")
+        elif self.warmup_ratio > 0 and self.warmup_steps > 0:
+            logger.info(
+                "Both warmup_ratio and warmup_steps given, warmup_steps will override any effect of warmup_ratio during training"
+            )
+
+        if isinstance(self.sharded_ddp, bool):
+            self.sharded_ddp = "simple" if self.sharded_ddp else ""
+        if isinstance(self.sharded_ddp, str):
+            self.sharded_ddp = [ShardedDDPOption(s) for s in self.sharded_ddp.split()]
+        if self.sharded_ddp == [ShardedDDPOption.OFFLOAD]:
+            raise ValueError(
+                "`--sharded_ddp offload` can't work on its own. It needs to be added to `--sharded_ddp zero_dp_2` or "
+                '`--sharded_ddp zero_dp_3`. For example, `--sharded_ddp "zero_dp_2 offload"`.'
+            )
+        elif len(self.sharded_ddp) > 1 and ShardedDDPOption.SIMPLE in self.sharded_ddp:
+            raise ValueError("`--sharded_ddp simple` is not compatible with any other option.")
+        elif ShardedDDPOption.ZERO_DP_2 in self.sharded_ddp and ShardedDDPOption.ZERO_DP_3 in self.sharded_ddp:
+            raise ValueError("`--sharded_ddp zero_dp_2` is not compatible with `--sharded_ddp zero_dp_3`.")
 
     def __repr__(self):
         # We override the default repr to remove deprecated arguments from the repr. This method should be removed once
@@ -543,10 +636,8 @@ class TrainingArguments:
             device = xm.xla_device()
             self._n_gpu = 0
         elif is_sagemaker_distributed_available():
-            import smdistributed.dataparallel.torch.distributed as dist
-
-            dist.init_process_group()
-            self.local_rank = dist.get_local_rank()
+            sm_dist.init_process_group()
+            self.local_rank = sm_dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.deepspeed:
@@ -622,7 +713,7 @@ class TrainingArguments:
 
         - :obj:`ParallelMode.NOT_PARALLEL`: no parallelism (CPU or one GPU).
         - :obj:`ParallelMode.NOT_DISTRIBUTED`: several GPUs in one single process (uses :obj:`torch.nn.DataParallel`).
-        - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each ahving its own process (uses
+        - :obj:`ParallelMode.DISTRIBUTED`: several GPUs, each having its own process (uses
           :obj:`torch.nn.DistributedDataParallel`).
         - :obj:`ParallelMode.TPU`: several TPU cores.
         """
@@ -638,11 +729,32 @@ class TrainingArguments:
             return ParallelMode.NOT_PARALLEL
 
     @property
+    @torch_required
+    def world_size(self):
+        """
+        The number of processes used in parallel.
+        """
+        if is_torch_tpu_available():
+            return xm.xrt_world_size()
+        elif is_sagemaker_distributed_available():
+            return sm_dist.get_world_size()
+        elif self.local_rank != -1:
+            return torch.distributed.get_world_size()
+        return 1
+
+    @property
     def place_model_on_device(self):
         """
         Can be subclassed and overridden for some specific integrations.
         """
         return True
+
+    @property
+    def _no_sync_in_gradient_accumulation(self):
+        """
+        Whether or not to use no_sync for the gradients when doing gradient accumulation.
+        """
+        return not self.deepspeed
 
     def to_dict(self):
         """
@@ -652,6 +764,8 @@ class TrainingArguments:
         for k, v in d.items():
             if isinstance(v, Enum):
                 d[k] = v.value
+            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+                d[k] = [x.value for x in v]
         return d
 
     def to_json_string(self):

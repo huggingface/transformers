@@ -179,6 +179,7 @@ class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
     all_generative_model_classes = (TFMarianMTModel,) if is_tf_available() else ()
     is_encoder_decoder = True
     test_pruning = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFMarianModelTester(self)
@@ -244,14 +245,6 @@ class TFMarianModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make Marian float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make Marian XLA compliant
         pass
 
     def test_resize_token_embeddings(self):
@@ -357,7 +350,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
     @cached_property
     def model(self):
         warnings.simplefilter("error")
-        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name, from_pt=True)
+        model: TFMarianMTModel = TFAutoModelForSeq2SeqLM.from_pretrained(self.model_name)
         assert isinstance(model, TFMarianMTModel)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
@@ -370,9 +363,7 @@ class AbstractMarianIntegrationTest(unittest.TestCase):
         self.assertListEqual(self.expected_text, generated_words)
 
     def translate_src_text(self, **tokenizer_kwargs):
-        model_inputs = self.tokenizer.prepare_seq2seq_batch(
-            src_texts=self.src_text, **tokenizer_kwargs, return_tensors="tf"
-        )
+        model_inputs = self.tokenizer(self.src_text, **tokenizer_kwargs, padding=True, return_tensors="tf")
         generated_ids = self.model.generate(
             model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, max_length=128
         )

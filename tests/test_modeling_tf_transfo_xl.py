@@ -164,6 +164,7 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
     # TODO: add this test when TFTransfoXLLMHead has a linear output layer implemented
     test_resize_embeddings = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFTransfoXLModelTester(self)
@@ -203,10 +204,6 @@ class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
                 assert x is None
                 name = model.get_bias()
                 assert name is None
-
-    def test_mixed_precision(self):
-        # TODO JP: Make TransfoXL float16 compliant
-        pass
 
     def test_xla_mode(self):
         # TODO JP: Make TransfoXL XLA compliant

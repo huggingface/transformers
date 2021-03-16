@@ -49,6 +49,7 @@ from .configuration_bart import BartConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "facebook/bart-large"
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
@@ -108,12 +109,11 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int):
-        assert padding_idx is not None, "`padding_idx` should not be None, but of type int"
+    def __init__(self, num_embeddings: int, embedding_dim: int):
         # Bart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models dont have this hack
         self.offset = 2
-        super().__init__(num_embeddings + self.offset, embedding_dim, padding_idx=padding_idx)
+        super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
@@ -320,7 +320,9 @@ class BartEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -527,8 +529,8 @@ BART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
 
-        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
@@ -673,7 +675,6 @@ class BartEncoder(BartPretrainedModel):
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
-            self.padding_idx,
         )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -836,7 +837,6 @@ class BartDecoder(BartPretrainedModel):
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
-            self.padding_idx,
         )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -1110,7 +1110,7 @@ class BartModel(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1378,7 +1378,7 @@ class BartForSequenceClassification(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1483,7 +1483,7 @@ class BartForQuestionAnswering(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

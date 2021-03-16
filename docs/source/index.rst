@@ -114,97 +114,116 @@ and conversion utilities for the following models:
 11. :doc:`CTRL <model_doc/ctrl>` (from Salesforce) released with the paper `CTRL: A Conditional Transformer Language
     Model for Controllable Generation <https://arxiv.org/abs/1909.05858>`__ by Nitish Shirish Keskar*, Bryan McCann*,
     Lav R. Varshney, Caiming Xiong and Richard Socher.
-12. :doc:`DeBERTa <model_doc/deberta>` (from Microsoft Research) released with the paper `DeBERTa: Decoding-enhanced
-    BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`__ by Pengcheng He, Xiaodong Liu, Jianfeng Gao,
-    Weizhu Chen.
-13. :doc:`DialoGPT <model_doc/dialogpt>` (from Microsoft Research) released with the paper `DialoGPT: Large-Scale
+12. :doc:`DeBERTa <model_doc/deberta>` (from Microsoft) released with the paper `DeBERTa: Decoding-enhanced BERT with
+    Disentangled Attention <https://arxiv.org/abs/2006.03654>`__ by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu
+    Chen.
+13. `DeBERTa-v2 <https://huggingface.co/transformers/master/model_doc/deberta_v2.html>`__ (from Microsoft) released
+    with the paper `DeBERTa: Decoding-enhanced BERT with Disentangled Attention <https://arxiv.org/abs/2006.03654>`__
+    by Pengcheng He, Xiaodong Liu, Jianfeng Gao, Weizhu Chen.
+14. :doc:`DialoGPT <model_doc/dialogpt>` (from Microsoft Research) released with the paper `DialoGPT: Large-Scale
     Generative Pre-training for Conversational Response Generation <https://arxiv.org/abs/1911.00536>`__ by Yizhe
     Zhang, Siqi Sun, Michel Galley, Yen-Chun Chen, Chris Brockett, Xiang Gao, Jianfeng Gao, Jingjing Liu, Bill Dolan.
-14. :doc:`DistilBERT <model_doc/distilbert>` (from HuggingFace), released together with the paper `DistilBERT, a
+15. :doc:`DistilBERT <model_doc/distilbert>` (from HuggingFace), released together with the paper `DistilBERT, a
     distilled version of BERT: smaller, faster, cheaper and lighter <https://arxiv.org/abs/1910.01108>`__ by Victor
     Sanh, Lysandre Debut and Thomas Wolf. The same method has been applied to compress GPT2 into `DistilGPT2
     <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__, RoBERTa into `DistilRoBERTa
     <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__, Multilingual BERT into
     `DistilmBERT <https://github.com/huggingface/transformers/tree/master/examples/distillation>`__ and a German
     version of DistilBERT.
-15. :doc:`DPR <model_doc/dpr>` (from Facebook) released with the paper `Dense Passage Retrieval for Open-Domain
+16. :doc:`DPR <model_doc/dpr>` (from Facebook) released with the paper `Dense Passage Retrieval for Open-Domain
     Question Answering <https://arxiv.org/abs/2004.04906>`__ by Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick
     Lewis, Ledell Wu, Sergey Edunov, Danqi Chen, and Wen-tau Yih.
-16. :doc:`ELECTRA <model_doc/electra>` (from Google Research/Stanford University) released with the paper `ELECTRA:
+17. :doc:`ELECTRA <model_doc/electra>` (from Google Research/Stanford University) released with the paper `ELECTRA:
     Pre-training text encoders as discriminators rather than generators <https://arxiv.org/abs/2003.10555>`__ by Kevin
     Clark, Minh-Thang Luong, Quoc V. Le, Christopher D. Manning.
-17. :doc:`FlauBERT <model_doc/flaubert>` (from CNRS) released with the paper `FlauBERT: Unsupervised Language Model
+18. :doc:`FlauBERT <model_doc/flaubert>` (from CNRS) released with the paper `FlauBERT: Unsupervised Language Model
     Pre-training for French <https://arxiv.org/abs/1912.05372>`__ by Hang Le, Loïc Vial, Jibril Frej, Vincent Segonne,
     Maximin Coavoux, Benjamin Lecouteux, Alexandre Allauzen, Benoît Crabbé, Laurent Besacier, Didier Schwab.
-18. :doc:`Funnel Transformer <model_doc/funnel>` (from CMU/Google Brain) released with the paper `Funnel-Transformer:
+19. :doc:`Funnel Transformer <model_doc/funnel>` (from CMU/Google Brain) released with the paper `Funnel-Transformer:
     Filtering out Sequential Redundancy for Efficient Language Processing <https://arxiv.org/abs/2006.03236>`__ by
     Zihang Dai, Guokun Lai, Yiming Yang, Quoc V. Le.
-19. :doc:`GPT <model_doc/gpt>` (from OpenAI) released with the paper `Improving Language Understanding by Generative
+20. :doc:`GPT <model_doc/gpt>` (from OpenAI) released with the paper `Improving Language Understanding by Generative
     Pre-Training <https://blog.openai.com/language-unsupervised/>`__ by Alec Radford, Karthik Narasimhan, Tim Salimans
     and Ilya Sutskever.
-20. :doc:`GPT-2 <model_doc/gpt2>` (from OpenAI) released with the paper `Language Models are Unsupervised Multitask
+21. :doc:`GPT-2 <model_doc/gpt2>` (from OpenAI) released with the paper `Language Models are Unsupervised Multitask
     Learners <https://blog.openai.com/better-language-models/>`__ by Alec Radford*, Jeffrey Wu*, Rewon Child, David
     Luan, Dario Amodei** and Ilya Sutskever**.
-21. :doc:`LayoutLM <model_doc/layoutlm>` (from Microsoft Research Asia) released with the paper `LayoutLM: Pre-training
+22. `I-BERT <https://huggingface.co/transformers/master/model_doc/ibert.html>`__ (from Berkeley) released with the
+    paper `I-BERT: Integer-only BERT Quantization <https://arxiv.org/abs/2101.01321>`__ by Sehoon Kim, Amir Gholami,
+    Zhewei Yao, Michael W. Mahoney, Kurt Keutzer
+23. :doc:`LayoutLM <model_doc/layoutlm>` (from Microsoft Research Asia) released with the paper `LayoutLM: Pre-training
     of Text and Layout for Document Image Understanding <https://arxiv.org/abs/1912.13318>`__ by Yiheng Xu, Minghao Li,
     Lei Cui, Shaohan Huang, Furu Wei, Ming Zhou.
-22. :doc:`LED <model_doc/led>` (from AllenAI) released with the paper `Longformer: The Long-Document Transformer
+24. :doc:`LED <model_doc/led>` (from AllenAI) released with the paper `Longformer: The Long-Document Transformer
     <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, Arman Cohan.
-23. :doc:`Longformer <model_doc/longformer>` (from AllenAI) released with the paper `Longformer: The Long-Document
+25. :doc:`Longformer <model_doc/longformer>` (from AllenAI) released with the paper `Longformer: The Long-Document
     Transformer <https://arxiv.org/abs/2004.05150>`__ by Iz Beltagy, Matthew E. Peters, Arman Cohan.
-24. :doc:`LXMERT <model_doc/lxmert>` (from UNC Chapel Hill) released with the paper `LXMERT: Learning Cross-Modality
+26. :doc:`LXMERT <model_doc/lxmert>` (from UNC Chapel Hill) released with the paper `LXMERT: Learning Cross-Modality
     Encoder Representations from Transformers for Open-Domain Question Answering <https://arxiv.org/abs/1908.07490>`__
     by Hao Tan and Mohit Bansal.
-25. :doc:`MarianMT <model_doc/marian>` Machine translation models trained using `OPUS <http://opus.nlpl.eu/>`__ data by
+27. :doc:`M2M100 <model_doc/m2m_100>` (from Facebook) released with the paper `Beyond English-Centric Multilingual
+    Machine Translation <https://arxiv.org/abs/2010.11125>`__ by by Angela Fan, Shruti Bhosale, Holger Schwenk, Zhiyi
+    Ma, Ahmed El-Kishky, Siddharth Goyal, Mandeep Baines, Onur Celebi, Guillaume Wenzek, Vishrav Chaudhary, Naman
+    Goyal, Tom Birch, Vitaliy Liptchinsky, Sergey Edunov, Edouard Grave, Michael Auli, Armand Joulin.
+28. :doc:`MarianMT <model_doc/marian>` Machine translation models trained using `OPUS <http://opus.nlpl.eu/>`__ data by
     Jörg Tiedemann. The `Marian Framework <https://marian-nmt.github.io/>`__ is being developed by the Microsoft
     Translator Team.
-26. :doc:`MBart <model_doc/mbart>` (from Facebook) released with the paper `Multilingual Denoising Pre-training for
+29. :doc:`MBart <model_doc/mbart>` (from Facebook) released with the paper `Multilingual Denoising Pre-training for
     Neural Machine Translation <https://arxiv.org/abs/2001.08210>`__ by Yinhan Liu, Jiatao Gu, Naman Goyal, Xian Li,
     Sergey Edunov, Marjan Ghazvininejad, Mike Lewis, Luke Zettlemoyer.
-27. :doc:`MPNet <model_doc/mpnet>` (from Microsoft Research) released with the paper `MPNet: Masked and Permuted
+30. :doc:`MBart-50 <model_doc/mbart>` (from Facebook) released with the paper `Multilingual Translation with Extensible
+    Multilingual Pretraining and Finetuning <https://arxiv.org/abs/2008.00401>`__ by Yuqing Tang, Chau Tran, Xian Li,
+    Peng-Jen Chen, Naman Goyal, Vishrav Chaudhary, Jiatao Gu, Angela Fan.
+31. :doc:`MPNet <model_doc/mpnet>` (from Microsoft Research) released with the paper `MPNet: Masked and Permuted
     Pre-training for Language Understanding <https://arxiv.org/abs/2004.09297>`__ by Kaitao Song, Xu Tan, Tao Qin,
     Jianfeng Lu, Tie-Yan Liu.
-28. :doc:`MT5 <model_doc/mt5>` (from Google AI) released with the paper `mT5: A massively multilingual pre-trained
+32. :doc:`MT5 <model_doc/mt5>` (from Google AI) released with the paper `mT5: A massively multilingual pre-trained
     text-to-text transformer <https://arxiv.org/abs/2010.11934>`__ by Linting Xue, Noah Constant, Adam Roberts, Mihir
     Kale, Rami Al-Rfou, Aditya Siddhant, Aditya Barua, Colin Raffel.
-29. :doc:`Pegasus <model_doc/pegasus>` (from Google) released with the paper `PEGASUS: Pre-training with Extracted
+33. :doc:`Pegasus <model_doc/pegasus>` (from Google) released with the paper `PEGASUS: Pre-training with Extracted
     Gap-sentences for Abstractive Summarization <https://arxiv.org/abs/1912.08777>`__> by Jingqing Zhang, Yao Zhao,
     Mohammad Saleh and Peter J. Liu.
-30. :doc:`ProphetNet <model_doc/prophetnet>` (from Microsoft Research) released with the paper `ProphetNet: Predicting
+34. :doc:`ProphetNet <model_doc/prophetnet>` (from Microsoft Research) released with the paper `ProphetNet: Predicting
     Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan, Weizhen Qi,
     Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
-31. :doc:`Reformer <model_doc/reformer>` (from Google Research) released with the paper `Reformer: The Efficient
+35. :doc:`Reformer <model_doc/reformer>` (from Google Research) released with the paper `Reformer: The Efficient
     Transformer <https://arxiv.org/abs/2001.04451>`__ by Nikita Kitaev, Łukasz Kaiser, Anselm Levskaya.
-32. :doc:`RoBERTa <model_doc/roberta>` (from Facebook), released together with the paper a `Robustly Optimized BERT
+36. :doc:`RoBERTa <model_doc/roberta>` (from Facebook), released together with the paper a `Robustly Optimized BERT
     Pretraining Approach <https://arxiv.org/abs/1907.11692>`__ by Yinhan Liu, Myle Ott, Naman Goyal, Jingfei Du, Mandar
     Joshi, Danqi Chen, Omer Levy, Mike Lewis, Luke Zettlemoyer, Veselin Stoyanov.
-33. :doc:`SqueezeBert <model_doc/squeezebert>` released with the paper `SqueezeBERT: What can computer vision teach NLP
+37. :doc:`SpeechToTextTransformer <model_doc/speech_to_text>` (from Facebook), released together with the paper
+    `fairseq S2T: Fast Speech-to-Text Modeling with fairseq <https://arxiv.org/abs/2010.05171>`__ by Changhan Wang, Yun
+    Tang, Xutai Ma, Anne Wu, Dmytro Okhonko, Juan Pino.
+38. :doc:`SqueezeBert <model_doc/squeezebert>` released with the paper `SqueezeBERT: What can computer vision teach NLP
     about efficient neural networks? <https://arxiv.org/abs/2006.11316>`__ by Forrest N. Iandola, Albert E. Shaw, Ravi
     Krishna, and Kurt W. Keutzer.
-34. :doc:`T5 <model_doc/t5>` (from Google AI) released with the paper `Exploring the Limits of Transfer Learning with a
+39. :doc:`T5 <model_doc/t5>` (from Google AI) released with the paper `Exploring the Limits of Transfer Learning with a
     Unified Text-to-Text Transformer <https://arxiv.org/abs/1910.10683>`__ by Colin Raffel and Noam Shazeer and Adam
     Roberts and Katherine Lee and Sharan Narang and Michael Matena and Yanqi Zhou and Wei Li and Peter J. Liu.
-35. :doc:`TAPAS <model_doc/tapas>` (from Google AI) released with the paper `TAPAS: Weakly Supervised Table Parsing via
+40. :doc:`TAPAS <model_doc/tapas>` (from Google AI) released with the paper `TAPAS: Weakly Supervised Table Parsing via
     Pre-training <https://arxiv.org/abs/2004.02349>`__ by Jonathan Herzig, Paweł Krzysztof Nowak, Thomas Müller,
     Francesco Piccinno and Julian Martin Eisenschlos.
-36. :doc:`Transformer-XL <model_doc/transformerxl>` (from Google/CMU) released with the paper `Transformer-XL:
+41. :doc:`Transformer-XL <model_doc/transformerxl>` (from Google/CMU) released with the paper `Transformer-XL:
     Attentive Language Models Beyond a Fixed-Length Context <https://arxiv.org/abs/1901.02860>`__ by Zihang Dai*,
     Zhilin Yang*, Yiming Yang, Jaime Carbonell, Quoc V. Le, Ruslan Salakhutdinov.
-37. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
+42. :doc:`Wav2Vec2 <model_doc/wav2vec2>` (from Facebook AI) released with the paper `wav2vec 2.0: A Framework for
     Self-Supervised Learning of Speech Representations <https://arxiv.org/abs/2006.11477>`__ by Alexei Baevski, Henry
     Zhou, Abdelrahman Mohamed, Michael Auli.
-38. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
+43. :doc:`XLM <model_doc/xlm>` (from Facebook) released together with the paper `Cross-lingual Language Model
     Pretraining <https://arxiv.org/abs/1901.07291>`__ by Guillaume Lample and Alexis Conneau.
-39. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
+44. :doc:`XLM-ProphetNet <model_doc/xlmprophetnet>` (from Microsoft Research) released with the paper `ProphetNet:
     Predicting Future N-gram for Sequence-to-Sequence Pre-training <https://arxiv.org/abs/2001.04063>`__ by Yu Yan,
     Weizhen Qi, Yeyun Gong, Dayiheng Liu, Nan Duan, Jiusheng Chen, Ruofei Zhang and Ming Zhou.
-40. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
+45. :doc:`XLM-RoBERTa <model_doc/xlmroberta>` (from Facebook AI), released together with the paper `Unsupervised
     Cross-lingual Representation Learning at Scale <https://arxiv.org/abs/1911.02116>`__ by Alexis Conneau*, Kartikay
     Khandelwal*, Naman Goyal, Vishrav Chaudhary, Guillaume Wenzek, Francisco Guzmán, Edouard Grave, Myle Ott, Luke
     Zettlemoyer and Veselin Stoyanov.
-41. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
+46. :doc:`XLNet <model_doc/xlnet>` (from Google/CMU) released with the paper `​XLNet: Generalized Autoregressive
     Pretraining for Language Understanding <https://arxiv.org/abs/1906.08237>`__ by Zhilin Yang*, Zihang Dai*, Yiming
     Yang, Jaime Carbonell, Ruslan Salakhutdinov, Quoc V. Le.
+47. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
+    Cross-Lingual Representation Learning For Speech Recognition <https://arxiv.org/abs/2006.13979>`__ by Alexis
+    Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
 
 
 .. _bigtable:
@@ -245,6 +264,8 @@ TensorFlow and/or Flax.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           DeBERTa           |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|         DeBERTa-v2          |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |         DistilBERT          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           ELECTRA           |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
@@ -257,6 +278,8 @@ TensorFlow and/or Flax.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |     Funnel Transformer      |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|           I-BERT            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |             LED             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           LXMERT            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
@@ -264,6 +287,8 @@ TensorFlow and/or Flax.
 |          LayoutLM           |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |         Longformer          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|           M2M100            |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |            MPNet            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -279,13 +304,15 @@ TensorFlow and/or Flax.
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |         ProphetNet          |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
-|             RAG             |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
+|             RAG             |       ✅       |       ❌       |       ✅        |         ✅         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |          Reformer           |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |          RetriBERT          |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |           RoBERTa           |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
++-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
+|         Speech2Text         |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
 |         SqueezeBERT         |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
 +-----------------------------+----------------+----------------+-----------------+--------------------+--------------+
@@ -369,6 +396,7 @@ TensorFlow and/or Flax.
     main_classes/processors
     main_classes/tokenizer
     main_classes/trainer
+    main_classes/feature_extractor
 
 .. toctree::
     :maxdepth: 2
@@ -388,6 +416,7 @@ TensorFlow and/or Flax.
     model_doc/convbert
     model_doc/ctrl
     model_doc/deberta
+    model_doc/deberta_v2
     model_doc/dialogpt
     model_doc/distilbert
     model_doc/dpr
@@ -397,11 +426,13 @@ TensorFlow and/or Flax.
     model_doc/fsmt
     model_doc/funnel
     model_doc/herbert
+    model_doc/ibert
     model_doc/layoutlm
     model_doc/led
     model_doc/longformer
     model_doc/lxmert
     model_doc/marian
+    model_doc/m2m_100
     model_doc/mbart
     model_doc/mobilebert
     model_doc/mpnet
@@ -415,6 +446,7 @@ TensorFlow and/or Flax.
     model_doc/reformer
     model_doc/retribert
     model_doc/roberta
+    model_doc/speech_to_text
     model_doc/squeezebert
     model_doc/t5
     model_doc/tapas
@@ -424,6 +456,7 @@ TensorFlow and/or Flax.
     model_doc/xlmprophetnet
     model_doc/xlmroberta
     model_doc/xlnet
+    model_doc/xlsr_wav2vec2
 
 .. toctree::
     :maxdepth: 2
@@ -434,3 +467,4 @@ TensorFlow and/or Flax.
     internal/tokenization_utils
     internal/trainer_utils
     internal/generation_utils
+    internal/file_utils

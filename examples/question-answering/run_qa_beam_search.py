@@ -40,8 +40,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
 from utils_qa import postprocess_qa_predictions_with_beam_search
 
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.4.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +119,20 @@ class DataTrainingArguments:
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
             "be faster on GPU but will be slower on TPU)."
+        },
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
         },
     )
     version_2_with_negative: bool = field(
@@ -200,6 +218,8 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
+        transformers.utils.logging.enable_default_handler()
+        transformers.utils.logging.enable_explicit_format()
     logger.info("Training/evaluation parameters %s", training_args)
 
     # Set seed before initializing model.
@@ -371,13 +391,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_train:
-        train_dataset = datasets["train"].map(
+        if "train" not in datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
+        if data_args.max_train_samples is not None:
+            # Select samples from Dataset, This will help to decrease processing time
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        # Create Training Features
+        train_dataset = train_dataset.map(
             prepare_train_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_train_samples is not None:
+            # Select samples from dataset again since Feature Creation might increase number of features
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -446,13 +476,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_eval:
-        validation_dataset = datasets["validation"].map(
+        if "validation" not in datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_dataset = datasets["validation"]
+        if data_args.max_val_samples is not None:
+            # Selecting Eval Samples from Dataset
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+        # Create Features from Eval Dataset
+        eval_dataset = eval_dataset.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_val_samples is not None:
+            # Selecting Samples from Dataset again since Feature Creation might increase samples size
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
@@ -499,7 +539,7 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=validation_dataset if training_args.do_eval else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
         eval_examples=datasets["validation"] if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
@@ -518,32 +558,27 @@ def main():
         train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+        metrics = train_result.metrics
 
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+
+        trainer.log_metrics("train", metrics)
+        trainer.save_metrics("train", metrics)
+        trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        results = trainer.evaluate()
+        metrics = trainer.evaluate()
 
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in sorted(results.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
-    return results
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
 
 
 def _mp_fn(index):

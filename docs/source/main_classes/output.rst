@@ -60,7 +60,7 @@ ModelOutput
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.file_utils.ModelOutput
-    :members:
+    :members: to_tuple
 
 
 BaseModelOutput

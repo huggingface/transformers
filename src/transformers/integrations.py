@@ -17,7 +17,6 @@ Integrations with other Python libraries.
 import importlib.util
 import io
 import json
-import math
 import numbers
 import os
 import re
@@ -27,6 +26,7 @@ from types import SimpleNamespace
 
 from .trainer_utils import SchedulerType
 from .utils import logging
+from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -49,7 +49,7 @@ if _has_comet:
 
 from .file_utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
 from .trainer_callback import TrainerCallback  # noqa: E402
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, EvaluationStrategy  # noqa: E402
+from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 
 
 # Integration functions:
@@ -174,16 +174,23 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
 
     _tb_writer = trainer.pop_callback(TensorBoardCallback)
     trainer.model = None
-    # Setup default `resources_per_trial` and `reporter`.
-    if "resources_per_trial" not in kwargs and trainer.args.n_gpu > 0:
-        # `args.n_gpu` is considered the total number of GPUs that will be split
-        # among the `n_jobs`
-        n_jobs = int(kwargs.pop("n_jobs", 1))
-        num_gpus_per_trial = trainer.args.n_gpu
-        if num_gpus_per_trial / n_jobs >= 1:
-            num_gpus_per_trial = int(math.ceil(num_gpus_per_trial / n_jobs))
-        kwargs["resources_per_trial"] = {"gpu": num_gpus_per_trial}
+    # Setup default `resources_per_trial`.
+    if "resources_per_trial" not in kwargs:
+        # Default to 1 CPU and 1 GPU (if applicable) per trial.
+        kwargs["resources_per_trial"] = {"cpu": 1}
+        if trainer.args.n_gpu > 0:
+            kwargs["resources_per_trial"]["gpu"] = 1
+        resource_msg = "1 CPU" + (" and 1 GPU" if trainer.args.n_gpu > 0 else "")
+        logger.info(
+            "No `resources_per_trial` arg was passed into "
+            "`hyperparameter_search`. Setting it to a default value "
+            f"of {resource_msg} for each trial."
+        )
+    # Make sure each trainer only uses GPUs that were allocated per trial.
+    gpus_per_trial = kwargs["resources_per_trial"].get("gpu", 0)
+    trainer.args._n_gpu = gpus_per_trial
 
+    # Setup default `progress_reporter`.
     if "progress_reporter" not in kwargs:
         from ray.tune import CLIReporter
 
@@ -193,7 +200,8 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         trainer.use_tune_checkpoints = True
         if kwargs["keep_checkpoints_num"] > 1:
             logger.warning(
-                "Currently keeping {} checkpoints for each trial. Checkpoints are usually huge, "
+                f"Currently keeping {kwargs['keep_checkpoint_num']} checkpoints for each trial. "
+                "Checkpoints are usually huge, "
                 "consider setting `keep_checkpoints_num=1`."
             )
     if "scheduler" in kwargs:
@@ -212,7 +220,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         # Check for `do_eval` and `eval_during_training` for schedulers that require intermediate reporting.
         if isinstance(
             kwargs["scheduler"], (ASHAScheduler, MedianStoppingRule, HyperBandForBOHB, PopulationBasedTraining)
-        ) and (not trainer.args.do_eval or trainer.args.evaluation_strategy == EvaluationStrategy.NO):
+        ) and (not trainer.args.do_eval or trainer.args.evaluation_strategy == IntervalStrategy.NO):
             raise RuntimeError(
                 "You are using {cls} as a scheduler but you haven't enabled evaluation during training. "
                 "This means your trials will not report intermediate results to Ray Tune, and "
@@ -274,6 +282,8 @@ def init_deepspeed(trainer, num_training_steps):
     """
     import deepspeed
 
+    require_version("deepspeed>0.3.10")
+
     args = trainer.args
     ds_config_file = args.deepspeed
     model = trainer.model
@@ -316,9 +326,8 @@ def init_deepspeed(trainer, num_training_steps):
             f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
-        # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-        # But trainer uses AdamW by default.
-        # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+        # ds supports Adam, AdamW, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+        # To use other optimizers requires voiding warranty with: `"zero_allow_untested_optimizer": true"`
 
         optimizer_configs = {
             "AdamW": {
@@ -330,7 +339,6 @@ def init_deepspeed(trainer, num_training_steps):
         }
         optimizer = "AdamW"
 
-        config["zero_allow_untested_optimizer"] = True
         config["optimizer"] = {
             "type": optimizer,
             "params": optimizer_configs[optimizer],

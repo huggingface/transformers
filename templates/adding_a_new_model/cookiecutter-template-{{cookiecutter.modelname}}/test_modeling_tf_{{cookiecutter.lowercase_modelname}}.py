@@ -253,6 +253,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     )
 
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TF{{cookiecutter.camelcase_modelname}}ModelTester(self)
@@ -478,6 +479,7 @@ class TF{{cookiecutter.camelcase_modelname}}ModelTest(TFModelTesterMixin, unitte
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TF{{cookiecutter.camelcase_modelname}}ModelTester(self)

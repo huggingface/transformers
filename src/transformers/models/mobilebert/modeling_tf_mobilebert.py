@@ -59,6 +59,7 @@ from .configuration_mobilebert import MobileBertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/mobilebert-uncased"
 _CONFIG_FOR_DOC = "MobileBertConfig"
 _TOKENIZER_FOR_DOC = "MobileBertTokenizer"
 
@@ -251,11 +252,12 @@ class TFMobileBertSelfAttention(tf.keras.layers.Layer):
         attention_scores = tf.matmul(
             query_layer, key_layer, transpose_b=True
         )  # (batch size, num_heads, seq_len_q, seq_len_k)
-        dk = tf.cast(shape_list(key_layer)[-1], tf.float32)  # scale attention_scores
+        dk = tf.cast(shape_list(key_layer)[-1], dtype=attention_scores.dtype)  # scale attention_scores
         attention_scores = attention_scores / tf.math.sqrt(dk)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in TFBertModel call() function)
+            # Apply the attention mask is (precomputed for all layers in TFMobileBertModel call() function)
+            attention_mask = tf.cast(attention_mask, dtype=attention_scores.dtype)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -726,6 +728,14 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         if inputs["token_type_ids"] is None:
             inputs["token_type_ids"] = tf.fill(input_shape, 0)
 
+        embedding_output = self.embeddings(
+            inputs["input_ids"],
+            inputs["position_ids"],
+            inputs["token_type_ids"],
+            inputs["inputs_embeds"],
+            training=inputs["training"],
+        )
+
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
         # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
@@ -738,9 +748,10 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         # positions we want to attend and -10000.0 for masked positions.
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
-
-        extended_attention_mask = tf.cast(extended_attention_mask, tf.float32)
-        extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -752,13 +763,6 @@ class TFMobileBertMainLayer(tf.keras.layers.Layer):
         else:
             inputs["head_mask"] = [None] * self.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            inputs["input_ids"],
-            inputs["position_ids"],
-            inputs["token_type_ids"],
-            inputs["inputs_embeds"],
-            training=inputs["training"],
-        )
         encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,
@@ -932,7 +936,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1124,7 +1128,7 @@ class TFMobileBertForMaskedLM(TFMobileBertPreTrainedModel, TFMaskedLanguageModel
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1345,7 +1349,7 @@ class TFMobileBertForSequenceClassification(TFMobileBertPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1453,7 +1457,7 @@ class TFMobileBertForQuestionAnswering(TFMobileBertPreTrainedModel, TFQuestionAn
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1588,7 +1592,7 @@ class TFMobileBertForMultipleChoice(TFMobileBertPreTrainedModel, TFMultipleChoic
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1736,7 +1740,7 @@ class TFMobileBertForTokenClassification(TFMobileBertPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(MOBILEBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/mobilebert-uncased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )

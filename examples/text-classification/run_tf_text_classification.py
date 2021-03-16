@@ -293,7 +293,6 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-
         result = trainer.evaluate()
         output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
 

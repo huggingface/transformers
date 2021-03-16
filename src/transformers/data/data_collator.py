@@ -20,8 +20,9 @@ from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 import torch
 from torch.nn.utils.rnn import pad_sequence
 
+from ..file_utils import PaddingStrategy
 from ..modeling_utils import PreTrainedModel
-from ..tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTrainedTokenizerBase
+from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
 
 
 InputDataClass = NewType("InputDataClass", Any)
@@ -89,7 +90,7 @@ class DataCollatorWithPadding:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -138,7 +139,7 @@ class DataCollatorForTokenClassification:
     Args:
         tokenizer (:class:`~transformers.PreTrainedTokenizer` or :class:`~transformers.PreTrainedTokenizerFast`):
             The tokenizer used for encoding the data.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
@@ -238,7 +239,7 @@ class DataCollatorForSeq2Seq:
             prepare the `decoder_input_ids`
 
             This is useful when using `label_smoothing` to avoid calculating loss twice.
-        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+        padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 

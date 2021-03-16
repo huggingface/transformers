@@ -3,6 +3,7 @@
         "enabled": true,
         "loss_scale": 0,
         "loss_scale_window": 1000,
+        "initial_scale_power": 32,
         "hysteresis": 2,
         "min_loss_scale": 1
     },
@@ -17,8 +18,6 @@
         "contiguous_gradients": true,
         "cpu_offload": true
     },
-
-    "zero_allow_untested_optimizer": true,
 
     "optimizer": {
         "type": "AdamW",

@@ -30,6 +30,10 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "M2M100Encoder",  # Building part of bigger (tested) model.
+    "M2M100Decoder",  # Building part of bigger (tested) model.
+    "Speech2TextEncoder",  # Building part of bigger (tested) model.
+    "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
     "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoderWrapper",  # Building part of bigger (tested) model.
@@ -75,6 +79,10 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
+    "M2M100Encoder",
+    "M2M100Decoder",
+    "Speech2TextEncoder",
+    "Speech2TextDecoder",
     "LEDEncoder",
     "LEDDecoder",
     "BartDecoder",
@@ -117,6 +125,9 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "TFGPT2DoubleHeadsModel",
     "TFMT5EncoderModel",
     "TFOpenAIGPTDoubleHeadsModel",
+    "TFRagModel",
+    "TFRagSequenceForGeneration",
+    "TFRagTokenForGeneration",
     "TFT5EncoderModel",
     "Wav2Vec2ForCTC",
     "XLMForQuestionAnswering",
@@ -372,6 +383,7 @@ DEPRECATED_OBJECTS = [
     "TextDataset",
     "TextDatasetForNextSentencePrediction",
     "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",

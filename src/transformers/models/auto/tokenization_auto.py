@@ -52,7 +52,7 @@ from ..roberta.tokenization_roberta import RobertaTokenizer
 from ..squeezebert.tokenization_squeezebert import SqueezeBertTokenizer
 from ..tapas.tokenization_tapas import TapasTokenizer
 from ..transfo_xl.tokenization_transfo_xl import TransfoXLTokenizer
-from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2Tokenizer
+from ..wav2vec2.tokenization_wav2vec2 import Wav2Vec2CTCTokenizer
 from ..xlm.tokenization_xlm import XLMTokenizer
 from .configuration_auto import (
     AlbertConfig,
@@ -67,6 +67,7 @@ from .configuration_auto import (
     ConvBertConfig,
     CTRLConfig,
     DebertaConfig,
+    DebertaV2Config,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -75,10 +76,12 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    IBertConfig,
     LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
     LxmertConfig,
+    M2M100Config,
     MarianConfig,
     MBartConfig,
     MobileBertConfig,
@@ -91,6 +94,7 @@ from .configuration_auto import (
     ReformerConfig,
     RetriBertConfig,
     RobertaConfig,
+    Speech2TextConfig,
     SqueezeBertConfig,
     T5Config,
     TapasConfig,
@@ -110,11 +114,15 @@ if is_sentencepiece_available():
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..big_bird.tokenization_big_bird import BigBirdTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
+    from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
+    from ..m2m_100 import M2M100Tokenizer
     from ..marian.tokenization_marian import MarianTokenizer
     from ..mbart.tokenization_mbart import MBartTokenizer
+    from ..mbart.tokenization_mbart50 import MBart50Tokenizer
     from ..mt5 import MT5Tokenizer
     from ..pegasus.tokenization_pegasus import PegasusTokenizer
     from ..reformer.tokenization_reformer import ReformerTokenizer
+    from ..speech_to_text import Speech2TextTokenizer
     from ..t5.tokenization_t5 import T5Tokenizer
     from ..xlm_prophetnet.tokenization_xlm_prophetnet import XLMProphetNetTokenizer
     from ..xlm_roberta.tokenization_xlm_roberta import XLMRobertaTokenizer
@@ -125,8 +133,10 @@ else:
     BertGenerationTokenizer = None
     BigBirdTokenizer = None
     CamembertTokenizer = None
+    DebertaV2Tokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
+    MBart50Tokenizer = None
     MT5Tokenizer = None
     PegasusTokenizer = None
     ReformerTokenizer = None
@@ -134,6 +144,8 @@ else:
     XLMRobertaTokenizer = None
     XLNetTokenizer = None
     XLMProphetNetTokenizer = None
+    M2M100Tokenizer = None
+    Speech2TextTokenizer = None
 
 if is_tokenizers_available():
     from ..albert.tokenization_albert_fast import AlbertTokenizerFast
@@ -152,6 +164,7 @@ if is_tokenizers_available():
     from ..led.tokenization_led_fast import LEDTokenizerFast
     from ..longformer.tokenization_longformer_fast import LongformerTokenizerFast
     from ..lxmert.tokenization_lxmert_fast import LxmertTokenizerFast
+    from ..mbart.tokenization_mbart50_fast import MBart50TokenizerFast
     from ..mbart.tokenization_mbart_fast import MBartTokenizerFast
     from ..mobilebert.tokenization_mobilebert_fast import MobileBertTokenizerFast
     from ..mpnet.tokenization_mpnet_fast import MPNetTokenizerFast
@@ -183,6 +196,7 @@ else:
     LongformerTokenizerFast = None
     LxmertTokenizerFast = None
     MBartTokenizerFast = None
+    MBart50TokenizerFast = None
     MobileBertTokenizerFast = None
     MPNetTokenizerFast = None
     MT5TokenizerFast = None
@@ -195,6 +209,7 @@ else:
     T5TokenizerFast = None
     XLMRobertaTokenizerFast = None
     XLNetTokenizerFast = None
+
 
 logger = logging.get_logger(__name__)
 
@@ -236,8 +251,11 @@ TOKENIZER_MAPPING = OrderedDict(
         (FSMTConfig, (FSMTTokenizer, None)),
         (BertGenerationConfig, (BertGenerationTokenizer, None)),
         (DebertaConfig, (DebertaTokenizer, None)),
+        (DebertaV2Config, (DebertaV2Tokenizer, None)),
         (RagConfig, (RagTokenizer, None)),
         (XLMProphetNetConfig, (XLMProphetNetTokenizer, None)),
+        (Speech2TextConfig, (Speech2TextTokenizer, None)),
+        (M2M100Config, (M2M100Tokenizer, None)),
         (ProphetNetConfig, (ProphetNetTokenizer, None)),
         (MPNetConfig, (MPNetTokenizer, MPNetTokenizerFast)),
         (TapasConfig, (TapasTokenizer, None)),
@@ -245,6 +263,8 @@ TOKENIZER_MAPPING = OrderedDict(
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
         (BigBirdConfig, (BigBirdTokenizer, None)),
+        (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
+        (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
     ]
 )
 
@@ -257,6 +277,8 @@ NO_CONFIG_TOKENIZER = [
     PhobertTokenizer,
     BarthezTokenizer,
     BarthezTokenizerFast,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
 ]
 
 

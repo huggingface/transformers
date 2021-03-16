@@ -297,6 +297,8 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         if is_tf_available()
         else ()
     )
+    test_head_masking = False
+    test_onnx = False
 
     def setUp(self):
         self.model_tester = TFLongformerModelTester(self)
@@ -337,30 +339,8 @@ class TFLongformerModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    @slow
-    def test_saved_model_with_attentions_output(self):
-        # Temporarily disable this test in order to find
-        # how to better handle it without timing out the CI
-        pass
-
-    @slow
-    def test_saved_model_with_hidden_states_output(self):
-        # Temporarily disable this test in order to find
-        # how to better handle it without timing out the CI
-        pass
-
     def test_saved_model_creation(self):
         # This test is too long (>30sec) and makes fail the CI
-        pass
-
-    @slow
-    def test_saved_model_creation_extended(self):
-        # Temporarily disable this test in order to find
-        # how to better handle it without timing out the CI
-        pass
-
-    def test_mixed_precision(self):
-        # TODO JP: Make Longformer float16 compliant
         pass
 
     def test_xla_mode(self):

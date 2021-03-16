@@ -56,7 +56,11 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="")
         tf_name = tf_name[1:]  # Remove level zero
 
     # When should we transpose the weights
-    transpose = bool(tf_name[-1] == "kernel" or "emb_projs" in tf_name or "out_projs" in tf_name)
+    transpose = bool(
+        tf_name[-1] in ["kernel", "pointwise_kernel", "depthwise_kernel"]
+        or "emb_projs" in tf_name
+        or "out_projs" in tf_name
+    )
 
     # Convert standard TF2.0 names in PyTorch names
     if tf_name[-1] == "kernel" or tf_name[-1] == "embeddings" or tf_name[-1] == "gamma":

@@ -333,6 +333,8 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
     )
     all_generative_model_classes = (TFGPT2LMHeadModel,) if is_tf_available() else ()
     test_head_masking = False
+    test_onnx = True
+    onnx_min_opset = 10
 
     def setUp(self):
         self.model_tester = TFGPT2ModelTester(self)
@@ -386,14 +388,6 @@ class TFGPT2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_gpt2_sequence_classification_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt2_for_sequence_classification(*config_and_inputs)
-
-    def test_mixed_precision(self):
-        # TODO JP: Make GPT2 float16 compliant
-        pass
-
-    def test_xla_mode(self):
-        # TODO JP: Make GPT2 XLA compliant
-        pass
 
     @slow
     def test_model_from_pretrained(self):

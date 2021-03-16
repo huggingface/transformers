@@ -56,7 +56,7 @@ FSMTTokenizer
 
 .. autoclass:: transformers.FSMTTokenizer
     :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, prepare_seq2seq_batch, save_vocabulary
+        create_token_type_ids_from_sequences, save_vocabulary
 
 
 FSMTModel

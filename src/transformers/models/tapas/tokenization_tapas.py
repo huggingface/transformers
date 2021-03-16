@@ -28,16 +28,13 @@ from typing import Callable, Dict, Generator, List, Optional, Text, Tuple, Union
 
 import numpy as np
 
-from ...file_utils import add_end_docstrings, is_pandas_available
+from ...file_utils import ExplicitEnum, PaddingStrategy, TensorType, add_end_docstrings, is_pandas_available
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
     EncodedInput,
-    ExplicitEnum,
-    PaddingStrategy,
     PreTokenizedInput,
-    TensorType,
     TextInput,
 )
 from ...utils import logging
@@ -151,7 +148,7 @@ def whitespace_tokenize(text):
 TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to encode the sequences with the special tokens relative to their model.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
@@ -180,7 +177,7 @@ TAPAS_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.

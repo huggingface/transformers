@@ -25,7 +25,6 @@ import warnings
 from collections import OrderedDict, UserDict
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -33,14 +32,24 @@ import numpy as np
 import requests
 
 from .file_utils import (
+    ExplicitEnum,
+    PaddingStrategy,
+    TensorType,
+    _is_jax,
+    _is_numpy,
+    _is_tensorflow,
+    _is_torch,
+    _is_torch_device,
     add_end_docstrings,
     cached_path,
     hf_bucket_url,
     is_flax_available,
+    is_offline_mode,
     is_remote_url,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    to_py_obj,
     torch_required,
 )
 from .utils import logging
@@ -53,34 +62,6 @@ if TYPE_CHECKING:
         import tensorflow as tf
     if is_flax_available():
         import jax.numpy as jnp  # noqa: F401
-
-
-def _is_numpy(x):
-    return isinstance(x, np.ndarray)
-
-
-def _is_torch(x):
-    import torch
-
-    return isinstance(x, torch.Tensor)
-
-
-def _is_torch_device(x):
-    import torch
-
-    return isinstance(x, torch.device)
-
-
-def _is_tensorflow(x):
-    import tensorflow as tf
-
-    return isinstance(x, tf.Tensor)
-
-
-def _is_jax(x):
-    import jax.numpy as jnp  # noqa: F811
-
-    return isinstance(x, jnp.ndarray)
 
 
 if is_tokenizers_available():
@@ -134,19 +115,6 @@ TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
 FULL_TOKENIZER_FILE = "tokenizer.json"
 
 
-class ExplicitEnum(Enum):
-    """
-    Enum with more explicit error message for missing values.
-    """
-
-    @classmethod
-    def _missing_(cls, value):
-        raise ValueError(
-            "%r is not a valid %s, please select one of %s"
-            % (value, cls.__name__, str(list(cls._value2member_map_.keys())))
-        )
-
-
 class TruncationStrategy(ExplicitEnum):
     """
     Possible values for the ``truncation`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
@@ -157,29 +125,6 @@ class TruncationStrategy(ExplicitEnum):
     ONLY_SECOND = "only_second"
     LONGEST_FIRST = "longest_first"
     DO_NOT_TRUNCATE = "do_not_truncate"
-
-
-class PaddingStrategy(ExplicitEnum):
-    """
-    Possible values for the ``padding`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for tab-completion
-    in an IDE.
-    """
-
-    LONGEST = "longest"
-    MAX_LENGTH = "max_length"
-    DO_NOT_PAD = "do_not_pad"
-
-
-class TensorType(ExplicitEnum):
-    """
-    Possible values for the ``return_tensors`` argument in :meth:`PreTrainedTokenizerBase.__call__`. Useful for
-    tab-completion in an IDE.
-    """
-
-    PYTORCH = "pt"
-    TENSORFLOW = "tf"
-    NUMPY = "np"
-    JAX = "jax"
 
 
 class CharSpan(NamedTuple):
@@ -206,24 +151,6 @@ class TokenSpan(NamedTuple):
 
     start: int
     end: int
-
-
-def to_py_obj(obj):
-    """
-    Convert a TensorFlow tensor, PyTorch tensor, Numpy array or python list to a python list.
-    """
-    if isinstance(obj, (dict, BatchEncoding)):
-        return {k: to_py_obj(v) for k, v in obj.items()}
-    elif isinstance(obj, (list, tuple)):
-        return [to_py_obj(o) for o in obj]
-    elif is_tf_available() and _is_tensorflow(obj):
-        return obj.numpy().tolist()
-    elif is_torch_available() and _is_torch(obj):
-        return obj.detach().cpu().tolist()
-    elif isinstance(obj, np.ndarray):
-        return obj.tolist()
-    else:
-        return obj
 
 
 class BatchEncoding(UserDict):
@@ -715,9 +642,9 @@ class BatchEncoding(UserDict):
         Convert the inner content to tensors.
 
         Args:
-            tensor_type (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            tensor_type (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 The type of tensors to use. If :obj:`str`, should be one of the values of the enum
-                :class:`~transformers.tokenization_utils_base.TensorType`. If :obj:`None`, no modification is done.
+                :class:`~transformers.file_utils.TensorType`. If :obj:`None`, no modification is done.
             prepend_batch_axis (:obj:`int`, `optional`, defaults to :obj:`False`):
                 Whether or not to add the batch dimension during the conversion.
         """
@@ -800,8 +727,7 @@ class BatchEncoding(UserDict):
             device (:obj:`str` or :obj:`torch.device`): The device to put the tensors on.
 
         Returns:
-            :class:`~transformers.BatchEncoding`: The same instance of :class:`~transformers.BatchEncoding` after
-            modification.
+            :class:`~transformers.BatchEncoding`: The same instance after modification.
         """
 
         # This check catches things like APEX blindly calling "to" on all inputs to a module
@@ -810,9 +736,7 @@ class BatchEncoding(UserDict):
         if isinstance(device, str) or _is_torch_device(device) or isinstance(device, int):
             self.data = {k: v.to(device=device) for k, v in self.data.items()}
         else:
-            logger.warning(
-                f"Attempting to cast a BatchEncoding to another type, {str(device)}. This is not supported."
-            )
+            logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
 
 
@@ -970,6 +894,12 @@ class SpecialTokensMixin:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary.
+
+        .. Note::
+            When adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix of
+            the model so that its embedding matrix matches the tokenizer.
+
+            In order to do that, please use the :meth:`~transformers.PreTrainedModel.resize_token_embeddings` method.
 
         Args:
             new_tokens (:obj:`str`, :obj:`tokenizers.AddedToken` or a list of `str` or :obj:`tokenizers.AddedToken`):
@@ -1315,7 +1245,7 @@ class SpecialTokensMixin:
 ENCODE_KWARGS_DOCSTRING = r"""
             add_special_tokens (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to encode the sequences with the special tokens relative to their model.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
@@ -1356,7 +1286,7 @@ ENCODE_KWARGS_DOCSTRING = r"""
             pad_to_multiple_of (:obj:`int`, `optional`):
                 If set will pad the sequence to a multiple of the provided value. This is especially useful to enable
                 the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -1667,69 +1597,55 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
 
-        s3_models = list(cls.max_model_input_sizes.keys())
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
+
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         vocab_files = {}
         init_configuration = {}
-        if pretrained_model_name_or_path in s3_models:
-            # Get the vocabulary from AWS S3 bucket
-            for file_id, map_list in cls.pretrained_vocab_files_map.items():
-                vocab_files[file_id] = map_list[pretrained_model_name_or_path]
-            if (
-                cls.pretrained_init_configuration
-                and pretrained_model_name_or_path in cls.pretrained_init_configuration
-            ):
-                init_configuration = cls.pretrained_init_configuration[pretrained_model_name_or_path].copy()
-        else:
-            # Get the vocabulary from local files
-            logger.info(
-                "Model name '{}' not found in model shortcut name list ({}). "
-                "Assuming '{}' is a path, a model identifier, or url to a directory containing tokenizer files.".format(
-                    pretrained_model_name_or_path, ", ".join(s3_models), pretrained_model_name_or_path
+
+        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+            if len(cls.vocab_files_names) > 1:
+                raise ValueError(
+                    f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "
+                    "supported for this tokenizer. Use a model identifier or the path to a directory instead."
                 )
+            warnings.warn(
+                f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is deprecated and "
+                "won't be possible anymore in v5. Use a model identifier or the path to a directory instead.",
+                FutureWarning,
             )
-
-            if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-                if len(cls.vocab_files_names) > 1:
-                    raise ValueError(
-                        "Calling {}.from_pretrained() with the path to a single file or url is not supported."
-                        "Use a model identifier or the path to a directory instead.".format(cls.__name__)
-                    )
-                logger.warning(
-                    "Calling {}.from_pretrained() with the path to a single file or url is deprecated".format(
-                        cls.__name__
-                    )
-                )
-                file_id = list(cls.vocab_files_names.keys())[0]
-                vocab_files[file_id] = pretrained_model_name_or_path
-            else:
-                # At this point pretrained_model_name_or_path is either a directory or a model identifier name
-                additional_files_names = {
-                    "added_tokens_file": ADDED_TOKENS_FILE,
-                    "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
-                    "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
-                    "tokenizer_file": FULL_TOKENIZER_FILE,
-                }
-                # Look for the tokenizer files
-                for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
-                    if os.path.isdir(pretrained_model_name_or_path):
-                        if subfolder is not None:
-                            full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
-                        else:
-                            full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                        if not os.path.exists(full_file_name):
-                            logger.info("Didn't find file {}. We won't load it.".format(full_file_name))
-                            full_file_name = None
+            file_id = list(cls.vocab_files_names.keys())[0]
+            vocab_files[file_id] = pretrained_model_name_or_path
+        else:
+            # At this point pretrained_model_name_or_path is either a directory or a model identifier name
+            additional_files_names = {
+                "added_tokens_file": ADDED_TOKENS_FILE,
+                "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
+                "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
+                "tokenizer_file": FULL_TOKENIZER_FILE,
+            }
+            # Look for the tokenizer files
+            for file_id, file_name in {**cls.vocab_files_names, **additional_files_names}.items():
+                if os.path.isdir(pretrained_model_name_or_path):
+                    if subfolder is not None:
+                        full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
                     else:
-                        full_file_name = hf_bucket_url(
-                            pretrained_model_name_or_path,
-                            filename=file_name,
-                            subfolder=subfolder,
-                            revision=revision,
-                            mirror=None,
-                        )
+                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
+                    if not os.path.exists(full_file_name):
+                        logger.info(f"Didn't find file {full_file_name}. We won't load it.")
+                        full_file_name = None
+                else:
+                    full_file_name = hf_bucket_url(
+                        pretrained_model_name_or_path,
+                        filename=file_name,
+                        subfolder=subfolder,
+                        revision=revision,
+                        mirror=None,
+                    )
 
-                    vocab_files[file_id] = full_file_name
+                vocab_files[file_id] = full_file_name
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
@@ -1739,21 +1655,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 resolved_vocab_files[file_id] = None
             else:
                 try:
-                    try:
-                        resolved_vocab_files[file_id] = cached_path(
-                            file_path,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            resume_download=resume_download,
-                            local_files_only=local_files_only,
-                            use_auth_token=use_auth_token,
-                        )
-                    except FileNotFoundError as error:
-                        if local_files_only:
-                            unresolved_files.append(file_id)
-                        else:
-                            raise error
+                    resolved_vocab_files[file_id] = cached_path(
+                        file_path,
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
+                    )
+
+                except FileNotFoundError as error:
+                    if local_files_only:
+                        unresolved_files.append(file_id)
+                    else:
+                        raise error
 
                 except requests.exceptions.HTTPError as err:
                     if "404 Client Error" in str(err):
@@ -1781,9 +1697,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 continue
 
             if file_path == resolved_vocab_files[file_id]:
-                logger.info("loading file {}".format(file_path))
+                logger.info(f"loading file {file_path}")
             else:
-                logger.info("loading file {} from cache at {}".format(file_path, resolved_vocab_files[file_id]))
+                logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
 
         return cls._from_pretrained(
             resolved_vocab_files, pretrained_model_name_or_path, init_configuration, *init_inputs, **kwargs
@@ -2602,7 +2518,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
                 Instead of :obj:`List[int]` you can have tensors (numpy arrays, PyTorch tensors or TensorFlow tensors),
                 see the note above for the return type.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
@@ -2624,7 +2540,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                 to the specific tokenizer's default, defined by the :obj:`return_outputs` attribute.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -3054,12 +2970,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
-        Converts a sequence of token ids in a single string. The most simple way to do it is ``" ".join(tokens)`` but
-        we often want to remove sub-word tokenization artifacts at the same time
+        Converts a sequence of tokens in a single string. The most simple way to do it is ``" ".join(tokens)`` but we
+        often want to remove sub-word tokenization artifacts at the same time.
 
         Args:
             tokens (:obj:`List[str]`): The token to join in a string.
-        Return: The joined tokens.
+
+        Returns:
+            :obj:`str`: The joined tokens.
         """
         raise NotImplementedError
 
@@ -3252,7 +3170,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             max_target_length (:obj:`int`, `optional`):
                 Controls the maximum length of decoder inputs (target language texts or summaries) If left unset or set
                 to :obj:`None`, this will use the max_length value.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.tokenization_utils_base.PaddingStrategy`, `optional`, defaults to :obj:`False`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Activates and controls padding. Accepts the following values:
 
                 * :obj:`True` or :obj:`'longest'`: Pad to the longest sequence in the batch (or no padding if only a
@@ -3261,7 +3179,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                   maximum acceptable input length for the model if that argument is not provided.
                 * :obj:`False` or :obj:`'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of
                   different lengths).
-            return_tensors (:obj:`str` or :class:`~transformers.tokenization_utils_base.TensorType`, `optional`):
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
@@ -3295,6 +3213,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             The full set of keys ``[input_ids, attention_mask, labels]``, will only be returned if tgt_texts is passed.
             Otherwise, input_ids, attention_mask will be the only keys.
         """
+        warnings.warn(
+            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
+            "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
+            "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
+            "details",
+            FutureWarning,
+        )
         # mBART-specific kwargs that should be ignored by other models.
         kwargs.pop("src_lang", None)
         kwargs.pop("tgt_lang", None)

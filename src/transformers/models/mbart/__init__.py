@@ -32,9 +32,11 @@ _import_structure = {
 
 if is_sentencepiece_available():
     _import_structure["tokenization_mbart"] = ["MBartTokenizer"]
+    _import_structure["tokenization_mbart50"] = ["MBart50Tokenizer"]
 
 if is_tokenizers_available():
     _import_structure["tokenization_mbart_fast"] = ["MBartTokenizerFast"]
+    _import_structure["tokenization_mbart50_fast"] = ["MBart50TokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_mbart"] = [
@@ -56,8 +58,10 @@ if TYPE_CHECKING:
 
     if is_sentencepiece_available():
         from .tokenization_mbart import MBartTokenizer
+        from .tokenization_mbart50 import MBart50Tokenizer
 
     if is_tokenizers_available():
+        from .tokenization_mbart50_fast import MBart50TokenizerFast
         from .tokenization_mbart_fast import MBartTokenizerFast
 
     if is_torch_available():
