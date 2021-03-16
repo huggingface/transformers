@@ -340,6 +340,6 @@ class ConversationalPipeline(Pipeline):
             # If the tokenizer cannot handle conversations, we default to only the old version
             input_ids = [self._legacy_parse_and_tokenize(conversation) for conversation in conversations]
         inputs = self.tokenizer.pad(
-            {"input_ids": input_ids}, padding="longest", return_attention_mask=True, return_tensors="pt"
+            {"input_ids": input_ids}, padding="longest", return_attention_mask=True, return_tensors=self.framework
         )
         return inputs
