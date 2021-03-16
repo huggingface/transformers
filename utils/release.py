@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import git
 import os
 import packaging.version
@@ -243,6 +244,13 @@ def post_patch_work():
 
 
 if __name__ == "__main__":
-    # pre_release_work()
-    post_release_work()
-    # post_patch_work()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--post_release", action="store_true", help="Whether this is pre or post release.")
+    parser.add_argument("--patch", action="store_true", help="Whether or not this is a patch release.")
+    args = parser.parse_args()
+    if args.pre:
+        pre_release_work(patch=args.patch)
+    elif args.patch:
+        post_patch_work()
+    else:
+        post_release_work()
