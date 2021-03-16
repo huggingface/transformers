@@ -566,14 +566,6 @@ class BigBirdBlockSparseAttention(nn.Module):
         n = to_seq_length
         wm = from_block_size
         wn = to_block_size
-        device = query_layer.device
-
-        # cast masks to float
-        from_mask = from_mask.float()
-        to_mask = to_mask.float()
-        band_mask = band_mask.float()
-        from_blocked_mask = from_blocked_mask.float()
-        to_blocked_mask = to_blocked_mask.float()
 
         # generate random attention and corresponding masks
         np.random.seed(seed)
@@ -599,7 +591,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             )
 
         rand_attn = np.stack(rand_attn, axis=0)
-        rand_attn = torch.tensor(rand_attn, device=device).long()
+        rand_attn = torch.tensor(rand_attn, device=query_layer.device, dtype=torch.long)
         rand_attn.unsqueeze_(0)
         rand_attn = torch.cat([rand_attn for _ in range(batch_size)], dim=0)
 
@@ -812,8 +804,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         context_layer = torch.transpose(context_layer, 1, 2)
 
         if output_attentions:
-            # TODO: need to verify if below code is correct
-            attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=device)
+            # TODO(PVP): need to verify if below code is correct
+            attention_probs = torch.zeros(b, h, m, n, dtype=torch.float, device=context_layer.device)
 
             # corresponding to `first_context_layer`
             attention_probs[:, :, :wm, :] = first_attn_weights
@@ -1842,7 +1834,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             exp_blocked_to_pad = torch.cat(
                 [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], dim=2
             )
-            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2].float(), exp_blocked_to_pad.float())
+            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
             band_mask.unsqueeze_(1)
             return band_mask
 
@@ -2572,7 +2564,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
             logits_mask = self.prepare_question_mask(question_lengths, seqlen)
             if token_type_ids is None:
                 token_type_ids = (~logits_mask).long()
-            logits_mask = logits_mask.float()
+            logits_mask = logits_mask
             logits_mask.unsqueeze_(2)
 
         outputs = self.bert(
