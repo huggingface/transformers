@@ -312,6 +312,12 @@ class Trainer:
                 self.sharded_ddp = ShardedDDPOption.ZERO_DP_3
 
         # one place to sort out whether to place the model on device or not
+        # postpone switching model to cuda when:
+        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        #    and we only use deepspeed for training at the moment
+        # 3. full fp16 eval - since the model needs to be half'ed first
+        # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
@@ -327,10 +333,6 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # postpone switching model to cuda when:
-        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
-        #    and we only use deepspeed for training at the moment
         if self.place_model_on_device:
             model = model.to(args.device)
 
@@ -617,6 +619,17 @@ class Trainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer`
+        and/or :obj:`create_scheduler`) in a subclass.
+        """
+        self.create_optimizer()
+        self.create_scheduler(num_training_steps)
+
+    def create_optimizer(self):
+        """
+        Setup the optimizer.
+
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
@@ -652,6 +665,13 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
+    def create_scheduler(self, num_training_steps: int):
+        """
+        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+
+        Args:
+            num_training_steps (int): The number of training steps to do.
+        """
         if self.lr_scheduler is None:
             warmup_steps = (
                 self.args.warmup_steps
@@ -902,7 +922,7 @@ class Trainer:
         if self.args.deepspeed:
             model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
             self.model = model.module
-            self.model_wrapped = model  # will get further wrapped in DDP
+            self.model_wrapped = model
             self.deepspeed = model  # DeepSpeedEngine object
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler

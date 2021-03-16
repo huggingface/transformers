@@ -263,9 +263,10 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for :obj:`False` and :obj:`["simple"]` for :obj:`True`.
-        deepspeed (:obj:`str`, `optional`):
+        deepspeed (:obj:`str` or :obj:`dict`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
-            evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
+            evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
+            ``ds_config.json``) or an already loaded json file as a :obj:`dict`"
         label_smoothing_factor (:obj:`float`, `optional`, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
@@ -481,7 +482,9 @@ class TrainingArguments:
     )
     deepspeed: Optional[str] = field(
         default=None,
-        metadata={"help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json)"},
+        metadata={
+            "help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already loaded json file as a dict"
+        },
     )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
