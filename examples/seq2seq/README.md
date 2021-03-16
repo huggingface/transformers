@@ -43,7 +43,8 @@ python examples/seq2seq/run_summarization.py \
     --model_name_or_path t5-small \
     --do_train \
     --do_eval \
-    --dataset_name xsum \
+    --dataset_name cnn_dailymail \
+    --dataset_config "3.0.0" \
     --source_prefix "summarize: " \
     --output_dir /tmp/tst-summarization \
     --per_device_train_batch_size=4 \
@@ -56,8 +57,10 @@ python examples/seq2seq/run_summarization.py \
 
 Only T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "summarize: "`.
 
-CNN/DailyMail dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name xsum` with `--dataset_name cnn_dailymail --dataset_config "3.0.0"`.
+We used CNN/DailyMail dataset in this example as `t5-small` was trained on it and one can get good scores even when pre-training with a very small sample.
 
+Extreme Summarization (XSum) Dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name cnn_dailymail --dataset_config "3.0.0"` with  `--dataset_name xsum`.
+    
 And here is how you would use it on your own files, after adjusting the values for the arguments
 `--train_file`, `--validation_file`, `--text_column` and `--summary_column` to match your setup:
 
