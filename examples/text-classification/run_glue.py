@@ -45,7 +45,7 @@ from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.4.0.dev0")
+check_min_version("4.4.0")
 
 task_to_keys = {
     "cola": ("sentence", None),
