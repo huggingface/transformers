@@ -297,37 +297,21 @@ class FlaxRobertaOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayer with Bert->Roberta
 class FlaxRobertaLayer(nn.Module):
-    num_heads: int
-    head_size: int
-    intermediate_size: int
-    hidden_act: str = "gelu"
-    dropout_rate: float = 0.0
-    kernel_init_scale: float = 0.2
+    config: RobertaConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
-    @nn.compact
-    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        attention = FlaxRobertaAttention(
-            self.num_heads,
-            self.head_size,
-            kernel_init_scale=self.kernel_init_scale,
-            dropout_rate=self.dropout_rate,
-            name="attention",
-            dtype=self.dtype,
-        )(hidden_states, attention_mask, deterministic=deterministic)
-        intermediate = FlaxRobertaIntermediate(
-            self.intermediate_size,
-            kernel_init_scale=self.kernel_init_scale,
-            hidden_act=self.hidden_act,
-            name="intermediate",
-            dtype=self.dtype,
-        )(attention)
-        output = FlaxRobertaOutput(
-            kernel_init_scale=self.kernel_init_scale, dropout_rate=self.dropout_rate, name="output", dtype=self.dtype
-        )(intermediate, attention, deterministic=deterministic)
+    def setup(self):
+        self.attention = FlaxRobertaAttention(self.config, name="attention", dtype=self.dtype)
+        self.intermediate = FlaxRobertaIntermediate(self.config, name="intermediate", dtype=self.dtype)
+        self.output = FlaxRobertaOutput(self.config, name="output", dtype=self.dtype)
 
-        return output
+    def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
+        attention_output = self.attention(hidden_states, attention_mask, deterministic=deterministic)
+        hidden_states = self.intermediate(attention_output)
+        hidden_states = self.output(hidden_states, attention_output, deterministic=deterministic)
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertLayerCollection with Bert->Roberta
@@ -498,21 +482,7 @@ class FlaxRobertaModel(FlaxRobertaPreTrainedModel):
         dtype: jnp.dtype = jnp.float32,
         **kwargs
     ):
-        module = FlaxRobertaModule(
-            vocab_size=config.vocab_size,
-            hidden_size=config.hidden_size,
-            type_vocab_size=config.type_vocab_size,
-            max_length=config.max_position_embeddings,
-            num_encoder_layers=config.num_hidden_layers,
-            num_heads=config.num_attention_heads,
-            head_size=config.hidden_size,
-            hidden_act=config.hidden_act,
-            intermediate_size=config.intermediate_size,
-            dropout_rate=config.hidden_dropout_prob,
-            dtype=dtype,
-            **kwargs,
-        )
-
+        module = FlaxRobertaModule(config, dtype=dtype, **kwargs)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
 
     @add_start_docstrings_to_model_forward(ROBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
