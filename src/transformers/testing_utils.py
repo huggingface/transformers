@@ -360,6 +360,9 @@ if is_torch_available():
 else:
     torch_device = None
 
+if is_tf_available():
+    import tensorflow as tf
+
 
 def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch. """
@@ -1169,6 +1172,8 @@ def deep_round(obj, decimals=3):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
         return deep_round(obj.tolist())
+    elif is_tf_available() and tf.is_tensor(obj):
+        return deep_round(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
     else:
