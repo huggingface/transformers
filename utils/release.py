@@ -141,7 +141,7 @@ def update_custom_js(version, patch=False):
     # First let's put the right version
     while not lines[index].startswith("const stableVersion ="):
         index += 1
-    lines[index] = f'const stableVersion = "{version}"\n'
+    lines[index] = f'const stableVersion = "v{version}"\n'
     
     # Then update the dictionary
     while not lines[index].startswith("const versionMapping = {"):
@@ -155,11 +155,11 @@ def update_custom_js(version, patch=False):
             if patch:
                 # We add the patch to the current stable doc
                 old_versions = f"{old_versions}/v{version}"
-                lines[index] = f'{indent}"": "{old_versions} (stable)"\n'
+                lines[index] = f'{indent}"": "{old_versions} (stable),"\n'
             else:
                 # We only keep the last of the micro versions associated to that particular release
                 old_version = old_versions.split("/")[-1]    
-                lines[index] = f'{indent}"": "v{version} (stable)"\n{indent}"{old_version}": "{old_versions}"\n'
+                lines[index] = f'{indent}"": "v{version} (stable)",\n{indent}"{old_version}": "{old_versions}",\n'
         index += 1
     
     with open(CUSTOM_JS_FILE, "w", encoding="utf-8", newline="\n") as f:
@@ -237,7 +237,7 @@ def post_patch_work():
         if len(commit) == 0:
             commit = version_commit
 
-    print["Updating doc deployment and version navbar in the source documentation."]
+    print("Updating doc deployment and version navbar in the source documentation.")
     update_custom_js(version, patch=True)
     update_deploy_sh(version, commit)
 
