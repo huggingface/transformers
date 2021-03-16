@@ -32,11 +32,11 @@ TEST_PATH = "./tests/sagemaker/scripts/tensorflow"
 @pytest.mark.parametrize("instance_type", ["ml.g4dn.xlarge"])
 def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_path):
     # cannot use git since, we need the requirements.txt to install the newest transformers version
-    subprocess.run(
-        "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/run_glue.py".split(),
-        encoding="utf-8",
-        check=True,
-    )
+    # subprocess.run(
+    #     "cp ./examples/text-classification/run_glue.py ./tests/sagemaker/scripts/tensorflow/run_glue.py".split(),
+    #     encoding="utf-8",
+    #     check=True,
+    # )
     # defines hyperparameters
     hyperparameters = {
         "model_name_or_path": model_name_or_path,
