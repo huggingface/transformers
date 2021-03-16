@@ -1061,6 +1061,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1100,6 +1101,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1139,6 +1141,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
