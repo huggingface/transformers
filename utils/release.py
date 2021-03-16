@@ -194,7 +194,7 @@ def post_release_work():
 
     # Check with the user we got that right.
     version = input(f"Which version are we developing now? [{dev_version}]")
-    commit = input(f"Commit hash to associate to {current_version}? [{version_commit}]")
+    commit = input(f"Commit hash to associate to v{current_version}? [{version_commit}]")
     if len(version) == 0:
         version = dev_version
     if len(commit) == 0:
@@ -204,8 +204,8 @@ def post_release_work():
     global_version_update(version)
 
     print("Updating doc deployment and version navbar in the source documentation.")
-    update_custom_js(version)
-    update_deploy_sh(version, commit)
+    update_custom_js(current_version)
+    update_deploy_sh(current_version, commit)
 
 
 def post_patch_work():
