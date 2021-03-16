@@ -110,7 +110,7 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
         "do_train": True,
         "do_eval": True,
         "do_predict": True,
-        "num_train_epochs": 2,
+        "num_train_epochs": 1,
         "output_dir": "/opt/ml/model",
         "overwrite_output_dir": True,
         "save_steps": 5500,
