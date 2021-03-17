@@ -671,7 +671,6 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
         self.init_weights()
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartEncoder.forward with MBart->M2M100
     def forward(
         self,
         input_ids=None,
@@ -700,12 +699,6 @@ class M2M100Encoder(M2M100PreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
             inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
                 Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
                 representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
@@ -739,10 +732,9 @@ class M2M100Encoder(M2M100PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_shape)
+        embed_pos = self.embed_positions(input_ids, inputs_embeds)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
@@ -837,7 +829,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         self.init_weights()
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartDecoder.forward with MBart->M2M100
     def forward(
         self,
         input_ids=None,
@@ -882,19 +873,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 `What are attention masks? <../glossary.html#attention-mask>`__
-            head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
-            encoder_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the attention modules in encoder to avoid performing cross-attention
-                on hidden heads. Mask values selected in ``[0, 1]``:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the heas is **masked**.
-
             past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding.
@@ -940,9 +918,19 @@ class M2M100Decoder(M2M100PreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        # create causal mask
+        # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+        combined_attention_mask = None
+        if input_shape[-1] > 1:
+            combined_attention_mask = _make_causal_mask(
+                input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
+            ).to(self.device)
+
+        if attention_mask is not None and combined_attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            combined_attention_mask = combined_attention_mask + _expand_mask(
+                attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -950,17 +938,16 @@ class M2M100Decoder(M2M100PreTrainedModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        all_cross_attentions = () if output_attentions else None
         next_decoder_cache = () if use_cache else None
 
         # check if head_mask has a correct number of layers specified if desired
@@ -997,7 +984,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(decoder_layer),
                     hidden_states,
-                    attention_mask,
+                    combined_attention_mask,
                     encoder_hidden_states,
                     encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
@@ -1008,7 +995,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
+                    attention_mask=combined_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
@@ -1024,9 +1011,7 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                all_cross_attentions += (layer_outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
 

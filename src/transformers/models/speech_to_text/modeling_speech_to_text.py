@@ -872,7 +872,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         return combined_attention_mask
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartDecoder.forward with MBart->Speech2Text
     def forward(
         self,
         input_ids=None,
@@ -981,15 +980,14 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            encoder_attention_mask = self._get_subsampled_encoder_attn_mask(encoder_attention_mask)
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
-
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
@@ -1003,6 +1001,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             assert head_mask.size()[0] == (
                 len(self.layers)
             ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -1017,8 +1016,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
                 if use_cache:
                     logger.warn(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
+                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
                     )
                     use_cache = False
 
@@ -1064,7 +1062,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                     all_cross_attentions += (layer_outputs[2],)
 
         hidden_states = self.layer_norm(hidden_states)
-
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
