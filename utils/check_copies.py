@@ -17,7 +17,8 @@ import argparse
 import glob
 import os
 import re
-import tempfile
+
+import black
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -76,23 +77,6 @@ _re_copy_warning = re.compile(r"^(\s*)#\s*Copied from\s+transformers\.(\S+\.\S+)
 _re_replace_pattern = re.compile(r"^\s*(\S+)->(\S+)(\s+.*|$)")
 
 
-def blackify(code):
-    """
-    Applies the black part of our `make style` command to `code`.
-    """
-    has_indent = code.startswith("    ")
-    if has_indent:
-        code = f"class Bla:\n{code}"
-    with tempfile.TemporaryDirectory() as d:
-        fname = os.path.join(d, "tmp.py")
-        with open(fname, "w", encoding="utf-8", newline="\n") as f:
-            f.write(code)
-        os.system(f"black -q --line-length 119 --target-version py35 {fname}")
-        with open(fname, "r", encoding="utf-8", newline="\n") as f:
-            result = f.read()
-            return result[len("class Bla:\n") :] if has_indent else result
-
-
 def get_indent(code):
     lines = code.split("\n")
     idx = 0
@@ -100,7 +84,18 @@ def get_indent(code):
         idx += 1
     if idx < len(lines):
         return re.search(r"^(\s*)\S", lines[idx]).groups()[0]
-    return 0
+    return ""
+
+
+def blackify(code):
+    """
+    Applies the black part of our `make style` command to `code`.
+    """
+    has_indent = len(get_indent(code)) > 0
+    if has_indent:
+        code = f"class Bla:\n{code}"
+    result = black.format_str(code, mode=black.FileMode([black.TargetVersion.PY35], line_length=119))
+    return result[len("class Bla:\n") :] if has_indent else result
 
 
 def is_copy_consistent(filename, overwrite=False):
@@ -158,6 +153,8 @@ def is_copy_consistent(filename, overwrite=False):
                 if option.strip() == "all-casing":
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
+            # Blackify after all those replacements
+            theoretical_code = blackify(theoretical_code)
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
