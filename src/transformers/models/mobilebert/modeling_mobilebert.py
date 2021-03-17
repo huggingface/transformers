@@ -1398,6 +1398,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing
 class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1417,7 +1418,6 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.forward with Bert->MobileBert all-casing
     def forward(
         self,
         input_ids=None,
