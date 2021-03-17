@@ -17,7 +17,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
-import gc
 import inspect
 import math
 import os
@@ -927,7 +926,9 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint)
+            deepspeed_engine, optimizer, lr_scheduler = init_deepspeed(
+                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
+            )
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine

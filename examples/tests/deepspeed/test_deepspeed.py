@@ -103,7 +103,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         with io.open(self.ds_config_zero3_file, "r", encoding="utf-8") as f:
             self.ds_config_zero3_dict = json.load(f)
 
-
     def test_fake_notebook_no_launcher(self):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
         with CaptureStd() as cs:  # noqa
@@ -283,7 +282,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # adapted from  TrainerIntegrationTest.test_save_checkpoints
 
         output_dir = self.get_auto_remove_tmp_dir()
-        ds_config_dict = deepcopy(self.ds_config_dict)
+        ds_config_dict = deepcopy(self.ds_config_zero2_dict)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         freq = 5
 
@@ -303,7 +302,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # adapted from TrainerIntegrationTest.test_can_resume_training
 
         output_dir = self.get_auto_remove_tmp_dir()
-        ds_config_dict = deepcopy(self.ds_config_dict)
+        ds_config_dict = deepcopy(self.ds_config_zero2_dict)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
 
@@ -344,14 +343,19 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(**kwargs)
             with self.assertRaises(Exception) as context:
                 trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
-            self.assertTrue("failed to resume from checkpoint" in str(context.exception))
+            self.assertTrue(
+                "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
+            )
 
             # 2. fail to find any checkpoint - due a fresh output_dir
             output_dir2 = self.get_auto_remove_tmp_dir()
             trainer = get_regression_trainer(output_dir=output_dir2, deepspeed=ds_config_dict)
             with self.assertRaises(Exception) as context:
                 trainer.train(resume_from_checkpoint=True)
-            self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
+            self.assertTrue(
+                "No valid checkpoint found in output directory" in str(context.exception),
+                f"got exception: {context.exception}",
+            )
 
 
 @slow
@@ -482,7 +486,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         if do_eval:
             actions += 1
             args.extend(
-                f"""
+                """
             --do_eval
             --max_val_samples 100
             --per_device_eval_batch_size 2

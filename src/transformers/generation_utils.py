@@ -1275,12 +1275,13 @@ class GenerationMixin:
             # forward pass to get next token
             # print(self)
             # die
-            #deepspeed.optimizer.param_coordinator.reset_step()
+            # deepspeed.optimizer.param_coordinator.reset_step()
             # print(torch._C.is_grad_enabled())
             # die
             import torch.distributed as dist
+
             print(f"{dist.get_rank()} generate {cur_len}/{max_length}")
-            #outputs = deepspeed(
+            # outputs = deepspeed(
             outputs = self(
                 **model_inputs,
                 return_dict=True,
@@ -1348,8 +1349,8 @@ class GenerationMixin:
             # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
             # must continue running forward so that the other gpus who may have not finished their
             # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length-cur_len):
-                #_ = deepspeed(
+            for _ in range(max_length - cur_len):
+                # _ = deepspeed(
                 _ = self(
                     **model_inputs,
                     return_dict=True,
@@ -1587,8 +1588,8 @@ class GenerationMixin:
             # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
             # must continue running forward so that the other gpus who may have not finished their
             # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length-cur_len):
-                #_ = deepspeed(
+            for _ in range(max_length - cur_len):
+                # _ = deepspeed(
                 _ = self(
                     **model_inputs,
                     return_dict=True,
@@ -1856,8 +1857,8 @@ class GenerationMixin:
             # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
             # must continue running forward so that the other gpus who may have not finished their
             # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length-cur_len):
-                #_ = deepspeed(
+            for _ in range(max_length - cur_len):
+                # _ = deepspeed(
                 _ = self(
                     **model_inputs,
                     return_dict=True,
@@ -2142,8 +2143,8 @@ class GenerationMixin:
             # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
             # must continue running forward so that the other gpus who may have not finished their
             # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length-cur_len):
-                #_ = deepspeed(
+            for _ in range(max_length - cur_len):
+                # _ = deepspeed(
                 _ = self(
                     **model_inputs,
                     return_dict=True,
@@ -2468,8 +2469,8 @@ class GenerationMixin:
             # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
             # must continue running forward so that the other gpus who may have not finished their
             # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length-cur_len):
-                #_ = deepspeed(
+            for _ in range(max_length - cur_len):
+                # _ = deepspeed(
                 _ = self(
                     **model_inputs,
                     return_dict=True,

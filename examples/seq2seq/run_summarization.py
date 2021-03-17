@@ -592,9 +592,4 @@ def _mp_fn(index):
 
 
 if __name__ == "__main__":
-
-    import faulthandler, signal
-
-    #faulthandler.dump_traceback_later(20, repeat=True)
-
     main()

@@ -185,7 +185,7 @@ class Seq2SeqTrainer(Trainer):
                     outputs = model(**inputs)
             else:
                 outputs = model(**inputs)
-                #outputs = self.deepspeed(**inputs)
+                # outputs = self.deepspeed(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
                     loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()

@@ -1496,6 +1496,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         import torch.distributed as dist
+
         self.c += 1
         print(f"{dist.get_rank()} {self.c} {input_ids}")
 
