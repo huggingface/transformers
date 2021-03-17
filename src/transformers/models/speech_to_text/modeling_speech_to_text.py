@@ -872,7 +872,6 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
 
         return combined_attention_mask
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartDecoder.forward with MBart->Speech2Text
     def forward(
         self,
         input_ids=None,
