@@ -117,3 +117,7 @@ class AutoTokenizerTest(unittest.TestCase):
         sample = "Hello, world. How are you?"
         tokens = tokenizer.tokenize(sample)
         self.assertEqual("[UNK]", tokens[0])
+
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/mpnet-base", do_lower_case=False)
+        tokens = tokenizer.tokenize(sample)
+        self.assertEqual("hello", tokens[0])
