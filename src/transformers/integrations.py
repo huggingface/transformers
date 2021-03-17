@@ -454,10 +454,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
         lr_scheduler=lr_scheduler,
     )
 
-    print(resume_from_checkpoint)
-
-    if resume_from_checkpoint is not None:
-        print(f"Attempting to resume from {resume_from_checkpoint}")
+    if resume_from_checkpoint is not None:  # and os.path.isdir(resume_from_checkpoint):
         logger.info(f"Attempting to resume from {resume_from_checkpoint}")
         # this magically updates self.optimizer and self.lr_scheduler
         load_path, _ = model.load_checkpoint(
