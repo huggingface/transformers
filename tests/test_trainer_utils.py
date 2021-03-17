@@ -27,9 +27,11 @@ if is_torch_available():
     from transformers.modeling_outputs import SequenceClassifierOutput
     from transformers.trainer_pt_utils import (
         DistributedLengthGroupedSampler,
+        DistributedSamplerWithLoop,
         DistributedTensorGatherer,
         LabelSmoother,
         LengthGroupedSampler,
+        SequentialDistributedSampler,
         get_parameter_names,
     )
 
@@ -141,3 +143,60 @@ class TrainerUtilsTest(unittest.TestCase):
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on
+
+    def test_distributed_sampler_with_loop(self):
+        batch_size = 16
+        for length in [23, 64, 123]:
+            dataset = list(range(length))
+            shard1 = DistributedSamplerWithLoop(dataset, batch_size, num_replicas=2, rank=0)
+            shard2 = DistributedSamplerWithLoop(dataset, batch_size, num_replicas=2, rank=1)
+
+            # Set seeds
+            shard1.set_epoch(0)
+            shard2.set_epoch(0)
+
+            # Sample
+            samples1 = list(shard1)
+            samples2 = list(shard2)
+
+            self.assertTrue(len(samples1) % batch_size == 0)
+            self.assertTrue(len(samples2) % batch_size == 0)
+
+            total = []
+            for sample1, sample2 in zip(samples1, samples2):
+                total += [sample1, sample2]
+
+            self.assertEqual(set(total[:length]), set(dataset))
+            self.assertEqual(set(total[length:]), set(total[: (len(total) - length)]))
+
+    def test_sequential_distributed_sampler(self):
+        batch_size = 16
+        for length in [23, 64, 123]:
+            dataset = list(range(length))
+            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0)
+            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1)
+
+            # Sample
+            samples1 = list(shard1)
+            samples2 = list(shard2)
+
+            total = samples1 + samples2
+
+            self.assertListEqual(total[:length], dataset)
+            self.assertListEqual(total[length:], dataset[: (len(total) - length)])
+
+            # With a batch_size passed
+            shard1 = SequentialDistributedSampler(dataset, num_replicas=2, rank=0, batch_size=batch_size)
+            shard2 = SequentialDistributedSampler(dataset, num_replicas=2, rank=1, batch_size=batch_size)
+
+            # Sample
+            samples1 = list(shard1)
+            samples2 = list(shard2)
+
+            self.assertTrue(len(samples1) % batch_size == 0)
+            self.assertTrue(len(samples2) % batch_size == 0)
+
+            total = samples1 + samples2
+
+            self.assertListEqual(total[:length], dataset)
+            self.assertListEqual(total[length:], dataset[: (len(total) - length)])

@@ -21,7 +21,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import BatchEncoding, MarianTokenizer
-from transformers.file_utils import is_sentencepiece_available, is_torch_available
+from transformers.file_utils import is_sentencepiece_available, is_tf_available, is_torch_available
 from transformers.testing_utils import require_sentencepiece
 
 
@@ -36,7 +36,13 @@ SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/t
 mock_tokenizer_config = {"target_lang": "fi", "source_lang": "en"}
 zh_code = ">>zh<<"
 ORG_NAME = "Helsinki-NLP/"
-FRAMEWORK = "pt" if is_torch_available() else "tf"
+
+if is_torch_available():
+    FRAMEWORK = "pt"
+elif is_tf_available():
+    FRAMEWORK = "tf"
+else:
+    FRAMEWORK = "jax"
 
 
 @require_sentencepiece

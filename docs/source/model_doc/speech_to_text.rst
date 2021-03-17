@@ -58,7 +58,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> import soundfile as sf
 
         >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-small-librispeech-asr")
-        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-small-librispeech-asr")
+        >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-small-librispeech-asr")
 
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
@@ -69,7 +69,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> ds = ds.map(map_to_array)
 
         >>> inputs = processor(ds["speech"][0], sampling_rate=16_000, return_tensors="pt")
-        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask])
+        >>> generated_ids = model.generate(input_ids=inputs["input_features"], attention_mask=inputs["attention_mask"])
 
         >>> transcription = processor.batch_decode(generated_ids)
 
@@ -90,7 +90,7 @@ be installed as follows: ``apt install libsndfile1-dev``
         >>> import soundfile as sf
 
         >>> model = Speech2TextForConditionalGeneration.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
-        >>> processor = Speech2Textprocessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
+        >>> processor = Speech2TextProcessor.from_pretrained("facebook/s2t-medium-mustc-multilingual-st")
 
         >>> def map_to_array(batch):
         ...     speech, _ = sf.read(batch["file"])
