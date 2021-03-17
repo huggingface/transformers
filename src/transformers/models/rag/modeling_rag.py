@@ -1316,7 +1316,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], List[int]] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
-        save_mode: Optional[bool] = None,
+        remove_invalid_values: Optional[bool] = None,
         **model_kwargs
     ):
         """
@@ -1413,9 +1413,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
-            save_mode (:obj:`bool`, `optional`):
+            remove_invalid_values (:obj:`bool`, `optional`):
                 Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
-                crash. Note that using ``save_mode`` can slow down generation.
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
 
         Return:
             :obj:`torch.LongTensor` of shape :obj:`(batch_size * num_return_sequences, sequence_length)`: The generated
@@ -1438,6 +1438,9 @@ class RagTokenForGeneration(RagPreTrainedModel):
             decoder_start_token_id
             if decoder_start_token_id is not None
             else self.config.generator.decoder_start_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
 
         # retrieve docs
@@ -1519,7 +1522,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
-            save_mode=save_mode,
+            remove_invalid_values=remove_invalid_values,
         )
 
         if num_beams == 1:

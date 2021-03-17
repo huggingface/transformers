@@ -582,7 +582,7 @@ class GenerationMixin:
         num_beams: int,
         num_beam_groups: int,
         diversity_penalty: float,
-        save_mode: Optional[bool],
+        remove_invalid_values: bool,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -608,6 +608,9 @@ class GenerationMixin:
         )
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
         # instantiate processors list
         processors = LogitsProcessorList()
@@ -641,7 +644,7 @@ class GenerationMixin:
             processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
-        if save_mode is True:
+        if remove_invalid_values is True:
             processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
@@ -691,7 +694,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
-        save_mode: Optional[bool] = None,
+        remove_invalid_values: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -794,9 +797,9 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
-            save_mode (:obj:`bool`, `optional`):
+            remove_invalid_values (:obj:`bool`, `optional`):
                 Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
-                crash. Note that using ``save_mode`` can slow down generation.
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -973,7 +976,7 @@ class GenerationMixin:
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
-            save_mode=save_mode,
+            remove_invalid_values=remove_invalid_values,
         )
 
         stopping_criteria = self._get_stopping_criteria(

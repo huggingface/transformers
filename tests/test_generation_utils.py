@@ -230,7 +230,7 @@ class GenerationTesterMixin:
             output_hidden_states=output_hidden_states,
             output_scores=output_scores,
             return_dict_in_generate=return_dict_in_generate,
-            save_mode=True,
+            remove_invalid_values=True,
             **logits_process_kwargs,
         )
 
@@ -286,7 +286,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
-            save_mode=True,
+            remove_invalid_values=True,
             **logits_warper_kwargs,
             **process_kwargs,
         )
@@ -351,7 +351,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
-            save_mode=True,
+            remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
         )
@@ -414,7 +414,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
-            save_mode=True,
+            remove_invalid_values=True,
             **beam_kwargs,
             **logits_warper_kwargs,
         )
@@ -479,7 +479,7 @@ class GenerationTesterMixin:
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict_in_generate=return_dict_in_generate,
-            save_mode=True,
+            remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
         )
@@ -951,7 +951,7 @@ class GenerationTesterMixin:
             output_ids_generate = model.generate(
                 do_sample=False,
                 max_length=max_length,
-                save_mode=True,
+                remove_invalid_values=True,
             )
 
             self.assertIsNotNone(output_ids_generate)
@@ -1325,7 +1325,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = bart_tokenizer(article, return_tensors="pt").input_ids.to(torch_device)
 
         outputs = bart_model.generate(
-            input_ids, num_beams=4, num_return_sequences=2, num_beam_groups=4, diversity_penalty=2.0, save_mode=True
+            input_ids,
+            num_beams=4,
+            num_return_sequences=2,
+            num_beam_groups=4,
+            diversity_penalty=2.0,
+            remove_invalid_values=True,
         )
 
         generated_text = bart_tokenizer.batch_decode(outputs, skip_special_tokens=True)
