@@ -159,8 +159,8 @@ To run only tests whose name contains ``adam``:
 
    pytest -k adam tests/test_optimization.py
 
-Logical ``and`` and ``or`` can be used to indicate whether all keywords should match or either. ``not`` can be 
-used to negate.
+Logical ``and`` and ``or`` can be used to indicate whether all keywords should match or either. ``not`` can be used to
+negate.
 
 To run all tests except those whose name contains ``adam``:
 
@@ -180,15 +180,15 @@ For example to run both ``test_adafactor`` and ``test_adam_w`` you can use:
 
    pytest -k "test_adam_w or test_adam_w" tests/test_optimization.py
 
-Note that we use ``or`` here, since we want either of the keywords to match to include both. 
+Note that we use ``or`` here, since we want either of the keywords to match to include both.
 
 If you want to include only tests that include both patterns, ``and`` is to be used:
 
 .. code-block:: bash
 
    pytest -k "test and ada" tests/test_optimization.py
-   
-   
+
+
 
 Run only modified tests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
