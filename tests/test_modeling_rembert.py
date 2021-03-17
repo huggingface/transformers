@@ -473,14 +473,18 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         hidden_size = 1152
 
         expected_shape = torch.Size((1, 5, hidden_size))
-        self.assertEqual(output['last_hidden_state'].shape, expected_shape)
+        self.assertEqual(output["last_hidden_state"].shape, expected_shape)
 
         expected_implementation = torch.tensor(
-           [[[0.0754, -0.2022, 0.1904],
-             [-0.3354, -0.3692, -0.4791],
-             [-0.2314, -0.6729, -0.0749],
-             [-0.0396, -0.3105, -0.4234],
-             [-0.1571, -0.0525, 0.5353]]]
+            [
+                [
+                    [0.0754, -0.2022, 0.1904],
+                    [-0.3354, -0.3692, -0.4791],
+                    [-0.2314, -0.6729, -0.0749],
+                    [-0.0396, -0.3105, -0.4234],
+                    [-0.1571, -0.0525, 0.5353],
+                ]
+            ]
         )
 
         # Running on the original tf implementation gives slightly different results here.
@@ -494,4 +498,4 @@ class RemBertModelIntegrationTest(unittest.TestCase):
         #     [-0.15887849032878876, -0.054529931396245956, 0.5356100797653198]
         # ]]
 
-        self.assertTrue(torch.allclose(output['last_hidden_state'][:, :, :3], expected_implementation, atol=1e-4))
+        self.assertTrue(torch.allclose(output["last_hidden_state"][:, :, :3], expected_implementation, atol=1e-4))

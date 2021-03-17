@@ -155,7 +155,9 @@ class RemBertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.input_embedding_size, padding_idx=config.pad_token_id)
+        self.word_embeddings = nn.Embedding(
+            config.vocab_size, config.input_embedding_size, padding_idx=config.pad_token_id
+        )
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.input_embedding_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.input_embedding_size)
 
@@ -640,7 +642,7 @@ class RemBertLMPredictionHead(nn.Module):
 
         # FIXME(tfevry): ALBERT has the following but that breaks this one
         #  Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        #self.decoder.bias = self.bias
+        # self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)

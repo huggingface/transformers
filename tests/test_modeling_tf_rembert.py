@@ -319,16 +319,20 @@ class TFRemBertModelIntegrationTest(unittest.TestCase):
         hidden_size = 1152
 
         expected_shape = [1, 5, hidden_size]
-        self.assertEqual(output['last_hidden_state'].shape, expected_shape)
+        self.assertEqual(output["last_hidden_state"].shape, expected_shape)
 
         expected_implementation = tf.constant(
-            [[[0.0754, -0.2022, 0.1904],
-              [-0.3354, -0.3692, -0.4791],
-              [-0.2314, -0.6729, -0.0749],
-              [-0.0396, -0.3105, -0.4234],
-              [-0.1571, -0.0525, 0.5353]]]
+            [
+                [
+                    [0.0754, -0.2022, 0.1904],
+                    [-0.3354, -0.3692, -0.4791],
+                    [-0.2314, -0.6729, -0.0749],
+                    [-0.0396, -0.3105, -0.4234],
+                    [-0.1571, -0.0525, 0.5353],
+                ]
+            ]
         )
-        tf.debugging.assert_near(output['last_hidden_state'][:, :, :3], expected_implementation, atol=1e-4)
+        tf.debugging.assert_near(output["last_hidden_state"][:, :, :3], expected_implementation, atol=1e-4)
 
         # Running on the original tf implementation gives slightly different results here.
         # Not clear why this variations is present
