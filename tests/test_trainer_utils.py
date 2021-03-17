@@ -169,7 +169,7 @@ class TrainerUtilsTest(unittest.TestCase):
             self.assertEqual(set(total[:length]), set(dataset))
             self.assertEqual(set(total[length:]), set(total[: (len(total) - length)]))
 
-    def test_distributed_sampler_with_loop(self):
+    def test_sequential_distributed_sampler(self):
         batch_size = 16
         for length in [23, 64, 123]:
             dataset = list(range(length))
