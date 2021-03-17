@@ -95,6 +95,20 @@ Coming soon!
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
 
 
+
+## Resuming training
+
+Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
+
+1. If `resume_from_checkpoint` is `True` it will look for the last checkpoint in the value of `output_dir` passed as `TrainingArguments`
+2. If `resume_from_checkpoint` is a path to a specific checkpoint it will use that saved checkpoint folder to resume the training from.
+
+In examples the two corresponding ways to perform a resume are:
+
+1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted)
+2. Pass `--model_name_or_path path_to_a_specific_checkpoint` to resume training from that checkpoint
+
+
 ## Distributed training and mixed precision
 
 All the PyTorch scripts mentioned above work out of the box with distributed training and mixed precision, thanks to
@@ -104,7 +118,7 @@ use the following command:
 ```bash
 python -m torch.distributed.launch \
     --nproc_per_node number_of_gpu_you_have path_to_script.py \
-	--all_arguments_of_the_script 
+	--all_arguments_of_the_script
 ```
 
 As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text
@@ -148,7 +162,7 @@ regular training script with its arguments (this is similar to the `torch.distri
 ```bash
 python xla_spawn.py --num_cores num_tpu_you_have \
     path_to_script.py \
-	--all_arguments_of_the_script 
+	--all_arguments_of_the_script
 ```
 
 As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text
