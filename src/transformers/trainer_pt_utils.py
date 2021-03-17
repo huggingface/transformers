@@ -251,8 +251,7 @@ class SequentialDistributedSampler(Sampler):
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        print("###### Indie iter, num_samples ", self.num_samples)
-        print("###### len(indices, ", len(indices))
+        print("###### Inside iter, num_samples ", self.num_samples, "###### len(indices, ", len(indices))
 
         assert (
             len(indices) == self.num_samples
