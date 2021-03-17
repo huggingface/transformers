@@ -85,9 +85,9 @@ class ViTModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-        image_labels = None
+        labels = None
         if self.use_labels:
-            image_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+            labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
         config = ViTConfig(
             image_size=self.image_size,
@@ -104,21 +104,21 @@ class ViTModelTester:
             initializer_range=self.initializer_range,
         )
 
-        return config, pixel_values, image_labels
+        return config, pixel_values, labels
 
-    def create_and_check_model(self, config, pixel_values, image_labels):
+    def create_and_check_model(self, config, pixel_values, labels):
         model = ViTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.patch_size**2 + 1, self.hidden_size))
 
-    def create_and_check_for_image_classification(self, config, pixel_values, image_labels):
+    def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
         model = ViTForImageClassification(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values, labels=image_labels)
+        result = model(pixel_values, labels=labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -126,7 +126,7 @@ class ViTModelTester:
         (
             config,
             pixel_values,
-            image_labels,
+            labels,
         ) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
@@ -164,12 +164,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         pass
     
     def test_model_common_attributes(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
             self.assertIsInstance(model.get_patch_embeddings(), (torch.nn.Module))
-            model.set_patch_embeddings(torch.nn.Embedding(10, 10))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
     

@@ -128,6 +128,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
+        for image in image_inputs:
+            self.assertIsInstance(image, Image.Image) 
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
@@ -143,6 +145,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, np.ndarray) 
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
@@ -159,6 +163,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PyTorch tensors
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
+        for image in image_inputs:
+            self.assertIsInstance(image, torch.Tensor) 
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values

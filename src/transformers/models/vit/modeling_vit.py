@@ -80,7 +80,6 @@ class ViTEmbeddings(nn.Module):
 
     Based on timm implementation, which can be found here:
     https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-
     """
 
     def __init__(self, config):
@@ -109,7 +108,11 @@ class ViTEmbeddings(nn.Module):
 
 
 class PatchEmbeddings(nn.Module):
-    """ Image to Patch Embedding."""
+    """ Image to Patch Embedding.
+    
+        Based on timm implementation, which can be found here:
+        https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+    """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
         super().__init__()
@@ -123,11 +126,11 @@ class PatchEmbeddings(nn.Module):
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, pixel_values):
-        B, C, H, W = pixel_values.shape
+        batch_size, num_channels, height, width = pixel_values.shape
         # FIXME look at relaxing size constraints
         assert (
-            H == self.image_size[0] and W == self.image_size[1]
-        ), f"Input image size ({H}*{W}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            height == self.image_size[0] and width == self.image_size[1]
+        ), f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
@@ -498,9 +501,6 @@ class ViTModel(ViTPreTrainedModel):
 
     def get_patch_embeddings(self):
         return self.embeddings.patch_embeddings
-
-    def set_patch_embeddings(self, value):
-        self.embeddings.patch_embeddings = value
 
     def _prune_heads(self, heads_to_prune):
         """Prunes heads of the model.

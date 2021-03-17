@@ -460,6 +460,7 @@ if is_torch_available():
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
+            "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -1615,6 +1616,7 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING,
+            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
