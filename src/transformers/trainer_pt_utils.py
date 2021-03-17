@@ -235,9 +235,7 @@ class SequentialDistributedSampler(Sampler):
         self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
         self.total_size = self.num_samples * self.num_replicas
         self.batch_size = batch_size
-        print("###### Length of dataset, ", len(self.dataset))
-        print("###### Num_samples, ", self.num_samples)
-        print("###### total_size, ", self.total_size)
+
 
     def __iter__(self):
         indices = list(range(len(self.dataset)))
@@ -251,7 +249,6 @@ class SequentialDistributedSampler(Sampler):
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        print("###### Inside iter, num_samples ", self.num_samples, "###### len(indices, ", len(indices))
 
         assert (
             len(indices) == self.num_samples
@@ -358,7 +355,6 @@ class DistributedTensorGatherer:
         self.num_samples = num_samples
         total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
         self.total_samples = int(np.ceil(num_samples / total_size)) * total_size
-        print(" ###### Total_samples in gatherer", self.total_samples)
         self.process_length = self.total_samples // world_size
         self._storage = None
         self._offsets = None

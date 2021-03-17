@@ -276,10 +276,6 @@ class SageMakerTrainer(Trainer):
                     ignore_keys = getattr(self.model.config, "keys_to_ignore_at_inference", [])
                 else:
                     ignore_keys = []
-            print("smp.dp_rank(): ", smp.dp_rank(), "smp.mp_rank(): ", smp.mp_rank())
-            for k, v in inputs.items():
-                if isinstance(v, torch.Tensor):
-                    print(k, v.shape)
 
 
             with torch.no_grad():
