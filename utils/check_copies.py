@@ -28,6 +28,10 @@ PATH_TO_DOCS = "docs/source"
 REPO_PATH = "."
 
 
+def _should_continue(line, indent):
+    return line.startswith(indent) or len(line) <= 1 or re.search(r"^\s*\):\s*$", line) is not None
+
+
 def find_code_in_transformers(object_name):
     """ Find and return the code source code of `object_name`."""
     parts = object_name.split(".")
@@ -63,7 +67,7 @@ def find_code_in_transformers(object_name):
 
     # We found the beginning of the class / func, now let's find the end (when the indent diminishes).
     start_index = line_index
-    while line_index < len(lines) and (lines[line_index].startswith(indent) or len(lines[line_index]) <= 1):
+    while line_index < len(lines) and _should_continue(lines[line_index], indent):
         line_index += 1
     # Clean up empty lines at the end (if any).
     while len(lines[line_index - 1]) <= 1:
@@ -131,9 +135,7 @@ def is_copy_consistent(filename, overwrite=False):
             if line_index >= len(lines):
                 break
             line = lines[line_index]
-            should_continue = (len(line) <= 1 or line.startswith(indent)) and re.search(
-                f"^{indent}# End copy", line
-            ) is None
+            should_continue = _should_continue(line, indent) and re.search(f"^{indent}# End copy", line) is None
         # Clean up empty lines at the end (if any).
         while len(lines[line_index - 1]) <= 1:
             line_index -= 1
@@ -178,6 +180,7 @@ def check_copies(overwrite: bool = False):
     all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
     diffs = []
     for filename in all_files:
+        print(filename)
         new_diffs = is_copy_consistent(filename, overwrite)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
     if not overwrite and len(diffs) > 0:
