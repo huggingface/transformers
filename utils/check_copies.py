@@ -153,8 +153,11 @@ def is_copy_consistent(filename, overwrite=False):
                 if option.strip() == "all-casing":
                     theoretical_code = re.sub(obj1.lower(), obj2.lower(), theoretical_code)
                     theoretical_code = re.sub(obj1.upper(), obj2.upper(), theoretical_code)
-            # Blackify after all those replacements
-            theoretical_code = blackify(theoretical_code)
+
+            # Blackify after replacement. To be able to do that, we need the header (class or function definition)
+            # from the previous line
+            theoretical_code = blackify(lines[start_index - 1] + theoretical_code)
+            theoretical_code = theoretical_code[len(lines[start_index - 1]) :]
 
         # Test for a diff and act accordingly.
         if observed_code != theoretical_code:
