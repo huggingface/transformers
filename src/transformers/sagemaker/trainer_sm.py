@@ -112,7 +112,12 @@ class SageMakerTrainer(Trainer):
 
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
         if self.is_model_parallel_enabled:
-            return SequentialDistributedSampler(eval_dataset, num_replicas=smp.dp_size(), rank=smp.dp_rank())
+            return SequentialDistributedSampler(
+                eval_dataset,
+                num_replicas=smp.dp_size(),
+                rank=smp.dp_rank(),
+                batch_size=self.args.per_device_eval_batch_size,
+            )
         else:
             return super()._get_eval_sampler(eval_dataset)
 
