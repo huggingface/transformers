@@ -232,7 +232,12 @@ class SequentialDistributedSampler(Sampler):
         self.dataset = dataset
         self.num_replicas = num_replicas
         self.rank = rank
-        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        num_samples = len(self.dataset)
+        # Add extra samples to make num_samples a multiple of batch_size if passed
+        if batch_size is not None:
+            self.num_samples = int(math.ceil(num_samples / (batch_size * num_replicas))) * batch_size
+        else:
+            self.num_samples = int(math.ceil(num_samples / num_replicas))
         self.total_size = self.num_samples * self.num_replicas
         self.batch_size = batch_size
 
@@ -250,12 +255,6 @@ class SequentialDistributedSampler(Sampler):
         assert (
             len(indices) == self.num_samples
         ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
-
-        # Add extra samples for indices be multiple of batch size
-        if self.batch_size is not None:
-            remainder = 0 if len(indices) % self.batch_size == 0 else self.batch_size - len(indices) % self.batch_size
-            start_remainder = 1 if self.rank < len(self.dataset) % self.num_replicas else 0
-            indices += indices[start_remainder: start_remainder + remainder]
 
         return iter(indices)
 

@@ -1783,8 +1783,8 @@ class Trainer:
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
         if not prediction_loss_only:
-            preds_gatherer = DistributedTensorGatherer(world_size, num_examples,  make_multiple_of=batch_size)
-            labels_gatherer = DistributedTensorGatherer(world_size, num_examples,  make_multiple_of=batch_size)
+            preds_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
+            labels_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
 
         model.eval()
 
