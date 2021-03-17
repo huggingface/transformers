@@ -1213,7 +1213,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
-    ua = f"id/{TRANSFORMERS_ID}; transformers/{__version__}; python/{sys.version.split()[0]}"
+    ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; transformers_id/{TRANSFORMERS_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
@@ -1224,7 +1224,6 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
         ua += "; " + user_agent
-    print(f'*****UA:{ua}')
     return ua
 
 
