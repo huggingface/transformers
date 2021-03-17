@@ -180,7 +180,6 @@ def check_copies(overwrite: bool = False):
     all_files = glob.glob(os.path.join(TRANSFORMERS_PATH, "**/*.py"), recursive=True)
     diffs = []
     for filename in all_files:
-        print(filename)
         new_diffs = is_copy_consistent(filename, overwrite)
         diffs += [f"- {filename}: copy does not match {d[0]} at line {d[1]}" for d in new_diffs]
     if not overwrite and len(diffs) > 0:
