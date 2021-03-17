@@ -117,106 +117,106 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
     assert all(t <= 0.9 for t in eval_loss)
 
 
-# @pytest.mark.skipif(
-#     literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
-#     reason="Skipping test because should only be run when releasing minor transformers version",
-# )
-# @pytest.mark.parametrize("model_name_or_path", ["distilbert-base-cased"])
-# @pytest.mark.parametrize("instance_count", [2])
-# @pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
-# def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_or_path):
-#     # cannot use git since, we need the requirements.txt to install the newest transformers version
-#     copy_script()
-#     # defines hyperparameters
-#     hyperparameters = {
-#         **DISTRIBUTED_HYPERPARAMETER,
-#         "model_name_or_path": model_name_or_path,
-#     }
-#     # distributed data settings
-#     distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
+@pytest.mark.skipif(
+    literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
+    reason="Skipping test because should only be run when releasing minor transformers version",
+)
+@pytest.mark.parametrize("model_name_or_path", ["distilbert-base-cased"])
+@pytest.mark.parametrize("instance_count", [2])
+@pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
+def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_or_path):
+    # cannot use git since, we need the requirements.txt to install the newest transformers version
+    copy_script()
+    # defines hyperparameters
+    hyperparameters = {
+        **DISTRIBUTED_HYPERPARAMETER,
+        "model_name_or_path": model_name_or_path,
+    }
+    # distributed data settings
+    distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
 
-#     # creates estimator
-#     estimator = HuggingFace(
-#         entry_point="run_glue.py",
-#         source_dir=TEST_PATH,
-#         role=SAGEMAKER_ROLE,
-#         image_uri=ECR_IMAGE,
-#         base_job_name=f"{BASE_NAME}-{instance_count}-sm-data",
-#         instance_count=instance_count,
-#         instance_type=instance_type,
-#         debugger_hook_config=False,
-#         hyperparameters=hyperparameters,
-#         metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
-#         distribution=distribution,
-#         py_version="py3",
-#     )
-#     # run training
-#     estimator.fit()
+    # creates estimator
+    estimator = HuggingFace(
+        entry_point="run_glue.py",
+        source_dir=TEST_PATH,
+        role=SAGEMAKER_ROLE,
+        image_uri=ECR_IMAGE,
+        base_job_name=f"{BASE_NAME}-{instance_count}-sm-data",
+        instance_count=instance_count,
+        instance_type=instance_type,
+        debugger_hook_config=False,
+        hyperparameters=hyperparameters,
+        metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
+        distribution=distribution,
+        py_version="py3",
+    )
+    # run training
+    estimator.fit()
 
-#     # test csv
-#     TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
-#         f"{TEST_PATH}/{BASE_NAME}_{instance_count}_sm_data_metrics.csv"
-#     )
+    # test csv
+    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
+        f"{TEST_PATH}/{BASE_NAME}_{instance_count}_sm_data_metrics.csv"
+    )
 
-#     result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
+    result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
 
-#     train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
-#     eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
-#     total_batch_size = list(result_metrics_df[result_metrics_df.metric_name == "total_batch_size"]["value"])
-#     eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+    train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
+    eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
+    total_batch_size = list(result_metrics_df[result_metrics_df.metric_name == "total_batch_size"]["value"])
+    eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
 
-#     assert all(t <= 300 for t in train_runtime)
-#     assert all(t >= 0.7 for t in eval_accuracy)
-#     assert all(t == 512 for t in total_batch_size)
-#     assert all(t <= 0.6 for t in eval_loss)
+    assert all(t <= 300 for t in train_runtime)
+    assert all(t >= 0.7 for t in eval_accuracy)
+    assert all(t == 512 for t in total_batch_size)
+    assert all(t <= 0.6 for t in eval_loss)
 
 
-# @pytest.mark.skipif(
-#     literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
-#     reason="Skipping test because should only be run when releasing minor transformers version",
-# )
-# @pytest.mark.parametrize("model_name_or_path", ["distilbert-base-cased"])
-# @pytest.mark.parametrize("instance_count", [2])
-# @pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
-# def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_path):
-#     # cannot use git since, we need the requirements.txt to install the newest transformers version
-#     copy_script()
-#     # defines hyperparameters
-#     hyperparameters = {
-#         **DISTRIBUTED_HYPERPARAMETER,
-#         "model_name_or_path": model_name_or_path,
-#     }
+@pytest.mark.skipif(
+    literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
+    reason="Skipping test because should only be run when releasing minor transformers version",
+)
+@pytest.mark.parametrize("model_name_or_path", ["distilbert-base-cased"])
+@pytest.mark.parametrize("instance_count", [2])
+@pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
+def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_path):
+    # cannot use git since, we need the requirements.txt to install the newest transformers version
+    copy_script()
+    # defines hyperparameters
+    hyperparameters = {
+        **DISTRIBUTED_HYPERPARAMETER,
+        "model_name_or_path": model_name_or_path,
+    }
 
-#     # creates estimator
-#     estimator = HuggingFace(
-#         entry_point="run_ddp.py",
-#         source_dir=TEST_PATH,
-#         role=SAGEMAKER_ROLE,
-#         image_uri=ECR_IMAGE,
-#         base_job_name=f"{BASE_NAME}-{instance_count}-ddp-data",
-#         instance_count=instance_count,
-#         instance_type=instance_type,
-#         debugger_hook_config=False,
-#         hyperparameters=hyperparameters,
-#         metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
-#         py_version="py3",
-#     )
-#     # run training
-#     estimator.fit()
+    # creates estimator
+    estimator = HuggingFace(
+        entry_point="run_ddp.py",
+        source_dir=TEST_PATH,
+        role=SAGEMAKER_ROLE,
+        image_uri=ECR_IMAGE,
+        base_job_name=f"{BASE_NAME}-{instance_count}-ddp-data",
+        instance_count=instance_count,
+        instance_type=instance_type,
+        debugger_hook_config=False,
+        hyperparameters=hyperparameters,
+        metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
+        py_version="py3",
+    )
+    # run training
+    estimator.fit()
 
-#     # test csv
-#     TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
-#         f"{TEST_PATH}/{BASE_NAME}_{instance_count}_ddp_data_metrics.csv"
-#     )
+    # test csv
+    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
+        f"{TEST_PATH}/{BASE_NAME}_{instance_count}_ddp_data_metrics.csv"
+    )
 
-#     result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
+    result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
 
-#     train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
-#     eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
-#     total_batch_size = list(result_metrics_df[result_metrics_df.metric_name == "total_batch_size"]["value"])
-#     eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+    train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
+    eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
+    total_batch_size = list(result_metrics_df[result_metrics_df.metric_name == "total_batch_size"]["value"])
+    eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
 
-#     assert all(t <= 200 for t in train_runtime)
-#     assert all(t >= 0.7 for t in eval_accuracy)
-#     assert all(t == 512 for t in total_batch_size)
-#     assert all(t <= 0.6 for t in eval_loss)
+    assert all(t <= 200 for t in train_runtime)
+    assert all(t >= 0.7 for t in eval_accuracy)
+    assert all(t == 512 for t in total_batch_size)
+    assert all(t <= 0.6 for t in eval_loss)
