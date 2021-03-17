@@ -183,7 +183,7 @@ except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
 
-_torchaudio_available = importlib.util.find_spec("torchaudio")
+_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
     logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
@@ -191,7 +191,7 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
-_torchvision_available = importlib.util.find_spec("torchvision")
+_torchvision_available = importlib.util.find_spec("torchvision") is not None
 try:
     _torchvision_version = importlib_metadata.version("torchvision")
     logger.debug(f"Successfully imported torchvision version {_torchvision_version}")

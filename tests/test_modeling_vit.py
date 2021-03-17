@@ -18,12 +18,8 @@
 import unittest
 import inspect
 
-import torchvision
-import torchvision.transforms as T
-from PIL import Image
-
 import requests
-from transformers import is_torch_available
+from transformers.file_utils import is_torch_available, is_torchvision_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -37,6 +33,12 @@ if is_torch_available():
 
     from transformers import ViTConfig, ViTForImageClassification, ViTModel
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
+
+
+if is_torchvision_available():
+    import torchvision
+    import torchvision.transforms as T
+    from PIL import Image
 
 
 class ViTModelTester:

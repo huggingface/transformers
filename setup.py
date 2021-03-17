@@ -130,6 +130,7 @@ _deps = [
     "tokenizers>=0.10.1,<0.11",
     "torch>=1.0",
     "torchaudio",
+    "torchvision",
     "tqdm>=4.27",
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
@@ -225,6 +226,7 @@ extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["vision"] = deps_list("torchvision")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (

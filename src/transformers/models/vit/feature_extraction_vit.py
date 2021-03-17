@@ -17,7 +17,7 @@
 from typing import List, Optional, Union
 
 import numpy as np
-import PIL
+from PIL import Image
 import torch
 from torchvision import transforms as T
 
@@ -45,7 +45,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
             Whether or not to normalize the input with mean and standard deviation.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to :obj:`224`):
+        size (:obj:`int`, `optional`, defaults to :obj:`List[224, 224]`):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
     """
 
@@ -57,7 +57,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
         image_std=[0.229, 0.224, 0.225],
         do_normalize=True,
         do_resize=True,
-        size=224,
+        size=[224,224],
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -70,20 +70,21 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     def __call__(
         self,
         images: Union[
-            PIL.Image.Image, np.ndarray, torch.Tensor, List[PIL.Image.Image], List[np.ndarray], List[torch.Tensor]
+            Image.Image, np.ndarray, torch.Tensor, List[Image.Image], List[np.ndarray], List[torch.Tensor]
         ],
         **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
         Args:
-            images (:obj:`PIL.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
+            images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch
-                tensor.
+                tensor. In case of a numpy array/Torch tensor, each image should be of shape (C, H, W), where C is a number of channels, 
+                H and W are image height and width. 
         """
         # Input type checking for clearer error
         assert (
-            isinstance(images, PIL.Image.Image)
+            isinstance(images, Image.Image)
             or isinstance(images, np.ndarray)
             or isinstance(images, torch.Tensor)
             or (
@@ -92,7 +93,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
                     and (
                         len(images) == 0
                         or (
-                            isinstance(images[0], PIL.Image.Image)
+                            isinstance(images[0], Image.Image)
                             or isinstance(images[0], np.ndarray)
                             or isinstance(images[0], torch.Tensor)
                         )
@@ -105,18 +106,20 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
         )
 
         is_batched = bool(
-            isinstance(images, (list, tuple)) and (isinstance(images[0], (PIL.Image.Image, np.ndarray, torch.Tensor)))
+            isinstance(images, (list, tuple)) and (isinstance(images[0], (Image.Image, np.ndarray, torch.Tensor)))
         )
 
         # step 1: make images a list of PIL images no matter what
         if is_batched:
             if isinstance(images[0], np.ndarray):
-                images = [Image.fromarray(image).convert("RGB") for image in images]
+                # PIL expects the channel dimension as last dimension
+                images = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in images]
             elif isinstance(images[0], torch.Tensor):
                 images = [T.ToPILImage()(image).convert("RGB") for image in images]
         else:
             if isinstance(images, np.ndarray):
-                images = [Image.fromarray(images).convert("RGB")]
+                # PIL expects the channel dimension as last dimension
+                images = [Image.fromarray(np.moveaxis(images, 0, -1))]
             elif isinstance(images, torch.Tensor):
                 images = [T.ToPILImage()(images).convert("RGB")]
             else:
@@ -125,7 +128,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
         # step 2: define transformations (resizing + normalization)
         transformations = []
         if self.do_resize and self.size is not None:
-            transformations.append(T.Resize(size=(self.size, self.size)))
+            transformations.append(T.Resize(size=self.size))
         if self.do_normalize:
             normalization = T.Compose([T.ToTensor(), T.Normalize(self.image_mean, self.image_std)])
             transformations.append(normalization)
