@@ -25,7 +25,6 @@ from copy import deepcopy
 from pathlib import Path
 from types import SimpleNamespace
 
-from .file_utils import WEIGHTS_NAME
 from .utils import logging
 from .utils.versions import require_version
 
@@ -275,8 +274,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
-    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved
-    checkpoint will be made.
+    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
 
     Args:
         trainer: Trainer object
@@ -458,7 +456,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
 
     print(resume_from_checkpoint)
 
-    if resume_from_checkpoint is not None: # and os.path.isdir(resume_from_checkpoint):
+    if resume_from_checkpoint is not None:
         print(f"Attempting to resume from {resume_from_checkpoint}")
         logger.info(f"Attempting to resume from {resume_from_checkpoint}")
         # this magically updates self.optimizer and self.lr_scheduler
