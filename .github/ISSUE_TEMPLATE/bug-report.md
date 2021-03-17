@@ -34,7 +34,7 @@ Models:
 - funnel: @sgugger
 - gpt2: @patrickvonplaten, @LysandreJik
 - rag: @patrickvonplaten, @lhoestq
-- tensorflow: XXX?
+- tensorflow: @LysandreJik
 
 Library:
 
@@ -48,7 +48,8 @@ Library:
 
 Documentation: @sgugger
 
-Model hub: 
+Model hub:
+
 - for issues with a model report at https://discuss.huggingface.co/ and tag the model's creator.
 
 HF projects:
