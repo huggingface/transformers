@@ -100,7 +100,7 @@ Coming soon!
 
 Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
 
-1. If `resume_from_checkpoint` is `True` it will look for the last checkpoint in the value of `output_dir` passed as `TrainingArguments`
+1. If `resume_from_checkpoint` is `True` it will look for the last checkpoint in the value of `output_dir` passed via `TrainingArguments`.
 2. If `resume_from_checkpoint` is a path to a specific checkpoint it will use that saved checkpoint folder to resume the training from.
 
 In examples the two corresponding ways to perform a resume are:
