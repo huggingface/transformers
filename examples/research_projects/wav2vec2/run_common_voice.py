@@ -77,9 +77,6 @@ class DataTrainingArguments:
     the command line.
     """
 
-    dataset_dir: str = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
-    )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
@@ -263,12 +260,8 @@ def main():
     set_seed(training_args.seed)
 
     # load dataset
-    common_voice_train = datasets.load_dataset(
-        "common_voice", data_args.dataset_config_name, data_dir=data_args.dataset_dir, split="train+validation"
-    )
-    common_voice_test = datasets.load_dataset(
-        "common_voice", data_args.dataset_config_name, data_dir=data_args.dataset_dir, split="test"
-    )
+    common_voice_train = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="train+validation")
+    common_voice_test = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test")
 
     # create tokenizer
     def remove_special_characters(batch):
@@ -335,6 +328,12 @@ def main():
         vocab_size=len(processor.tokenizer),
     )
 
+    if data_args.max_train_samples is not None:
+        common_voice_train = common_voice_train.select(range(data_args.max_train_samples))
+
+    if data_args.max_val_samples is not None:
+        common_voice_test = common_voice_test.select(range(data_args.max_val_samples))
+
     resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
     def speech_file_to_array_fn(batch):
@@ -361,8 +360,6 @@ def main():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
 
-    # common_voice_train = common_voice_train.select(range(512))
-    # common_voice_test = common_voice_test.select(range(32))
     common_voice_train = common_voice_train.map(
         prepare_dataset,
         remove_columns=common_voice_train.column_names,
