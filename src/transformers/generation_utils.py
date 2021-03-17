@@ -1511,6 +1511,11 @@ class GenerationMixin:
 
             # sample
             probs = F.softmax(next_token_scores, dim=-1)
+
+            # make sure "inf" values are replaced to avoid nan's
+            if float("inf") in probs:
+                probs = torch.clamp(probs, min=-float("inf"), max=torch.finfo(probs.dtype).max)
+
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # add code that transfomers next_tokens to tokens_to_add
@@ -2026,6 +2031,11 @@ class GenerationMixin:
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
             probs = F.softmax(next_token_scores, dim=-1)
+
+            # make sure "inf" values are replaced to avoid nan's
+            if float("inf") in probs:
+                probs = torch.clamp(probs, min=-float("inf"), max=torch.finfo(probs.dtype).max)
+
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
 
