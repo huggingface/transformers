@@ -21,6 +21,7 @@ import numbers
 import os
 import re
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 
 from .utils import logging
@@ -268,15 +269,19 @@ def rewrite_logs(d):
     return new_d
 
 
-def init_deepspeed(trainer, num_training_steps):
+def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     """
-    Init DeepSpeed, after converting any relevant Trainer's args into DeepSpeed configuration
+    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+
+    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
 
     Args:
         trainer: Trainer object
         num_training_steps: per single gpu
+        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
 
     Returns: model, optimizer, lr_scheduler
+
     """
     import deepspeed
 
@@ -287,7 +292,9 @@ def init_deepspeed(trainer, num_training_steps):
     model = trainer.model
 
     if isinstance(args.deepspeed, dict):
-        config = args.deepspeed
+        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
+        # modified it, it will not be accepted here again, since some config params must be not set by users
+        config = deepcopy(args.deepspeed)
     elif isinstance(args.deepspeed, str):
         with io.open(ds_config_file, "r", encoding="utf-8") as f:
             config = json.load(f)
@@ -441,6 +448,15 @@ def init_deepspeed(trainer, num_training_steps):
         optimizer=optimizer,
         lr_scheduler=lr_scheduler,
     )
+
+    if resume_from_checkpoint is not None:  # and os.path.isdir(resume_from_checkpoint):
+        logger.info(f"Attempting to resume from {resume_from_checkpoint}")
+        # this magically updates self.optimizer and self.lr_scheduler
+        load_path, _ = model.load_checkpoint(
+            resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+        )
+        if load_path is None:
+            raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
 
     return model, optimizer, lr_scheduler
 
