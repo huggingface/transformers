@@ -220,7 +220,7 @@ class SequentialDistributedSampler(Sampler):
     or `reduce` resulting tensors at the end of the loop.
     """
 
-    def __init__(self, dataset, num_replicas=None, rank=None):
+    def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -232,8 +232,14 @@ class SequentialDistributedSampler(Sampler):
         self.dataset = dataset
         self.num_replicas = num_replicas
         self.rank = rank
-        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        num_samples = len(self.dataset)
+        # Add extra samples to make num_samples a multiple of batch_size if passed
+        if batch_size is not None:
+            self.num_samples = int(math.ceil(num_samples / (batch_size * num_replicas))) * batch_size
+        else:
+            self.num_samples = int(math.ceil(num_samples / num_replicas))
         self.total_size = self.num_samples * self.num_replicas
+        self.batch_size = batch_size
 
     def __iter__(self):
         indices = list(range(len(self.dataset)))
