@@ -167,8 +167,8 @@ class FlaxRobertaEmbedding(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        emb_init: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=self.initializer_range)
-        self.embeddings = self.param("weight", emb_init, (self.vocab_size, self.hidden_size))
+        init_fn: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=self.initializer_range)
+        self.embeddings = self.param("weight", init_fn, (self.vocab_size, self.hidden_size))
 
     def __call__(self, input_ids):
         return jnp.take(self.embeddings, input_ids, axis=0)
@@ -182,40 +182,40 @@ class FlaxRobertaEmbeddings(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.word_emb = FlaxRobertaEmbedding(
+        self.word_embeddings = FlaxRobertaEmbedding(
             self.config.vocab_size,
             self.config.hidden_size,
             initializer_range=self.config.initializer_range,
             name="word_embeddings",
             dtype=self.dtype,
         )
-        self.pos_emb = FlaxRobertaEmbedding(
+        self.position_embeddings = FlaxRobertaEmbedding(
             self.config.max_position_embeddings,
             self.config.hidden_size,
             initializer_range=self.config.initializer_range,
             name="position_embeddings",
             dtype=self.dtype,
         )
-        self.token_type_emb = FlaxRobertaEmbedding(
+        self.token_type_embeddings = FlaxRobertaEmbedding(
             self.config.type_vocab_size,
             self.config.hidden_size,
             initializer_range=self.config.initializer_range,
             name="token_type_embeddings",
             dtype=self.dtype,
         )
-        # fmt: off
-        self.layer_norm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
-        # fmt: on
+        self.layer_norm = FlaxRobertaLayerNorm(
+            hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype
+        )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
         # Embed
-        inputs_embeds = self.word_emb(jnp.atleast_2d(input_ids.astype("i4")))
-        position_embeds = self.pos_emb(jnp.atleast_2d(position_ids.astype("i4")))
-        token_type_embeds = self.token_type_emb(jnp.atleast_2d(token_type_ids.astype("i4")))
+        inputs_embeds = self.word_embeddings(jnp.atleast_2d(input_ids.astype("i4")))
+        position_embeds = self.position_embeddings(jnp.atleast_2d(position_ids.astype("i4")))
+        token_type_embeddings = self.token_type_embeddings(jnp.atleast_2d(token_type_ids.astype("i4")))
 
         # Sum all embeddings
-        hidden_states = inputs_embeds + jnp.broadcast_to(position_embeds, inputs_embeds.shape) + token_type_embeds
+        hidden_states = inputs_embeds + jnp.broadcast_to(position_embeds, inputs_embeds.shape) + token_type_embeddings
 
         # Layer Norm
         hidden_states = self.layer_norm(hidden_states)
@@ -238,9 +238,9 @@ class FlaxRobertaAttention(nn.Module):
             name="self",
             dtype=self.dtype,
         )
-        # fmt: off
-        self.layer_norm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
-        # fmt: on
+        self.layer_norm = FlaxRobertaLayerNorm(
+            hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype
+        )
 
     def __call__(self, hidden_states, attention_mask, deterministic=True):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
@@ -286,9 +286,9 @@ class FlaxRobertaOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        # fmt: off
-        self.layer_norm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
-        # fmt: on
+        self.layer_norm = FlaxRobertaLayerNorm(
+            hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype
+        )
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -321,7 +321,7 @@ class FlaxRobertaLayerCollection(nn.Module):
 
     def setup(self):
         self.layers = [
-            FlaxRobertaLayer(self.config, name=f"{i}", dtype=self.dtype) for i in range(self.config.num_hidden_layers)
+            FlaxRobertaLayer(self.config, name=str(i), dtype=self.dtype) for i in range(self.config.num_hidden_layers)
         ]
 
     def __call__(self, hidden_states, attention_mask, deterministic: bool = True):

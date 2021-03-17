@@ -149,8 +149,8 @@ class FlaxBertEmbedding(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        init_fn: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=self.initializer_range)
-        self.embeddings = self.param("weight", init_fn, (self.vocab_size, self.hidden_size))
+        emb_init: Callable[..., np.ndarray] = jax.nn.initializers.normal(stddev=self.initializer_range)
+        self.embeddings = self.param("weight", emb_init, (self.vocab_size, self.hidden_size))
 
     def __call__(self, input_ids):
         return jnp.take(self.embeddings, input_ids, axis=0)
@@ -216,7 +216,9 @@ class FlaxBertAttention(nn.Module):
             name="self",
             dtype=self.dtype,
         )
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
 
     def __call__(self, hidden_states, attention_mask, deterministic=True):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
@@ -260,7 +262,9 @@ class FlaxBertOutput(nn.Module):
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -336,7 +340,9 @@ class FlaxBertPredictionHeadTransform(nn.Module):
     def setup(self):
         self.dense = nn.Dense(self.config.hidden_size, name="dense", dtype=self.dtype)
         self.activation = ACT2FN[self.config.hidden_act]
+        # fmt: off
         self.layer_norm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="layer_norm", dtype=self.dtype)
+        # fmt: on
 
     def __call__(self, hidden_states):
         hidden_states = self.dense(hidden_states)
