@@ -459,8 +459,8 @@ VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
-            Pixel values can be obtained using :class:`~transformers.ViTImageProcessor`. See
-            :meth:`transformers.ViTImageProcessor.__call__` for details.
+            Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
+            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
         
         attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
