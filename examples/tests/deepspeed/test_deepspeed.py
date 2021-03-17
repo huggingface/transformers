@@ -66,6 +66,9 @@ class TestDeepSpeedWithoutLauncher(TestCasePlus):
 
     This class is for testing directly via get_regression_trainer
 
+    Important: this class' setup can only work with a single gpu because it runs within the current
+    pytest worker. For multi-gpu tests use TestDeepSpeedWithLauncher.
+
     Note: if any of the tests of this class get run there will be at least one gpu occupied by them
     until this pytest worker exits. This is because the gpu memory allocated by the cuda-kernels
     won't be released until this pytest worker exits.
@@ -250,7 +253,7 @@ class TestDeepSpeedWithoutLauncher(TestCasePlus):
 @require_deepspeed
 @require_torch_gpu
 class TestDeepSpeedWithLauncher(TestCasePlus):
-    """ This class is for testing via an external script """
+    """ This class is for testing via an external script - can do multiple gpus """
 
     # Tests to devise #
     #
@@ -264,6 +267,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     #
     # but there are 5 variations on beam search in `generate`- with identical code branched with `if
     # synced_gpus`
+    #
+    # 2. most tests should probably be run on both: zero2 and zero3 configs
+    #
 
     @require_torch_multi_gpu
     def test_basic_distributed_zero2(self):
