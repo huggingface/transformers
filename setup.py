@@ -228,7 +228,7 @@ extras["speech"] = deps_list("soundfile", "torchaudio")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black")
     + extras["retrieval"]
     + extras["modelcreation"]
 )
