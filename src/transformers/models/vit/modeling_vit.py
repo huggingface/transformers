@@ -122,13 +122,13 @@ class PatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, x):
-        B, C, H, W = x.shape
+    def forward(self, pixel_values):
+        B, C, H, W = pixel_values.shape
         # FIXME look at relaxing size constraints
         assert (
             H == self.image_size[0] and W == self.image_size[1]
         ), f"Input image size ({H}*{W}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-        x = self.projection(x).flatten(2).transpose(1, 2)
+        x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
 
