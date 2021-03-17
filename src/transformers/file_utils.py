@@ -214,7 +214,7 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
-TRANSFORMERS_ID = uuid4().hex
+SESSION_ID = uuid4().hex
 DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False)
 
 WEIGHTS_NAME = "pytorch_model.bin"
@@ -1213,7 +1213,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
-    ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; transformers_id/{TRANSFORMERS_ID}"
+    ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
