@@ -277,7 +277,6 @@ class SageMakerTrainer(Trainer):
                 else:
                     ignore_keys = []
 
-
             with torch.no_grad():
                 raw_outputs = forward_only(model, inputs)
                 if has_labels:
