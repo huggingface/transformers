@@ -461,20 +461,37 @@ class RemBertModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class RemBertModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_masked_lm(self):
-        model = RemBertForMaskedLM.from_pretrained("rembert-large")
-        input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
-        output = model(input_ids)[0]
+    def test_inference_model(self):
+        # Test exact values at the last hidden layer
+        # model = RemBertModel.from_pretrained("rembert-large")
+        model = RemBertModel.from_pretrained("artefacts/pt_model")
+        # FIXME(tfevry): Remove once uploaded to model hub
+        input_ids = torch.tensor([[312, 56498, 313, 2125, 313]])
+        segment_ids = torch.tensor([[0, 0, 0, 1, 1]])
+        output = model(input_ids, token_type_ids=segment_ids, output_hidden_states=True)
 
-        # TODO Replace vocab size
-        vocab_size = 250300
+        hidden_size = 1152
 
-        expected_shape = torch.Size((1, 6, vocab_size))
-        self.assertEqual(output.shape, expected_shape)
+        expected_shape = torch.Size((1, 5, hidden_size))
+        self.assertEqual(output['last_hidden_state'].shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
-        expected_slice = torch.tensor(
-            [[[-0.0483, 0.1188, -0.0313], [-0.0606, 0.1435, 0.0199], [-0.0235, 0.1519, 0.0175]]]
+        expected_implementation = torch.tensor(
+           [[[0.0754, -0.2022, 0.1904],
+             [-0.3354, -0.3692, -0.4791],
+             [-0.2314, -0.6729, -0.0749],
+             [-0.0396, -0.3105, -0.4234],
+             [-0.1571, -0.0525, 0.5353]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
+        # Running on the original tf implementation gives slightly different results here.
+        # Not clear why this variations is present
+        # TODO: Find reason for discrepancy
+        # expected_original_implementation = [[
+        #     [0.07630594074726105, -0.20146065950393677, 0.19107051193714142],
+        #     [-0.3405614495277405, -0.36971670389175415, -0.4808273911476135],
+        #     [-0.22587086260318756, -0.6656315922737122, -0.07844287157058716],
+        #     [-0.04145475849509239, -0.3077218234539032, -0.42316967248916626],
+        #     [-0.15887849032878876, -0.054529931396245956, 0.5356100797653198]
+        # ]]
+
+        self.assertTrue(torch.allclose(output['last_hidden_state'][:, :, :3], expected_implementation, atol=1e-4))
