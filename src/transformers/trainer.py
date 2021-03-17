@@ -876,9 +876,16 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({self.args.output_dir})")
 
-        if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+        if resume_from_checkpoint is not None:
+            if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+                raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
+
             logger.info(f"Loading model from {resume_from_checkpoint}).")
-            if isinstance(self.model, PreTrainedModel):
+
+            if self.deepspeed:
+                # will be resumed in init_deepspeed
+                pass
+            elif isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(resume_from_checkpoint)
                 model_reloaded = True
             else:
@@ -920,7 +927,7 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
+            deepspeed_engine, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint)
             self.model = deepspeed_engine.module
             self.model_wrapped = deepspeed_engine
             self.deepspeed = deepspeed_engine
@@ -1294,6 +1301,10 @@ class Trainer:
         if checkpoint is None:
             return
 
+        if self.deepspeed:
+            # deepspeed loads optimizer/lr_scheduler together with the model in init_deepspeed
+            return
+
         if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
             os.path.join(checkpoint, "scheduler.pt")
         ):
@@ -1317,10 +1328,6 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
-
-        if self.deepspeed:
-            # Not sure how to check if there is a saved deepspeed checkpoint, but since it just return None if it fails to find a deepspeed checkpoint this is sort of a check-n-load function
-            self.deepspeed.load_checkpoint(checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True)
 
     def hyperparameter_search(
         self,
