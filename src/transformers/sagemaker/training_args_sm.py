@@ -43,7 +43,7 @@ class SageMakerTrainingArguments(TrainingArguments):
         super().__post_init__()
         if is_smdistributed_available() and self.mp_parameters != "":
             cfg = {
-                "microbatches": 2,
+                "microbatches": 4,
                 "placement_strategy": "spread",
                 "pipeline": "interleaved",
                 "optimize": "speed",
