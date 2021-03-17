@@ -103,10 +103,10 @@ Trainer supports resuming from a checkpoint via `trainer.train(resume_from_check
 1. If `resume_from_checkpoint` is `True` it will look for the last checkpoint in the value of `output_dir` passed via `TrainingArguments`.
 2. If `resume_from_checkpoint` is a path to a specific checkpoint it will use that saved checkpoint folder to resume the training from.
 
-In examples the two corresponding ways to perform a resume are:
+You can resume training from a previous checkpoint like this:
 
-1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted)
-2. Pass `--model_name_or_path path_to_a_specific_checkpoint` to resume training from that checkpoint
+1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted, for instance).
+2. Pass `--model_name_or_path path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
 
 
 ## Distributed training and mixed precision
