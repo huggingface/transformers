@@ -101,8 +101,8 @@ def _is_start_of_word(text):
 
 
 def _insert_one_token_to_ordered_list(token_list: List[str], new_token: str):
-    """Inserts one token to an ordered list if it does not already exist.
-       Note: token_list must be sorted.
+    """
+    Inserts one token to an ordered list if it does not already exist. Note: token_list must be sorted.
     """
     insertion_idx = bisect.bisect_left(token_list, new_token)
     # Checks if new_token is already in the ordered token_list
