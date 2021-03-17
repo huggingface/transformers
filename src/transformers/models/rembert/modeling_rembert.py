@@ -135,10 +135,6 @@ def load_tf_weights_in_rembert(model, config, tf_checkpoint_path):
         elif m_name == "kernel":
             array = np.transpose(array)
         try:
-            if not hasattr(pointer, "shape"):
-                import pdb
-
-                pdb.set_trace()
             assert (
                 pointer.shape == array.shape
             ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
@@ -214,6 +210,7 @@ class RemBertPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->RemBert
 class RemBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()

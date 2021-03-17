@@ -17,8 +17,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
-
+from ...file_utils import (
+    _BaseLazyModule,
+    is_sentencepiece_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 _import_structure = {
     "configuration_rembert": ["REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "RemBertConfig"],
@@ -61,7 +66,8 @@ if is_tf_available():
 
 if TYPE_CHECKING:
     from .configuration_rembert import REMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RemBertConfig
-    from .tokenization_rembert import RemBertTokenizer
+    if is_sentencepiece_available():
+        from .tokenization_rembert import RemBertTokenizer
 
     if is_tokenizers_available():
         from .tokenization_rembert_fast import RemBertTokenizerFast
