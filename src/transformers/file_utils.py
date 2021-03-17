@@ -1224,6 +1224,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
         ua += "; " + user_agent
+    print(f'*****UA:{ua}')
     return ua
 
 
