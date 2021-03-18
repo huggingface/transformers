@@ -96,7 +96,7 @@ python run_asr.py \
 First, let's understand how this dataset represents Arabic text; it uses a format called
 [Buckwalter transliteration](https://en.wikipedia.org/wiki/Buckwalter_transliteration).
 We use the [lang-trans](https://github.com/kariminf/lang-trans) package to convert back to Arabic when logging.
-The Buckwalter format only includes ASCII characters, some of which are non-alpha (e.g., `">" maps to "أ"`).
+The Buckwalter format only includes ASCII characters, some of which are non-alpha (e.g., `">"` maps to `"أ"`).
 
 `--orthography="buckwalter"` applies certain text preprocessing rules, for tokenization and normalization, to clean up the dataset. In this case, we use the following instance of `Orthography`:
 
