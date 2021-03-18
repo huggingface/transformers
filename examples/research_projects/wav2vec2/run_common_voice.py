@@ -58,13 +58,37 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
-    attention_dropout: Optional[float] = field(default=0.1, metadata={"help": ""})
-    activation_dropout: Optional[float] = field(default=0.0, metadata={"help": ""})
-    hidden_dropout: Optional[float] = field(default=0.1, metadata={"help": ""})
-    feat_proj_dropout: Optional[float] = field(default=0.0, metadata={"help": ""})
-    mask_time_prob: Optional[float] = field(default=0.05, metadata={"help": ""})
-    gradient_checkpointing: Optional[bool] = field(default=True, metadata={"help": ""})
-    layerdrop: Optional[float] = field(default=0.1, metadata={"help": ""})
+    attention_dropout: Optional[float] = field(
+        default=0.1, metadata={"help": "The dropout ratio for the attention probabilities."}
+    )
+    activation_dropout: Optional[float] = field(
+        default=0.1, metadata={"help": "The dropout ratio for activations inside the fully connected layer."}
+    )
+    hidden_dropout: Optional[float] = field(
+        default=0.1,
+        metadata={
+            "help": "The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler."
+        },
+    )
+    feat_proj_dropout: Optional[float] = field(
+        default=0.1,
+        metadata={"help": "The dropout probabilitiy for all 1D convolutional layers in feature extractor."},
+    )
+    mask_time_prob: Optional[float] = field(
+        default=0.05,
+        metadata={
+            "help": "Propability of each feature vector along the time axis to be chosen as the start of the vector"
+            "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+            "vectors will be masked along the time axis. This is only relevant if ``apply_spec_augment is True``."
+        },
+    )
+    gradient_checkpointing: Optional[bool] = field(
+        default=True,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
+    layerdrop: Optional[float] = field(default=0.0, metadata={"help": "The LayerDrop probability."})
 
 
 @dataclass
@@ -259,11 +283,11 @@ def main():
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # load dataset
+    # Get the datasets:
     common_voice_train = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="train+validation")
     common_voice_test = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test")
 
-    # create tokenizer
+    # Create and save tokenizer
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
         return batch
@@ -293,18 +317,21 @@ def main():
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
     vocab_dict = {v: k for k, v in enumerate(vocab_list)}
-
     vocab_dict["|"] = vocab_dict[" "]
     del vocab_dict[" "]
-
     vocab_dict["[UNK]"] = len(vocab_dict)
     vocab_dict["[PAD]"] = len(vocab_dict)
 
-    with open(os.path.join(training_args.output_dir, "vocab.json"), "w") as vocab_file:
+    with open("vocab.json", "w") as vocab_file:
         json.dump(vocab_dict, vocab_file)
 
+    # Load pretrained model and tokenizer
+    #
+    # Distributed training:
+    # The .from_pretrained methods guarantee that only one local process can concurrently
+    # download model & vocab.
     tokenizer = Wav2Vec2CTCTokenizer(
-        os.path.join(training_args.output_dir, "vocab.json"),
+        "vocab.json",
         unk_token="[UNK]",
         pad_token="[PAD]",
         word_delimiter_token="|",
@@ -316,10 +343,10 @@ def main():
     model = Wav2Vec2ForCTC.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        activation_dropout=model_args.activation_dropou,
-        attention_dropout=model_args.attention_dropou,
-        hidden_dropout=model_args.hidden_dropou,
-        feat_proj_dropout=model_args.feat_proj_dropou,
+        activation_dropout=model_args.activation_dropout,
+        attention_dropout=model_args.attention_dropout,
+        hidden_dropout=model_args.hidden_dropout,
+        feat_proj_dropout=model_args.feat_proj_dropout,
         mask_time_prob=model_args.mask_time_prob,
         gradient_checkpointing=model_args.gradient_checkpointing,
         layerdrop=model_args.layerdrop,
@@ -336,6 +363,8 @@ def main():
 
     resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
+    # Preprocessing the datasets.
+    # We need to read the aduio fiels as arrays and tokenizer targets.
     def speech_file_to_array_fn(batch):
         speech_array, sampling_rate = torchaudio.load(batch["path"])
         batch["speech"] = resampler(speech_array).squeeze().numpy()
@@ -344,10 +373,14 @@ def main():
         return batch
 
     common_voice_train = common_voice_train.map(
-        speech_file_to_array_fn, remove_columns=common_voice_train.column_names, num_proc=32
+        speech_file_to_array_fn,
+        remove_columns=common_voice_train.column_names,
+        num_proc=data_args.preprocessing_num_workers,
     )
     common_voice_test = common_voice_test.map(
-        speech_file_to_array_fn, remove_columns=common_voice_test.column_names, num_proc=32
+        speech_file_to_array_fn,
+        remove_columns=common_voice_test.column_names,
+        num_proc=data_args.preprocessing_num_workers,
     )
 
     def prepare_dataset(batch):
@@ -356,6 +389,7 @@ def main():
             len(set(batch["sampling_rate"])) == 1
         ), f"Make sure all inputs have the same sampling rate of {processor.feature_extractor.sampling_rate}."
         batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
+        # Setup the processor for targets
         with processor.as_target_processor():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
@@ -375,9 +409,8 @@ def main():
         num_proc=data_args.preprocessing_num_workers,
     )
 
+    # Metric
     wer_metric = datasets.load_metric("wer")
-
-    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
 
     def compute_metrics(pred):
         pred_logits = pred.predictions
@@ -396,6 +429,9 @@ def main():
     if model_args.freeze_feature_extractor:
         model.freeze_feature_extractor()
 
+    # Data collator
+    data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
+
     # Initialize our Trainer
     trainer = CTCTrainer(
         model=model,
@@ -404,13 +440,17 @@ def main():
         compute_metrics=compute_metrics,
         train_dataset=common_voice_train,
         eval_dataset=common_voice_test,
-        tokenizer=processor,
+        tokenizer=processor.feature_extractor,
     )
 
     # Training
     if training_args.do_train:
         train_result = trainer.train()
         trainer.save_model()
+
+        # save the feature_extractor and the tokenizer
+        if is_main_process():
+            processor.save_pretrained(training_args.output_dir)
 
         metrics = train_result.metrics
         max_train_samples = (
