@@ -108,7 +108,7 @@ examples/token-classification/run_ner.py \
 [...]
 ```
 
-Most example scripts should have the first two and some have the third command line arguments. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
+Most example scripts should have the first two command line arguments and some have the third one if it makes sense. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
 ```
 examples/token-classification/run_ner.py -h
 ```
