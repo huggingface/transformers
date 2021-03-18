@@ -350,8 +350,8 @@ def main():
         model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
         gradient_checkpointing=model_args.gradient_checkpointing,
+        vocab_size=len(processor.tokenizer),
     )
-    model.resize_lm_head(len(processor.tokenizer))
 
     train_dataset = datasets.load_dataset(
         data_args.dataset_name, data_args.dataset_config_name, split=data_args.train_split_name
@@ -369,7 +369,7 @@ def main():
     )
     text_updates = []
 
-    def prepare_example(example):  # TODO(elgeish) make use of caching and/or multiprocessing
+    def prepare_example(example):  # TODO(elgeish) make use of multiprocessing?
         example["speech"], example["sampling_rate"] = librosa.load(example[data_args.speech_file_column], sr=target_sr)
         if data_args.max_duration_in_seconds is not None:
             example["duration_in_seconds"] = len(example["speech"]) / example["sampling_rate"]

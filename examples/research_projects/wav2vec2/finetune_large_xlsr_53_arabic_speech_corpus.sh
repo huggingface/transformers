@@ -11,13 +11,13 @@ python run_asr.py \
 --logging_steps="50" \
 --learning_rate="5e-4" \
 --warmup_steps="3000" \
---model_name_or_path="facebook/wav2vec2-large-xlsr" \
+--model_name_or_path="elgeish/wav2vec2-large-xlsr-53-arabic" \
 --fp16 \
 --dataset_name="arabic_speech_corpus" \
 --train_split_name="train" \
 --validation_split_name="test" \
 --max_duration_in_seconds="15" \
---orthography buckwalter \
+--orthography="buckwalter" \
 --preprocessing_num_workers="$(nproc)" \
 --group_by_length \
 --freeze_feature_extractor \

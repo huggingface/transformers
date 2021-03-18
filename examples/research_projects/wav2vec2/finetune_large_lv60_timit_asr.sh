@@ -16,7 +16,7 @@ python run_asr.py \
 --dataset_name="timit_asr" \
 --train_split_name="train" \
 --validation_split_name="test" \
---orthography timit \
+--orthography="timit" \
 --preprocessing_num_workers="$(nproc)" \
 --group_by_length \
 --freeze_feature_extractor \
