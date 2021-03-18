@@ -222,11 +222,8 @@ def speech_file_to_array_fn(batch):
 		batch["speech"] = resampler(speech_array).squeeze().numpy()
 		return batch
 
-test_dataset = test_dataset.map(speech_file_to_array_fn, remove_columns=test_dataset.column_names)
-
-
-
-inputs = processor(test_dataset["speech"][:2], sampling_rate=16_000)
+test_dataset = test_dataset.map(speech_file_to_array_fn)
+inputs = processor(test_dataset["speech"][:2], sampling_rate=16_000, return_tensors="pt", padding=True)
 
 with torch.no_grad():
 		logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
@@ -258,28 +255,36 @@ model = Wav2Vec2ForCTC.from_pretrained("{model_id}") #TODO: replace {model_id} w
 
 resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
+# Preprocessing the datasets.
+# We need to read the aduio files as arrays
+def speech_file_to_array_fn(batch):
+		speech_array, sampling_rate = torchaudio.load(batch["path"])
+		batch["speech"] = resampler(speech_array).squeeze().numpy()
+		return batch
+
+test_dataset = test_dataset.map(speech_file_to_array_fn)
+
 chars_to_ignore_regex = '[\,\?\.\!\-\;\:\"\“]'  # TODO: adapt this list to include all special characters you removed from the data
 
 # Preprocessing the datasets.
 # We need to read the aduio files as arrays
-def process(batch):
-		speech_array, sampling_rate = torchaudio.load(batch["path"])
-		batch["speech"] = resampler(speech_array).squeeze().numpy()
+def evaluate(batch):
     batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).lower()
+
+		speech_array, sampling_rate = torchaudio.load(batch["path"])
+		speech_array = resampler(speech_array).squeeze().numpy()
+		inputs = processor(speech_array, sampling_rate=16_0000, return_tensors="pt", padding=True)
+
+		with torch.no_grad():
+		    logits = model(inputs.input_values.to("cuda"), attention_mask=inputs.attention_mask.to("cuda")).logits
+
+		batch["pred_strings"] = processor.batch_decode(logits)
 		return batch
 
-test_dataset = test_dataset.map(process, remove_columns=test_dataset.column_names)
 
-inputs = processor(test_dataset["speech"][:2], sampling_rate=16_000)
+result = test_dataset.map(process, remove_columns=test_dataset.column_names)
 
-with torch.no_grad():
-		logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
-
-predicted_ids = torch.argmax(logits, dim=-1)
-
-predicted_strings = processor.batch_decode(predicted_ids)
-
-print("WER: {.2f}".format(100 * wer(predictions=predicted_strings, references=test_dataset["sentence"])))
+print("WER: {.2f}".format(100 * wer(predictions=result["predicted_strings"], references=result["sentence"])))
 ```
 
 **Result**: XX.X %
