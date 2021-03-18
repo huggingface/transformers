@@ -24,7 +24,7 @@ from transformers import TrainingArguments
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
-    CaptureStd,
+    CaptureLogger,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -105,13 +105,18 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     def test_fake_notebook_no_launcher(self):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
-        with CaptureStd() as cs:  # noqa
+
+        # note that unittest resets sys.stdout each test, so `CaptureStd` will work here to capture
+        # DeepSpeed log if this test happens to run first in this pytest worker. But it will fail if
+        # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
+        # to reset `logger.handlers[0].setStream(sys.stdout)` or directly capture from the logger.
+        from deepspeed.utils import logger
+
+        with CaptureLogger(logger) as cs:
             with mockenv_context(**self.dist_env_1_gpu):
                 trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_zero2_file)
                 trainer.train()
-        # XXX: the following check currently only works if run alone, see: https://github.com/microsoft/DeepSpeed/issues/810
-        # assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
-        # so I'm not sure how to test that deepspeed actually did run, other than that it didn't fail
+        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
     # Test various combos
     # 1. DS scheduler + DS optimizer: this is already tested by most other tests
@@ -302,6 +307,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # adapted from TrainerIntegrationTest.test_can_resume_training
 
         output_dir = self.get_auto_remove_tmp_dir()
+        # output_dir = "/tmp/zero3"
         ds_config_dict = deepcopy(self.ds_config_zero2_dict)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
         kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
