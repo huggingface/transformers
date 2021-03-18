@@ -97,6 +97,11 @@ if __name__ == "__main__":
         def compute_metrics(p: EvalPrediction) -> Dict:
             sequential = list(range(len(dataset)))
             success = p.predictions.tolist() == sequential and p.label_ids.tolist() == sequential
+            if not success and training_args.local_rank == 0:
+                logger.warning(
+                    "Predictions and/or labels do not match expected results:\n  - predictions: "
+                    f"{p.predictions.tolist()}\n  - labels: {p.label_ids.tolist()}\n  - expected: {sequential}"
+                )
             return {"success": success}
 
         trainer = Trainer(
