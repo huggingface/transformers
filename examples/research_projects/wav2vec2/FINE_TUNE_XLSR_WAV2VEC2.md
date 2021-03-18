@@ -170,8 +170,12 @@ account for the final evaluation.
 
 ### How to create the readme
 
-The model card is written in markdown (`.md`) and should be added by simply clicking on the "Add model card" button which is found on the top right corner. You are encouraged to copy-paste the following template into your model card. **Make sure that** instead of copying the output of the markdown file you copy 
-the **raw** version of the following part. To get the raw version of this file, simply click on "raw" and copy everything below the marker.
+The model card is written in markdown (`.md`) and should be added by simply clicking on the "Add model card" button which is found on the top right corner. 
+You are encouraged to copy-paste the following template into your model card. 
+
+**Make sure that** instead of copying the output of the markdown file you copy the **raw** version of the following part. 
+
+To get the raw version of this file, simply click on "raw" and copy everything below the marker.
 Make sure that you read and consequently remove all #TODO: statements from the model card. 
 
 <======================Copy **raw** version from here=========================
