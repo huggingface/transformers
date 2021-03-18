@@ -77,6 +77,7 @@ from .trainer_callback import (
 )
 from .trainer_pt_utils import (
     DistributedLengthGroupedSampler,
+    DistributedSamplerWithLoop,
     DistributedTensorGatherer,
     LabelSmoother,
     LengthGroupedSampler,
@@ -311,6 +312,12 @@ class Trainer:
                 self.sharded_ddp = ShardedDDPOption.ZERO_DP_3
 
         # one place to sort out whether to place the model on device or not
+        # postpone switching model to cuda when:
+        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
+        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
+        #    and we only use deepspeed for training at the moment
+        # 3. full fp16 eval - since the model needs to be half'ed first
+        # 4. Sharded DDP - same as MP
         self.place_model_on_device = args.place_model_on_device
         if (
             self.is_model_parallel
@@ -326,10 +333,6 @@ class Trainer:
         self.eval_dataset = eval_dataset
         self.tokenizer = tokenizer
 
-        # postpone switching model to cuda when:
-        # 1. MP - since we are trying to fit a much bigger than 1 gpu model
-        # 2. fp16-enabled DeepSpeed loads the model in half the size and it doesn't need .to() anyway,
-        #    and we only use deepspeed for training at the moment
         if self.place_model_on_device:
             model = model.to(args.device)
 
@@ -491,24 +494,10 @@ class Trainer:
         ):
             return None
 
-        # Gather the number of processes and this process index.
-        if self.args.parallel_mode == ParallelMode.TPU:
-            num_processes = xm.xrt_world_size()
-            process_index = xm.get_ordinal()
-        elif (
-            self.args.parallel_mode == ParallelMode.DISTRIBUTED
-            or self.args.parallel_mode == ParallelMode.SAGEMAKER_DISTRIBUTED
-        ):
-            num_processes = dist.get_world_size()
-            process_index = dist.get_rank()
-        else:
-            num_processes = 1
-            process_index = 0
-
         # Build the sampler.
         if self.args.group_by_length:
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
-            if num_processes <= 1:
+            if self.args.world_size <= 1:
                 return LengthGroupedSampler(
                     self.train_dataset, self.args.train_batch_size, model_input_name=model_input_name
                 )
@@ -516,16 +505,26 @@ class Trainer:
                 return DistributedLengthGroupedSampler(
                     self.train_dataset,
                     self.args.train_batch_size,
-                    num_replicas=num_processes,
-                    rank=process_index,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
                     model_input_name=model_input_name,
                 )
 
         else:
-            if num_processes <= 1:
+            if self.args.world_size <= 1:
                 return RandomSampler(self.train_dataset)
+            elif self.args.parallel_mode == ParallelMode.TPU and not self.args.dataloader_drop_last:
+                # Use a loop for TPUs when drop_last is False to have all batches have the same size.
+                return DistributedSamplerWithLoop(
+                    self.train_dataset,
+                    batch_size=self.args.per_device_train_batch_size,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                )
             else:
-                return DistributedSampler(self.train_dataset, num_replicas=num_processes, rank=process_index)
+                return DistributedSampler(
+                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index
+                )
 
     def get_train_dataloader(self) -> DataLoader:
         """
@@ -620,6 +619,17 @@ class Trainer:
         Setup the optimizer and the learning rate scheduler.
 
         We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
+        Trainer's init through :obj:`optimizers`, or subclass and override this method (or :obj:`create_optimizer`
+        and/or :obj:`create_scheduler`) in a subclass.
+        """
+        self.create_optimizer()
+        self.create_scheduler(num_training_steps)
+
+    def create_optimizer(self):
+        """
+        Setup the optimizer.
+
+        We provide a reasonable default that works well. If you want to use something else, you can pass a tuple in the
         Trainer's init through :obj:`optimizers`, or subclass and override this method in a subclass.
         """
         if self.optimizer is None:
@@ -655,6 +665,13 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
+    def create_scheduler(self, num_training_steps: int):
+        """
+        Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
+
+        Args:
+            num_training_steps (int): The number of training steps to do.
+        """
         if self.lr_scheduler is None:
             warmup_steps = (
                 self.args.warmup_steps
@@ -673,7 +690,7 @@ class Trainer:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
 
-        Will raise an exception if the underlying dataset dese not implement method :obj:`__len__`
+        Will raise an exception if the underlying dataset does not implement method :obj:`__len__`
         """
         return len(dataloader.dataset)
 
@@ -859,9 +876,16 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({self.args.output_dir})")
 
-        if resume_from_checkpoint is not None and os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+        if resume_from_checkpoint is not None:
+            if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
+                raise ValueError(f"Can't find a valid checkpoint at {resume_from_checkpoint}")
+
             logger.info(f"Loading model from {resume_from_checkpoint}).")
-            if isinstance(self.model, PreTrainedModel):
+
+            if self.deepspeed:
+                # will be resumed in init_deepspeed
+                pass
+            elif isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(resume_from_checkpoint)
                 model_reloaded = True
             else:
@@ -903,9 +927,11 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
-            model, optimizer, lr_scheduler = init_deepspeed(self, num_training_steps=max_steps)
+            model, optimizer, lr_scheduler = init_deepspeed(
+                self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
+            )
             self.model = model.module
-            self.model_wrapped = model  # will get further wrapped in DDP
+            self.model_wrapped = model
             self.deepspeed = model  # DeepSpeedEngine object
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
@@ -915,9 +941,6 @@ class Trainer:
         self.state = TrainerState()
         self.state.is_hyper_param_search = trial is not None
 
-        # Check if saved optimizer or scheduler states exist
-        self._load_optimizer_and_scheduler(resume_from_checkpoint)
-
         model = self._wrap_model(self.model_wrapped)
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
@@ -926,6 +949,9 @@ class Trainer:
 
         if delay_optimizer_creation:
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
+
+        # Check if saved optimizer or scheduler states exist
+        self._load_optimizer_and_scheduler(resume_from_checkpoint)
 
         # important: at this point:
         # self.model         is the Transformers Model
@@ -1131,6 +1157,12 @@ class Trainer:
 
         logger.info("\n\nTraining completed. Do not forget to share your model on huggingface.co/models =)\n\n")
         if self.args.load_best_model_at_end and self.state.best_model_checkpoint is not None:
+            # Wait for everyone to get here so we are sur the model has been saved by process 0.
+            if is_torch_tpu_available():
+                xm.rendezvous("load_best_model_at_end")
+            elif self.args.local_rank != -1:
+                dist.barrier()
+
             logger.info(
                 f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric})."
             )
@@ -1271,6 +1303,10 @@ class Trainer:
         if checkpoint is None:
             return
 
+        if self.deepspeed:
+            # deepspeed loads optimizer/lr_scheduler together with the model in init_deepspeed
+            return
+
         if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
             os.path.join(checkpoint, "scheduler.pt")
         ):
@@ -1294,10 +1330,6 @@ class Trainer:
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
                 reissue_pt_warnings(caught_warnings)
-
-        if self.deepspeed:
-            # Not sure how to check if there is a saved deepspeed checkpoint, but since it just return None if it fails to find a deepspeed checkpoint this is sort of a check-n-load function
-            self.deepspeed.load_checkpoint(checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True)
 
     def hyperparameter_search(
         self,
@@ -1776,17 +1808,17 @@ class Trainer:
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None
 
-        world_size = 1
-        if is_torch_tpu_available():
-            world_size = xm.xrt_world_size()
-        elif self.args.local_rank != -1:
-            world_size = dist.get_world_size()
-        world_size = max(1, world_size)
+        world_size = max(1, self.args.world_size)
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
         if not prediction_loss_only:
-            preds_gatherer = DistributedTensorGatherer(world_size, num_examples)
-            labels_gatherer = DistributedTensorGatherer(world_size, num_examples)
+            # The actual number of eval_sample can be greater than num_examples in distributed settings (when we pass
+            # a batch size to the sampler)
+            make_multiple_of = None
+            if hasattr(dataloader, "sampler") and isinstance(dataloader.sampler, SequentialDistributedSampler):
+                make_multiple_of = dataloader.sampler.batch_size
+            preds_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
+            labels_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
 
         model.eval()
 

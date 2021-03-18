@@ -33,10 +33,43 @@ Then cd in the example folder of your choice and run
 pip install -r requirements.txt
 ```
 
-Alternatively, you can run the version of the examples as they were for your current version of Transformers via (for instance with v3.5.1):
+To browse the examples corresponding to released versions of 🤗 Transformers, click on the line below and then on your desired version of the library:
+
+<details>
+  <summary>Examples for older versions of 🤗 Transformers</summary>
+
+  - [v4.3.3](https://github.com/huggingface/transformers/tree/v4.3.3/examples)
+  - [v4.2.2](https://github.com/huggingface/transformers/tree/v4.2.2/examples)
+  - [v4.1.1](https://github.com/huggingface/transformers/tree/v4.1.1/examples)
+  - [v4.0.1](https://github.com/huggingface/transformers/tree/v4.0.1/examples)
+  - [v3.5.1](https://github.com/huggingface/transformers/tree/v3.5.1/examples)
+  - [v3.4.0](https://github.com/huggingface/transformers/tree/v3.4.0/examples)
+  - [v3.3.1](https://github.com/huggingface/transformers/tree/v3.3.1/examples)
+  - [v3.2.0](https://github.com/huggingface/transformers/tree/v3.2.0/examples)
+  - [v3.1.0](https://github.com/huggingface/transformers/tree/v3.1.0/examples)
+  - [v3.0.2](https://github.com/huggingface/transformers/tree/v3.0.2/examples)
+  - [v2.11.0](https://github.com/huggingface/transformers/tree/v2.11.0/examples)
+  - [v2.10.0](https://github.com/huggingface/transformers/tree/v2.10.0/examples)
+  - [v2.9.1](https://github.com/huggingface/transformers/tree/v2.9.1/examples)
+  - [v2.8.0](https://github.com/huggingface/transformers/tree/v2.8.0/examples)
+  - [v2.7.0](https://github.com/huggingface/transformers/tree/v2.7.0/examples)
+  - [v2.6.0](https://github.com/huggingface/transformers/tree/v2.6.0/examples)
+  - [v2.5.1](https://github.com/huggingface/transformers/tree/v2.5.1/examples)
+  - [v2.4.0](https://github.com/huggingface/transformers/tree/v2.4.0/examples)
+  - [v2.3.0](https://github.com/huggingface/transformers/tree/v2.3.0/examples)
+  - [v2.2.0](https://github.com/huggingface/transformers/tree/v2.2.0/examples)
+  - [v2.1.1](https://github.com/huggingface/transformers/tree/v2.1.0/examples)
+  - [v2.0.0](https://github.com/huggingface/transformers/tree/v2.0.0/examples)
+  - [v1.2.0](https://github.com/huggingface/transformers/tree/v1.2.0/examples)
+  - [v1.1.0](https://github.com/huggingface/transformers/tree/v1.1.0/examples)
+  - [v1.0.0](https://github.com/huggingface/transformers/tree/v1.0.0/examples)
+</details>
+
+Alternatively, you can find switch your cloned 🤗 Transformers to a specific version (for instance with v3.5.1) with
 ```bash
 git checkout tags/v3.5.1
 ```
+and run the example command as usual afterward.
 
 ## The Big Table of Tasks
 
@@ -62,11 +95,37 @@ Coming soon!
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
 
 
-<!--
-## One-click Deploy to Cloud (wip)
+## Running quick tests
 
-**Coming soon!**
--->
+Most examples are equipped with a mechanism to truncate the number of dataset samples to the desired length. This is useful for debugging purposes, for example to quickly check that all stages of the programs can complete, before running the same setup on the full dataset which may take hours to complete.
+
+For example here is how to truncate all three splits to just 50 samples each:
+```
+examples/token-classification/run_ner.py \
+--max_train_samples 50 \
+--max_val_samples 50 \
+--max_test_samples 50 \
+[...]
+```
+
+Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
+```
+examples/token-classification/run_ner.py -h
+```
+
+## Resuming training
+
+You can resume training from a previous checkpoint like this:
+
+1. Pass `--output_dir previous_output_dir` without `--overwrite_output_dir` to resume training from the latest checkpoint in `output_dir` (what you would use if the training was interrupted, for instance).
+2. Pass `--model_name_or_path path_to_a_specific_checkpoint` to resume training from that checkpoint folder.
+
+Should you want to turn an example into a notebook where you'd no longer have access to the command
+line, 🤗 Trainer supports resuming from a checkpoint via `trainer.train(resume_from_checkpoint)`.
+
+1. If `resume_from_checkpoint` is `True` it will look for the last checkpoint in the value of `output_dir` passed via `TrainingArguments`.
+2. If `resume_from_checkpoint` is a path to a specific checkpoint it will use that saved checkpoint folder to resume the training from.
+
 
 ## Distributed training and mixed precision
 
@@ -77,7 +136,7 @@ use the following command:
 ```bash
 python -m torch.distributed.launch \
     --nproc_per_node number_of_gpu_you_have path_to_script.py \
-	--all_arguments_of_the_script 
+	--all_arguments_of_the_script
 ```
 
 As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text
@@ -121,7 +180,7 @@ regular training script with its arguments (this is similar to the `torch.distri
 ```bash
 python xla_spawn.py --num_cores num_tpu_you_have \
     path_to_script.py \
-	--all_arguments_of_the_script 
+	--all_arguments_of_the_script
 ```
 
 As an example, here is how you would fine-tune the BERT large model (with whole word masking) on the text

@@ -19,7 +19,7 @@ import numpy as np
 
 import transformers
 from transformers import is_flax_available, is_torch_available
-from transformers.testing_utils import require_flax, require_torch
+from transformers.testing_utils import is_pt_flax_cross_test, require_flax
 
 
 if is_flax_available():
@@ -69,7 +69,7 @@ class FlaxModelTesterMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
-    @require_torch
+    @is_pt_flax_cross_test
     def test_equivalence_flax_pytorch(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -91,7 +91,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**inputs_dict)
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 2e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
