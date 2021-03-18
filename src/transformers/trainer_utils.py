@@ -446,3 +446,4 @@ class ShardedDDPOption(ExplicitEnum):
     ZERO_DP_2 = "zero_dp_2"
     ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"
