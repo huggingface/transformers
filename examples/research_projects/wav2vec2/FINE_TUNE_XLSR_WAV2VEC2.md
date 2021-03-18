@@ -1,129 +1,143 @@
-## Fine-tuning Wav2Vec2
+## How to fine-tune a pretrained XLSR-Wav2Vec2 checkpoint on a specific language?
 
-The `run_asr.py` script allows one to fine-tune pretrained Wav2Vec2 models that can be found [here](https://huggingface.co/models?search=facebook/wav2vec2).
 
-This finetuning script can also be run as a google colab [TODO: here]( ).
+This file gives an in-detail explanation on how to fine-tune [Facebook's multi-lingual Wav2vec2](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) on any language of the [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets).
 
-The script is actively maintained by [Patrick von Platen](https://github.com/patrickvonplaten).
-Feel free to ask a question on the [Forum](https://discuss.huggingface.co/) or post an issue on [GitHub](https://github.com/huggingface/transformers/issues/new/choose) and adding `@patrickvonplaten` as a tag.
+### Theory
 
-### Fine-Tuning with TIMIT
-Let's take a look at the [script](./finetune_base_timit_asr.sh) used to fine-tune [wav2vec2-base](https://huggingface.co/facebook/wav2vec2-base)
-with the [TIMIT dataset](https://huggingface.co/datasets/timit_asr):
+First, it is recommended that take some time to you read up on how Wav2vec2 works in theory. 
+Getting a better understanding of the theory and the inner mechanisms of the model often helps when fine-tuning the model. 
 
-```bash
-#!/usr/bin/env bash
-python run_asr.py \
---output_dir="./wav2vec2-base-timit-asr" \
---num_train_epochs="30" \
---per_device_train_batch_size="20" \
---per_device_eval_batch_size="20" \
---evaluation_strategy="steps" \
---save_steps="500" \
---eval_steps="100" \
---logging_steps="50" \
---learning_rate="5e-4" \
---warmup_steps="3000" \
---model_name_or_path="facebook/wav2vec2-base" \
---fp16 \
---dataset_name="timit_asr" \
---train_split_name="train" \
---validation_split_name="test" \
---orthography="timit" \
---preprocessing_num_workers="$(nproc)" \
---group_by_length \
---freeze_feature_extractor \
---verbose_logging \
-```
+**However**, if you don't like reading blog posts / papers, don't worry - it is by no means necessary to go through the theory in order to fine-tune Wav2Vec2 on your language of choice.
 
-The resulting model and inference examples can be found [here](https://huggingface.co/elgeish/wav2vec2-base-timit-asr).
-Some of the arguments above may look unfamiliar, let's break down what's going on:
+If you are interested in learning more about the model though, here are a couple of resources that are important to better understand Wav2Vec2:
 
-`--orthography="timit"` applies certain text preprocessing rules, for tokenization and normalization, to clean up the dataset.
-In this case, we use the following instance of `Orthography`:
+- [Facebook's Wav2Vec2 blog post](https://ai.facebook.com/blog/wav2vec-state-of-the-art-speech-recognition-through-self-supervision/)
+- [Official Wav2Vec2 paper](https://arxiv.org/abs/2006.11477)
+- [Official XLSR Wav2vec2 paper](https://arxiv.org/pdf/2006.13979.pdf)
+- [Hugging Face Blog](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)
 
-```python
-Orthography(
-    do_lower_case=True,
-    # break compounds like "quarter-century-old" and replace pauses "--"
-    translation_table=str.maketrans({"-": " "}),
-)
-```
+It helps to have a good understanding on the following points:
 
-The instance above is used as follows:
-* creates a tokenizer with `do_lower_case=True` (ignores casing for input and lowercases output when decoding)
-* replaces `"-"` with `" "` to break compounds like `"quarter-century-old"` and to clean up suspended hyphens
-* cleans up consecutive whitespaces (replaces them with a single space: `" "`)
-* removes characters not in vocabulary (lacking respective sound units)
+- How was XLSR-Wav2Vec2 pretrained? -> Feature vectors were masked and had to be predicted by the model; very similar in spirit to masked language model of BERT.
 
-`--verbose_logging` logs text preprocessing updates and when evaluating, using the validation split every `eval_steps`,
-logs references and predictions.
+- What parts of XLSR-Wav2Vec2 are responsible for what? What is the feature extractor part used for? -> extract feature vectors from the 1D raw audio waveform; What is the transformer part doing? -> mapping feature vectors to contextualized feature vectors; ...
 
-### Fine-Tuning with Arabic Speech Corpus
+- What part of the model needs to be fine-tuned? -> The pretrained model **does not** include a language head to classify the contextualized features to letters. This is randomely initialized when loading the pretrained checkpoint and has to be fine-tuned. Also, note that the authors recommend to **not** further fine-tune the feature extractor.
 
-Other datasets, like the [Arabic Speech Corpus dataset](https://huggingface.co/datasets/arabic_speech_corpus),
-require more work! Let's take a look at the [script](./finetune_large_xlsr_53_arabic_speech_corpus.sh)
-used to fine-tune [wav2vec2-large-xlsr-53](https://huggingface.co/elgeish/wav2vec2-large-xlsr-53-arabic):
+- What data was used to XLSR-Wav2Vec2? The checkpoint we will use for further fine-tuning was pretrained on **53** languages. 
 
-```bash
-#!/usr/bin/env bash
-python run_asr.py \
---output_dir="./wav2vec2-large-xlsr-53-arabic-speech-corpus" \
---num_train_epochs="50" \
---per_device_train_batch_size="1" \
---per_device_eval_batch_size="1" \
---gradient_accumulation_steps="8" \
---evaluation_strategy="steps" \
---save_steps="500" \
---eval_steps="100" \
---logging_steps="50" \
---learning_rate="5e-4" \
---warmup_steps="3000" \
---model_name_or_path="elgeish/wav2vec2-large-xlsr-53-arabic" \
---fp16 \
---dataset_name="arabic_speech_corpus" \
---train_split_name="train" \
---validation_split_name="test" \
---max_duration_in_seconds="15" \
---orthography="buckwalter" \
---preprocessing_num_workers="$(nproc)" \
---group_by_length \
---freeze_feature_extractor \
---target_feature_extractor_sampling_rate \
---verbose_logging \
-```
+- What languages are considered to be similar by XLSR-Wav2Vec2? In the official [XLSR Wav2Vec2 paper](https://arxiv.org/pdf/2006.13979.pdf), the authors show nicely which languages share a common contextualized latent space. It might be useful for you to extend your training data with data of other languages that are considered to be very similar by the model (or you).
 
-First, let's understand how this dataset represents Arabic text; it uses a format called
-[Buckwalter transliteration](https://en.wikipedia.org/wiki/Buckwalter_transliteration).
-We use the [lang-trans](https://github.com/kariminf/lang-trans) package to convert back to Arabic when logging.
-The Buckwalter format only includes ASCII characters, some of which are non-alpha (e.g., `">"` maps to `"أ"`).
+### Training Setup
 
-`--orthography="buckwalter"` applies certain text preprocessing rules, for tokenization and normalization, to clean up the dataset. In this case, we use the following instance of `Orthography`:
+There are two possible setups which can be used to fine-tune Wav2Vec2. The easiest setup is to simply use [google colab](https://colab.research.google.com/). It is possible to train the full model in a *free* google colab, but it is recommended to use google colab pro since it has been shown to be more stable.
+
+The other option is to run a script locally. While this can be more difficult to setup in also means that you have more control over the training run and probably access to better GPUs than you would have in a google colab.
+
+For each option, we explain in-detail how to fine-tune XLSR-Wav2Vec2 in the following.
+
+#### Google Colab
+
+**Note**: Instead of reading the following, you can simply watch [this](https://www.youtube.com/watch?v=UynYn2C3tI0&ab_channel=PatrickvonPlaten) video, where Patrick 
+walk you through how to use the google colab.
+
+**1.**: If you plan on training XLSR-Wav2Vec2 in a google colab, you should first make sure to have a valid gmail account. You can sign up for a gmail account [here](https://accounts.google.com/signup/v2/webcreateaccount?hl=en&flowName=GlifWebSignIn&flowEntry=SignUp). 
+Having succesfully signed up for gmail, you can now sign into your account to make sure you are logged in when opening new tabs in your browser.
+
+**2.**: Next, head over to the official [Fine-Tune XLSR-Wav2Vec2 with 🤗 Transformes](https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/Fine_Tune_XLSR_Wav2Vec2_on_Turkish_ASR_with_%F0%9F%A4%97_Transformers.ipynb) google colab. The first thing you should do is to make a copy of it - click `->File->Save a copy in Drive`. This should save a copy of the google colab in your google drive. 
+
+**3.**: Now it is highly recommended to carefully read the google colab without running the cells yet. 
+You should get an understanding of the model is trained and what you will have to change when training the model in a different language. 
+Having done so, you can again head over to [Common Voice](https://commonvoice.mozilla.org/en/datasets) and pick your a language you want to fine-tune [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) on. Make sure you remember the language code (For each language, you can find it under the field "*Version*". It corresponds to **all characters before the first underscore**. *E.g.* for Greek it is *el*, while for Irish it is *ga-IE*.
+
+**4.**: Now you should replace the language code used for the demo of this colab, being *tr* for Turkish with the language code corresponding to the language you just chose in the **second** cell of the google colab. This will load the correct data for your language.
+
+**5.**: It is time start running the google colab! Make sure that you have selected "GPU" as your runtime environment and you can start running the cells one-by-one. Make sure you attentively read the text between the cells to understand what is happening and to eventually correct the cells to improve the fine-tuning script for your language. Things you might want to improve / change:
+ 
+ - Data loading. It is very much recommended to use more than just the official training data of the Common Voice dataset. If you find more data on the internet, feel free to use it! Check out the section ["How to combined multiple datasets into one"](#how-to-combine-multiple-datasets-into-one)
+
+- Data Processing. You should adapt the data processing to your specific language. In data processing, you should make the data more uniform so that it will be easier for the model to learn how to classify speech in your data. Here it can be really helpful to be proficient in the language to know what can be done to simplify the language withouth changing the meanning. 
+Data processing methods include, but are not limited to:
+	- Normalizing your data. Make sure all characters are lower-cased.
+	- Remove typographical symbols and punctuation marks. See a list [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks). Be careful to not remove punctation marks that can change the meaning of the sentence. *E.g.* you should not remove the single quatation mark `'` in English, as it would change the words `"it's"` to `"its"` which is a different word and has thus a different meaning. For more tips on data processing see ["How to effectively preprocess the data"](#how-to-effectively-preprocess-the-data")
+
+- Hyperparameter Tuning. Depending on the size of the data you should probably change the hyperparameters of the google colab. You can change any parameter you like. For more tips and tricks see ["How to do hyperparameter tuning for my language"](#how-to-do-hyperparameter-tuning-for-my-language)
+
+When running the google colab make sure that you uncomment the cell corresponding to mounting your gogle drive to the colab. This cells look as follows:
 
 ```python
-Orthography(
-    vocab_file=pathlib.Path(__file__).parent.joinpath("vocab/buckwalter.json"),
-    word_delimiter_token="/",  # "|" is Arabic letter alef with madda above
-    words_to_remove={"sil"},  # fixing "sil" in arabic_speech_corpus dataset
-    untransliterator=arabic.buckwalter.untransliterate,
-    translation_table=str.maketrans(translation_table = {
-        "-": " ",  # sometimes used to represent pauses
-        "^": "v",  # fixing "tha" in arabic_speech_corpus dataset
-    }),
-)
+# from google.colab import drive
+# drive.mount('/content/gdrive/')
+``` 
+
+Uncomment it, run it, and follow the instructions to mount your google drive. This way you can be sure that the model parameters and created tokenizer & feature extractor files are saved in **your** google drive.
+
+Also make sure that you uncomment the cells corresponding to save the preprocessing files and trained model weights to your drive. Otherwise you might loose a trained model if you google crashes. You should change the name of your model from `wav2vec2-large-xlsr-turkish-demo` to `wav2vec2-large-xlsr-{your_favorite_name}`.
+
+Those cells correspond to:
+
+```python
+# processor.save_pretrained("/content/gdrive/MyDrive/wav2vec2-large-xlsr-turkish-demo")
 ```
 
-The instance above is used as follows:
-* creates a tokenizer with Buckwalter vocabulary and `word_delimiter_token="/"`
-* replaces `"-"` with `" "` to clean up hyphens and fixes the orthography for `"ث"`
-* removes words used as indicators (in this case, `"sil"` is used for silence)
-* cleans up consecutive whitespaces (replaces them with a single space: `" "`)
-* removes characters not in vocabulary (lacking respective sound units)
+and the line:
 
-`--verbose_logging` logs text preprocessing updates and when evaluating, using the validation split every `eval_steps`,
-logs references and predictions. Using the Buckwalter format, text is also logged in Arabic abjad.
+```python
+  output_dir="/content/gdrive/MyDrive/wav2vec2-large-xlsr-turkish-demo",
+```
 
-`--target_feature_extractor_sampling_rate` resamples audio to target feature extractor's sampling rate (16kHz).
+further below (which should already be uncommented).
 
-`--max_duration_in_seconds="15"` filters out examples whose audio is longer than the specified limit,
-which helps with capping GPU memory usage.
+Having finished the training you should find the following files/folders under the folder `wav2vec2-large-xlsr-{your_favorite_name}` in your google drive:
+
+- `preprocessor_config.json` - the parameters of the feature extractor
+- `special_tokens_map.json` - the special token map of the tokenizer
+- `tokenizer_config.json` - the parameters of the tokenizer
+- `vocab.json` - the vocabulary of the tokenizer
+- `checkpoint-{...}/` - the saved checkpoints saved during training. Each checkpoint should contain the files: `config.json`, `optimizer.pt`, `pytorch_model.bin`, `scheduler.pt`, `training_args.bin`. The files `config.json` and `pytorch_model.bin` define your model.
+
+If you are happy with your training results it is time to upload your model! 
+Download the following files to your local computer: **`preprocessor_config.json`, `special_tokens_map.json`, `tokenizer_config.json`, `vocab.json`, `config.json`, `pytorch_model.bin`**. Those files fully define a XLSR-Wav2Vec2 model checkpoint.
+
+Awesome you have succesfully trained a XLSR-Wav2Vec2 model 😎. Now you can jump to the secttion ["How to upload my trained checkpoint"](#how-to-upload-my-trained-checkpoint)
+
+
+### How to upload my trained checkpoint
+
+To upload your trained checkpoint
+Next, make sure to follow the instructions [here](https://huggingface.co/transformers/model_sharing.html) on how create a model repository on the 🤗 model hub 
+
+Having created your model repository on the hub, you should clone it locally.
+
+Then and add all the following files that fully define a XLSR-Wav2Vec2 checkpoint into the repository:
+
+- `preprocessor_config.json`
+- `special_tokens_map.json`
+- `tokenizer_config.json`
+- `vocab.json`
+- `config.json`
+- `pytorch_model.bin`
+
+Having added the above files, you should run the follwing to push files to your model repository.
+
+```
+git add . && git commit -m "Add model files" && git push
+```
+
+Your model in then available under *huggingface.co/{your_username}/{your_chosen_xlsr-large_model_name}* for everybody to use 🎉.
+
+
+## Tips & Tricks
+
+
+### How to combine multiple datasets into one
+
+
+### How to effectively preprocess the data
+
+
+### How to do hyperparameter turing for my language
+
+
+
