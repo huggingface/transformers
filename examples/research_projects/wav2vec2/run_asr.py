@@ -54,6 +54,9 @@ class ModelArguments:
     freeze_feature_extractor: Optional[bool] = field(
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
+    gradient_checkpointing: Optional[bool] = field(
+        default=False, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
+    )
     verbose_logging: Optional[bool] = field(
         default=False,
         metadata={"help": "Whether to log verbose messages or not."},
@@ -101,6 +104,14 @@ class DataTrainingArguments:
         metadata={
             "help": "The name of the validation data set split to use (via the datasets library). Defaults to 'validation'"
         },
+    )
+    target_text_column: Optional[str] = field(
+        default="text",
+        metadata={"help": "Column in the dataset that contains label (target text). Defaults to 'text'"},
+    )
+    speech_file_column: Optional[str] = field(
+        default="file",
+        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
     )
     target_feature_extractor_sampling_rate: Optional[bool] = field(
         default=False,
@@ -333,9 +344,13 @@ def main():
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
     configure_logger(model_args, training_args)
 
-    model = Wav2Vec2ForCTC.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir)
     orthography = Orthography.from_name(data_args.orthography.lower())
     processor = orthography.create_processor(model_args)
+    model = Wav2Vec2ForCTC.from_pretrained(
+        model_args.model_name_or_path,
+        cache_dir=model_args.cache_dir,
+        gradient_checkpointing=model_args.gradient_checkpointing,
+    )
     model.resize_lm_head(len(processor.tokenizer))
 
     train_dataset = datasets.load_dataset(
@@ -355,19 +370,19 @@ def main():
     text_updates = []
 
     def prepare_example(example):  # TODO(elgeish) make use of caching and/or multiprocessing
-        example["speech"], example["sampling_rate"] = librosa.load(example["file"], sr=target_sr)
+        example["speech"], example["sampling_rate"] = librosa.load(example[data_args.speech_file_column], sr=target_sr)
         if data_args.max_duration_in_seconds is not None:
             example["duration_in_seconds"] = len(example["speech"]) / example["sampling_rate"]
         # Normalize and clean up text; order matters!
-        updated_text = orthography.preprocess_for_training(example["text"])
+        updated_text = orthography.preprocess_for_training(example[data_args.target_text_column])
         updated_text = vocabulary_text_cleaner.sub("", updated_text)
-        if updated_text != example["text"]:
-            text_updates.append((example["text"], updated_text))
-            example["text"] = updated_text
+        if updated_text != example[data_args.target_text_column]:
+            text_updates.append((example[data_args.target_text_column], updated_text))
+            example[data_args.target_text_column] = updated_text
         return example
 
-    train_dataset = train_dataset.map(prepare_example, remove_columns=["file"])
-    val_dataset = val_dataset.map(prepare_example, remove_columns=["file"])
+    train_dataset = train_dataset.map(prepare_example, remove_columns=[data_args.speech_file_column])
+    val_dataset = val_dataset.map(prepare_example, remove_columns=[data_args.speech_file_column])
 
     if data_args.max_duration_in_seconds is not None:
 
@@ -402,7 +417,7 @@ def main():
 
         batch["input_values"] = processor(batch["speech"], sampling_rate=batch["sampling_rate"][0]).input_values
         with processor.as_target_processor():
-            batch["labels"] = processor(batch["text"]).input_ids
+            batch["labels"] = processor(batch[data_args.target_text_column]).input_ids
         return batch
 
     train_dataset = train_dataset.map(
