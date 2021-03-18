@@ -95,6 +95,23 @@ Coming soon!
 | [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
 
 
+## Running quick tests
+
+Most examples are equipped with a mechanism to truncate the number of dataset samples to the desired length. This is useful for debugging purposes, for example to quickly check that all stages of the programs can complete, before running the same setup on the full dataset which may take hours to complete.
+
+For example here is how to truncate all three splits to just 50 samples each:
+```
+examples/token-classification/run_ner.py \
+--max_train_samples 50 \
+--max_val_samples 50 \
+--max_test_samples 50 \
+[...]
+```
+
+Most example scripts should have the first two command line arguments and some have the third one. You can quickly check if a given example supports any of these by passing a `-h` option, e.g.:
+```
+examples/token-classification/run_ner.py -h
+```
 
 ## Resuming training
 
