@@ -839,7 +839,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
             >>> # add bounding boxes of cls + sep tokens
             >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
-            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
             >>> input_ids = encoding["input_ids"]
             >>> attention_mask = encoding["attention_mask"]
             >>> token_type_ids = encoding["token_type_ids"]
