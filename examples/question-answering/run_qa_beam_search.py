@@ -174,7 +174,12 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None and self.test_file is None:
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+            and self.test_file is None
+        ):
             raise ValueError("Need either a dataset name or a training/validation/test file.")
         else:
             if self.train_file is not None:
@@ -513,7 +518,7 @@ def main():
         if data_args.max_val_samples is not None:
             # Selecting Samples from Dataset again since Feature Creation might increase samples size
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
-    
+
     if training_args.do_predict:
         if "test" not in datasets:
             raise ValueError("--do_predict requires a test dataset")
@@ -543,7 +548,7 @@ def main():
     )
 
     # Post-processing:
-    def post_processing_function(examples, features, predictions, stage='eval'):
+    def post_processing_function(examples, features, predictions, stage="eval"):
         # Post-processing: we match the start logits and end logits to answers in the original context.
         predictions, scores_diff_json = postprocess_qa_predictions_with_beam_search(
             examples=examples,
@@ -566,12 +571,12 @@ def main():
             ]
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
-        
+
         # if we are using post processing for test stage we will use respective example
-        if stage=='test':
-            examples=test_examples
+        if stage == "test":
+            examples = test_examples
         else:
-            examples=eval_examples
+            examples = eval_examples
 
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)

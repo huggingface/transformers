@@ -175,7 +175,12 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None and self.test_file is None:
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+            and self.test_file is None
+        ):
             raise ValueError("Need either a dataset name or a training/validation file/test_file.")
         else:
             if self.train_file is not None:
@@ -507,7 +512,7 @@ def main():
     )
 
     # Post-processing:
-    def post_processing_function(examples, features, predictions, stage='eval'):
+    def post_processing_function(examples, features, predictions, stage="eval"):
         # Post-processing: we match the start logits and end logits to answers in the original context.
         predictions = postprocess_qa_predictions(
             examples=examples,
@@ -530,10 +535,10 @@ def main():
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
 
         # if we are using post processing for test stage we will use respective example
-        if stage=='test':
-            examples=test_examples
+        if stage == "test":
+            examples = test_examples
         else:
-            examples=eval_examples
+            examples = eval_examples
 
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
 
