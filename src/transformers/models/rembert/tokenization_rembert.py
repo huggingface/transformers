@@ -16,7 +16,6 @@
 
 
 import os
-import unicodedata
 from shutil import copyfile
 from typing import List, Optional, Tuple
 
@@ -40,8 +39,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "rembert-large": 256,
 }
 
-SPIECE_UNDERLINE = "▁"
-
 
 class RemBertTokenizer(PreTrainedTokenizer):
     """
@@ -54,12 +51,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to lowercase the input when tokenizing.
-        remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to keep accents when tokenizing.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -102,9 +93,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
     def __init__(
         self,
         vocab_file,
-        do_lower_case=False,
-        remove_space=True,
-        keep_accents=False,
         bos_token="[CLS]",
         eos_token="[SEP]",
         unk_token="[UNK]",
@@ -115,9 +103,9 @@ class RemBertTokenizer(PreTrainedTokenizer):
         **kwargs
     ):
         super().__init__(
-            do_lower_case=do_lower_case,
-            remove_space=remove_space,
-            keep_accents=keep_accents,
+            do_lower_case=False,
+            remove_space=False,
+            keep_accents=True,
             bos_token=bos_token,
             eos_token=eos_token,
             unk_token=unk_token,
@@ -128,9 +116,6 @@ class RemBertTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
         self.sp_model = spm.SentencePieceProcessor()
@@ -155,44 +140,10 @@ class RemBertTokenizer(PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor()
         self.sp_model.Load(self.vocab_file)
 
-    def preprocess_text(self, inputs):
-        if self.remove_space:
-            outputs = " ".join(inputs.strip().split())
-        else:
-            outputs = inputs
-        outputs = outputs.replace("``", '"').replace("''", '"')
-
-        if not self.keep_accents:
-            outputs = unicodedata.normalize("NFKD", outputs)
-            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
-        if self.do_lower_case:
-            outputs = outputs.lower()
-
-        return outputs
-
     def _tokenize(self, text, sample=False):
         """ Tokenize a string. """
-        text = self.preprocess_text(text)
-
-        if not sample:
-            pieces = self.sp_model.EncodeAsPieces(text)
-        else:
-            pieces = self.sp_model.SampleEncodeAsPieces(text, 64, 0.1)
-        new_pieces = []
-        for piece in pieces:
-            if len(piece) > 1 and piece[-1] == str(",") and piece[-2].isdigit():
-                cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
-                if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
-                    if len(cur_pieces[0]) == 1:
-                        cur_pieces = cur_pieces[1:]
-                    else:
-                        cur_pieces[0] = cur_pieces[0][1:]
-                cur_pieces.append(piece[-1])
-                new_pieces.extend(cur_pieces)
-            else:
-                new_pieces.append(piece)
-
-        return new_pieces
+        pieces = self.sp_model.EncodeAsPieces(text)
+        return pieces
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
@@ -203,7 +154,7 @@ class RemBertTokenizer(PreTrainedTokenizer):
         return self.sp_model.IdToPiece(index)
 
     def convert_tokens_to_string(self, tokens):
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+        out_string = self.sp_model.decode_pieces(tokens)
         return out_string
 
     def build_inputs_with_special_tokens(
