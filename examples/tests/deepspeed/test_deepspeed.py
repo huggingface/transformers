@@ -61,6 +61,7 @@ def require_deepspeed(test_case):
     else:
         return test_case
 
+zero_stages = ["zero2", "zero3"]
 
 @require_deepspeed
 @require_torch_gpu
@@ -95,13 +96,20 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             MASTER_ADDR="localhost", MASTER_PORT="10999", RANK="0", LOCAL_RANK="0", WORLD_SIZE="1"
         )
 
-        self.ds_config_zero2_file = f"{self.test_file_dir_str}/ds_config_zero2.json"
-        self.ds_config_zero3_file = f"{self.test_file_dir_str}/ds_config_zero3.json"
+        self.ds_config_file = {}
+        self.ds_config_file["zero2"] = f"{self.test_file_dir_str}/ds_config_zero2.json"
+        self.ds_config_file["zero3"] = f"{self.test_file_dir_str}/ds_config_zero3.json"
 
-        with io.open(self.ds_config_zero2_file, "r", encoding="utf-8") as f:
-            self.ds_config_zero2_dict = json.load(f)
-        with io.open(self.ds_config_zero3_file, "r", encoding="utf-8") as f:
-            self.ds_config_zero3_dict = json.load(f)
+        # use self.get_config_dict(stage) to use these to ensure the original is not modified
+        self.ds_config_dict = {}
+        with io.open(self.ds_config_file["zero2"], "r", encoding="utf-8") as f:
+            self.ds_config_dict["zero2"] = json.load(f)
+        with io.open(self.ds_config_file["zero3"], "r", encoding="utf-8") as f:
+            self.ds_config_dict["zero3"] = json.load(f)
+
+    def get_config_dict(self, stage):
+        return deepcopy(self.ds_config_dict[stage])
+
 
     def test_fake_notebook_no_launcher(self):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
@@ -114,7 +122,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         with CaptureLogger(logger) as cs:
             with mockenv_context(**self.dist_env_1_gpu):
-                trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_zero2_file)
+                trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file["zero2"])
                 trainer.train()
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
@@ -127,7 +135,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_hf_scheduler_hf_optimizer(self):
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = deepcopy(self.ds_config_zero2_dict)
+            ds_config_zero2_dict = self.get_config_dict("zero2")
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
@@ -140,7 +148,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_ds_scheduler_hf_optimizer(self):
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = deepcopy(self.ds_config_zero2_dict)
+            ds_config_zero2_dict = self.get_config_dict("zero2")
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
@@ -152,7 +160,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_hf_scheduler_ds_optimizer(self):
         # this combo is not possible at the moment
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = deepcopy(self.ds_config_zero2_dict)
+            ds_config_zero2_dict = self.get_config_dict("zero2")
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
@@ -164,7 +172,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_hf_optimizer_with_offload(self):
         # must not allow non-DS optimizer when using ZERO-offload
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = deepcopy(self.ds_config_zero2_dict)
+            ds_config_zero2_dict = self.get_config_dict("zero2")
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = True
             # sanity check - should the default config change
@@ -191,7 +199,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=8,
-                deepspeed=self.ds_config_zero2_file,
+                deepspeed=self.ds_config_file["zero2"],
                 per_device_train_batch_size=8,
                 logging_steps=1,
             )
@@ -228,7 +236,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=train_len,
-                deepspeed=self.ds_config_zero3_file,
+                deepspeed=self.ds_config_file["zero3"],
                 per_device_train_batch_size=8,
                 gradient_accumulation_steps=1,
             )
@@ -245,7 +253,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=train_len,
-                deepspeed=self.ds_config_zero3_file,
+                deepspeed=self.ds_config_file["zero3"],
                 per_device_train_batch_size=4,
                 gradient_accumulation_steps=2,
             )
@@ -262,106 +270,128 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
 
-    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, is_pretrained=True):
+    def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
 
         file_list = [WEIGHTS_NAME, "training_args.bin", "trainer_state.json", "config.json"]
-        ds_file_list = ["mp_rank_00_model_states.pt", "zero_pp_rank_0_mp_rank_00optim_states.pt"]
+
+        if stage == "zero2":
+            ds_file_list = ["mp_rank_00_model_states.pt"]
+        elif stage == "zero3":
+            ds_file_list = ["zero_pp_rank_0_mp_rank_00_model_states.pt"]
+        else:
+            raise ValueError(f"unknown stage {stage}")
+
+        # XXX: this can be recoded and then removed once we require deepspeed>0.3.13
+        import deepspeed
+        from packaging import version
+        if version.parse(deepspeed.__version__) > version.parse("0.3.13"):
+            ds_file_list.append("zero_pp_rank_0_mp_rank_00_optim_states.pt")
+        else:
+            ds_file_list.append("zero_pp_rank_0_mp_rank_00optim_states.pt")
 
         for step in range(freq, total, freq):
             checkpoint = os.path.join(output_dir, f"checkpoint-{step}")
-            self.assertTrue(os.path.isdir(checkpoint))
+            self.assertTrue(os.path.isdir(checkpoint),  f"[{stage}] {checkpoint} dir is not found")
 
             # common files
             for filename in file_list:
-                self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
+                path = os.path.join(checkpoint, filename)
+                self.assertTrue(os.path.isfile(path), f"[{stage}] {path} is not found")
 
             # ds files
             ds_path = os.path.join(checkpoint, f"global_step{step}")
             for filename in ds_file_list:
                 # filename = os.path.join(path, filename)
                 # print(filename)
-                self.assertTrue(os.path.isfile(os.path.join(ds_path, filename)))
+                path = os.path.join(ds_path, filename)
+                self.assertTrue(os.path.isfile(path), f"[{stage}] {path} is not found")
 
     def test_save_checkpoints(self):
         # adapted from  TrainerIntegrationTest.test_save_checkpoints
 
-        output_dir = self.get_auto_remove_tmp_dir()
-        ds_config_dict = deepcopy(self.ds_config_zero2_dict)
-        ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-        freq = 5
+        for stage in zero_stages:
+            output_dir = self.get_auto_remove_tmp_dir()
+            ds_config_dict = self.get_config_dict(stage)
+            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+            freq = 5
 
-        # save checkpoints
-        with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(
-                output_dir=output_dir,
-                save_steps=freq,
-                deepspeed=ds_config_dict,
-            )
-            trainer.train()
+            # save checkpoints
+            with mockenv_context(**self.dist_env_1_gpu):
+                trainer = get_regression_trainer(
+                    output_dir=output_dir,
+                    save_steps=freq,
+                    deepspeed=ds_config_dict,
+                )
+                trainer.train()
 
-        total = int(self.n_epochs * 64 / self.batch_size)
-        self.check_saved_checkpoints_deepspeed(output_dir, freq, total)
+            total = int(self.n_epochs * 64 / self.batch_size)
+            self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage)
 
     def test_can_resume_training(self):
         # adapted from TrainerIntegrationTest.test_can_resume_training
 
-        output_dir = self.get_auto_remove_tmp_dir()
-        # output_dir = "/tmp/zero3"
-        ds_config_dict = deepcopy(self.ds_config_zero2_dict)
-        ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-        kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
-
+        # failures to find checkpoints are enough to be tested on just one of the stages
         with mockenv_context(**self.dist_env_1_gpu):
-            trainer = get_regression_trainer(**kwargs)
-            trainer.train()
-            (a, b) = trainer.model.a.item(), trainer.model.b.item()
-            state = dataclasses.asdict(trainer.state)
+            ds_config_dict = self.get_config_dict("zero2")
+            output_dir = self.get_auto_remove_tmp_dir()
+            trainer = get_regression_trainer(output_dir=output_dir, deepspeed=ds_config_dict)
 
-            checkpoint = os.path.join(output_dir, "checkpoint-5")
-
-            # Reinitialize trainer
-            trainer = get_regression_trainer(**kwargs)
-
-            trainer.train(resume_from_checkpoint=checkpoint)
-            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-            state1 = dataclasses.asdict(trainer.state)
-            self.assertEqual(a, a1)
-            self.assertEqual(b, b1)
-            self.check_trainer_state_are_the_same(state, state1)
-
-            # Now check with a later checkpoint that it also works when we span over one epoch
-            checkpoint = os.path.join(output_dir, "checkpoint-15")
-
-            # Reinitialize trainer and load model
-            trainer = get_regression_trainer(**kwargs)
-
-            trainer.train(resume_from_checkpoint=checkpoint)
-            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-            state1 = dataclasses.asdict(trainer.state)
-            self.assertEqual(a, a1)
-            self.assertEqual(b, b1)
-            self.check_trainer_state_are_the_same(state, state1)
-
-            # Now check failures
-
-            # 1. fail to find a bogus checkpoint
-            trainer = get_regression_trainer(**kwargs)
-            with self.assertRaises(Exception) as context:
-                trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
-            self.assertTrue(
-                "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
-            )
-
-            # 2. fail to find any checkpoint - due a fresh output_dir
-            output_dir2 = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(output_dir=output_dir2, deepspeed=ds_config_dict)
+            # 1. fail to find any checkpoint - due a fresh output_dir
             with self.assertRaises(Exception) as context:
                 trainer.train(resume_from_checkpoint=True)
             self.assertTrue(
                 "No valid checkpoint found in output directory" in str(context.exception),
                 f"got exception: {context.exception}",
             )
+
+            # 2. fail to find a bogus checkpoint
+            with self.assertRaises(Exception) as context:
+                checkpoint = os.path.join(output_dir, "checkpoint-5")
+                trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
+            self.assertTrue(
+                "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
+            )
+
+
+        # now test normal resume for each stage separately
+        for stage in zero_stages:
+            output_dir = self.get_auto_remove_tmp_dir()
+            ds_config_dict = self.get_config_dict(stage)
+            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+            kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
+
+            with mockenv_context(**self.dist_env_1_gpu):
+                trainer = get_regression_trainer(**kwargs)
+                trainer.train()
+                (a, b) = trainer.model.a.item(), trainer.model.b.item()
+                state = dataclasses.asdict(trainer.state)
+
+                checkpoint = os.path.join(output_dir, "checkpoint-5")
+
+                # Reinitialize trainer
+                trainer = get_regression_trainer(**kwargs)
+
+                trainer.train(resume_from_checkpoint=checkpoint)
+                (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+                state1 = dataclasses.asdict(trainer.state)
+                self.assertEqual(a, a1)
+                self.assertEqual(b, b1)
+                self.check_trainer_state_are_the_same(state, state1)
+
+                # Now check with a later checkpoint that it also works when we span over one epoch
+                checkpoint = os.path.join(output_dir, "checkpoint-15")
+
+                # Reinitialize trainer and load model
+                trainer = get_regression_trainer(**kwargs)
+
+                trainer.train(resume_from_checkpoint=checkpoint)
+                (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+                state1 = dataclasses.asdict(trainer.state)
+                self.assertEqual(a, a1)
+                self.assertEqual(b, b1)
+                self.check_trainer_state_are_the_same(state, state1)
+
 
 
 @slow
