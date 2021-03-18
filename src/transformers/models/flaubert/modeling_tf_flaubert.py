@@ -932,6 +932,8 @@ class TFFlaubertForQuestionAnsweringSimple(TFXLMForQuestionAnsweringSimple):
     FLAUBERT_START_DOCSTRING,
 )
 class TFFlaubertForTokenClassification(TFXLMForTokenClassification):
+    config_class = FlaubertConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
@@ -945,6 +947,8 @@ class TFFlaubertForTokenClassification(TFXLMForTokenClassification):
     FLAUBERT_START_DOCSTRING,
 )
 class TFFlaubertForMultipleChoice(TFXLMForMultipleChoice):
+    config_class = FlaubertConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
