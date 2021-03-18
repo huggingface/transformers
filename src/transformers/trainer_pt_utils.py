@@ -497,7 +497,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or model_input_name not in dataset[0]:
+            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
