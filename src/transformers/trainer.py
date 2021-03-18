@@ -690,7 +690,7 @@ class Trainer:
         """
         Helper to get number of samples in a :class:`~torch.utils.data.DataLoader` by accessing its dataset.
 
-        Will raise an exception if the underlying dataset dese not implement method :obj:`__len__`
+        Will raise an exception if the underlying dataset does not implement method :obj:`__len__`
         """
         return len(dataloader.dataset)
 
@@ -1812,8 +1812,13 @@ class Trainer:
 
         eval_losses_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
         if not prediction_loss_only:
-            preds_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
-            labels_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=batch_size)
+            # The actual number of eval_sample can be greater than num_examples in distributed settings (when we pass
+            # a batch size to the sampler)
+            make_multiple_of = None
+            if hasattr(dataloader, "sampler") and isinstance(dataloader.sampler, SequentialDistributedSampler):
+                make_multiple_of = dataloader.sampler.batch_size
+            preds_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
+            labels_gatherer = DistributedTensorGatherer(world_size, num_examples, make_multiple_of=make_multiple_of)
 
         model.eval()
 
