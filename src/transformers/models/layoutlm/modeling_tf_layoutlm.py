@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
@@ -802,12 +802,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         self.layoutlm = TFLayoutLMMainLayer(config, name="layoutlm")
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="layoutlm-base-uncased",
-        output_type=TFBaseModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFBaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -823,6 +818,37 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         training: Optional[bool] = False,
         **kwargs,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
+            >>> import tensorflow as tf
+
+            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+            >>> model = TFLayoutLMModel.from_pretrained('microsoft/layoutlm-base-uncased')
+
+            >>> words = ["Hello", "world"]
+            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+
+            >>> token_boxes = []
+            >>> for word, box in zip(words, normalized_word_boxes):
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     token_boxes.extend([box] * len(word_tokens))
+            >>> # add bounding boxes of cls + sep tokens
+            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+
+            >>> encoding = tokenizer(' '.join(words), return_tensors="pt")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = tf.convert_to_tensor([token_boxes])
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids)
+
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         inputs = input_processing(
             func=self.call,
             config=self.config,
@@ -897,12 +923,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         return self.name + "/" + self.mlm.name + "/" + self.mlm.predictions.name
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="layoutlm-base-uncased",
-        output_type=TFMaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFMaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -924,6 +945,39 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
             Labels for computing the masked language modeling loss. Indices should be in ``[-100, 0, ...,
             config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are ignored
             (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
+            >>> import tensorflow as tf
+
+            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+            >>> model = TFLayoutLMForMaskedLM.from_pretrained('microsoft/layoutlm-base-uncased')
+
+            >>> words = ["Hello", "[MASK]"]
+            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+
+            >>> token_boxes = []
+            >>> for word, box in zip(words, normalized_word_boxes):
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     token_boxes.extend([box] * len(word_tokens))
+            >>> # add bounding boxes of cls + sep tokens
+            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+
+            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = tf.convert_to_tensor([token_boxes])
+
+            >>> labels = tokenizer("Hello world", return_tensors="tf")["input_ids"]
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+            ...                 labels=labels)
+
+            >>> loss = outputs.loss
         """
         inputs = input_processing(
             func=self.call,
@@ -1005,12 +1059,7 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         )
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="layoutlm-base-uncased",
-        output_type=TFSequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1032,6 +1081,39 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
             Labels for computing the sequence classification/regression loss. Indices should be in :obj:`[0, ...,
             config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
+            >>> import tensorflow as tf
+
+            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+            >>> model = TFLayoutLMForSequenceClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+
+            >>> words = ["Hello", "world"]
+            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+
+            >>> token_boxes = []
+            >>> for word, box in zip(words, normalized_word_boxes):
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     token_boxes.extend([box] * len(word_tokens))
+            >>> # add bounding boxes of cls + sep tokens
+            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+
+            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = tf.convert_to_tensor([token_boxes])
+            >>> sequence_label = tf.convert_to_tensor([1])
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+            ...                 labels=sequence_label)
+
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
         """
         inputs = input_processing(
             func=self.call,
@@ -1118,12 +1200,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         )
 
     @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="layoutlm-base-uncased",
-        output_type=TFTokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=TFTokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -1144,6 +1221,39 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         labels (:obj:`tf.Tensor` or :obj:`np.ndarray` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Labels for computing the token classification loss. Indices should be in ``[0, ..., config.num_labels -
             1]``.
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
+            >>> import torch
+
+            >>> tokenizer = LayoutLMTokenizer.from_pretrained('microsoft/layoutlm-base-uncased')
+            >>> model = TFLayoutLMForTokenClassification.from_pretrained('microsoft/layoutlm-base-uncased')
+
+            >>> words = ["Hello", "world"]
+            >>> normalized_word_boxes = [637, 773, 693, 782], [698, 773, 733, 782]
+
+            >>> token_boxes = []
+            >>> for word, box in zip(words, normalized_word_boxes):
+            ...     word_tokens = tokenizer.tokenize(word)
+            ...     token_boxes.extend([box] * len(word_tokens))
+            >>> # add bounding boxes of cls + sep tokens
+            >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
+
+            >>> encoding = tokenizer(' '.join(words), return_tensors="tf")
+            >>> input_ids = encoding["input_ids"]
+            >>> attention_mask = encoding["attention_mask"]
+            >>> token_type_ids = encoding["token_type_ids"]
+            >>> bbox = tf.convert_to_tensor([token_boxes])
+            >>> token_labels = tf.convert_to_tensor([1,1,0,0])
+
+            >>> outputs = model(input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids,
+            ...                 labels=token_labels)
+
+            >>> loss = outputs.loss
+            >>> logits = outputs.logits
         """
         inputs = input_processing(
             func=self.call,
