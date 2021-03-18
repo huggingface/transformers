@@ -145,7 +145,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token(self) -> str:
         """
-        :obj:`str`: Padding token. Log an error if used while not having been set.
+        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
         """
         if self._word_delimiter_token is None and self.verbose:
             logger.error("Using word_delimiter_token, but it is not set yet.")
