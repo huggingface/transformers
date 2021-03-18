@@ -534,14 +534,7 @@ def main():
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
 
-        # if we are using post processing for test stage we will use respective example
-        if stage == "test":
-            examples = test_examples
-        else:
-            examples = eval_examples
-
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
-
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
     metric = load_metric("squad_v2" if data_args.version_2_with_negative else "squad")
