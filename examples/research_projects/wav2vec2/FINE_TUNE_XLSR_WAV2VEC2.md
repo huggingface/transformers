@@ -175,7 +175,7 @@ You are encouraged to copy-paste the following template into your model card.
 
 **Make sure that** instead of copying the output of the markdown file you copy the **raw** version of the following part. 
 
-To get the raw version of this file, simply click on "raw" and copy everything below the marker.
+To get the raw version of this file, simply click on the "`raw`" button on the top right corner of this file next to "`blame`" and copy everything below the marker.
 Make sure that you read and consequently remove all #TODO: statements from the model card. 
 
 <======================Copy **raw** version from here=========================
