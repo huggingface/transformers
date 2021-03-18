@@ -59,4 +59,5 @@ deploy_doc "bfa4ccf" v4.1.1
 deploy_doc "7d9a9d0" v4.2.2
 deploy_doc "bae0c79" v4.3.3
 deploy_doc "c988db5" v4.4.0
-deploy_doc "c5d6a28"  # v4.4.1 Latest stable release
+deploy_doc "c5d6a28" v4.4.1
+deploy_doc "9f43a42"  # v4.4.2 Latest stable release
