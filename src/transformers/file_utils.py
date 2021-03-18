@@ -102,8 +102,12 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
                             try:
                                 _tf_version = importlib_metadata.version("tf-nightly-gpu")
                             except importlib_metadata.PackageNotFoundError:
-                                _tf_version = None
-                                _tf_available = False
+                                # Support for intel-tensorflow version
+                                try:
+                                    _tf_version = importlib_metadata.version("intel-tensorflow")
+                                except importlib_metadata.PackageNotFoundError:
+                                    _tf_version = None
+                                    _tf_available = False
     if _tf_available:
         if version.parse(_tf_version) < version.parse("2"):
             logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
@@ -1308,8 +1312,12 @@ def get_from_cache(
             # between the HEAD and the GET (unlikely, but hey).
             if 300 <= r.status_code <= 399:
                 url_to_download = r.headers["Location"]
+        except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+            # Actually raise for those subclasses of ConnectionError
+            raise
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            # etag is already None
+            # Otherwise, our Internet connection is down.
+            # etag is None
             pass
 
     filename = url_to_filename(url, etag)
