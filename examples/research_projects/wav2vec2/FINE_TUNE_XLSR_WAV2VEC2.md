@@ -1,28 +1,22 @@
 # Fine-Tuning week of XLSR-Wav2Vec2 on 60 languages 🌍
 
-Welcome to the fine-tuning week! The goal of this week is to have state-of-the-art automatic speech recognition (ASR) models on as many languages as possible. The fine-tuning week ends on Friday, the 26th March at 12am PST time.
+Welcome to the fine-tuning week! The goal of this week is to have state-of-the-art automatic speech recognition (ASR) models in as many languages as possible. The fine-tuning weekends on Friday, the 26th March at midnight PST time.
 
-Participants are encouraged to fine-tune the pretrained [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) checkpoint on one or more of the 60 languages of [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets). 
+Participants are encouraged to fine-tune the pretrained [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) checkpoint on one or more of the 60 languages of [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets).
 Furthermore, it is very much appreciated if participants fine-tune XLSR-Wav2Vec2 on a language that is not included in the Common Voice dataset.
 
-All fine-tuned models uploaded until Friday, the 26th March 12am PST, will be taken into account for a competition and the best model per language will be awarded a prize if the best model performs reasonbly well.
-The testing data to evaluate the models will be the official Common Voice *`test`* data of version 6.1. 
-Again, participants are very much encouraged to fine-tune XLSR-Wav2Vec2 on languages that are not found in the [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets) since those languages are even more likely to be underrepresented in the speech community. 
-Each model fine-tuned on a language not found in Common Voice, will be evaluated by the Hugging Face after Friday, the 26th March 12am PST, and if the model performs reasonably well, the model 
-receives a prize as well. For more information on which data can be used for training, how 
-the models are evaluated exactly, and what type of data preprocessing can be used, please see ["Training and Evaluation Rules"](#training-and-evaluation-rules).
+All fine-tuned models uploaded until Friday, the 26th March midnight PST, will be taken into account for competition, and the best model per language will be awarded a prize if the best model performs reasonably well. 
+The testing data to evaluate the models will be the official [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets) *`test data`* of version 6.1. Again, participants are very much encouraged to fine-tune XLSR-Wav2Vec2 on languages that are not found in the Common Voice dataset since those languages are even more likely to be underrepresented in the speech community. 
+Each model fine-tuned on a language not found in Common Voice, will be evaluated by the Hugging Face after Friday, the 26th March at midnight PST, and if the model performs reasonably well, the model receives a prize as well. 
+For more information on which data can be used for training, how the models are evaluated exactly, and what type of data preprocessing can be used, please see ["Training and Evaluation Rules"](#training-and-evaluation-rules).
 
 **Please keep in mind:**
-The spirit of the fine-tuning week is to provide state-of-the-art speech recognition in as 
-many languages as possible to the community! So while 
-we encourage a healthy competition between people/groups of the same language so that better 
-results are obtained, it is **extremely important** that we help each other and share our
-insights with the whole team/community. What matters in the end is what has been achieved by 
-the team as a whole during the fine-tuning week. That being said, we strongly encourage people 
-to share tips & tricks on the forum or on Slack, help each other when team members encounter 
-bugs and to work in groups. To make it easier to share and help, forum threads have been created under the name {language} ASR: Fine-Tuning Wav2Vec2, *e.g.* [here](https://discuss.huggingface.co/t/arabic-asr-fine-tuning-wav2vec2/4608). It is very much possible that prizes will be given to groups of 
-people instead of individuals. Also don't hesitate to ask questions, propose improvements 
-to the organization, to the material given to participants, etc...🤗
+The spirit of the fine-tuning week is to provide state-of-the-art speech recognition in as many languages as possible to the community! 
+So while we encourage healthy competition between people/groups of the same language so that better results are obtained, it is extremely important that we help each other and share our insights with the whole team/community. 
+What matters in the end is what has been achieved by the team as a whole during the fine-tuning week. 
+That being said, we strongly encourage people to share tips & tricks on the forum or Slack, help each other when team members encounter bugs, and work in groups. 
+To make it easier to share and help, forum threads have been created under the name {language} ASR: Fine-Tuning Wav2Vec2, e.g. here. 
+It is very much possible that prizes will be given to groups of people instead of individuals. Also, don't hesitate to ask questions, propose improvements to the organization, to the material given to participants, etc...🤗
 
 ## Table of Contents
 
@@ -44,59 +38,59 @@ to the organization, to the material given to participants, etc...🤗
 
 ## Organization of the fine tuning week
 
-The week officially starts on the 22.03.2021 and ends on the 29.03.2021, but you are more then welcome to start fine-tuning models before the start date. 
+The week officially starts on 22.03.2021 and ends on 29.03.2021, but you are more than welcome to start fine-tuning models before the start date. 
 General questions you might have, general problems you encounter, and general tips can be shared directly on the Slack channel (see [this post](https://discuss.huggingface.co/t/open-to-the-community-xlsr-wav2vec2-fine-tuning-week-for-low-resource-languages/4467) on how to be added to Slack). 
-More language-specific questions or specific bugs should be posted on the [forum](https://discuss.huggingface.co/) (feel free to use aready existing language specific threads, *e.g.* [this one](https://discuss.huggingface.co/t/arabic-asr-fine-tuning-wav2vec2/4608) or open a new one if there is no thread for your language yet) or directly on [github](https://github.com/huggingface/transformers) if you think some code or document needs correction/improvement.
+More language-specific questions or specific bugs should be posted on the [forum](https://discuss.huggingface.co/) (feel free to use already existing language-specific threads, *e.g.* [this one](https://discuss.huggingface.co/t/arabic-asr-fine-tuning-wav2vec2/4608) or open a new one if there is no thread for your language yet) or directly on [github](https://github.com/huggingface/transformers) if you think some code or document needs correction/improvement.
 Starting on Monday, the 22.03.2021, the Hugging Face team will try to provide an overview of currently trained models along with their evaluation results.
 All the necessary information on:
 
-- How to fine tune the XLSR model
+- How to fine-tune the XLSR model
 - How to upload the model
 - How to share your evaluation results & training/eval script
-- What are the training / evaluation rules
+- What are the training/evaluation rules
 
 can be found in the sections below. If something is still unclear, feel free to drop a message in the Slack channel.
 
 ## How to fine tune XLSR Wav2Vec2
 
-This chapter gives an in-detail explanation on how to fine-tune [Facebook's multi-lingual Wav2vec2](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) on any language of the [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets).
+This chapter gives an in-detail explanation of how to fine-tune [Facebook's multi-lingual Wav2vec2](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) on any language of the [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets).
 
-There are two possible setups which can be used to fine-tune Wav2Vec2. The easiest setup is to simply use [google colab](https://colab.research.google.com/). It is possible to train the full model in a *free* google colab, but it is recommended to use google colab pro since it has been shown to be more stable.
+Two possible setups can be used to fine-tune Wav2Vec2. The easiest setup is to simply use [google colab](https://colab.research.google.com/). It is possible to train the full model in a *free* google colab, but it is recommended to use google colab pro since it is more stable.
 
-The other option is to run a script locally. While this can be more difficult to setup in also means that you have more control over the training run and probably access to better GPUs than you would have in a google colab. 
+The other option is to run a script locally. While this can be more difficult to set up, it also means that you have more control over the training run and probably access to better GPUs than you would have in a google colab. 
 For small datasets, it is usually totally sufficient to train your model
-in a google colab. For larger and thus more memory intensive datasets, it is probably
-better to fine tune the model locally.
+in a google colab. For larger and thus more memory-intensive datasets, it is probably
+better to fine-tune the model locally.
 
-For each option, we explain in-detail how to fine-tune XLSR-Wav2Vec2 in the following.
+For each option, we explain in detail how to fine-tune XLSR-Wav2Vec2 in the following.
 
 ### Google colab setup
 
 **Note**: Instead of reading the following section, you can simply watch [this](https://www.youtube.com/watch?v=UynYn2C3tI0&ab_channel=PatrickvonPlaten) video, where Patrick explains how to adapt the google colab for your specific language.
 
 **1.**: If you plan on training XLSR-Wav2Vec2 in a google colab, you should first make sure to have a valid gmail account. You can sign up for a gmail account [here](https://accounts.google.com/signup/v2/webcreateaccount?hl=en&flowName=GlifWebSignIn&flowEntry=SignUp). 
-Having succesfully signed up for gmail, you can now sign into your account to make sure you are logged in when opening new tabs in your browser.
+Having successfully signed up for gmail, you can now sign in to your account to make sure you are logged in when opening new tabs in your browser.
 
 **2.**: Next, head over to the official [Fine-Tune XLSR-Wav2Vec2 with 🤗 Transformes](https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/Fine_Tune_XLSR_Wav2Vec2_on_Turkish_ASR_with_%F0%9F%A4%97_Transformers.ipynb) google colab. The first thing you should do is to make a copy of it - click `->File->Save a copy in Drive`. This should save a copy of the google colab in your google drive. 
 
 **3.**: Now it is highly recommended to carefully read the google colab without running the cells yet. 
 You should get an understanding of the model is trained and what you will have to change when training the model in a different language. 
-Having done so, you can again head over to [Common Voice](https://commonvoice.mozilla.org/en/datasets) and pick your a language you want to fine-tune [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) on. Make sure you remember the language code (For each language, you can find it under the field "*Version*". It corresponds to **all characters before the first underscore**. *E.g.* for Greek it is *el*, while for Irish it is *ga-IE*.
+Having done so, you can again head over to [Common Voice](https://commonvoice.mozilla.org/en/datasets) and pick a language you want to fine-tune [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) on. Make sure you remember the language code (For each language, you can find it under the field "*Version*". It corresponds to **all characters before the first underscore**. *E.g.* for Greek it is *el*, while for Irish it is *ga-IE*.
 
 **4.**: Now you should replace the language code used for the demo of this colab, being *tr* for Turkish with the language code corresponding to the language you just chose in the **second** cell of the google colab. This will load the correct data for your language.
 
-**5.**: It is time start running the google colab! Make sure that you have selected "GPU" as your runtime environment and you can start running the cells one-by-one. Make sure you attentively read the text between the cells to understand what is happening and to eventually correct the cells to improve the fine-tuning script for your language. Things you might want to improve / change:
+**5.**: It is time to start running the google colab! Make sure that you have selected "GPU" as your runtime environment and you can start running the cells one-by-one. Make sure you attentively read the text between the cells to understand what is happening and to eventually correct the cells to improve the fine-tuning script for your language. Things you might want to improve/change:
  
  - Data loading. It is very much recommended to use more than just the official training data of the Common Voice dataset. If you find more data on the internet, feel free to use it! Check out the section ["How to combined multiple datasets into one"](#how-to-combine-multiple-datasets-into-one)
 
-- Data Processing. You should adapt the data processing to your specific language. In data processing, you should make the data more uniform so that it will be easier for the model to learn how to classify speech in your data. Here it can be really helpful to be proficient in the language to know what can be done to simplify the language withouth changing the meanning. 
+- Data Processing. You should adapt the data processing to your specific language. In data processing, you should make the data more uniform so that it will be easier for the model to learn how to classify speech in your data. Here it can be really helpful to be proficient in the language to know what can be done to simplify the language without changing the meaning. 
 Data processing methods include, but are not limited to:
 	- Normalizing your data. Make sure all characters are lower-cased.
-	- Remove typographical symbols and punctuation marks. See a list [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks). Be careful to not remove punctation marks that can change the meaning of the sentence. *E.g.* you should not remove the single quatation mark `'` in English, as it would change the words `"it's"` to `"its"` which is a different word and has thus a different meaning. For more tips on data processing see ["How to effectively preprocess the data"](#how-to-effectively-preprocess-the-data")
+	- Remove typographical symbols and punctuation marks. See a list [here](https://en.wikipedia.org/wiki/List_of_typographical_symbols_and_punctuation_marks). Be careful to not remove punctuation marks that can change the meaning of the sentence. *E.g.* you should not remove the single quotation mark `'` in English, as it would change the words `"it's"` to `"its"` which is a different word and has thus a different meaning. For more tips on data processing see ["How to effectively preprocess the data"](#how-to-effectively-preprocess-the-data")
 
 - Hyperparameter Tuning. Depending on the size of the data you should probably change the hyperparameters of the google colab. You can change any parameter you like. For more tips and tricks see ["How to do hyperparameter tuning for my language"](#how-to-do-hyperparameter-tuning-for-my-language)
 
-When running the google colab make sure that you uncomment the cell corresponding to mounting your gogle drive to the colab. This cells look as follows:
+When running the google colab make sure that you uncomment the cell corresponding to mounting your google drive to the colab. This cell looks as follows:
 
 ```python
 # from google.colab import drive
@@ -105,7 +99,7 @@ When running the google colab make sure that you uncomment the cell correspondin
 
 Uncomment it, run it, and follow the instructions to mount your google drive. This way you can be sure that the model parameters and created tokenizer & feature extractor files are saved in **your** google drive.
 
-Also make sure that you uncomment the cells corresponding to save the preprocessing files and trained model weights to your drive. Otherwise you might loose a trained model if you google crashes. You should change the name of your model from `wav2vec2-large-xlsr-turkish-demo` to `wav2vec2-large-xlsr-{your_favorite_name}`.
+Also, make sure that you uncomment the cells corresponding to save the preprocessing files and trained model weights to your drive. Otherwise, you might lose a trained model if you google crashes. You should change the name of your model from `wav2vec2-large-xlsr-turkish-demo` to `wav2vec2-large-xlsr-{your_favorite_name}`.
 
 Those cells correspond to:
 
@@ -132,7 +126,7 @@ Having finished the training you should find the following files/folders under t
 If you are happy with your training results it is time to upload your model! 
 Download the following files to your local computer: **`preprocessor_config.json`, `special_tokens_map.json`, `tokenizer_config.json`, `vocab.json`, `config.json`, `pytorch_model.bin`**. Those files fully define a XLSR-Wav2Vec2 model checkpoint.
 
-Awesome you have succesfully trained a XLSR-Wav2Vec2 model 😎. Now you can jump to the secttion ["How to upload my trained checkpoint"](#how-to-upload-my-trained-checkpoint)
+Awesome you have successfully trained a XLSR-Wav2Vec2 model 😎. Now you can jump to the section ["How to upload my trained checkpoint"](#how-to-upload-my-trained-checkpoint)
 
 ### Local machine
 
@@ -141,7 +135,7 @@ To fill...
 
 ## How to upload my trained checkpoint
 
-To upload your trained checkpoint, make sure to follow the instructions [here](https://huggingface.co/transformers/model_sharing.html) on how create a model repository on the 🤗 model hub .
+To upload your trained checkpoint, make sure to follow the instructions [here](https://huggingface.co/transformers/model_sharing.html) on how to create a model repository on the 🤗 model hub .
 
 Having created your model repository on the hub, you should clone it locally.
 
@@ -154,7 +148,7 @@ Then and add the following files that fully define a XLSR-Wav2Vec2 checkpoint in
 - `config.json`
 - `pytorch_model.bin`
 
-Having added the above files, you should run the follwing to push files to your model repository.  
+Having added the above files, you should run the following to push files to your model repository.  
 ```
 git add . && git commit -m "Add model files" && git push
 ```
@@ -176,7 +170,7 @@ account for the final evaluation.
 
 ### How to create the readme
 
-The model card is written in markdown (`.md`) and should be added by simply clicking on the "Add model card" button which is found on the top right corner. You are encouraged to copy paste the following template into your model card.
+The model card is written in markdown (`.md`) and should be added by simply clicking on the "Add model card" button which is found on the top right corner. You are encouraged to copy-paste the following template into your model card.
 Make sure that you read and consequently remove all #TODO: statements from the model card. 
 
 <======================Copy from here=========================
@@ -309,7 +303,7 @@ the final result on the model card.
 In this section, we will quickly go over what data is allowed to be used as training 
 data, what kind of data preprocessing is allowed be used, and how the model should be evaluated.
 
-To make it very simple regarding the first point: **All data except the official common voice `test` data set can be used as training data**. For models trained on a language that is not included in Common Voice, the author of the model is responsible to 
+To make it very simple regarding the first point: **All data except the official common voice `test` data set can be used as training data**. For models trained in a language that is not included in Common Voice, the author of the model is responsible to 
 leave a reasonable amount of data for evaluation.
 
 Second, the rules regarding the preprocessing are not that as straight-forward. It is allowed (and recommended) to 
@@ -345,10 +339,10 @@ TODO...
 
 ## Further reading material
 
-It is recommended that take some time to you read up on how Wav2vec2 works in theory. 
+It is recommended that take some time to read up on how Wav2vec2 works in theory. 
 Getting a better understanding of the theory and the inner mechanisms of the model often helps when fine-tuning the model. 
 
-**However**, if you don't like reading blog posts / papers, don't worry - it is by no means necessary to go through the theory in order to fine-tune Wav2Vec2 on your language of choice.
+**However**, if you don't like reading blog posts/papers, don't worry - it is by no means necessary to go through the theory to fine-tune Wav2Vec2 on your language of choice.
 
 If you are interested in learning more about the model though, here are a couple of resources that are important to better understand Wav2Vec2:
 
@@ -358,13 +352,13 @@ If you are interested in learning more about the model though, here are a couple
 - [Hugging Face Blog](https://huggingface.co/blog/fine-tune-xlsr-wav2vec2)
 - [How does CTC (Connectionist Temporal Classification) work](https://distill.pub/2017/ctc/)
 
-It helps to have a good understanding on the following points:
+It helps to have a good understanding of the following points:
 
 - How was XLSR-Wav2Vec2 pretrained? -> Feature vectors were masked and had to be predicted by the model; very similar in spirit to masked language model of BERT.
 
 - What parts of XLSR-Wav2Vec2 are responsible for what? What is the feature extractor part used for? -> extract feature vectors from the 1D raw audio waveform; What is the transformer part doing? -> mapping feature vectors to contextualized feature vectors; ...
 
-- What part of the model needs to be fine-tuned? -> The pretrained model **does not** include a language head to classify the contextualized features to letters. This is randomely initialized when loading the pretrained checkpoint and has to be fine-tuned. Also, note that the authors recommend to **not** further fine-tune the feature extractor.
+- What part of the model needs to be fine-tuned? -> The pretrained model **does not** include a language head to classify the contextualized features to letters. This is randomly initialized when loading the pretrained checkpoint and has to be fine-tuned. Also, note that the authors recommend to **not** further fine-tune the feature extractor.
 
 - What data was used to XLSR-Wav2Vec2? The checkpoint we will use for further fine-tuning was pretrained on **53** languages. 
 
@@ -373,7 +367,7 @@ It helps to have a good understanding on the following points:
 
 ## FAQ
 
-- Can a participant fine-tune models for more than one languages? 
+- Can a participant fine-tune models for more than one language? 
 Yes! A participant can fine-tune models in as many languages she/he likes
 - Can a participant use extra data (apart from the common voice data)?
 Yes! All data except the official common voice `test data` can be used for training.
