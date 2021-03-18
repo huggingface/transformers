@@ -19,10 +19,7 @@ os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed 
 
 SAGEMAKER_ROLE = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
 ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:pytorch1.6.0-transformers4.3.1-tokenizers0.10.1-datasets1.2.1-py36-gpu-cu110"
-<<<<<<< HEAD
 # ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.7.1-transformers4.4.0-py36-gpu-cu110-ubuntu18.04"
-=======
->>>>>>> 797886659dc2759a6b032ea8ed51687b80c1dfb8
 BASE_NAME = "sm-pt-transfromers-test"
 TEST_PATH = "./tests/sagemaker/scripts/pytorch"
 

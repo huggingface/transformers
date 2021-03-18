@@ -69,13 +69,9 @@ test-examples:
 
 test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
 	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
-<<<<<<< HEAD
 	# TEST_SAGEMAKER=True python -m pytest -s -v ./tests/sagemaker/test_tensorflow_dlc.py
 	# TEST_SAGEMAKER=True python -m pytest -s -v ./tests/sagemaker/test_pytorch_dlc.py
 
-=======
-	# TEST_SAGEMAKER=True python -m pytest -s -v ./tests/sagemaker
->>>>>>> 797886659dc2759a6b032ea8ed51687b80c1dfb8
 
 
 # Check that docs can build
