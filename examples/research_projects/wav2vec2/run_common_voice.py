@@ -26,7 +26,7 @@ from transformers import (
     is_apex_available,
     set_seed,
 )
-from transformers.trainer_utils import is_main_process
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
 
 
 if is_apex_available():
@@ -268,6 +268,21 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # Detecting last checkpoint.
+    last_checkpoint = None
+    if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
+        last_checkpoint = get_last_checkpoint(training_args.output_dir)
+        if last_checkpoint is None and len(os.listdir(training_args.output_dir)) > 0:
+            raise ValueError(
+                f"Output directory ({training_args.output_dir}) already exists and is not empty. "
+                "Use --overwrite_output_dir to overcome."
+            )
+        elif last_checkpoint is not None:
+            logger.info(
+                f"Checkpoint detected, resuming training at {last_checkpoint}. To avoid this behavior, change "
+                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+            )
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -290,38 +305,39 @@ def main():
     set_seed(training_args.seed)
 
     # Get the datasets:
-    common_voice_train = datasets.load_dataset(
+    train_dataset = datasets.load_dataset(
         "common_voice", data_args.dataset_config_name, split=data_args.train_split_name
     )
-    common_voice_test = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test")
+    eval_dataset = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test")
 
     # Create and save tokenizer
     chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]'
+
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
         return batch
 
-    common_voice_train = common_voice_train.map(remove_special_characters, remove_columns=["sentence"])
-    common_voice_test = common_voice_test.map(remove_special_characters, remove_columns=["sentence"])
+    train_dataset = train_dataset.map(remove_special_characters, remove_columns=["sentence"])
+    eval_dataset = eval_dataset.map(remove_special_characters, remove_columns=["sentence"])
 
     def extract_all_chars(batch):
         all_text = " ".join(batch["text"])
         vocab = list(set(all_text))
         return {"vocab": [vocab], "all_text": [all_text]}
 
-    vocab_train = common_voice_train.map(
+    vocab_train = train_dataset.map(
         extract_all_chars,
         batched=True,
         batch_size=-1,
         keep_in_memory=True,
-        remove_columns=common_voice_train.column_names,
+        remove_columns=train_dataset.column_names,
     )
-    vocab_test = common_voice_train.map(
+    vocab_test = train_dataset.map(
         extract_all_chars,
         batched=True,
         batch_size=-1,
         keep_in_memory=True,
-        remove_columns=common_voice_test.column_names,
+        remove_columns=eval_dataset.column_names,
     )
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
@@ -365,10 +381,10 @@ def main():
     )
 
     if data_args.max_train_samples is not None:
-        common_voice_train = common_voice_train.select(range(data_args.max_train_samples))
+        train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     if data_args.max_val_samples is not None:
-        common_voice_test = common_voice_test.select(range(data_args.max_val_samples))
+        eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
     resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
@@ -381,14 +397,14 @@ def main():
         batch["target_text"] = batch["text"]
         return batch
 
-    common_voice_train = common_voice_train.map(
+    train_dataset = train_dataset.map(
         speech_file_to_array_fn,
-        remove_columns=common_voice_train.column_names,
+        remove_columns=train_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
-    common_voice_test = common_voice_test.map(
+    eval_dataset = eval_dataset.map(
         speech_file_to_array_fn,
-        remove_columns=common_voice_test.column_names,
+        remove_columns=eval_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
 
@@ -403,16 +419,16 @@ def main():
             batch["labels"] = processor(batch["target_text"]).input_ids
         return batch
 
-    common_voice_train = common_voice_train.map(
+    train_dataset = train_dataset.map(
         prepare_dataset,
-        remove_columns=common_voice_train.column_names,
+        remove_columns=train_dataset.column_names,
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
     )
-    common_voice_test = common_voice_test.map(
+    eval_dataset = eval_dataset.map(
         prepare_dataset,
-        remove_columns=common_voice_test.column_names,
+        remove_columns=eval_dataset.column_names,
         batch_size=training_args.per_device_train_batch_size,
         batched=True,
         num_proc=data_args.preprocessing_num_workers,
@@ -447,14 +463,20 @@ def main():
         data_collator=data_collator,
         args=training_args,
         compute_metrics=compute_metrics,
-        train_dataset=common_voice_train,
-        eval_dataset=common_voice_test,
+        train_dataset=train_dataset if training_args.do_train else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
         tokenizer=processor.feature_extractor,
     )
 
     # Training
     if training_args.do_train:
-        train_result = trainer.train()
+        if last_checkpoint is not None:
+            checkpoint = last_checkpoint
+        elif os.path.isdir(model_args.model_name_or_path):
+            checkpoint = model_args.model_name_or_path
+        else:
+            checkpoint = None
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()
 
         # save the feature_extractor and the tokenizer
@@ -463,9 +485,9 @@ def main():
 
         metrics = train_result.metrics
         max_train_samples = (
-            data_args.max_train_samples if data_args.max_train_samples is not None else len(common_voice_train)
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
         )
-        metrics["train_samples"] = min(max_train_samples, len(common_voice_train))
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
 
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
@@ -476,10 +498,8 @@ def main():
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
         metrics = trainer.evaluate()
-        max_val_samples = (
-            data_args.max_val_samples if data_args.max_val_samples is not None else len(common_voice_test)
-        )
-        metrics["eval_samples"] = min(max_val_samples, len(common_voice_test))
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
