@@ -1,9 +1,9 @@
 # Fine-Tuning week of XLSR-Wav2Vec2 on 60 languages 🌍
 
-Welcome to the fine-tuning week! The goal of this week is to have state-of-the-art Automatic Speech Recognition (ASR) models on as many languages as possible. The fine-tuning week ends on Friday, the 26th March at 12am PST time.
+Welcome to the fine-tuning week! The goal of this week is to have state-of-the-art automatic speech recognition (ASR) models on as many languages as possible. The fine-tuning week ends on Friday, the 26th March at 12am PST time.
 
 Participants are encouraged to fine-tune the pretrained [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) checkpoint on one or more of the 60 languages of [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets). 
-Furthermore, it is very much appreciated if participants fine-tune XLSR-Wav2Vec2 on a language that does not occur on Common Voice.
+Furthermore, it is very much appreciated if participants fine-tune XLSR-Wav2Vec2 on a language that is not included in the Common Voice dataset.
 
 All fine-tuned models uploaded until Friday, the 26th March 12am PST, will be taken into account for a competition and the best model per language will be awarded a prize if the best model performs reasonbly well.
 The testing data to evaluate the models will be the official Common Voice *`test`* data of version 6.1. 
@@ -13,8 +13,8 @@ receives a prize as well. For more information on which data can be used for tra
 the models are evaluated exactly, and what type of data preprocessing can be used, please see ["Training and Evaluation Rules"](#training-and-evaluation-rules).
 
 **Please keep in mind:**
-The spirit of the fine-tuning week is to provide 
-the community state-of-the-art speech recognition in as many languages as possible! So while 
+The spirit of the fine-tuning week is to provide state-of-the-art speech recognition in as 
+many languages as possible to the community! So while 
 we encourage a healthy competition between people/groups of the same language so that better 
 results are obtained, it is **extremely important** that we help each other and share our
 insights with the whole team/community. What matters in the end is what has been achieved by 
@@ -32,6 +32,7 @@ to the organization, to the material given to participants, etc...🤗
   - [Local machine](#local-machine)
 - [How to upload my trained checkpoint](#how-to-upload-my-trained-checkpoint)
 	- [How to create the README](#how-to-create-the-README)
+- [How to evaluate my trained checkpoint](#how-to-evaluate-my-trained-checkpoint)
 - [Rules of training and evaluation](#rules-of-training-and-evaluation)
 - [Tips and tricks for training](#tips-and-tricks-for-training)
 	- [How to combine multiple datasests into one](#how-to-combine-multiple-datasets-into-one)
@@ -218,15 +219,15 @@ resampler = torchaudio.transforms.Resample(48_000, 16_000)
 # Preprocessing the datasets.
 # We need to read the aduio files as arrays
 def speech_file_to_array_fn(batch):
-		speech_array, sampling_rate = torchaudio.load(batch["path"])
-		batch["speech"] = resampler(speech_array).squeeze().numpy()
-		return batch
+	speech_array, sampling_rate = torchaudio.load(batch["path"])
+	batch["speech"] = resampler(speech_array).squeeze().numpy()
+	return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
 inputs = processor(test_dataset["speech"][:2], sampling_rate=16_000, return_tensors="pt", padding=True)
 
 with torch.no_grad():
-		logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
+	logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
 
 predicted_ids = torch.argmax(logits, dim=-1)
 
@@ -252,42 +253,39 @@ wer = load_metric("wer")
 
 processor = Wav2Vec2Processor.from_pretrained("{model_id}") #TODO: replace {model_id} with your model id. The model id consists of {your_username}/{your_modelname}, *e.g.* `elgeish/wav2vec2-large-xlsr-53-arabic`
 model = Wav2Vec2ForCTC.from_pretrained("{model_id}") #TODO: replace {model_id} with your model id. The model id consists of {your_username}/{your_modelname}, *e.g.* `elgeish/wav2vec2-large-xlsr-53-arabic`
+model.to("cuda")
 
+chars_to_ignore_regex = '[\,\?\.\!\-\;\:\"\“]'  # TODO: adapt this list to include all special characters you removed from the data
 resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
 # Preprocessing the datasets.
 # We need to read the aduio files as arrays
 def speech_file_to_array_fn(batch):
-		speech_array, sampling_rate = torchaudio.load(batch["path"])
-		batch["speech"] = resampler(speech_array).squeeze().numpy()
-		return batch
+	batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).lower()
+	speech_array, sampling_rate = torchaudio.load(batch["path"])
+	batch["speech"] = resampler(speech_array).squeeze().numpy()
+	return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
-
-chars_to_ignore_regex = '[\,\?\.\!\-\;\:\"\“]'  # TODO: adapt this list to include all special characters you removed from the data
 
 # Preprocessing the datasets.
 # We need to read the aduio files as arrays
 def evaluate(batch):
-    batch["sentence"] = re.sub(chars_to_ignore_regex, '', batch["sentence"]).lower()
+	inputs = processor(batch["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
 
-		speech_array, sampling_rate = torchaudio.load(batch["path"])
-		speech_array = resampler(speech_array).squeeze().numpy()
-		inputs = processor(speech_array, sampling_rate=16_0000, return_tensors="pt", padding=True)
+	with torch.no_grad():
+		logits = model(inputs.input_values.to("cuda"), attention_mask=inputs.attention_mask.to("cuda")).logits
 
-		with torch.no_grad():
-		    logits = model(inputs.input_values.to("cuda"), attention_mask=inputs.attention_mask.to("cuda")).logits
+  pred_ids = torch.argmax(logits, dim=-1)
+	batch["pred_strings"] = processor.batch_decode(pred_ids)
+	return batch
 
-		batch["pred_strings"] = processor.batch_decode(logits)
-		return batch
+result = test_dataset.map(evaluate, batched=True, batch_size=8)
 
-
-result = test_dataset.map(process, remove_columns=test_dataset.column_names)
-
-print("WER: {.2f}".format(100 * wer(predictions=result["predicted_strings"], references=result["sentence"])))
+print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))
 ```
 
-**Result**: XX.X %
+**Result**: XX.XX %  # TODO: write output of print here
 
 
 ## Training
@@ -300,7 +298,11 @@ The script used for training can be found [here](...) # TODO: fill in a link to 
 
 Your model in then available under *huggingface.co/{your_username}/{your_chosen_xlsr-large_model_name}* for everybody to use 🎉.
 
+## How to evaluate my trained checkpoint
 
+Having uploaded your model, you should not evaluate your model in a final step. This should be as simple as 
+copying the evaluation code of your model card into a python script and running it. Make sure to note 
+the final result on the model card.
 
 ## Rules of training and evaluation
 
