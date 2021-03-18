@@ -24,10 +24,10 @@ For the old `finetune_trainer.py` and related utils, see [`examples/legacy/seq2s
 ### Supported Architectures
 
 - `BartForConditionalGeneration`
+- `FSMTForConditionalGeneration` (translation only)
+- `MBartForConditionalGeneration`
 - `MarianMTModel`
 - `PegasusForConditionalGeneration`
-- `MBartForConditionalGeneration`
-- `FSMTForConditionalGeneration` (translation only)
 - `T5ForConditionalGeneration`
 
 `run_summarization.py` and `run_translation.py` are lightweight examples of how to download and preprocess a dataset from the [🤗 Datasets](https://github.com/huggingface/datasets) library or use your own files (jsonlines or csv), then fine-tune one of the architectures above on it.
@@ -50,9 +50,7 @@ python examples/seq2seq/run_summarization.py \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50
+    --predict_with_generate
 ```
 
 Only T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use an additional argument: `--source_prefix "summarize: "`.
@@ -60,7 +58,7 @@ Only T5 models `t5-small`, `t5-base`, `t5-large`, `t5-3b` and `t5-11b` must use 
 We used CNN/DailyMail dataset in this example as `t5-small` was trained on it and one can get good scores even when pre-training with a very small sample.
 
 Extreme Summarization (XSum) Dataset is another commonly used dataset for the task of summarization. To use it replace `--dataset_name cnn_dailymail --dataset_config "3.0.0"` with  `--dataset_name xsum`.
-    
+
 And here is how you would use it on your own files, after adjusting the values for the arguments
 `--train_file`, `--validation_file`, `--text_column` and `--summary_column` to match your setup:
 
@@ -76,9 +74,7 @@ python examples/seq2seq/run_summarization.py \
     --overwrite_output_dir \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50
+    --predict_with_generate
 ```
 
 The task of summarization supports custom CSV and JSONLINES formats.
@@ -157,9 +153,7 @@ python examples/seq2seq/run_translation.py \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50 
+    --predict_with_generate
 ```
 
 MBart and some T5 models require special handling.
@@ -180,9 +174,7 @@ python examples/seq2seq/run_translation.py \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50
+    --predict_with_generate
 ```
 
 If you get a terrible BLEU score, make sure that you didn't forget to use the `--source_prefix` argument.
@@ -204,9 +196,7 @@ python examples/seq2seq/run_translation.py \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50
+    --predict_with_generate
  ```
 
 And here is how you would use the translation finetuning on your own files, after adjusting the
@@ -219,7 +209,7 @@ python examples/seq2seq/run_translation.py \
     --do_eval \
     --source_lang en \
     --target_lang ro \
-    --source_prefix "translate English to Romanian: " \    
+    --source_prefix "translate English to Romanian: " \
     --dataset_name wmt16 \
     --dataset_config_name ro-en \
     --train_file path_to_jsonlines_file \
@@ -228,9 +218,7 @@ python examples/seq2seq/run_translation.py \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50
+    --predict_with_generate
 ```
 
 The task of translation supports only custom JSONLINES files, with each line being a dictionary with a key `"translation"` and its value another dictionary whose keys is the language pair. For example:
@@ -256,7 +244,5 @@ python examples/seq2seq/run_translation.py \
     --per_device_train_batch_size=4 \
     --per_device_eval_batch_size=4 \
     --overwrite_output_dir \
-    --predict_with_generate \
-    --max_train_samples 50 \
-    --max_val_samples 50
+    --predict_with_generate
  ```
