@@ -39,7 +39,9 @@ if version.parse(torch.__version__) >= version.parse("1.6"):
 
 logger = logging.getLogger(__name__)
 
-chars_to_ignore_regex = '[\,\?\.\!\-\;\:""\%\'"\�]'  # noqa: W605
+
+def list_field(default=None, metadata=None):
+    return field(default_factory=lambda: default, metadata=metadata)
 
 
 @dataclass
@@ -105,7 +107,7 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
     train_split_name: Optional[str] = field(
-        default="train",
+        default="train+validation",
         metadata={
             "help": "The name of the training data set split to use (via the datasets library). Defaults to 'train'"
         },
@@ -130,6 +132,10 @@ class DataTrainingArguments:
             "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
             "value if set."
         },
+    )
+    chars_to_ignore: List[str] = list_field(
+        default=[",", "?", ".", "!", "-", ";", ":", '""', "%", "'", '"', "�"],
+        metadata={"help": "A list of characters to remove from the transcripts."},
     )
 
 
@@ -284,10 +290,13 @@ def main():
     set_seed(training_args.seed)
 
     # Get the datasets:
-    common_voice_train = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="train+validation")
+    common_voice_train = datasets.load_dataset(
+        "common_voice", data_args.dataset_config_name, split=data_args.train_split_name
+    )
     common_voice_test = datasets.load_dataset("common_voice", data_args.dataset_config_name, split="test")
 
     # Create and save tokenizer
+    chars_to_ignore_regex = f'[{"".join(data_args.chars_to_ignore)}]'
     def remove_special_characters(batch):
         batch["text"] = re.sub(chars_to_ignore_regex, "", batch["sentence"]).lower() + " "
         return batch
@@ -364,7 +373,7 @@ def main():
     resampler = torchaudio.transforms.Resample(48_000, 16_000)
 
     # Preprocessing the datasets.
-    # We need to read the aduio fiels as arrays and tokenizer targets.
+    # We need to read the aduio files as arrays and tokenize the targets.
     def speech_file_to_array_fn(batch):
         speech_array, sampling_rate = torchaudio.load(batch["path"])
         batch["speech"] = resampler(speech_array).squeeze().numpy()
@@ -449,7 +458,7 @@ def main():
         trainer.save_model()
 
         # save the feature_extractor and the tokenizer
-        if is_main_process():
+        if is_main_process(training_args.local_rank):
             processor.save_pretrained(training_args.output_dir)
 
         metrics = train_result.metrics
