@@ -110,3 +110,14 @@ class AutoTokenizerTest(unittest.TestCase):
     def test_from_pretrained_use_fast_toggle(self):
         self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False), BertTokenizer)
         self.assertIsInstance(AutoTokenizer.from_pretrained("bert-base-cased"), BertTokenizerFast)
+
+    @require_tokenizers
+    def test_do_lower_case(self):
+        tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", do_lower_case=False)
+        sample = "Hello, world. How are you?"
+        tokens = tokenizer.tokenize(sample)
+        self.assertEqual("[UNK]", tokens[0])
+
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/mpnet-base", do_lower_case=False)
+        tokens = tokenizer.tokenize(sample)
+        self.assertEqual("[UNK]", tokens[0])
