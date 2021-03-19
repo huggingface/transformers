@@ -31,6 +31,7 @@ It is very much possible that prizes will be given to groups of people instead o
 - [Tips and tricks for training](#tips-and-tricks-for-training)
 	- [How to combine multiple datasests into one](#how-to-combine-multiple-datasets-into-one)
 	- [How to effectively preprocess the data](#how-to-effectively-preprocess-the-data)
+  - [How to efficiently preproces the data](#how-to-do-efficiently-load-datasets-with-limited-ram-and-hard-drive-space)
 	- [How to do hyperparameter tuning](#how-to-do-hyperparameter-tuning)
 	- [How to preprocess and evaluate character based languages](#how-to-preprocess-and-evaluate-character-based-languages)
 - [Further reading material](#further-reading-material)
@@ -284,7 +285,7 @@ result = test_dataset.map(evaluate, batched=True, batch_size=8)
 print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))
 ```
 
-**Result**: XX.XX %  # TODO: write output of print here
+**Test Result**: XX.XX %  # TODO: write output of print here
 
 
 ## Training
@@ -329,17 +330,20 @@ TODO...
 
 ### How to combine multiple datasets into one
 
+- Check out [this](https://discuss.huggingface.co/t/how-to-combine-local-data-files-with-an-official-dataset/4685) post.
 
 ### How to effectively preprocess the data
+
+
+### How to do efficiently load datasets with limited ram and hard drive space
+
+- Check out [this](https://discuss.huggingface.co/t/german-asr-fine-tuning-wav2vec2/4558/8?u=patrickvonplaten) post.
 
 
 ### How to do hyperparameter turing for my language
 
 
 ### How to preprocess and evaluate character based languages
-
-
-### How to do lazy data loading
 
 
 ## Further reading material
