@@ -63,7 +63,7 @@ _CONFIG_FOR_DOC = "RemBertConfig"
 _TOKENIZER_FOR_DOC = "RemBertTokenizer"
 
 TF_REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "rembert-large",
+    "google/rembert-large",
     # See all RemBERT models at https://huggingface.co/models?filter=rembert
 ]
 
@@ -144,6 +144,7 @@ class TFRemBertEmbeddings(tf.keras.layers.Layer):
         return final_embeddings
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertSelfAttention with Bert->RemBert
 class TFRemBertSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: RemBertConfig, **kwargs):
         super().__init__(**kwargs)
@@ -779,11 +780,16 @@ class TFRemBertModel(TFRemBertPreTrainedModel):
 
         return outputs
 
-    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutput:
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns
+        )
 
 
 @add_start_docstrings("""RemBERT Model with a `language modeling` head on top. """, REMBERT_START_DOCSTRING)
@@ -981,36 +987,6 @@ class TFRemBertForCausalLM(TFRemBertPreTrainedModel, TFCausalLanguageModelingLos
         return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
 
-class TFRemBertClassificationHead(tf.keras.layers.Layer):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config: RemBertConfig, *inputs, **kwargs):
-        super().__init__(config, *inputs, **kwargs)
-
-        self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
-        )
-        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
-        self.out_proj = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj"
-        )
-
-        if isinstance(config.hidden_act, str):
-            self.classifier_act_fn = get_tf_activation(config.hidden_act)
-        else:
-            self.classifier_act_fn = config.hidden_act
-
-    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        hidden_states = hidden_states[:, 0, :]  # take <s> token (equiv. to [CLS])
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.dense(inputs=hidden_states)
-        hidden_states = self.classifier_act_fn(hidden_states)
-        hidden_states = self.dropout(inputs=hidden_states, training=training)
-        hidden_states = self.out_proj(hidden_states)
-
-        return hidden_states
-
-
 @add_start_docstrings(
     """
     RemBERT Model transformer with a sequence classification/regression head on top e.g., for GLUE tasks.
@@ -1024,7 +1000,12 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
         self.num_labels = config.num_labels
 
         self.rembert = TFRemBertMainLayer(config, name="rembert")
-        self.classifier = TFRemBertClassificationHead(config, name="classifier")
+        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
+        self.classifier = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
+        )
 
     @add_start_docstrings_to_model_forward(REMBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1082,12 +1063,13 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        logits = self.classifier(hidden_states=outputs[0], training=inputs["training"])
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
+        logits = self.classifier(inputs=pooled_output)
         loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=logits)
 
         if not inputs["return_dict"]:
-            output = (logits,) + outputs[1:]
-
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
@@ -1116,7 +1098,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
         super().__init__(config, *inputs, **kwargs)
 
         self.rembert = TFRemBertMainLayer(config, name="rembert")
-        self.sequence_summary = TFSequenceSummary(config, config.initializer_range, name="sequence_summary")
+        self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
             units=1, kernel_initializer=get_initializer(config.initializer_range), name="classifier"
         )
@@ -1218,14 +1200,14 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
             return_dict=inputs["return_dict"],
             training=inputs["training"],
         )
-        logits = self.sequence_summary(inputs=outputs[0], training=inputs["training"])
-        logits = self.classifier(inputs=logits)
+        pooled_output = outputs[1]
+        pooled_output = self.dropout(inputs=pooled_output, training=inputs["training"])
+        logits = self.classifier(inputs=pooled_output)
         reshaped_logits = tf.reshape(tensor=logits, shape=(-1, num_choices))
         loss = None if inputs["labels"] is None else self.compute_loss(labels=inputs["labels"], logits=reshaped_logits)
 
         if not inputs["return_dict"]:
-            output = (reshaped_logits,) + outputs[1:]
-
+            output = (reshaped_logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
@@ -1366,7 +1348,7 @@ class TFRemBertForQuestionAnswering(TFRemBertPreTrainedModel, TFQuestionAnswerin
 
         self.num_labels = config.num_labels
 
-        self.rembert = TFRemBertMainLayer(config, name="rembert")
+        self.rembert = TFRemBertMainLayer(config, add_pooling_layer=False, name="rembert")
         self.qa_outputs = tf.keras.layers.Dense(
             units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="qa_outputs"
         )

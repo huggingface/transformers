@@ -57,7 +57,7 @@ _CONFIG_FOR_DOC = "RemBertConfig"
 _TOKENIZER_FOR_DOC = "RemBertTokenizer"
 
 REMBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "rembert-large",
+    "google/rembert-large",
     # See all RemBERT models at https://huggingface.co/models?filter=rembert
 ]
 
@@ -629,26 +629,19 @@ class RemBertPredictionHeadTransform(nn.Module):
 
 
 class RemBertLMPredictionHead(nn.Module):
-    # FIXME(tfevry): RemBERT's actual head adds a skip connection to the input embeddings.
-    # Loosely inspired from Albert, without the layer norm.
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.output_embedding_size)
         self.decoder = nn.Linear(config.output_embedding_size, config.vocab_size)
         self.activation = ACT2FN[config.hidden_act]
-
-        # FIXME(tfevry): ALBERT has the following but that breaks this one
-        #  Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        # self.decoder.bias = self.bias
+        self.LayerNorm = nn.LayerNorm(config.output_embedding_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.activation(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
         hidden_states = self.decoder(hidden_states)
-
-        prediction_scores = hidden_states
-
-        return prediction_scores
+        return hidden_states
 
 
 class RemBertOnlyMLMHead(nn.Module):
@@ -1173,27 +1166,6 @@ class RemBertForCausalLM(RemBertPreTrainedModel):
         return reordered_past
 
 
-class RemBertClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.config = config
-
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = ACT2FN[self.config.hidden_act](x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
 @add_start_docstrings(
     """
     RemBERT Model transformer with a sequence classification/regression head on top (a linear layer on top of the
@@ -1206,7 +1178,8 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.rembert = RemBertModel(config)
-        self.classifier = RemBertClassificationHead(config)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
 
@@ -1250,8 +1223,10 @@ class RemBertForSequenceClassification(RemBertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
+        pooled_output = outputs[1]
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
@@ -1287,7 +1262,7 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
         super().__init__(config)
 
         self.rembert = RemBertModel(config)
-        self.sequence_summary = SequenceSummary(config)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
         self.init_weights()
@@ -1343,9 +1318,9 @@ class RemBertForMultipleChoice(RemBertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs[1]
 
-        pooled_output = self.sequence_summary(sequence_output)
+        pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, num_choices)
 
@@ -1378,8 +1353,8 @@ class RemBertForTokenClassification(RemBertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.rembert = RemBertModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.rembert = RemBertModel(config, add_pooling_layer=False)
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
@@ -1468,7 +1443,7 @@ class RemBertForQuestionAnswering(RemBertPreTrainedModel):
         config.num_labels = 2
         self.num_labels = config.num_labels
 
-        self.rembert = RemBertModel(config)
+        self.rembert = RemBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         self.init_weights()
