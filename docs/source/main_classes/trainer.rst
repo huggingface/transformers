@@ -757,12 +757,17 @@ ZeRO-3
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""￼
 
 
-Performance tuning: ￼ - ``stage3_max_live_parameters``: ``1e9`` - ``stage3_max_reuse_distance``: ``1e9`` -
-``stage3_prefetch_bucket_size``: ``0.9 * hidden_size*hidden_size`` - ``stage3_param_persitance_threshold``:
-``10*hidden_size`` - ``reduce_bucket_size``: ``hidden_size*hidden_size`` - ``sub_group_size`` ~``1e15``
+Performance tuning: ￼
+
+- ``stage3_max_live_parameters``: ``1e9``
+- ``stage3_max_reuse_distance``: ``1e9``
+- ``stage3_prefetch_bucket_size``: ``0.9 * hidden_size*hidden_size``
+- ``stage3_param_persistence_threshold``: ``10*hidden_size``
+- ``reduce_bucket_size``: ``hidden_size*hidden_size``
+- ``sub_group_size``: ``1e14``
 
 If hitting OOM reduce ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``. They should have minimal impact
-on perf unless you are doing activation checkpointing. ``1e9`` would consume ~2GB. The memory is shared by
+on performance unless you are doing activation checkpointing. ``1e9`` would consume ~2GB. The memory is shared by
 ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``, so its not additive, its just 2GB total.
 
 ``stage3_max_live_parameters`` is the upper limit on how many full parameters you want to keep on the GPU at any given
@@ -773,8 +778,8 @@ overhead. This is super helpful when you have activation check-pointing enabled,
 backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
 
 
-If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persitance_threshold``: as
-recommended above, they will already be fairly small so you wont have to tune those much.
+If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persistence_threshold``: as
+recommended above, they will already be fairly small so you won't have to tune those much.
 
 Other:
 
