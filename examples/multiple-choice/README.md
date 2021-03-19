@@ -20,7 +20,7 @@ Based on the script [`run_swag.py`]().
 
 ## PyTorch script: fine-tuning on SWAG
 
-`run_swag` allows you to fine-tune any model from our [hub](https://huggingface.co/models) on the SWAG dataset or your own csv/jsonlines files as long as they are structured the same way. To make it works on another dataset, you will need to tweak the `preprocess_function` inside the script.
+`run_swag` allows you to fine-tune any model from our [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on the SWAG dataset or your own csv/jsonlines files as long as they are structured the same way. To make it works on another dataset, you will need to tweak the `preprocess_function` inside the script.
 
 ```bash
 python examples/multiple-choice/run_swag.py \

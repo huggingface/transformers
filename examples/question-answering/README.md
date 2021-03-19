@@ -25,7 +25,7 @@ of the script.
 
 The old version of this script can be found [here](https://github.com/huggingface/transformers/tree/master/examples/legacy/question-answering).
 
-`run_qa.py` allows you to fine-tune any model from our [hub](https://huggingface.co/models) on the SQUAD dataset or another question-answering dataset of the `datasets` library or your own csv/jsonlines files as long as they are structured the same way as SQUAD. You might need to tweak the data processing inside the script if your data is structured differently.
+`run_qa.py` allows you to fine-tune any model from our [hub](https://huggingface.co/models) (as long as its architecture as a `ForQuestionAnswering` version in the library) on the SQUAD dataset or another question-answering dataset of the `datasets` library or your own csv/jsonlines files as long as they are structured the same way as SQUAD. You might need to tweak the data processing inside the script if your data is structured differently.
 
 Note that if your dataset contains samples with no possible answers (like SQUAD version 2), you need to pass along the flag `--version_2_with_negative`.
 
