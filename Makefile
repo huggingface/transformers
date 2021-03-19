@@ -26,7 +26,6 @@ extra_quality_checks:
 	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
-	python utils/class_mapping_update.py
 
 # this target runs checks on all files
 quality:
@@ -41,6 +40,7 @@ quality:
 extra_style_checks: deps_table_update
 	python utils/custom_init_isort.py
 	python utils/style_doc.py src/transformers docs/source --max_len 119
+	python utils/class_mapping_update.py
 
 # this target runs checks on all files
 style:
