@@ -62,7 +62,7 @@ def split_code_in_indented_blocks(code, indent_level="", start_prompt=None, end_
             if len(current_block) > 0 and get_indent(current_block[-1]).startswith(indent_level + " "):
                 current_block.append(lines[index])
                 blocks.append("\n".join(current_block))
-                if index < len(lines) - 2:
+                if index < len(lines) - 1:
                     current_block = [lines[index + 1]]
                     index += 1
                 else:
@@ -97,8 +97,11 @@ def ignore_underscore(key):
 def sort_objects(objects, key=None):
     "Sort a list of `objects` following the rules of isort. `key` optionally maps an object to a str."
     # If no key is provided, we use a noop.
+    def noop(x):
+        return x
+
     if key is None:
-        key = lambda x: x
+        key = noop
     # Constants are all uppercase, they go first.
     constants = [obj for obj in objects if key(obj).isupper()]
     # Classes are not all uppercase but start with a capital, they go second.
@@ -166,10 +169,10 @@ def sort_imports(file, check_only=True):
     """
     with open(file, "r") as f:
         code = f.read()
-    
+
     if "_import_structure" not in code:
         return
- 
+
     # Blocks of indent level 0
     main_blocks = split_code_in_indented_blocks(
         code, start_prompt="_import_structure = {", end_prompt="if TYPE_CHECKING:"

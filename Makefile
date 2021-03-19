@@ -26,15 +26,15 @@ extra_quality_checks: deps_table_update
 	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
-	python utils/style_doc.py src/transformers docs/source --max_len 119
+	python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
 	python utils/class_mapping_update.py
 
 # this target runs checks on all files
 quality:
 	black --check $(check_dirs)
 	isort --check-only $(check_dirs)
+	python utils/custom_init_isort.py --check_only
 	flake8 $(check_dirs)
-	python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
 	${MAKE} extra_quality_checks
 
 # Format source code automatically and check is there are any problems left that need manual fixing
@@ -42,6 +42,7 @@ quality:
 style: deps_table_update
 	black $(check_dirs)
 	isort $(check_dirs)
+	python utils/custom_init_isort.py
 	python utils/style_doc.py src/transformers docs/source --max_len 119
 
 # Super fast fix and check target that only works on relevant modified files since the branch was made
