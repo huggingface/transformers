@@ -14,18 +14,16 @@
 # limitations under the License.
 
 
-import itertools
-import random
 import unittest
-import requests
 
 import numpy as np
 
-from transformers import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, ViTConfig, ViTFeatureExtractor
+from transformers import ViTFeatureExtractor
 from transformers.file_utils import is_torch_available, is_torchvision_available
 from transformers.testing_utils import require_torch, require_torchvision
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
+
 
 if is_torch_available():
     import torch
@@ -47,7 +45,7 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         image_std=[0.5, 0.5, 0.5],
         do_normalize=True,
         do_resize=True,
-        size=[18,18],
+        size=[18, 18],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -69,18 +67,19 @@ class ViTFeatureExtractionTester(unittest.TestCase):
             "do_resize": self.do_resize,
             "size": self.size,
         }
-    
+
     def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        """ This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-            or a list of PyTorch tensors if one specifies torchify=True.
+        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
+        or a list of PyTorch tensors if one specifies torchify=True.
         """
-        
+
         assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
-        
+
         if equal_resolution:
             image_inputs = [
-                np.random.randint(255, size=(self.num_channels, self.max_resolution, self.max_resolution),
-                                    dtype=np.uint8)
+                np.random.randint(
+                    255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
+                )
                 for i in range(self.batch_size)
             ]
         else:
@@ -104,14 +103,14 @@ class ViTFeatureExtractionTester(unittest.TestCase):
 class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
     feature_extraction_class = ViTFeatureExtractor
-    
+
     def setUp(self):
         self.feature_extract_tester = ViTFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
         return self.feature_extract_tester.prepare_feat_extract_dict()
-    
+
     def test_feat_extract_properties(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "image_mean"))
@@ -122,41 +121,56 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
 
     def test_batch_feature(self):
         pass
-    
+
     def test_call_pil(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random PIL images
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False)
         for image in image_inputs:
-            self.assertIsInstance(image, Image.Image) 
+            self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
-        self.assertEqual(encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size))
+        self.assertEqual(
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size)
+        )
 
         # Test batched
         encoded_images = feature_extractor(image_inputs).pixel_values
-        self.assertEqual(encoded_images.shape, (self.feature_extract_tester.batch_size, self.feature_extract_tester.num_channels, 
-                            *self.feature_extract_tester.size))
-    
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.size,
+            ),
+        )
+
     def test_call_numpy(self):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         # create random numpy tensors
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
-            self.assertIsInstance(image, np.ndarray) 
+            self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
-        self.assertEqual(encoded_images.shape, (1, self.feature_extract_tester.num_channels, 
-                            *self.feature_extract_tester.size))
-        
+        self.assertEqual(
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size)
+        )
+
         # Test batched
         encoded_images = feature_extractor(image_inputs).pixel_values
-        self.assertEqual(encoded_images.shape, (self.feature_extract_tester.batch_size, self.feature_extract_tester.num_channels, 
-                            *self.feature_extract_tester.size))
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.size,
+            ),
+        )
 
     def test_call_pytorch(self):
         # Initialize feature_extractor
@@ -164,13 +178,21 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # create random PyTorch tensors
         image_inputs = self.feature_extract_tester.prepare_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
-            self.assertIsInstance(image, torch.Tensor) 
+            self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
-        self.assertEqual(encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size))
+        self.assertEqual(
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size)
+        )
 
         # Test batched
         encoded_images = feature_extractor(image_inputs).pixel_values
-        self.assertEqual(encoded_images.shape, (self.feature_extract_tester.batch_size, self.feature_extract_tester.num_channels, 
-                            *self.feature_extract_tester.size))
+        self.assertEqual(
+            encoded_images.shape,
+            (
+                self.feature_extract_tester.batch_size,
+                self.feature_extract_tester.num_channels,
+                *self.feature_extract_tester.size,
+            ),
+        )

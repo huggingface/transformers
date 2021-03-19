@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 
     if is_torchvision_available():
         from .feature_extraction_vit import ViTFeatureExtractor
-    
+
     if is_torch_available():
         from .modeling_vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,

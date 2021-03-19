@@ -1430,10 +1430,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.vit import (
-        VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
-        ViTConfig, 
-    )
+    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -1556,7 +1553,7 @@ if TYPE_CHECKING:
 
     if is_torchvision_available():
         from .models.vit import ViTFeatureExtractor
-    
+
     # Modeling
     if is_torch_available():
 

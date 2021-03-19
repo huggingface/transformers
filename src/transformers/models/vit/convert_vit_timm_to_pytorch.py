@@ -16,14 +16,11 @@
 
 
 import argparse
-import os
 from pathlib import Path
 
 import torch
 import torchvision.transforms as T
-from packaging import version
 from PIL import Image
-from torch import nn
 
 import requests
 import timm

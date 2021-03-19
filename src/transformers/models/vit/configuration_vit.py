@@ -82,7 +82,8 @@ class ViTConfig(PretrainedConfig):
         num_channels (:obj:`int`, `optional`, defaults to :obj:`3`):
             The number of input channels.
 
-        Example::
+    
+    Example::
 
         >>> from transformers import ViTModel, ViTConfig
 

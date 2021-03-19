@@ -14,14 +14,13 @@
 # limitations under the License.
 """Feature extractor class for ViT."""
 
-from typing import List, Optional, Union
+from typing import List, Union
 
 import numpy as np
-from PIL import Image
 import torch
+from PIL import Image
 from torchvision import transforms as T
 
-from ...file_utils import PaddingStrategy, TensorType
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import logging
 
@@ -31,11 +30,11 @@ logger = logging.get_logger(__name__)
 
 class ViTFeatureExtractor(FeatureExtractionMixin):
     r"""
-    Constructs a ViT feature extractor. 
-    
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main methods. 
+    Constructs a ViT feature extractor.
+
+    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main methods.
     Users should refer to this superclass for more information regarding those methods.
-    
+
     Args:
         image_mean (:obj:`int`, defaults to [0.485, 0.456, 0.406]):
             The sequence of means for each channel, to be used when normalizing images.
@@ -57,7 +56,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
         image_std=[0.229, 0.224, 0.225],
         do_normalize=True,
         do_resize=True,
-        size=[224,224],
+        size=[224, 224],
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -69,18 +68,17 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
 
     def __call__(
         self,
-        images: Union[
-            Image.Image, np.ndarray, torch.Tensor, List[Image.Image], List[np.ndarray], List[torch.Tensor]
-        ],
+        images: Union[Image.Image, np.ndarray, torch.Tensor, List[Image.Image], List[np.ndarray], List[torch.Tensor]],
         **kwargs
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
+        
         Args:
             images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch
-                tensor. In case of a numpy array/Torch tensor, each image should be of shape (C, H, W), where C is a number of channels, 
-                H and W are image height and width. 
+                tensor. In case of a numpy array/Torch tensor, each image should be of shape (C, H, W), where C is a number of channels,
+                H and W are image height and width.
         """
         # Input type checking for clearer error
         assert (

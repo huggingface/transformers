@@ -15,8 +15,9 @@
 """ PyTorch ViT model. """
 
 
+import collections.abc
 import math
-import os
+from itertools import repeat
 
 import torch
 import torch.utils.checkpoint
@@ -33,7 +34,6 @@ from ...file_utils import (
 from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
 from ...modeling_utils import (
     PreTrainedModel,
-    SequenceSummary,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
@@ -51,13 +51,6 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nielsr/vit-base-patch16-224",
     # See all ViT models at https://huggingface.co/models?filter=vit
 ]
-
-
-""" Layer/Module Helpers
-Hacked together by / Copyright 2020 Ross Wightman
-"""
-import collections.abc
-from itertools import repeat
 
 
 # Copied from
@@ -108,10 +101,10 @@ class ViTEmbeddings(nn.Module):
 
 
 class PatchEmbeddings(nn.Module):
-    """ Image to Patch Embedding.
-    
-        Based on timm implementation, which can be found here:
-        https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+    """Image to Patch Embedding.
+
+    Based on timm implementation, which can be found here:
+    https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
@@ -379,7 +372,7 @@ class ViTEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, output_attentions)
 
                     return custom_forward
 
@@ -461,7 +454,7 @@ VIT_INPUTS_DOCSTRING = r"""
             Pixel values. Padding will be ignored by default should you provide it.
             Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
             :meth:`transformers.ViTFeatureExtractor.__call__` for details.
-        
+
         attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
             - 1 for pixels that are real (i.e. **not masked**),
@@ -470,10 +463,10 @@ VIT_INPUTS_DOCSTRING = r"""
 
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-            
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-            
+
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
@@ -511,12 +504,7 @@ class ViTModel(ViTPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="vit-base-patch16-224",
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -526,6 +514,25 @@ class ViTModel(ViTPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import ViTFeatureExtractor, ViTModel
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224')
+            
+            >>> inputs = feature_extractor(images=image)
+            >>> outputs = model(**inputs)
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -604,12 +611,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    # @add_code_sample_docstrings(
-    #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="vit-base-patch16-224",
-    #     output_type=SequenceClassifierOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -626,6 +628,25 @@ class ViTForImageClassification(ViTPreTrainedModel):
             Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
             If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import ViTFeatureExtractor, ViTForImageClassification
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
+            >>> model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+            
+            >>> inputs = feature_extractor(images=image)
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> predicted_class = logits.argmax(-1).item()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
