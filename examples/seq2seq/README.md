@@ -114,7 +114,7 @@ and you wanted to select only `text` and `summary`, then you'd pass these additi
     --summary_column summary \
 ```
 
-#### Custom JSONFILES Files
+#### Custom JSONLINES Files
 
 The second supported format is jsonlines. Here is an example of a jsonlines custom data file.
 

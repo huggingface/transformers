@@ -21,7 +21,7 @@ tagging (POS). The main scrip `run_ner.py` leverages the 🤗 Datasets library a
 customize it to your needs if you need extra processing on your datasets.
 
 It will either run on a datasets hosted on our [hub](https://huggingface.co/datasets) or with your own text files for
-training and validation.
+training and validation, you might just need to add some tweaks in the data preprocessing.
 
 The following example fine-tunes BERT on CoNLL-2003:
 
