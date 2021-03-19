@@ -1543,12 +1543,20 @@ class Trainer:
 
         Will only save from the main process.
         """
+
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
         elif (
-            ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
+            self.deepspeed
+            or ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
+            or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
         ):
+            # self.optimizer._partition_all_parameters()
             state_dict = self.model.state_dict()
+            # from pprint import pprint
+            # pprint(state_dict)
+            # die
+
             if self.is_world_process_zero():
                 self._save(output_dir, state_dict=state_dict)
         elif self.is_world_process_zero():

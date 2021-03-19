@@ -589,6 +589,7 @@ or with bash magic, where you can write a multi-line code for the shell to run:
 
 
 
+
 Configuration
 =======================================================================================================================
 
@@ -778,6 +779,9 @@ recommended above, they will already be fairly small so you wont have to tune th
 Other:
 
 ``allgather_partitions``, ``allgather_bucket_size`` and ``reduce_scatter`` are not used in ZeRO-3.
+
+
+
 
 
 Optimizer and Scheduler
@@ -987,6 +991,78 @@ Here is an example of the ``gradient_clipping`` configuration:
     {
         "gradient_clipping": 1.0,
     }
+
+
+
+ZeRO 3 Nuances
+=======================================================================================================================
+
+ZeRO 3 is quite different from ZeRO 2 because of its param sharding, so the following might be of use in certain
+circumstances.
+
+
+Registering External Parameters
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+If layer A needs to access weights belonging to layer B, currently layer A needs to tell DeepSpeed about it. This is
+done with the help of ``deepspeed.zero.register_external_parameter`` that needs to be called in ``A.__init__`` and can
+be seen in the following example:
+
+.. code-block:: python
+
+   class ModuleZ3(torch.nn.Module):
+       def __init__(self, *args):
+           super().__init__(self, *args)
+           self.layer1 = SomeLayer()
+           self.layer2 = OtherLayer()
+           deepspeed.zero.register_external_parameter(self, self.layer1.weight)
+
+       def forward(self, input):
+           x = self.layer1(input)
+           # self.layer1.weight is needed in ModuleZ3.forward
+           y = self.layer2(x, self.layer1.weight)
+           return y
+
+
+For full details on this method please refer to `Registering External Parameters
+<https://deepspeed.readthedocs.io/en/latest/zero3.html#registering-external-parameters>`__
+
+
+
+Constructing Massive Models
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+DeepSpeed/ZeRO-3 can handle models with Trillions of parameters which may not fit onto the existing RAM. In such cases
+but also if you want the initialization to happen much faster, initialize the model using `deepspeed.zero.Init()`
+context manager (which is also a function decorator), like so:
+
+.. code-block:: python
+
+    from transformers import T5ForConditionalGeneration, T5Config
+    import deepspeed
+    with deepspeed.zero.Init():
+       config = T5Config.from_pretrained("t5-small")
+       model = T5ForConditionalGeneration(config)
+
+As you can see this gives you a random model. At the moment there is no way to do that for a pretrained model.
+
+For full details on this method and other related features please refer to `Constructing Massive Models
+<https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models>`__.
+
+
+
+
+External Parameters
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+When using ``deepspeed.zero.Init()`` discussed earlier, a layer A may need to access layer B's weights
+
+
+XXX: complete
+
+
+For full details on this method please refer to `Gathering Parameters
+<https://deepspeed.readthedocs.io/en/latest/zero3.html#manual-parameter-coordination>`__
 
 
 

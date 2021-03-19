@@ -439,7 +439,6 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    # init that takes part of the config via `args`, and the bulk of it via `config_params`
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=model,

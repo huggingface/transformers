@@ -61,7 +61,9 @@ def require_deepspeed(test_case):
     else:
         return test_case
 
+
 zero_stages = ["zero2", "zero3"]
+
 
 @require_deepspeed
 @require_torch_gpu
@@ -109,7 +111,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     def get_config_dict(self, stage):
         return deepcopy(self.ds_config_dict[stage])
-
 
     def test_fake_notebook_no_launcher(self):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
@@ -283,8 +284,10 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             raise ValueError(f"unknown stage {stage}")
 
         # XXX: this can be recoded and then removed once we require deepspeed>0.3.13
-        import deepspeed
         from packaging import version
+
+        import deepspeed
+
         if version.parse(deepspeed.__version__) > version.parse("0.3.13"):
             ds_file_list.append("zero_pp_rank_0_mp_rank_00_optim_states.pt")
         else:
@@ -292,7 +295,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         for step in range(freq, total, freq):
             checkpoint = os.path.join(output_dir, f"checkpoint-{step}")
-            self.assertTrue(os.path.isdir(checkpoint),  f"[{stage}] {checkpoint} dir is not found")
+            self.assertTrue(os.path.isdir(checkpoint), f"[{stage}] {checkpoint} dir is not found")
 
             # common files
             for filename in file_list:
@@ -353,13 +356,14 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
             )
 
-
         # now test normal resume for each stage separately
         for stage in zero_stages:
             output_dir = self.get_auto_remove_tmp_dir()
             ds_config_dict = self.get_config_dict(stage)
             ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
+            kwargs = dict(
+                output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict
+            )
 
             with mockenv_context(**self.dist_env_1_gpu):
                 trainer = get_regression_trainer(**kwargs)
@@ -391,7 +395,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(a, a1)
                 self.assertEqual(b, b1)
                 self.check_trainer_state_are_the_same(state, state1)
-
 
 
 @slow
