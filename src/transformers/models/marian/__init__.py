@@ -36,14 +36,14 @@ if is_sentencepiece_available():
 if is_torch_available():
     _import_structure["modeling_marian"] = [
         "MARIAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MarianForCausalLM",
         "MarianModel",
         "MarianMTModel",
         "MarianPreTrainedModel",
-        "MarianForCausalLM",
     ]
 
 if is_tf_available():
-    _import_structure["modeling_tf_marian"] = ["TFMarianMTModel", "TFMarianModel"]
+    _import_structure["modeling_tf_marian"] = ["TFMarianModel", "TFMarianMTModel"]
 
 
 if TYPE_CHECKING:

@@ -29,9 +29,8 @@ _import_structure = {
 }
 
 if is_sentencepiece_available():
-    _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
     _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
-
+    _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
 
 if is_torch_available():
     _import_structure["modeling_speech_to_text"] = [

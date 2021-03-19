@@ -28,13 +28,13 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_ibert"] = [
         "IBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "IBertPreTrainedModel",
         "IBertForMaskedLM",
         "IBertForMultipleChoice",
         "IBertForQuestionAnswering",
         "IBertForSequenceClassification",
         "IBertForTokenClassification",
         "IBertModel",
+        "IBertPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
