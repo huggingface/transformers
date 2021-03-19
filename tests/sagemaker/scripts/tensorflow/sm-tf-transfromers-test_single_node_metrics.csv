@@ -1,4 +1,4 @@
 ,timestamp,metric_name,value
-0,0.0,train_runtime,275.5670738220215
-1,0.0,eval_loss,0.39334240555763245
-2,0.0,eval_accuracy,0.8144000172615051
+0,0.0,train_runtime,297.2120325565338
+1,0.0,eval_loss,0.38512489199638367
+2,0.0,eval_accuracy,0.8217999935150146
