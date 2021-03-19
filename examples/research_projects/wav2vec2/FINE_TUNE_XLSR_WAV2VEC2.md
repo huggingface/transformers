@@ -326,21 +326,21 @@ done, *e.g.* [here](https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav
 
 ## Tips and tricks
 
-TODO...
+This section summarizes a couple of tips and tricks across various topics. It will continously be updated during the week.
 
 ### How to combine multiple datasets into one
 
-- Check out [this](https://discuss.huggingface.co/t/how-to-combine-local-data-files-with-an-official-dataset/4685) post.
+Check out [this](https://discuss.huggingface.co/t/how-to-combine-local-data-files-with-an-official-dataset/4685) post.
 
 ### How to effectively preprocess the data
 
 
 ### How to do efficiently load datasets with limited ram and hard drive space
 
-- Check out [this](https://discuss.huggingface.co/t/german-asr-fine-tuning-wav2vec2/4558/8?u=patrickvonplaten) post.
+Check out [this](https://discuss.huggingface.co/t/german-asr-fine-tuning-wav2vec2/4558/8?u=patrickvonplaten) post.
 
 
-### How to do hyperparameter turing for my language
+### How to do hyperparameter tuning
 
 
 ### How to preprocess and evaluate character based languages
