@@ -29,12 +29,12 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_deberta"] = [
         "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DebertaForSequenceClassification",
-        "DebertaModel",
         "DebertaForMaskedLM",
-        "DebertaPreTrainedModel",
-        "DebertaForTokenClassification",
         "DebertaForQuestionAnswering",
+        "DebertaForSequenceClassification",
+        "DebertaForTokenClassification",
+        "DebertaModel",
+        "DebertaPreTrainedModel",
     ]
 
 

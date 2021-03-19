@@ -22,16 +22,16 @@ from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_ava
 
 _import_structure = {
     "configuration_wav2vec2": ["WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Wav2Vec2Config"],
-    "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
     "feature_extraction_wav2vec2": ["Wav2Vec2FeatureExtractor"],
     "processing_wav2vec2": ["Wav2Vec2Processor"],
+    "tokenization_wav2vec2": ["Wav2Vec2CTCTokenizer", "Wav2Vec2Tokenizer"],
 }
 
 if is_torch_available():
     _import_structure["modeling_wav2vec2"] = [
         "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Wav2Vec2ForMaskedLM",
         "Wav2Vec2ForCTC",
+        "Wav2Vec2ForMaskedLM",
         "Wav2Vec2Model",
         "Wav2Vec2PreTrainedModel",
     ]
