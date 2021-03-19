@@ -30,6 +30,7 @@ from jax.random import PRNGKey
 from .configuration_utils import PretrainedConfig
 from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
+from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 
 
 logger = logging.get_logger(__name__)
@@ -307,24 +308,26 @@ class FlaxPreTrainedModel(ABC):
         else:
             resolved_archive_file = None
 
-        # Instantiate model.
-        with open(resolved_archive_file, "rb") as state_f:
-            try:
-                if from_pt:
-                    import torch
-
-                    state = torch.load(state_f)
-
-                    state = convert_state_dict_from_pt(cls, state, config)
-                else:
-                    state = from_bytes(cls, state_f.read())
-            except UnpicklingError:
-                raise EnvironmentError(
-                    f"Unable to convert pytorch model {archive_file} to Flax deserializable object. "
-                )
-
         # init random models
         model = cls(config, *model_args, **model_kwargs)
+
+        if from_pt:
+            state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
+#                if from_pt:
+#                    state =
+#                    import torch
+#
+#                    state = torch.load(state_f)
+#
+#                    state = convert_state_dict_from_pt(, state, config)
+        else:
+            with open(resolved_archive_file, "rb") as state_f:
+                try:
+                    state = from_bytes(cls, state_f.read())
+                except UnpicklingError:
+                    raise EnvironmentError(
+                        f"Unable to convert {archive_file} to Flax deserializable object. "
+                    )
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
