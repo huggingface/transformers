@@ -192,6 +192,20 @@ tags:
 - speech
 - xlsr-fine-tuning-week
 license: apache-2.0
+model-index:
+- name: {model_id} #TODO: replace {model_id} with your model id. The model id consists of {your_username}/{your_modelname}, *e.g.* `elgeish/wav2vec2-large-xlsr-53-arabic`
+  results:
+  - task: 
+      name: Speech Recognition
+      type: automatic-speech-recognition
+    dataset:
+      name: Common Voice {lang_id} #TODO: replace {lang_id} in your language code here. Make sure the code is one of the *ISO codes* of [this](https://huggingface.co/languages) site.
+      type: common_voice
+      args: {lang_id} #TODO: replace {lang_id} in your language code here. Make sure the code is one of the *ISO codes* of [this](https://huggingface.co/languages) site.
+    metrics:
+       - name: Test WER
+         type: wer
+         value: {wer_result_on_test} #TODO (IMPORTANT): replace {wer_result_on_test} with the WER error rate you achieved on the common_voice test set. It should be in the format XX.XX (don't add the % sign here). **Please** remember to fill out this value after you evaluated your model, so that your model appears on the leaderboard. If you fill out this model card before evaluating your model, please remember to edit the model card afterward to fill in your value
 ---
 
 # Wav2Vec2-Large-XLSR-53-{language} #TODO: replace language with your {language}, *e.g.* French
@@ -285,7 +299,7 @@ result = test_dataset.map(evaluate, batched=True, batch_size=8)
 print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))
 ```
 
-**Test Result**: XX.XX %  # TODO: write output of print here
+**Test Result**: XX.XX %  # TODO: write output of print here. IMPORTANT: Please remember to also replace {wer_result_on_test} at the top of with this value here. tags.
 
 
 ## Training
