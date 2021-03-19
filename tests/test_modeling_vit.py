@@ -79,7 +79,6 @@ class ViTModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
-        self.num_labels = num_labels
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -111,15 +110,17 @@ class ViTModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.patch_size**2 + 1, self.hidden_size))
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
-        config.num_labels = self.num_labels
+        config.num_labels = self.type_sequence_label_size
         model = ViTForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.type_sequence_label_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -192,9 +193,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # in ViT, the seq_len equal the square of the patch_size + 1 
-        patch_size = getattr(self.model_tester, "patch_size", None)
-        seq_len = patch_size**2 + 1
+        # in ViT, the seq_len equals the square of number of patches + 1 (we add 1 for the [CLS] token)
+        image_size = self.model_tester.image_size
+        patch_size = self.model_tester.patch_size
+        num_patches = (image_size // patch_size) * (image_size // patch_size) 
+        seq_len = num_patches + 1
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
