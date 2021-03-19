@@ -25,14 +25,12 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
-torch_device = 'cpu'
-
 
 if is_torch_available():
     import torch
 
     from transformers import ViTConfig, ViTForImageClassification, ViTModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_torchvision_available():
@@ -111,6 +109,8 @@ class ViTModelTester:
         model.eval()
         result = model(pixel_values)
         # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = to_2tuple(self.image_size)
+        patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
 
@@ -169,7 +169,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_patch_embeddings(), (torch.nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
     
@@ -194,9 +194,9 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         # in ViT, the seq_len equals the square of number of patches + 1 (we add 1 for the [CLS] token)
-        image_size = self.model_tester.image_size
-        patch_size = self.model_tester.patch_size
-        num_patches = (image_size // patch_size) * (image_size // patch_size) 
+        image_size = to_2tuple(self.model_tester.image_size)
+        patch_size = to_2tuple(self.model_tester.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         seq_len = num_patches + 1
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
@@ -325,7 +325,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            seq_length = self.model_tester.patch_size**2 + 1
+            # ViT has a different seq_length
+            image_size = to_2tuple(self.model_tester.image_size)
+            patch_size = to_2tuple(self.model_tester.patch_size)
+            num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+            seq_length = num_patches + 1
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

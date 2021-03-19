@@ -499,7 +499,7 @@ class ViTModel(ViTPreTrainedModel):
 
         self.init_weights()
 
-    def get_patch_embeddings(self):
+    def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
