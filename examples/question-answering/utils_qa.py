@@ -215,14 +215,14 @@ def postprocess_qa_predictions(
         assert os.path.isdir(output_dir), f"{output_dir} is not a directory."
 
         prediction_file = os.path.join(
-            output_dir, "predictions.json" if prefix is None else f"predictions_{prefix}".json
+            output_dir, "predictions.json" if prefix is None else f"{prefix}_predictions.json"
         )
         nbest_file = os.path.join(
-            output_dir, "nbest_predictions.json" if prefix is None else f"nbest_predictions_{prefix}".json
+            output_dir, "nbest_predictions.json" if prefix is None else f"{prefix}_nbest_predictions.json"
         )
         if version_2_with_negative:
             null_odds_file = os.path.join(
-                output_dir, "null_odds.json" if prefix is None else f"null_odds_{prefix}".json
+                output_dir, "null_odds.json" if prefix is None else f"{prefix}_null_odds_{prefix}.json"
             )
 
         logger.info(f"Saving predictions to {prediction_file}.")
@@ -403,14 +403,14 @@ def postprocess_qa_predictions_with_beam_search(
         assert os.path.isdir(output_dir), f"{output_dir} is not a directory."
 
         prediction_file = os.path.join(
-            output_dir, "predictions.json" if prefix is None else f"predictions_{prefix}".json
+            output_dir, "predictions.json" if prefix is None else f"{prefix}_predictions.json"
         )
         nbest_file = os.path.join(
-            output_dir, "nbest_predictions.json" if prefix is None else f"nbest_predictions_{prefix}".json
+            output_dir, "nbest_predictions.json" if prefix is None else f"{prefix}_nbest_predictions.json"
         )
         if version_2_with_negative:
             null_odds_file = os.path.join(
-                output_dir, "null_odds.json" if prefix is None else f"null_odds_{prefix}".json
+                output_dir, "null_odds.json" if prefix is None else f"{prefix}_null_odds.json"
             )
 
         print(f"Saving predictions to {prediction_file}.")
