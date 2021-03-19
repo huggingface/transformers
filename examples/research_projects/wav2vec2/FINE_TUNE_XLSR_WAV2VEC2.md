@@ -22,8 +22,8 @@ It is very much possible that prizes will be given to groups of people instead o
 
 - [Organization of the fine tuning week](#organization-of-the-fine-tuning-week)
 - [How to fine tune XLSR Wav2Vec2](#how-to-fine-tune-xlsr-wav2vec2)
-  - [Google colab setup](#google-colab-setup)
-  - [Local machine](#local-machine)
+	- [Google colab setup](#google-colab-setup)
+	- [Local machine](#local-machine)
 - [How to upload my trained checkpoint](#how-to-upload-my-trained-checkpoint)
 	- [How to create the README](#how-to-create-the-README)
 - [How to evaluate my trained checkpoint](#how-to-evaluate-my-trained-checkpoint)
