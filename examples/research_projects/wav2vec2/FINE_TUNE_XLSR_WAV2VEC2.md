@@ -22,15 +22,16 @@ It is very much possible that prizes will be given to groups of people instead o
 
 - [Organization of the fine tuning week](#organization-of-the-fine-tuning-week)
 - [How to fine tune XLSR Wav2Vec2](#how-to-fine-tune-xlsr-wav2vec2)
-  - [Google colab setup](#google-colab-setup)
-  - [Local machine](#local-machine)
+	- [Google colab setup](#google-colab-setup)
+	- [Local machine](#local-machine)
 - [How to upload my trained checkpoint](#how-to-upload-my-trained-checkpoint)
-	- [How to create the README](#how-to-create-the-README)
+	- [How to create the README](#how-to-create-the-readme)
 - [How to evaluate my trained checkpoint](#how-to-evaluate-my-trained-checkpoint)
 - [Rules of training and evaluation](#rules-of-training-and-evaluation)
-- [Tips and tricks for training](#tips-and-tricks-for-training)
+- [Tips and tricks](#tips-and-tricks)
 	- [How to combine multiple datasests into one](#how-to-combine-multiple-datasets-into-one)
 	- [How to effectively preprocess the data](#how-to-effectively-preprocess-the-data)
+	- [How to efficiently preproces the data](#how-to-do-efficiently-load-datasets-with-limited-ram-and-hard-drive-space)
 	- [How to do hyperparameter tuning](#how-to-do-hyperparameter-tuning)
 	- [How to preprocess and evaluate character based languages](#how-to-preprocess-and-evaluate-character-based-languages)
 - [Further reading material](#further-reading-material)
@@ -284,7 +285,7 @@ result = test_dataset.map(evaluate, batched=True, batch_size=8)
 print("WER: {:2f}".format(100 * wer.compute(predictions=result["pred_strings"], references=result["sentence"])))
 ```
 
-**Result**: XX.XX %  # TODO: write output of print here
+**Test Result**: XX.XX %  # TODO: write output of print here
 
 
 ## Training
@@ -325,21 +326,24 @@ done, *e.g.* [here](https://discuss.huggingface.co/t/spanish-asr-fine-tuning-wav
 
 ## Tips and tricks
 
-TODO...
+This section summarizes a couple of tips and tricks across various topics. It will continously be updated during the week.
 
 ### How to combine multiple datasets into one
 
+Check out [this](https://discuss.huggingface.co/t/how-to-combine-local-data-files-with-an-official-dataset/4685) post.
 
 ### How to effectively preprocess the data
 
 
-### How to do hyperparameter turing for my language
+### How to do efficiently load datasets with limited ram and hard drive space
+
+Check out [this](https://discuss.huggingface.co/t/german-asr-fine-tuning-wav2vec2/4558/8?u=patrickvonplaten) post.
+
+
+### How to do hyperparameter tuning
 
 
 ### How to preprocess and evaluate character based languages
-
-
-### How to do lazy data loading
 
 
 ## Further reading material
