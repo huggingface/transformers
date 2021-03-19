@@ -136,9 +136,17 @@ To fill...
 
 ## How to upload my trained checkpoint
 
-To upload your trained checkpoint, make sure to follow the instructions [here](https://huggingface.co/transformers/model_sharing.html) on how to create a model repository on the 🤗 model hub .
+To upload your trained checkpoint, you have to create a new model repository on the 🤗 model hub, from this page: https://huggingface.co/new
 
-Having created your model repository on the hub, you should clone it locally.
+> You can also follow the more in-depth instructions [here](https://huggingface.co/transformers/model_sharing.html) if needed.
+
+Having created your model repository on the hub, you should clone it locally:
+
+```bash
+git lfs install
+
+git clone https://huggingface.co/username/your-model-name
+```
 
 Then and add the following files that fully define a XLSR-Wav2Vec2 checkpoint into the repository. You should have added the following files.
 
