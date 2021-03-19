@@ -31,7 +31,7 @@ It is very much possible that prizes will be given to groups of people instead o
 - [Tips and tricks for training](#tips-and-tricks-for-training)
 	- [How to combine multiple datasests into one](#how-to-combine-multiple-datasets-into-one)
 	- [How to effectively preprocess the data](#how-to-effectively-preprocess-the-data)
-  - [How to efficiently preproces the data](#how-to-do-efficiently-load-datasets-with-limited-ram-and-hard-drive-space)
+	- [How to efficiently preproces the data](#how-to-do-efficiently-load-datasets-with-limited-ram-and-hard-drive-space)
 	- [How to do hyperparameter tuning](#how-to-do-hyperparameter-tuning)
 	- [How to preprocess and evaluate character based languages](#how-to-preprocess-and-evaluate-character-based-languages)
 - [Further reading material](#further-reading-material)
