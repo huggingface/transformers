@@ -1,13 +1,13 @@
 # Fine-Tuning week of XLSR-Wav2Vec2 on 60 languages 🌍
 
-Welcome to the fine-tuning week! The goal of this week is to have state-of-the-art automatic speech recognition (ASR) models in as many languages as possible. The fine-tuning weekends on Friday, the 26th March at midnight PST time.
+Welcome to the fine-tuning week! The goal of this week is to have state-of-the-art automatic speech recognition (ASR) models in as many languages as possible. The fine-tuning week ends on Friday, the 26th March at midnight PST time.
 
 Participants are encouraged to fine-tune the pretrained [facebook/wav2vec2-large-xlsr-53](https://huggingface.co/facebook/wav2vec2-large-xlsr-53) checkpoint on one or more of the 60 languages of [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets).
 Furthermore, it is very much appreciated if participants fine-tune XLSR-Wav2Vec2 on a language that is not included in the Common Voice dataset.
 
 All fine-tuned models uploaded until Friday, the 26th March midnight PST, will be taken into account for competition, and the best model per language will be awarded a prize if the best model performs reasonably well. 
 The testing data to evaluate the models will be the official [Common Voice dataset](https://commonvoice.mozilla.org/en/datasets) *`test data`* of version 6.1. Again, participants are very much encouraged to fine-tune XLSR-Wav2Vec2 on languages that are not found in the Common Voice dataset since those languages are even more likely to be underrepresented in the speech community. 
-Each model fine-tuned on a language not found in Common Voice, will be evaluated by the Hugging Face after Friday, the 26th March at midnight PST, and if the model performs reasonably well, the model receives a prize as well. 
+Each model fine-tuned on a language not found in Common Voice, will be evaluated by the Hugging Face team after Friday, the 26th March at midnight PST, and if the model performs reasonably well, the model receives a prize as well. 
 For more information on which data can be used for training, how the models are evaluated exactly, and what type of data preprocessing can be used, please see ["Training and Evaluation Rules"](#training-and-evaluation-rules).
 
 **Please keep in mind:**
@@ -136,9 +136,17 @@ To fill...
 
 ## How to upload my trained checkpoint
 
-To upload your trained checkpoint, make sure to follow the instructions [here](https://huggingface.co/transformers/model_sharing.html) on how to create a model repository on the 🤗 model hub .
+To upload your trained checkpoint, you have to create a new model repository on the 🤗 model hub, from this page: https://huggingface.co/new
 
-Having created your model repository on the hub, you should clone it locally.
+> You can also follow the more in-depth instructions [here](https://huggingface.co/transformers/model_sharing.html) if needed.
+
+Having created your model repository on the hub, you should clone it locally:
+
+```bash
+git lfs install
+
+git clone https://huggingface.co/username/your-model-name
+```
 
 Then and add the following files that fully define a XLSR-Wav2Vec2 checkpoint into the repository. You should have added the following files.
 
@@ -186,6 +194,8 @@ datasets:
 - common_voice #TODO: remove if you did not use the common voice dataset
 - TODO: add more datasets if you have used additional datasets. Make sure to use the exact same 
 dataset name as the one found [here](https://huggingface.co/datasets). If the dataset can not be found in the official datasets, just give it a new name
+metrics:
+- wer
 tags:
 - audio
 - automatic-speech-recognition
@@ -314,7 +324,7 @@ Your model in then available under *huggingface.co/{your_username}/{your_chosen_
 
 ## How to evaluate my trained checkpoint
 
-Having uploaded your model, you should not evaluate your model in a final step. This should be as simple as 
+Having uploaded your model, you should now evaluate your model in a final step. This should be as simple as 
 copying the evaluation code of your model card into a python script and running it. Make sure to note 
 the final result on the model card.
 
