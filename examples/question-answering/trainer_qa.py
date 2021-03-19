@@ -98,7 +98,7 @@ class QuestionAnsweringTrainer(Trainer):
         if isinstance(test_dataset, datasets.Dataset):
             test_dataset.set_format(type=test_dataset.format["type"], columns=list(test_dataset.features.keys()))
 
-        eval_preds = self.post_process_function(test_examples, test_dataset, output.predictions)
+        eval_preds = self.post_process_function(test_examples, test_dataset, output.predictions, "test")
         metrics = self.compute_metrics(eval_preds)
 
         return PredictionOutput(predictions=eval_preds.predictions, label_ids=eval_preds.label_ids, metrics=metrics)
