@@ -571,7 +571,7 @@ class WandbCallback(TrainerCallback):
         # log outputs
         self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
-    def setup(self, args, state, model, reinit, **kwargs):
+    def setup(self, args, state, model, **kwargs):
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
@@ -609,12 +609,12 @@ class WandbCallback(TrainerCallback):
             else:
                 run_name = args.run_name
 
-            self._wandb.init(
-                project=os.getenv("WANDB_PROJECT", "huggingface"),
-                name=run_name,
-                reinit=True if reinit else None,  # let wandb handle init logic (notebook vs script)
-                **init_args,
-            )
+            if self._wandb.run is None:
+                self._wandb.init(
+                    project=os.getenv("WANDB_PROJECT", "huggingface"),
+                    name=run_name,
+                    **init_args,
+                )
             # add config parameters (run may have been created manually)
             self._wandb.config.update(combined_dict, allow_val_change=True)
 
@@ -628,8 +628,10 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         hp_search = state.is_hyper_param_search
-        if not self._initialized or hp_search:
-            self.setup(args, state, model, reinit=hp_search, **kwargs)
+        if hp_search:
+            self._wandb.finish()
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
 
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._wandb is None:
@@ -666,7 +668,7 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         if not self._initialized:
-            self.setup(args, state, model, reinit=False)
+            self.setup(args, state, model)
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
             self._wandb.log(logs, step=state.global_step)
