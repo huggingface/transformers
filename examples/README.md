@@ -240,34 +240,11 @@ Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metri
 
 Advanced configuration is possible by setting environment variables:
 
-<table>
-  <thead>
-    <tr>
-      <th>Environment Variables</th>
-      <th>Options</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>WANDB_LOG_MODEL</td>
-      <td>Log the model as artifact at the end of training (<b>false</b> by default)</td>
-    </tr>
-    <tr>
-      <td>WANDB_WATCH</td>
-      <td>
-        <ul>
-          <li><b>gradients</b> (default): Log histograms of the gradients</li>
-          <li><b>all</b>: Log histograms of gradients and parameters</li>
-          <li><b>false</b>: No gradient or parameter logging</li>
-        </ul>
-      </td>
-    </tr>
-    <tr>
-      <td>WANDB_PROJECT</td>
-      <td>Organize runs by project</td>
-    </tr>
-  </tbody>
-</table>
+| Environment Variable | Value |
+|---|---|
+| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training (`false` by default) |
+| WANDB_WATCH | one of `gradients` (default) to log histograms of gradients, `all` to log histograms of both gradients and parameters, or `false` for no histogram logging |
+| WANDB_PROJECT | Organize runs by project |
 
 Set run names with `run_name` argument present in scripts or as part of `TrainingArguments`.
 
