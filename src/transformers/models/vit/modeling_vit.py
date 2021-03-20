@@ -25,19 +25,9 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import BaseModelOutput, SequenceClassifierOutput
-from ...modeling_utils import (
-    PreTrainedModel,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
 from .configuration_vit import ViTConfig
 
@@ -45,7 +35,6 @@ from .configuration_vit import ViTConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ViTConfig"
-_TOKENIZER_FOR_DOC = "ViTTokenizer"
 
 VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nielsr/vit-base-patch16-224",
@@ -69,7 +58,8 @@ to_2tuple = _ntuple(2)
 
 
 class ViTEmbeddings(nn.Module):
-    """Construct the cls token, position and patch embeddings.
+    """
+    Construct the cls token, position and patch embeddings.
 
     Based on timm implementation, which can be found here:
     https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -101,7 +91,8 @@ class ViTEmbeddings(nn.Module):
 
 
 class PatchEmbeddings(nn.Module):
-    """Image to Patch Embedding.
+    """
+    Image to Patch Embedding.
 
     Based on timm implementation, which can be found here:
     https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
@@ -155,7 +146,6 @@ class ViTSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
         output_attentions=False,
     ):
@@ -169,9 +159,6 @@ class ViTSelfAttention(nn.Module):
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in ViTModel forward() function)
-            attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.Softmax(dim=-1)(attention_scores)
@@ -196,8 +183,10 @@ class ViTSelfAttention(nn.Module):
 
 
 class ViTSelfOutput(nn.Module):
-    """The residual connection is defined in VitLayer instead of here (as is the case with other models),
-    due to the layernorm applied before each block."""
+    """
+    The residual connection is defined in VitLayer instead of here (as is the case with other models), due to the
+    layernorm applied before each block.
+    """
 
     def __init__(self, config):
         super().__init__()
@@ -240,13 +229,11 @@ class ViTAttention(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
         output_attentions=False,
     ):
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
             head_mask,
             output_attentions,
         )
@@ -305,13 +292,11 @@ class ViTLayer(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
         output_attentions=False,
     ):
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
-            attention_mask,
             head_mask,
             output_attentions=output_attentions,
         )
@@ -353,7 +338,6 @@ class ViTEncoder(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask=None,
         head_mask=None,
         output_attentions=False,
         output_hidden_states=False,
@@ -379,13 +363,11 @@ class ViTEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
-                    attention_mask,
                     layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(
                     hidden_states,
-                    attention_mask,
                     layer_head_mask,
                     output_attentions,
                 )
@@ -417,8 +399,8 @@ class ViTEncoder(nn.Module):
 
 class ViTPreTrainedModel(PreTrainedModel):
     """
-    An abstract class to handle weights initialization and
-    a simple interface for downloading and loading pretrained models.
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
     """
 
     config_class = ViTConfig
@@ -438,28 +420,23 @@ class ViTPreTrainedModel(PreTrainedModel):
 
 
 VIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
-    usage and behavior.
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
 
     Parameters:
         config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the configuration.
-            Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
+            weights.
 """
 
 VIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
-            Pixel values. Padding will be ignored by default should you provide it.
-            Pixel values can be obtained using :class:`~transformers.ViTFeatureExtractor`. See
-            :meth:`transformers.ViTFeatureExtractor.__call__` for details.
-
-        attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
-            Mask to avoid performing attention on padding pixel values. Mask values selected in ``[0, 1]``:
-            - 1 for pixels that are real (i.e. **not masked**),
-            - 0 for pixels that are padding (i.e. **masked**).
-            `What are attention masks? <../glossary.html#attention-mask>`__
+            Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
+            :class:`~transformers.ViTFeatureExtractor`. See :meth:`transformers.ViTFeatureExtractor.__call__` for
+            details.
 
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
@@ -496,9 +473,9 @@ class ViTModel(ViTPreTrainedModel):
         return self.embeddings.patch_embeddings
 
     def _prune_heads(self, heads_to_prune):
-        """Prunes heads of the model.
-        heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
-        See base class PreTrainedModel
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
         """
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
@@ -508,7 +485,6 @@ class ViTModel(ViTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -528,7 +504,7 @@ class ViTModel(ViTPreTrainedModel):
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224')
-            
+
             >>> inputs = feature_extractor(images=image)
             >>> outputs = model(**inputs)
             >>> last_hidden_states = outputs.last_hidden_state
@@ -542,32 +518,12 @@ class ViTModel(ViTPreTrainedModel):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        # if input_ids is not None and inputs_embeds is not None:
-        #     raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        # elif input_ids is not None:
-        #     input_shape = input_ids.size()
-        #     batch_size, seq_length = input_shape
-        # elif inputs_embeds is not None:
-        #     input_shape = inputs_embeds.size()[:-1]
-        #     batch_size, seq_length = input_shape
-        # else:
-        #     raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        # device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        # if attention_mask is None:
-        #     attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-
-        # # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # # ourselves in which case we just need to make it broadcastable to all heads.
-        # extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
-
-        # # Prepare head mask if needed
-        # # 1.0 in head_mask indicate we keep the head
-        # # attention_probs has shape bsz x n_heads x N x N
-        # # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        # head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             pixel_values,
@@ -575,7 +531,6 @@ class ViTModel(ViTPreTrainedModel):
 
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=None,  # replaced extended_attention_mask
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -594,8 +549,10 @@ class ViTModel(ViTPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ViT Model transformer with an image classification head on top (a linear layer on top of
-    the pooled output) e.g. for ImageNet. """,
+    """
+    ViT Model transformer with an image classification head on top (a linear layer on top of the pooled output) e.g.
+    for ImageNet.
+    """,
     VIT_START_DOCSTRING,
 )
 class ViTForImageClassification(ViTPreTrainedModel):
@@ -615,7 +572,6 @@ class ViTForImageClassification(ViTPreTrainedModel):
     def forward(
         self,
         pixel_values=None,
-        attention_mask=None,
         head_mask=None,
         labels=None,
         output_attentions=None,
@@ -624,9 +580,8 @@ class ViTForImageClassification(ViTPreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss.
-            Indices should be in :obj:`[0, ..., config.num_labels - 1]`.
-            If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
             If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Returns:
@@ -634,6 +589,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         Examples::
 
             >>> from transformers import ViTFeatureExtractor, ViTForImageClassification
+            >>> from datasets import load_dataset
             >>> from PIL import Image
             >>> import requests
 
@@ -642,17 +598,17 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             >>> model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
-            
+
             >>> inputs = feature_extractor(images=image)
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
             >>> predicted_class = logits.argmax(-1).item()
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vit(
             pixel_values,
-            attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

@@ -32,8 +32,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     r"""
     Constructs a ViT feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main methods.
-    Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from :class:`~transformers.FeatureExtractionMixin` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         image_mean (:obj:`int`, defaults to [0.485, 0.456, 0.406]):
@@ -73,12 +73,12 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
-        
+
         Args:
             images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch
-                tensor. In case of a numpy array/Torch tensor, each image should be of shape (C, H, W), where C is a number of channels,
-                H and W are image height and width.
+                tensor. In case of a numpy array/Torch tensor, each image should be of shape (C, H, W), where C is a
+                number of channels, H and W are image height and width.
         """
         # Input type checking for clearer error
         assert (
