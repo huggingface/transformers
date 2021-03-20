@@ -243,18 +243,18 @@ Advanced configuration is possible by setting environment variables:
 <table>
   <thead>
     <tr>
-      <th style="text-align:left">Environment Variables</th>
-      <th style="text-align:left">Options</th>
+      <th>Environment Variables</th>
+      <th>Options</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td style="text-align:left">WANDB_LOG_MODEL</td>
-      <td style="text-align:left">Log the model as artifact at the end of training (<b>false</b> by default)</td>
+      <td>WANDB_LOG_MODEL</td>
+      <td>Log the model as artifact at the end of training (<b>false</b> by default)</td>
     </tr>
     <tr>
-      <td style="text-align:left">WANDB_WATCH</td>
-      <td style="text-align:left">
+      <td>WANDB_WATCH</td>
+      <td>
         <ul>
           <li><b>gradients</b> (default): Log histograms of the gradients</li>
           <li><b>all</b>: Log histograms of gradients and parameters</li>
@@ -263,8 +263,8 @@ Advanced configuration is possible by setting environment variables:
       </td>
     </tr>
     <tr>
-      <td style="text-align:left">WANDB_PROJECT</td>
-      <td style="text-align:left">Organize runs by project</td>
+      <td>WANDB_PROJECT</td>
+      <td>Organize runs by project</td>
     </tr>
   </tbody>
 </table>
