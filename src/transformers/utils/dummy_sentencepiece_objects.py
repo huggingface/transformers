@@ -38,6 +38,24 @@ class CamembertTokenizer:
         requires_sentencepiece(self)
 
 
+class DebertaV2Tokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class M2M100Tokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
 class MarianTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)
@@ -84,6 +102,20 @@ class PegasusTokenizer:
 
 
 class ReformerTokenizer:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class Speech2TextProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_sentencepiece(self)
+
+
+class Speech2TextTokenizer:
     def __init__(self, *args, **kwargs):
         requires_sentencepiece(self)
 

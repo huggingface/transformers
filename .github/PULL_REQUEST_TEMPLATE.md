@@ -46,7 +46,7 @@ Models:
 - funnel: @sgugger
 - gpt2: @patrickvonplaten, @LysandreJik
 - rag: @patrickvonplaten, @lhoestq
-- tensorflow: @jplu
+- tensorflow: @LysandreJik
 
 Library:
 

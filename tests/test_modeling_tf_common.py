@@ -25,7 +25,14 @@ from importlib import import_module
 from typing import List, Tuple
 
 from transformers import is_tf_available
-from transformers.testing_utils import _tf_gpu_memory_limit, is_pt_tf_cross_test, require_onnx, require_tf, slow
+from transformers.testing_utils import (
+    _tf_gpu_memory_limit,
+    is_pt_tf_cross_test,
+    require_onnx,
+    require_tf,
+    slow,
+    tooslow,
+)
 
 
 if is_tf_available():
@@ -129,6 +136,7 @@ class TFModelTesterMixin:
 
                 self.assert_outputs_same(after_outputs, outputs)
 
+    @tooslow
     def test_graph_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -142,6 +150,7 @@ class TFModelTesterMixin:
             outputs = run_in_graph_mode()
             self.assertIsNotNone(outputs)
 
+    @tooslow
     def test_xla_mode(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -182,6 +191,7 @@ class TFModelTesterMixin:
                 expected_arg_names = ["input_ids"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @tooslow
     def test_saved_model_creation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = False
@@ -202,7 +212,7 @@ class TFModelTesterMixin:
             saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
             self.assertTrue(os.path.exists(saved_model_dir))
 
-    @slow
+    @tooslow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -311,6 +321,7 @@ class TFModelTesterMixin:
 
             onnxruntime.InferenceSession(onnx_model.SerializeToString())
 
+    @tooslow
     def test_mixed_precision(self):
         tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
 
@@ -484,6 +495,7 @@ class TFModelTesterMixin:
             max_diff = np.amax(np.abs(tfo - pto))
             self.assertLessEqual(max_diff, 4e-2)
 
+    @tooslow
     def test_train_pipeline_custom_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         # head_mask and decoder_head_mask has different shapes than other input args
@@ -904,6 +916,7 @@ class TFModelTesterMixin:
 
             model(inputs)
 
+    @tooslow
     def test_graph_mode_with_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

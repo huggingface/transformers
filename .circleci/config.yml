@@ -77,14 +77,43 @@ jobs:
                   keys:
                       - v0.4-torch_and_tf-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece]
-            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
+            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,speech]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                 key: v0.4-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: RUN_PT_TF_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf ./tests/ -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_torch_and_flax:
+        working_directory: ~/transformers
+        docker:
+            - image: circleci/python:3.6
+        environment:
+            OMP_NUM_THREADS: 1
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.4-torch_and_flax-{{ checksum "setup.py" }}
+                      - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,flax,torch,testing,sentencepiece,speech]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
+            - save_cache:
+                key: v0.4-{{ checksum "setup.py" }}
+                paths:
+                    - '~/.cache/pip'
+            - run: RUN_PT_FLAX_CROSS_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax ./tests/ -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -104,9 +133,10 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece]
-            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
+            - run: pip install .[sklearn,torch,testing,sentencepiece,speech]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -158,7 +188,7 @@ jobs:
                     - v0.4-flax-{{ checksum "setup.py" }}
                     - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: sudo pip install .[flax,sklearn,torch,testing,sentencepiece]
+            - run: sudo pip install .[flax,testing,sentencepiece]
             - save_cache:
                   key: v0.4-flax-{{ checksum "setup.py" }}
                   paths:
@@ -183,9 +213,10 @@ jobs:
                   keys:
                       - v0.4-torch-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece]
-            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.7.0+cpu.html
+            - run: pip install .[sklearn,torch,testing,sentencepiece,speech]
+            - run: pip install tapas torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cpu.html
             - save_cache:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
@@ -300,6 +331,7 @@ jobs:
                   keys:
                       - v0.4-build_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install ."[all, docs]"
             - save_cache:
@@ -351,6 +383,7 @@ jobs:
                       - '~/.cache/pip'
             - run: black --check examples tests src utils
             - run: isort --check-only examples tests src utils
+            - run: python utils/custom_init_isort.py --check_only
             - run: flake8 examples tests src utils
             - run: python utils/style_doc.py src/transformers docs/source --max_len 119 --check_only
             - run: python utils/check_copies.py
@@ -413,6 +446,7 @@ workflows:
             - run_examples_torch
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
+            - run_tests_torch_and_flax
             - run_tests_torch
             - run_tests_tf
             - run_tests_flax

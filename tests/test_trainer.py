@@ -24,6 +24,7 @@ import numpy as np
 from transformers import AutoTokenizer, IntervalStrategy, PretrainedConfig, TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.testing_utils import (
+    TestCasePlus,
     get_tests_dir,
     require_datasets,
     require_optuna,
@@ -193,6 +194,20 @@ if is_torch_available():
             loss = torch.nn.functional.mse_loss(y, labels)
             return (loss, y, y) if self.double_output else (loss, y)
 
+    class TstLayer(torch.nn.Module):
+        def __init__(self, hidden_size):
+            super().__init__()
+            self.linear1 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln1 = torch.nn.LayerNorm(hidden_size)
+            self.linear2 = torch.nn.Linear(hidden_size, hidden_size)
+            self.ln2 = torch.nn.LayerNorm(hidden_size)
+            self.bias = torch.nn.Parameter(torch.zeros(hidden_size))
+
+        def forward(self, x):
+            h = self.ln1(torch.nn.functional.relu(self.linear1(x)))
+            h = torch.nn.functional.relu(self.linear2(x))
+            return self.ln2(x + h + self.bias)
+
     def get_regression_trainer(a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, **kwargs):
         label_names = kwargs.get("label_names", None)
         train_dataset = RegressionDataset(length=train_len, label_names=label_names)
@@ -221,28 +236,7 @@ if is_torch_available():
         )
 
 
-@require_torch
-@require_sentencepiece
-@require_tokenizers
-class TrainerIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        args = TrainingArguments(".")
-        self.n_epochs = args.num_train_epochs
-        self.batch_size = args.train_batch_size
-        trainer = get_regression_trainer(learning_rate=0.1)
-        trainer.train()
-        self.default_trained_model = (trainer.model.a, trainer.model.b)
-
-        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
-        trainer.train()
-        self.alternate_trained_model = (trainer.model.a, trainer.model.b)
-
-    def check_trained_model(self, model, alternate_seed=False):
-        # Checks a training seeded with learning_rate = 0.1
-        (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
-        self.assertTrue(torch.allclose(model.a, a))
-        self.assertTrue(torch.allclose(model.b, b))
-
+class TrainerIntegrationCommon:
     def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True):
         file_list = [WEIGHTS_NAME, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
@@ -291,6 +285,30 @@ class TrainerIntegrationTest(unittest.TestCase):
             _ = log.pop("train_samples_per_second", None)
             _ = log1.pop("train_samples_per_second", None)
             self.assertEqual(log, log1)
+
+
+@require_torch
+@require_sentencepiece
+@require_tokenizers
+class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
+    def setUp(self):
+        super().setUp()
+        args = TrainingArguments(".")
+        self.n_epochs = args.num_train_epochs
+        self.batch_size = args.train_batch_size
+        trainer = get_regression_trainer(learning_rate=0.1)
+        trainer.train()
+        self.default_trained_model = (trainer.model.a, trainer.model.b)
+
+        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
+        trainer.train()
+        self.alternate_trained_model = (trainer.model.a, trainer.model.b)
+
+    def check_trained_model(self, model, alternate_seed=False):
+        # Checks a training seeded with learning_rate = 0.1
+        (a, b) = self.alternate_trained_model if alternate_seed else self.default_trained_model
+        self.assertTrue(torch.allclose(model.a, a))
+        self.assertTrue(torch.allclose(model.b, b))
 
     def test_trainer_works_with_dict(self):
         # Edge case because Apex with mode O2 will change our models to return dicts. This test checks it doesn't break
@@ -574,14 +592,29 @@ class TrainerIntegrationTest(unittest.TestCase):
         trainer.train()
         self.check_trained_model(trainer.model)
 
+    @require_torch_multi_gpu
+    def test_run_seq2seq_double_train_wrap_once(self):
+        # test that we don't wrap the model more than once
+        # since wrapping primarily happens on multi-gpu setup we want multiple gpus to test for
+        # example DataParallel(DataParallel(model))
+
+        trainer = get_regression_trainer()
+        trainer.train()
+        model_wrapped_before = trainer.model_wrapped
+        trainer.train()
+        model_wrapped_after = trainer.model_wrapped
+        self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+
     def test_can_resume_training(self):
         if torch.cuda.device_count() > 2:
             # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
             # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
             # won't be the same since the training dataloader is shuffled).
             return
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(**kwargs)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             state = dataclasses.asdict(trainer.state)
@@ -589,7 +622,7 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
             # Reinitialize trainer
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
@@ -602,7 +635,7 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
@@ -613,9 +646,9 @@ class TrainerIntegrationTest(unittest.TestCase):
 
         # With a regular model that is not a PreTrainedModel
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(
-                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
-            )
+            kwargs = dict(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False)
+
+            trainer = get_regression_trainer(**kwargs)
             trainer.train()
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             state = dataclasses.asdict(trainer.state)
@@ -623,9 +656,7 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
 
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(
-                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
-            )
+            trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
@@ -638,9 +669,7 @@ class TrainerIntegrationTest(unittest.TestCase):
             checkpoint = os.path.join(tmpdir, "checkpoint-15")
 
             # Reinitialize trainer and load model
-            trainer = get_regression_trainer(
-                output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, pretrained=False
-            )
+            trainer = get_regression_trainer(**kwargs)
 
             trainer.train(resume_from_checkpoint=checkpoint)
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
@@ -648,6 +677,21 @@ class TrainerIntegrationTest(unittest.TestCase):
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
+
+        # Now check failures
+
+        # 1. fail to find a bogus checkpoint
+        trainer = get_regression_trainer()
+        with self.assertRaises(Exception) as context:
+            trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
+        self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
+
+        # 2. fail to find any checkpoint - due a fresh output_dir
+        output_dir2 = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=output_dir2)
+        with self.assertRaises(Exception) as context:
+            trainer.train(resume_from_checkpoint=True)
+        self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
     def test_resume_training_with_gradient_accumulation(self):
         if torch.cuda.device_count() > 2:
@@ -977,6 +1021,18 @@ class TrainerIntegrationTest(unittest.TestCase):
         # should be about half of fp16_init
         # perfect world: fp32_init/2 == fp16_eval
         self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+
+    def test_no_wd_param_group(self):
+        model = torch.nn.Sequential(TstLayer(128), torch.nn.ModuleList([TstLayer(128), TstLayer(128)]))
+        trainer = Trainer(model=model)
+        trainer.create_optimizer_and_scheduler(10)
+        # fmt: off
+        wd_names = ['0.linear1.weight', '0.linear2.weight', '1.0.linear1.weight', '1.0.linear2.weight', '1.1.linear1.weight', '1.1.linear2.weight']
+        # fmt: on
+        wd_params = [p for n, p in model.named_parameters() if n in wd_names]
+        no_wd_params = [p for n, p in model.named_parameters() if n not in wd_names]
+        self.assertListEqual(trainer.optimizer.param_groups[0]["params"], wd_params)
+        self.assertListEqual(trainer.optimizer.param_groups[1]["params"], no_wd_params)
 
 
 @require_torch

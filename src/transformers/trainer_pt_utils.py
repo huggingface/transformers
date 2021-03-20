@@ -182,6 +182,34 @@ def torch_distributed_zero_first(local_rank: int):
         dist.barrier()
 
 
+class DistributedSamplerWithLoop(DistributedSampler):
+    """
+    Like a :obj:torch.utils.data.distributed.DistributedSampler` but loops at the end back to the beginning of the
+    shuffled samples to make each process have a round multiple of batch_size samples.
+
+    Args:
+        dataset (:obj:`torch.utils.data.Dataset`):
+            Dataset used for sampling.
+        batch_size (:obj:`int`):
+            The batch size used with this sampler
+        kwargs:
+            All other keyword arguments passed to :obj:`DistributedSampler`.
+    """
+
+    def __init__(self, dataset, batch_size, **kwargs):
+        super().__init__(dataset, **kwargs)
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        indices = list(super().__iter__())
+        remainder = 0 if len(indices) % self.batch_size == 0 else self.batch_size - len(indices) % self.batch_size
+        # DistributedSampler already added samples from the beginning to make the number of samples a round multiple
+        # of the world size, so we skip those.
+        start_remainder = 1 if self.rank < len(self.dataset) % self.num_replicas else 0
+        indices += indices[start_remainder : start_remainder + remainder]
+        return iter(indices)
+
+
 class SequentialDistributedSampler(Sampler):
     """
     Distributed Sampler that subsamples indices sequentially, making it easier to collate all results at the end.
@@ -192,7 +220,7 @@ class SequentialDistributedSampler(Sampler):
     or `reduce` resulting tensors at the end of the loop.
     """
 
-    def __init__(self, dataset, num_replicas=None, rank=None):
+    def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -204,8 +232,14 @@ class SequentialDistributedSampler(Sampler):
         self.dataset = dataset
         self.num_replicas = num_replicas
         self.rank = rank
-        self.num_samples = int(math.ceil(len(self.dataset) * 1.0 / self.num_replicas))
+        num_samples = len(self.dataset)
+        # Add extra samples to make num_samples a multiple of batch_size if passed
+        if batch_size is not None:
+            self.num_samples = int(math.ceil(num_samples / (batch_size * num_replicas))) * batch_size
+        else:
+            self.num_samples = int(math.ceil(num_samples / num_replicas))
         self.total_size = self.num_samples * self.num_replicas
+        self.batch_size = batch_size
 
     def __iter__(self):
         indices = list(range(len(self.dataset)))
@@ -228,7 +262,7 @@ class SequentialDistributedSampler(Sampler):
         return self.num_samples
 
 
-def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset):
+def get_tpu_sampler(dataset: torch.utils.data.dataset.Dataset, bach_size: int):
     if xm.xrt_world_size() <= 1:
         return RandomSampler(dataset)
     return DistributedSampler(dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
@@ -463,7 +497,7 @@ class LengthGroupedSampler(Sampler):
         self.batch_size = batch_size
         self.model_input_name = model_input_name if model_input_name is not None else "input_ids"
         if lengths is None:
-            if not isinstance(dataset[0], dict) or model_input_name not in dataset[0]:
+            if not isinstance(dataset[0], dict) or self.model_input_name not in dataset[0]:
                 raise ValueError(
                     "Can only automatically infer lengths for datasets whose items are dictionaries with an "
                     f"'{self.model_input_name}' key."
@@ -672,3 +706,19 @@ def save_state(self):
 
     path = os.path.join(self.args.output_dir, "trainer_state.json")
     self.state.save_to_json(path)
+
+
+def get_parameter_names(model, forbidden_layer_types):
+    """
+    Returns the names of the model parameters that are not inside a forbidden layer.
+    """
+    result = []
+    for name, child in model.named_children():
+        result += [
+            f"{name}.{n}"
+            for n in get_parameter_names(child, forbidden_layer_types)
+            if not isinstance(child, tuple(forbidden_layer_types))
+        ]
+    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
+    result += list(model._parameters.keys())
+    return result

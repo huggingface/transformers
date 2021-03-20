@@ -482,7 +482,7 @@ class ProphetNetModelTester:
             torch.allclose(
                 outputs_no_mask.last_hidden_state_ngram[0, :5, 0],
                 outputs_with_mask.last_hidden_state_ngram[0, :5, 0],
-                atol=1e-3,
+                atol=1e-2,
             )
         )
 

@@ -22,7 +22,7 @@ import os
 from typing import Any, Dict, Tuple, Union
 
 from . import __version__
-from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_remote_url
+from .file_utils import CONFIG_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
 from .utils import logging
 
 
@@ -384,6 +384,11 @@ class PretrainedConfig(object):
 
         """
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict.get("model_type", False) and hasattr(cls, "model_type"):
+            assert (
+                config_dict["model_type"] == cls.model_type
+            ), f"You tried to initiate a model of type '{cls.model_type}' with a pretrained model of type '{config_dict['model_type']}'"
+
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
@@ -411,6 +416,10 @@ class PretrainedConfig(object):
         use_auth_token = kwargs.pop("use_auth_token", None)
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):

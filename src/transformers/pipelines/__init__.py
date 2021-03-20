@@ -246,6 +246,7 @@ def pipeline(
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
+    model_kwargs: Dict[str, Any] = {},
     **kwargs
 ) -> Pipeline:
     """
@@ -271,7 +272,7 @@ def pipeline(
             - :obj:`"text2text-generation"`: will return a :class:`~transformers.Text2TextGenerationPipeline`.
             - :obj:`"text-generation"`: will return a :class:`~transformers.TextGenerationPipeline`.
             - :obj:`"zero-shot-classification:`: will return a :class:`~transformers.ZeroShotClassificationPipeline`.
-            - :obj:`"conversation"`: will return a :class:`~transformers.ConversationalPipeline`.
+            - :obj:`"conversational"`: will return a :class:`~transformers.ConversationalPipeline`.
         model (:obj:`str` or :obj:`~transformers.PreTrainedModel` or :obj:`~transformers.TFPreTrainedModel`, `optional`):
             The model that will be used by the pipeline to make predictions. This can be a model identifier or an
             actual instance of a pretrained model inheriting from :class:`~transformers.PreTrainedModel` (for PyTorch)
@@ -307,6 +308,9 @@ def pipeline(
             artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
+        model_kwargs:
+            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
+            **model_kwargs)` function.
         kwargs:
             Additional keyword arguments passed along to the specific pipeline init (see the documentation for the
             corresponding pipeline class for possible values).
@@ -383,7 +387,6 @@ def pipeline(
     # Instantiate model if needed
     if isinstance(model, str):
         # Handle transparent TF/PT model conversion
-        model_kwargs = {}
         if framework == "pt" and model.endswith(".h5"):
             model_kwargs["from_tf"] = True
             logger.warning(

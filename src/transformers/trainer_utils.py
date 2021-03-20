@@ -38,6 +38,13 @@ from .file_utils import (
 )
 
 
+if is_torch_available():
+    import torch
+
+if is_tf_available():
+    import tensorflow as tf
+
+
 def set_seed(seed: int):
     """
     Helper function for reproducible behavior to set the seed in ``random``, ``numpy``, ``torch`` and/or ``tf`` (if
@@ -49,14 +56,10 @@ def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
     if is_torch_available():
-        import torch
-
         torch.manual_seed(seed)
         torch.cuda.manual_seed_all(seed)
         # ^^ safe to call this function even if cuda is not available
     if is_tf_available():
-        import tensorflow as tf
-
         tf.random.set_seed(seed)
 
 
@@ -423,8 +426,24 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
+def denumpify_detensorize(metrics):
+    """
+    Recursively calls `.item()` on the element of the dictionary passed
+    """
+    if isinstance(metrics, (list, tuple)):
+        return type(metrics)(denumpify_detensorize(m) for m in metrics)
+    elif isinstance(metrics, dict):
+        return type(metrics)({k: denumpify_detensorize(v) for k, v in metrics.items()})
+    elif isinstance(metrics, np.generic):
+        return metrics.item()
+    elif is_torch_available() and isinstance(metrics, torch.Tensor) and metrics.numel() == 1:
+        return metrics.item()
+    return metrics
+
+
 class ShardedDDPOption(ExplicitEnum):
     SIMPLE = "simple"
-    ZERO_DP_2 = "zero2"
-    ZERO_DP_3 = "zero3"
+    ZERO_DP_2 = "zero_dp_2"
+    ZERO_DP_3 = "zero_dp_3"
     OFFLOAD = "offload"
+    AUTO_WRAP = "auto_wrap"

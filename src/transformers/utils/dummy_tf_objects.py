@@ -1050,8 +1050,12 @@ class TFLxmertVisualFeatureEncoder:
         requires_tf(self)
 
 
-class TFMarian:
+class TFMarianModel:
     def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
         requires_tf(self)
 
 
@@ -1329,6 +1333,25 @@ class TFPegasusModel:
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFRagModel:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFRagSequenceForGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_tf(self)
+
+
+class TFRagTokenForGeneration:
+    def __init__(self, *args, **kwargs):
         requires_tf(self)
 
 
