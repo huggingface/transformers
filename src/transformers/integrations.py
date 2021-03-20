@@ -557,16 +557,7 @@ class WandbCallback(TrainerCallback):
         assert has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
         if has_wandb:
             import wandb
-
-            wandb.ensure_configured()
-            if wandb.api.api_key is None:
-                has_wandb = False
-                logger.warning(
-                    "W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable."
-                )
-                self._wandb = None
-            else:
-                self._wandb = wandb
+            self._wandb = wandb
         self._initialized = False
         # log outputs
         self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
