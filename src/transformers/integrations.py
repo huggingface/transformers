@@ -618,6 +618,11 @@ class WandbCallback(TrainerCallback):
             # add config parameters (run may have been created manually)
             self._wandb.config.update(combined_dict, allow_val_change=True)
 
+            # define default x-axis (for latest wandb versions)
+            if getattr(self._wandb, "define_metric", None):
+                self._wandb.define_metric("train/global_step")
+                self._wandb.define_metric("*", step_metric='train/global_step', step_sync=True)
+
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
                 self._wandb.watch(
@@ -636,9 +641,6 @@ class WandbCallback(TrainerCallback):
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._wandb is None:
             return
-        # commit last step
-        if state.is_world_process_zero:
-            self._wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
@@ -671,7 +673,7 @@ class WandbCallback(TrainerCallback):
             self.setup(args, state, model)
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
-            self._wandb.log(logs, step=state.global_step)
+            self._wandb.log({**logs, 'train/global_step'=global_step)
 
 
 class CometCallback(TrainerCallback):
