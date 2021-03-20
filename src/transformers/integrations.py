@@ -611,11 +611,12 @@ class WandbCallback(TrainerCallback):
 
             self._wandb.init(
                 project=os.getenv("WANDB_PROJECT", "huggingface"),
-                config=combined_dict,
                 name=run_name,
-                reinit=reinit,
+                reinit=True if reinit else None,  # let wandb handle init logic (notebook vs script)
                 **init_args,
             )
+            # add config parameters (run may have been created manually)
+            self._wandb.config.update(combined_dict, allow_val_change=True)
 
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
