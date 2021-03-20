@@ -704,7 +704,7 @@ class Trainer:
             params = self.hp_space(trial)
         elif self.hp_search_backend == HPSearchBackend.RAY:
             params = trial
-            params.pop('wandb', None)
+            params.pop("wandb", None)
 
         for key, value in params.items():
             if not hasattr(self.args, key):
