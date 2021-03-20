@@ -557,6 +557,7 @@ class WandbCallback(TrainerCallback):
         assert has_wandb, "WandbCallback requires wandb to be installed. Run `pip install wandb`."
         if has_wandb:
             import wandb
+
             self._wandb = wandb
         self._initialized = False
         # log outputs
@@ -571,8 +572,8 @@ class WandbCallback(TrainerCallback):
 
         Environment:
             WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to log model as artifact at the end of training.
-                Use along with `TrainingArguments.load_best_model_at_end` to upload best model.
+                Whether or not to log model as artifact at the end of training. Use along with
+                `TrainingArguments.load_best_model_at_end` to upload best model.
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
                 Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
                 logging or :obj:`"all"` to log gradients and parameters.
@@ -613,7 +614,7 @@ class WandbCallback(TrainerCallback):
             # define default x-axis (for latest wandb versions)
             if getattr(self._wandb, "define_metric", None):
                 self._wandb.define_metric("train/global_step")
-                self._wandb.define_metric("*", step_metric='train/global_step', step_sync=True)
+                self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
@@ -665,7 +666,7 @@ class WandbCallback(TrainerCallback):
             self.setup(args, state, model)
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
-            self._wandb.log({**logs, 'train/global_step'=global_step)
+            self._wandb.log({**logs, "train/global_step": state.global_step})
 
 
 class CometCallback(TrainerCallback):
