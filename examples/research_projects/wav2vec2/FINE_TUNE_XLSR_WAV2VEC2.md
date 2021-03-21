@@ -232,6 +232,8 @@ option and pass the path of the checkpoint as `--model_name_or_path`.
 
 As the script is based on the `Trainer` API, refer to the [Trainer docs](https://huggingface.co/transformers/main_classes/trainer.html) for more information about ``Trainer`` and ``TrainingArguments``.
 
+[OVH cloud](https://www.ovh.com/world/) has generously offered free compute for this sprint. Please refer to [this video](https://www.youtube.com/watch?v=2hlkWAESMk8&ab_channel=Databuzzword) to get started with OVH. 
+
 
 ## How to upload my trained checkpoint
 
