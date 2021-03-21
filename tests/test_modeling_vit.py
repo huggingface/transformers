@@ -19,8 +19,8 @@ import inspect
 import unittest
 
 import requests
-from transformers.file_utils import is_torch_available, is_torchvision_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.file_utils import is_torch_available, is_torchvision_available, cached_property
+from transformers.testing_utils import require_torch, require_torchvision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -34,7 +34,7 @@ if is_torch_available():
 
 
 if is_torchvision_available():
-    import torchvision.transforms as T
+    from transformers import ViTFeatureExtractor
     from PIL import Image
 
 
@@ -321,41 +321,36 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 # We will verify our results on an image of cute cats
-# TODO: use ViTFeatureExtractor in the future
-def prepare_img(image_resolution):
+def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-
-    # standard PyTorch mean-std input image normalization
-    transform = T.Compose(
-        [
-            T.Resize((image_resolution, image_resolution)),
-            T.ToTensor(),
-            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ]
-    )
-
-    # mean-std normalize the input image (batch-size: 1)
-    img = transform(im).unsqueeze(0)
-
+    img = Image.open(requests.get(url, stream=True).raw)
     return img
 
 
 @require_torch
+@require_torchvision
 class ViTModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        # TODO: add .from_pretrained()
+        return ViTFeatureExtractor()
+    
     @slow
     def test_inference_image_classification_head(self):
         # TODO: replace namespace to google
         model = ViTForImageClassification.from_pretrained("nielsr/vit-base-patch16-224").to(torch_device)
-        pixel_values = prepare_img(224).to(torch_device)
 
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image).to(torch_device)
+        
         # forward pass
-        outputs = model(pixel_values)
+        outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.7332, 0.7286, -0.4020]).to(torch_device)
+        expected_slice = torch.tensor([-0.2744,  0.8215, -0.0836]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

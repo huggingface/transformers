@@ -18,7 +18,6 @@ import unittest
 
 import numpy as np
 
-from transformers import ViTFeatureExtractor
 from transformers.file_utils import is_torch_available, is_torchvision_available
 from transformers.testing_utils import require_torch, require_torchvision
 
@@ -30,6 +29,7 @@ if is_torch_available():
 
 if is_torchvision_available():
     from PIL import Image
+    from transformers import ViTFeatureExtractor
 
 
 class ViTFeatureExtractionTester(unittest.TestCase):
@@ -41,11 +41,11 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         image_size=18,
         min_resolution=30,
         max_resolution=400,
-        image_mean=[0.485, 0.456, 0.406],
+        image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
         do_normalize=True,
         do_resize=True,
-        size=[18, 18],
+        size=18,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -133,7 +133,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
         self.assertEqual(
-            encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size)
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, self.feature_extract_tester.size,
+            self.feature_extract_tester.size)
         )
 
         # Test batched
@@ -143,7 +144,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                *self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size
             ),
         )
 
@@ -158,7 +160,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
         self.assertEqual(
-            encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size)
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, self.feature_extract_tester.size,
+            self.feature_extract_tester.size)
         )
 
         # Test batched
@@ -168,7 +171,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                *self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size
             ),
         )
 
@@ -183,7 +187,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
         self.assertEqual(
-            encoded_images.shape, (1, self.feature_extract_tester.num_channels, *self.feature_extract_tester.size)
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, self.feature_extract_tester.size,
+            self.feature_extract_tester.size)
         )
 
         # Test batched
@@ -193,6 +198,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                *self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size
             ),
         )

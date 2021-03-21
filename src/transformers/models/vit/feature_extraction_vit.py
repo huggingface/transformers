@@ -36,15 +36,15 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        image_mean (:obj:`int`, defaults to [0.485, 0.456, 0.406]):
+        image_mean (:obj:`int`, defaults to [0.5, 0.5, 0.5]):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to [0.229, 0.224, 0.225]):
+        image_std (:obj:`int`, defaults to [0.5, 0.5, 0.5]):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to :obj:`List[224, 224]`):
+        size (:obj:`int`, `optional`, defaults to :obj:`224`):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
     """
 
@@ -52,11 +52,11 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
 
     def __init__(
         self,
-        image_mean=[0.485, 0.456, 0.406],
-        image_std=[0.229, 0.224, 0.225],
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
         do_normalize=True,
         do_resize=True,
-        size=[224, 224],
+        size=224,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -119,7 +119,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
         # step 2: define transformations (resizing + normalization)
         transformations = []
         if self.do_resize and self.size is not None:
-            transformations.append(T.Resize(size=self.size))
+            transformations.append(T.Resize(size=(self.size, self.size)))
         if self.do_normalize:
             normalization = T.Compose([T.ToTensor(), T.Normalize(self.image_mean, self.image_std)])
             transformations.append(normalization)
