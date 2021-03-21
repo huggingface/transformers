@@ -273,7 +273,7 @@ All these questions should be answered in a model card which is the first thing 
 visiting your model on the hub under `https://huggingface.co/{your_username}/{your_modelname}`.
 
 **Note**:
-It is extremely that you add this model card or else we cannot find your model and thus cannot take the model into 
+It is extremely important that you add this model card or else we cannot find your model and thus cannot take the model into 
 account for the final evaluation.
 
 ### How to create the readme
@@ -425,7 +425,7 @@ Your model in then available under *huggingface.co/{your_username}/{your_chosen_
 
 Having uploaded your model, you should now evaluate your model in a final step. This should be as simple as 
 copying the evaluation code of your model card into a python script and running it. Make sure to note 
-the final result on the model card.
+the final result on the model card **both** under the YAML tags at the very top **and** below your evaluation code under "Test Results".
 
 ## Rules of training and evaluation
 
