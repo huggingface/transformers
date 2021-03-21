@@ -83,7 +83,7 @@ class ViTEmbeddings(nn.Module):
         batch_size = pixel_values.shape[0]
         embeddings = self.patch_embeddings(pixel_values)
 
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
         embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)

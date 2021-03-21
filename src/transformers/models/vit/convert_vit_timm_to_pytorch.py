@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import ViTConfig, ViTForImageClassification, ViTModel
+from transformers import ViTConfig, ViTForImageClassification
 from transformers.utils import logging
 
 

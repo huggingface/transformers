@@ -81,27 +81,20 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
                 number of channels, H and W are image height and width.
         """
         # Input type checking for clearer error
-        assert (
-            isinstance(images, Image.Image)
-            or isinstance(images, np.ndarray)
-            or isinstance(images, torch.Tensor)
-            or (
-                (
-                    isinstance(images, (list, tuple))
-                    and (
-                        len(images) == 0
-                        or (
-                            isinstance(images[0], Image.Image)
-                            or isinstance(images[0], np.ndarray)
-                            or isinstance(images[0], torch.Tensor)
-                        )
-                    )
-                )
+        valid_images = False
+
+        # Check that images has a valid type
+        if isinstance(images, (Image.Image, np.ndarray, torch.Tensor)):
+            valid_images = True
+        elif isinstance(images, (list, tuple)):
+            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray, torch.Tensor)):
+                valid_images = True
+
+        if not valid_images:
+            raise ValueError(
+                "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
+                "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
             )
-        ), (
-            "Images must of type `PIL.Image.Image`, `np.ndarray` or `torch.Tensor` (single example),"
-            "`List[PIL.Image.Image]`, `List[np.ndarray]` or `List[torch.Tensor]` (batch of examples)."
-        )
 
         is_batched = bool(
             isinstance(images, (list, tuple)) and (isinstance(images[0], (Image.Image, np.ndarray, torch.Tensor)))

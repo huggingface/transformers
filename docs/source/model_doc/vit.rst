@@ -36,15 +36,28 @@ substantially fewer computational resources to train.*
 
 Tips:
 
-- To feed images to the Transformer encoder, each image is split into fixed-size patches, which are then linearly
-  embedded. The authors also add absolute position embeddings, and feed the resulting sequence of vectors to a standard
-  Transformer encoder.
-- The Vision Transformer expects each image to be of the same size (resolution), either 224x224 or 384x384 depending on
-  the checkpoint. One can use :class:`~transformers.ViTFeatureExtractor` to resize (or rescale) and normalize images
-  for the model.
-- Both the expected image resolution and patch resolution are reflected in the name of each checkpoint. For example,
-  :obj:`google/vit-base-patch16-224` refers to a base architecture with image resolution 224x224 and patch resolution
-  of 16x16. All checkpoints can be found on the `hub <https://huggingface.co/models?search=vit>`__.
+- To feed images to the Transformer encoder, each image is split into a sequence of fixed-size patches, which are then
+  linearly embedded. A [CLS] token is added to serve as representation of an entire image, which can be used for
+  classification. The authors also add absolute position embeddings, and feed the resulting sequence of vectors to a
+  standard Transformer encoder.
+- The Vision Transformer was pre-trained using a resolution of 224x224. During fine-tuning, it is often beneficial to
+  use a higher resolution than pre-training `(Touvron et al., 2019) <https://arxiv.org/abs/1906.06423>`__, `(Kolesnikov
+  et al., 2020) <https://arxiv.org/abs/1912.11370>`__. The authors report the best results with a resolution of 384x384
+  during fine-tuning.
+- As the Vision Transformer expects each image to be of the same size (resolution), one can use
+  :class:`~transformers.ViTFeatureExtractor` to resize (or rescale) and normalize images for the model.
+- Both the patch resolution and image resolution used during fine-tuning are reflected in the name of each checkpoint.
+  For example, :obj:`google/vit-base-patch16-224` refers to a base architecture with patch resolution of 16x16 and
+  fine-tuning resolution of 224x224. All checkpoints can be found on the `hub
+  <https://huggingface.co/models?search=vit>`__.
+- The available checkpoints are pre-trained on `ImageNet-21k <http://www.image-net.org/>`__ (a collection of 14 million
+  images and 21k classes), and then fine-tuned on `ImageNet <http://www.image-net.org/challenges/LSVRC/2012/>`__ (also
+  referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes).
+- The best results are obtained with supervised pre-training, which is not the case in NLP. The authors did also
+  experiment with a self-supervised pre-training objective, namely masked patched prediction (inspired by masked
+  language modeling). With this approach, the smaller ViT-B/16 model achieves 79.9% accuracy on ImageNet, a significant
+  improvement of 2% to training from scratch, but still 4% behind supervised pre-training.
+
 
 The original code (written in JAX) can be found `here <https://github.com/google-research/vision_transformer>`__.
 
