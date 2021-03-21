@@ -131,7 +131,85 @@ Awesome you have successfully trained a XLSR-Wav2Vec2 model 😎. Now you can ju
 
 ### Local machine
 
-To fill...
+We have provided `run_common_voice.py` script to run the fine-tuning on local machine. The script is similar to the colab but allows you to launch training using command line, save and continue training from previous checkpoints and launch training on multiple GPUs.
+
+1. First, head over to the `examples/research_projec/wav2vec2` directory where the `run_common_voice.py` script is located and install the required packages. The
+packages are listed in the `requirements.txt` file. To install run `pip install -r requirements.txt`. 
+
+	**Note**: Installing the latest version of `torchaudio` will also upgrade `torch` to it's latest stable version. If you are using specific version of `torch` then make sure
+	to use the correct `torchaudio` version compatible with your version of `torch`. By default the `requirements.txt` will install the latest version of `torchaudio`.
+
+2. Next, take a look at the `run_common_voice.py` script to get an understanding of how it works. In short the script does the following things
+	- Load the given common voice dataset.
+	- Create vocab for the language.
+	- Load the model with given hyperparameters.
+	- Pre-process the dataset to input into the model.
+	- Run training
+	- Run evaluation.
+
+3. The following examples show how you can launch fine-tuning for common voice Turkish dataset.
+	
+	**To lanuch fine-tuninig on singel GPU:**
+	
+	```bash
+	python run_common_voice.py \
+		--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
+		--dataset_config_name="tr" \ # use this argument to specify the language code
+		--output_dir=./wav2vec2-large-xlsr-turkish-demo \
+		--overwrite_output_dir \
+		--num_train_epochs="5" \
+		--per_device_train_batch_size="16" \
+		--learning_rate="3e-4" \
+		--warmup_steps="500" \
+		--evaluation_strategy="steps" \
+		--save_steps="400" \
+		--eval_steps="400" \
+		--logging_steps="400" \
+		--save_total_limit="3" \
+		--freeze_feature_extractor \
+		--feat_proj_dropout="0.0" \
+		--layerdrop="0.1" \
+		--gradient_checkpointing \
+		--fp16 \
+		--group_by_length \
+		--do_train --do_eval
+	```
+
+	**To lanuch fine-tuninig on multiple GPUs:**
+	
+	```bash
+	python -m torch.distributed.launch \
+		--nproc_per_node 4 run_common_voice.py \
+		--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
+		--dataset_config_name="tr" \ # use this argument to specify the language code
+		--output_dir=./wav2vec2-large-xlsr-turkish-demo \
+		--overwrite_output_dir \
+		--num_train_epochs="5" \
+		--per_device_train_batch_size="16" \
+		--learning_rate="3e-4" \
+		--warmup_steps="500" \
+		--evaluation_strategy="steps" \
+		--save_steps="400" \
+		--eval_steps="400" \
+		--logging_steps="400" \
+		--save_total_limit="3" \
+		--freeze_feature_extractor \
+		--feat_proj_dropout="0.0" \
+		--layerdrop="0.1" \
+		--gradient_checkpointing \
+		--fp16 \
+		--group_by_length \
+		--do_train --do_eval
+	```
+
+	The above command will launch the training on 4 GPUs. Use the `--nproc_per_node` option to specify the number of GPUs.
+
+	Once the training is finished, the model and checkpoints will be saved under the directory specified by the `--output_dir` argument.
+
+4. The script also allows you to resume training from the last saved checkpoint. To resume training from last saved checkpoint remove the `--overwrite_output_dir` option and run the same command again.  And to continue training from a specific checkpoint, keep the `--overwrite_output_dir`
+option and pass the path of the checkpoint as `--model_name_or_path`.
+
+As the script is based on the `Trainer` API, refer to the [Trainer docs](https://huggingface.co/transformers/main_classes/trainer.html) to know more about `Trainer` specific arguments.
 
 
 ## How to upload my trained checkpoint
