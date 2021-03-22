@@ -1067,7 +1067,7 @@ class Trainer:
                     steps_trained_in_current_epoch -= 1
                     continue
 
-                if (step + 1) % self.args.gradient_accumulation_steps == 0:
+                if step % self.args.gradient_accumulation_steps == 0:
                     self.control = self.callback_handler.on_step_begin(self.args, self.state, self.control)
 
                 if (
