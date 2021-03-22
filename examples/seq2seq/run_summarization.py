@@ -38,7 +38,6 @@ from transformers import (
     HfArgumentParser,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
-    default_data_collator,
     set_seed,
 )
 from transformers.file_utils import is_offline_mode
@@ -466,15 +465,12 @@ def main():
 
     # Data collator
     label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
-    if data_args.pad_to_max_length:
-        data_collator = default_data_collator
-    else:
-        data_collator = DataCollatorForSeq2Seq(
-            tokenizer,
-            model=model,
-            label_pad_token_id=label_pad_token_id,
-            pad_to_multiple_of=8 if training_args.fp16 else None,
-        )
+    data_collator = DataCollatorForSeq2Seq(
+        tokenizer,
+        model=model,
+        label_pad_token_id=label_pad_token_id,
+        pad_to_multiple_of=8 if training_args.fp16 else None,
+    )
 
     # Metric
     metric = load_metric("rouge")
