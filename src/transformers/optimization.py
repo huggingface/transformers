@@ -405,6 +405,7 @@ class Adafactor(Optimizer):
     Recommended T5 finetuning settings (https://discuss.huggingface.co/t/t5-finetuning-tips/684/3):
 
         - Training without LR warmup or clip_threshold is not recommended.
+
            * use scheduled LR warm-up to fixed LR
            * use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
         - Disable relative updates
