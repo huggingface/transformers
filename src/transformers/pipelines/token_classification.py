@@ -111,7 +111,7 @@ class TokenClassificationPipeline(Pipeline):
         self.subword_label_re_alignment = subword_label_re_alignment
         self.ignore_subwords = ignore_subwords
 
-        if self.ignore_subwords and not self.tokenizer.is_fast:
+        if (self.ignore_subwords or self.subword_label_re_alignment) and not self.tokenizer.is_fast:
             raise ValueError(
                 "Slow tokenizers cannot ignore subwords. Please set the `ignore_subwords` option"
                 "to `False` or use a fast tokenizer."
@@ -208,13 +208,13 @@ class TokenClassificationPipeline(Pipeline):
                     "end": end_ind,
                 }
 
-                if self.grouped_entities and (self.subword_label_re_alignment or self.ignore_subwords):
+                if (self.grouped_entities and self.ignore_subwords) or self.subword_label_re_alignment:
                     entity["is_subword"] = is_subword
 
                 entities += [entity]
 
             if self.subword_label_re_alignment:
-                self.set_subwords_label(entities, self.subword_label_re_alignment)
+                self.set_subwords_label(entities)
             else:
                 for entity in entities:
                     label_idx = entity["score"].argmax()
@@ -234,56 +234,68 @@ class TokenClassificationPipeline(Pipeline):
             return answers[0]
         return answers
 
-    def set_subwords_label(self, entities: List[dict], strategy: str) -> dict:
-        def sub_words_label(sub_words: List[dict]) -> dict:
+    def set_subwords_label(self, entities: List[dict]) -> List[dict]:
+        strategy = self.subword_label_re_alignment
+
+        def set_labels(sub_words: List[dict]) -> dict:
             score = np.stack([sub["score"] for sub in sub_words])
-            if strategy == "default":
+            if strategy == "default" or strategy is True:
                 label_idx = score[0].argmax()
                 label = self.model.config.id2label[label_idx]
                 sub_words[0]["entity"] = label
+                sub_words[0]["score"] = score[0][label_idx]
                 for sub in sub_words[1:]:
                     sub["entity"] = "O"
-                return sub_words
+                    sub["score"] = 0.0  # what score should we assign here?
+            else:
+                if strategy == "first":
+                    # get label of first sub-word
+                    max_label_idx = score[0].argmax()
+                    label = self.model.config.id2label[max_label_idx]
+                elif strategy == "max":
+                    max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
+                    label = self.model.config.id2label[max_label_idx]
+                elif strategy == "average":
+                    max_label_idx = np.mean(score, axis=0).argmax()
+                    label = self.model.config.id2label[max_label_idx]
+                else:
+                    raise ValueError(f"Invalid value {strategy} for option `subword_label_re_alignment`")
 
-            if strategy == "first":
-                # get label of first sub-word
-                label_idx = score[0].argmax()
-                label = self.model.config.id2label[label_idx]
-            elif strategy == "max":
-                max_label_idx = np.unravel_index(np.argmax(score, axis=None), score.shape)[1]
-                label = self.model.config.id2label[max_label_idx]
-            elif strategy == "average":
-                max_label_idx = np.mean(score, axis=0).argmax()
-                label = self.model.config.id2label[max_label_idx]
+                for idx, sub in enumerate(sub_words):
+                    sub["entity"] = label
+                    sub["score"] = score[idx][max_label_idx].item()
 
-            for idx, sub in enumerate(sub_words):
-                sub["entity"] = label
-                sub["score"] = score[idx][max_label_idx].item()
+            if self.ignore_subwords:
+                sub_words[0]["word"] += "".join([sub["word"].split("##")[1] for sub in sub_words[1:]])
+                return [sub_words[0]]
 
             return sub_words
 
-        word_group_disagg = []
+        subword_indices = np.where([entity["is_subword"] for entity in entities])[0]
+        if subword_indices.size == 0:
+            adjacent_subwords = []
+        else:
+            # find non-consecutive indices to identify separate clusters of subwords
+            cluster_edges = np.where(np.diff(subword_indices) != 1)[0]
+            # Sets of adjacent subwords indices, e.g.
+            # ['Sir', 'Test', '##y', 'M', '##c', '##T', '##est', 'is', 'test', '##iful']
+            # --> [[2],[4,5,6],[9]]
+            adjacent_subwords = np.split(subword_indices, cluster_edges + 1)  # shift edge by 1
+
+        word_indices = []
+        start = 0
+        for subwords in adjacent_subwords:
+            root_word = subwords[0] - 1
+            word_indices += [[idx] for idx in range(start, root_word)]
+            word_indices += [[root_word] + list(subwords)]
+            start = subwords[-1] + 1
+        word_indices += [[idx] for idx in range(start, len(entities))]
+
         entities_with_label = []
+        for word_idx in word_indices:
+            subwords = [entities[idx] for idx in word_idx]
+            entities_with_label += set_labels(subwords)
 
-        for entity in reversed(entities):
-            is_subword = entity["is_subword"]
-            word_group_disagg += [entity]
-            if not is_subword:
-                begin_sub = word_group_disagg.pop(-1)
-                if len(word_group_disagg) and word_group_disagg[0]["is_subword"]:
-                    word_group_disagg.reverse()
-                    merged_entity = sub_words_label(sub_words=word_group_disagg)
-                    entities_with_label.extend(merged_entity)
-
-                label_idx = begin_sub["score"].argmax()
-                label = self.model.config.id2label[label_idx]
-                begin_sub["entity"] = label
-                begin_sub["score"] = begin_sub["score"][label_idx].item()
-
-                entities_with_label.append(begin_sub)
-                word_group_disagg = []
-
-        entities_with_label.reverse()
         return entities_with_label
 
     def group_sub_entities(self, entities: List[dict]) -> dict:
