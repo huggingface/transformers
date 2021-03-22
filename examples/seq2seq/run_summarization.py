@@ -473,6 +473,7 @@ def main():
         pad_to_multiple_of=8 if training_args.fp16 else None,
     )
 
+
     # Metric
     metric = load_metric("rouge")
 
