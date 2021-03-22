@@ -19,7 +19,7 @@ import inspect
 import unittest
 
 import requests
-from transformers.file_utils import is_torch_available, is_torchvision_available, cached_property
+from transformers.file_utils import cached_property, is_torch_available, is_torchvision_available
 from transformers.testing_utils import require_torch, require_torchvision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -34,8 +34,9 @@ if is_torch_available():
 
 
 if is_torchvision_available():
-    from transformers import ViTFeatureExtractor
     from PIL import Image
+
+    from transformers import ViTFeatureExtractor
 
 
 class ViTModelTester:
@@ -327,14 +328,13 @@ def prepare_img():
     return img
 
 
-@require_torch
 @require_torchvision
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         # TODO: add .from_pretrained()
-        return ViTFeatureExtractor()
-    
+        return ViTFeatureExtractor() if is_torchvision_available() else None
+
     @slow
     def test_inference_image_classification_head(self):
         # TODO: replace namespace to google
@@ -343,7 +343,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         inputs = feature_extractor(images=image).to(torch_device)
-        
+
         # forward pass
         outputs = model(**inputs)
 
@@ -351,6 +351,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744,  0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers.file_utils import is_torch_available, is_torchvision_available
-from transformers.testing_utils import require_torch, require_torchvision
+from transformers.testing_utils import require_torchvision
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
@@ -29,6 +29,7 @@ if is_torch_available():
 
 if is_torchvision_available():
     from PIL import Image
+
     from transformers import ViTFeatureExtractor
 
 
@@ -99,10 +100,9 @@ class ViTFeatureExtractionTester(unittest.TestCase):
 
 
 @require_torchvision
-@require_torch
 class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ViTFeatureExtractor
+    feature_extraction_class = ViTFeatureExtractor if is_torchvision_available() else None
 
     def setUp(self):
         self.feature_extract_tester = ViTFeatureExtractionTester(self)
@@ -133,8 +133,13 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
         self.assertEqual(
-            encoded_images.shape, (1, self.feature_extract_tester.num_channels, self.feature_extract_tester.size,
-            self.feature_extract_tester.size)
+            encoded_images.shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
         )
 
         # Test batched
@@ -145,7 +150,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
                 self.feature_extract_tester.size,
-                self.feature_extract_tester.size
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -160,8 +165,13 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
         self.assertEqual(
-            encoded_images.shape, (1, self.feature_extract_tester.num_channels, self.feature_extract_tester.size,
-            self.feature_extract_tester.size)
+            encoded_images.shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
         )
 
         # Test batched
@@ -172,7 +182,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
                 self.feature_extract_tester.size,
-                self.feature_extract_tester.size
+                self.feature_extract_tester.size,
             ),
         )
 
@@ -187,8 +197,13 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         # Test not batched input
         encoded_images = feature_extractor(image_inputs[0]).pixel_values
         self.assertEqual(
-            encoded_images.shape, (1, self.feature_extract_tester.num_channels, self.feature_extract_tester.size,
-            self.feature_extract_tester.size)
+            encoded_images.shape,
+            (
+                1,
+                self.feature_extract_tester.num_channels,
+                self.feature_extract_tester.size,
+                self.feature_extract_tester.size,
+            ),
         )
 
         # Test batched
@@ -199,6 +214,6 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
                 self.feature_extract_tester.size,
-                self.feature_extract_tester.size
+                self.feature_extract_tester.size,
             ),
         )
