@@ -37,6 +37,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
+from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
 
 import numpy as np
@@ -102,8 +103,12 @@ if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VA
                             try:
                                 _tf_version = importlib_metadata.version("tf-nightly-gpu")
                             except importlib_metadata.PackageNotFoundError:
-                                _tf_version = None
-                                _tf_available = False
+                                # Support for intel-tensorflow version
+                                try:
+                                    _tf_version = importlib_metadata.version("intel-tensorflow")
+                                except importlib_metadata.PackageNotFoundError:
+                                    _tf_version = None
+                                    _tf_available = False
     if _tf_available:
         if version.parse(_tf_version) < version.parse("2"):
             logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
@@ -213,6 +218,7 @@ if (
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+SESSION_ID = uuid4().hex
 DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False)
 
 WEIGHTS_NAME = "pytorch_model.bin"
@@ -1211,7 +1217,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
-    ua = "transformers/{}; python/{}".format(__version__, sys.version.split()[0])
+    ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
@@ -1308,8 +1314,12 @@ def get_from_cache(
             # between the HEAD and the GET (unlikely, but hey).
             if 300 <= r.status_code <= 399:
                 url_to_download = r.headers["Location"]
+        except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+            # Actually raise for those subclasses of ConnectionError
+            raise
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
-            # etag is already None
+            # Otherwise, our Internet connection is down.
+            # etag is None
             pass
 
     filename = url_to_filename(url, etag)

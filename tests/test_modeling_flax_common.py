@@ -60,6 +60,7 @@ def random_attention_mask(shape, rng=None):
     return attn_mask
 
 
+@require_flax
 class FlaxModelTesterMixin:
     model_tester = None
     all_model_classes = ()
@@ -90,7 +91,7 @@ class FlaxModelTesterMixin:
                 fx_outputs = fx_model(**inputs_dict)
                 self.assertEqual(len(fx_outputs), len(pt_outputs), "Output lengths differ between Flax and PyTorch")
                 for fx_output, pt_output in zip(fx_outputs, pt_outputs):
-                    self.assert_almost_equals(fx_output, pt_output.numpy(), 1e-3)
+                    self.assert_almost_equals(fx_output, pt_output.numpy(), 2e-3)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     pt_model.save_pretrained(tmpdirname)
@@ -103,7 +104,6 @@ class FlaxModelTesterMixin:
                 for fx_output_loaded, pt_output in zip(fx_outputs_loaded, pt_outputs):
                     self.assert_almost_equals(fx_output_loaded, pt_output.numpy(), 5e-3)
 
-    @require_flax
     def test_from_pretrained_save_pretrained(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -121,7 +121,6 @@ class FlaxModelTesterMixin:
                 for output_loaded, output in zip(outputs_loaded, outputs):
                     self.assert_almost_equals(output_loaded, output, 5e-3)
 
-    @require_flax
     def test_jit_compilation(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -144,7 +143,6 @@ class FlaxModelTesterMixin:
                 for jitted_output, output in zip(jitted_outputs, outputs):
                     self.assertEqual(jitted_output.shape, output.shape)
 
-    @require_flax
     def test_naming_convention(self):
         for model_class in self.all_model_classes:
             model_class_name = model_class.__name__
