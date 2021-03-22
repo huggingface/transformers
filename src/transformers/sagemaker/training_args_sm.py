@@ -15,7 +15,7 @@
 import importlib.util
 import json
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import torch
 
