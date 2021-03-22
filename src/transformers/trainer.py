@@ -700,8 +700,12 @@ class Trainer:
 
         if self.hp_search_backend is None or trial is None:
             return
+        if self.hp_search_backend == HPSearchBackend.OPTUNA:
+            params = self.hp_space(trial)
+        elif self.hp_search_backend == HPSearchBackend.RAY:
+            params = trial
+            params.pop("wandb", None)
 
-        params = self.hp_space(trial) if self.hp_search_backend == HPSearchBackend.OPTUNA else trial
         for key, value in params.items():
             if not hasattr(self.args, key):
                 raise AttributeError(
