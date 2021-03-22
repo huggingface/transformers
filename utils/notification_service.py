@@ -175,7 +175,7 @@ if __name__ == "__main__":
         )
 
         for job, job_result in results.items():
-            if len(job_result["failures"]):
+            if job_result["failures"]:
                 client.chat_postMessage(
                     channel=channel_id, text=f"{job}\n{job_result['failures']}", thread_ts=result["ts"]
                 )

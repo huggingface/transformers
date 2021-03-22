@@ -134,7 +134,7 @@ class BlenderbotSmallTokenizer(PreTrainedTokenizer):
         tokens = token.split(" ")
         words = []
         for token in tokens:
-            if not len(token):
+            if not token:
                 continue
 
             token = token.lower()

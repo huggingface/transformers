@@ -166,7 +166,7 @@ class HfArgumentParser(ArgumentParser):
                   after initialization.
                 - The potential list of remaining argument strings. (same as argparse.ArgumentParser.parse_known_args)
         """
-        if args_filename or (look_for_args_file and len(sys.argv)):
+        if args_filename or (look_for_args_file and sys.argv):
             if args_filename:
                 args_file = Path(args_filename)
             else:
