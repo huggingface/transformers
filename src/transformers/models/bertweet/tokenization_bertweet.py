@@ -314,7 +314,7 @@ class BertweetTokenizer(PreTrainedTokenizer):
         split_tokens = []
         words = re.findall(r"\S+\n?", text)
         for token in words:
-            split_tokens.extend([t for t in self.bpe(token).split(" ")])
+            split_tokens.extend(list(self.bpe(token).split(" ")))
         return split_tokens
 
     def normalizeTweet(self, tweet):
