@@ -27,6 +27,8 @@ from transformers.utils import logging
 logger = logging.get_logger(__name__)
 
 # TODO: should be moved to `file_utils` after refactoring of SageMakerTrainer
+
+
 def is_sagemaker_model_parallel_available():
     # Get the sagemaker specific mp parameters from smp_options variable.
     smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
