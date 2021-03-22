@@ -369,7 +369,10 @@ if is_torch_available():
     ]
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
+        "ForcedBOSTokenLogitsProcessor",
+        "ForcedEOSTokenLogitsProcessor",
         "HammingDiversityLogitsProcessor",
+        "InfNanRemoveLogitsProcessor",
         "LogitsProcessor",
         "LogitsProcessorList",
         "LogitsWarper",
@@ -1560,7 +1563,10 @@ if TYPE_CHECKING:
         )
         from .generation_beam_search import BeamScorer, BeamSearchScorer
         from .generation_logits_process import (
+            ForcedBOSTokenLogitsProcessor,
+            ForcedEOSTokenLogitsProcessor,
             HammingDiversityLogitsProcessor,
+            InfNanRemoveLogitsProcessor,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
