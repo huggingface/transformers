@@ -61,10 +61,6 @@ if is_sagemaker_model_parallel_available():
 
 @dataclass
 class SageMakerTrainingArguments(TrainingArguments):
-    mp_parameters: str = field(
-        default="", metadata={"help": "Used by the SageMaker launcher to send mp-specific args."}
-    )
-
     @cached_property
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
