@@ -17,6 +17,7 @@
 # limitations under the License.
 
 from . import (
+    gpt_neo,
     albert,
     auto,
     bart,
