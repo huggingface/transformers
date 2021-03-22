@@ -261,7 +261,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
-        (Wav2Vec2Config, (Wav2Vec2Tokenizer, None)),
         (BigBirdConfig, (BigBirdTokenizer, None)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
