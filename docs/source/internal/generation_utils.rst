@@ -151,6 +151,16 @@ generation.
 .. autoclass:: transformers.HammingDiversityLogitsProcessor
     :members: __call__
 
+.. autoclass:: transformers.ForcedBOSTokenLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.ForcedEOSTokenLogitsProcessor
+    :members: __call__
+
+.. autoclass:: transformers.InfNanRemoveLogitsProcessor
+    :members: __call__
+
+
 StoppingCriteria
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

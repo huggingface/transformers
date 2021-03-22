@@ -123,7 +123,22 @@ class BeamSearchScorer:
         requires_pytorch(self)
 
 
+class ForcedBOSTokenLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ForcedEOSTokenLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class HammingDiversityLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class InfNanRemoveLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
