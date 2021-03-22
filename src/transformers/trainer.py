@@ -65,6 +65,7 @@ from .file_utils import (
 )
 from .modeling_utils import PreTrainedModel, unwrap_model
 from .optimization import Adafactor, AdamW, get_scheduler
+from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
     DefaultFlowCallback,
