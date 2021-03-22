@@ -27,6 +27,7 @@ from .generation_logits_process import (
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
+    InfNanRemoveLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
@@ -581,6 +582,7 @@ class GenerationMixin:
         num_beams: int,
         num_beam_groups: int,
         diversity_penalty: float,
+        remove_invalid_values: bool,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -606,6 +608,9 @@ class GenerationMixin:
         )
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
         # instantiate processors list
         processors = LogitsProcessorList()
@@ -639,6 +644,8 @@ class GenerationMixin:
             processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
+        if remove_invalid_values is True:
+            processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
     def _get_stopping_criteria(
@@ -687,6 +694,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -789,6 +797,9 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            remove_invalid_values (:obj:`bool`, `optional`):
+                Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -965,6 +976,7 @@ class GenerationMixin:
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
+            remove_invalid_values=remove_invalid_values,
         )
 
         stopping_criteria = self._get_stopping_criteria(
@@ -1511,6 +1523,7 @@ class GenerationMixin:
 
             # sample
             probs = F.softmax(next_token_scores, dim=-1)
+
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # add code that transfomers next_tokens to tokens_to_add
@@ -2026,6 +2039,7 @@ class GenerationMixin:
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
             probs = F.softmax(next_token_scores, dim=-1)
+
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
 
