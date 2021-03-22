@@ -401,7 +401,7 @@ def evaluate(batch):
 	with torch.no_grad():
 		logits = model(inputs.input_values.to("cuda"), attention_mask=inputs.attention_mask.to("cuda")).logits
 
-  pred_ids = torch.argmax(logits, dim=-1)
+	pred_ids = torch.argmax(logits, dim=-1)
 	batch["pred_strings"] = processor.batch_decode(pred_ids)
 	return batch
 
