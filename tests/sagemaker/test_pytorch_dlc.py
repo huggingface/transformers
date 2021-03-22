@@ -221,3 +221,74 @@ def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_pat
     assert all(t >= 0.7 for t in eval_accuracy)
     assert all(t == 512 for t in total_batch_size)
     assert all(t <= 0.6 for t in eval_loss)
+
+
+@pytest.mark.skipif(
+    literal_eval(os.getenv("TEST_SAGEMAKER", "False")) is not True,
+    reason="Skipping test because should only be run when releasing minor transformers version",
+)
+@pytest.mark.parametrize("model_name_or_path", ["roberta-large"])
+@pytest.mark.parametrize("instance_count", [1])
+@pytest.mark.parametrize("instance_type", ["ml.p3dn.24xlarge"])
+def test_multi_node_sm_model_parallel(instance_type, instance_count, model_name_or_path):
+
+    # defines hyperparameters
+    hyperparameters = {
+        **DISTRIBUTED_HYPERPARAMETER,
+        "model_name_or_path": model_name_or_path,
+        "max_steps": 500,
+    }
+
+    # configuration for running training on smdistributed Model Parallel
+    mpi_options = {
+        "enabled": True,
+        "processes_per_host": 8,
+        "custom_mpi_options": "--mca btl_vader_single_copy_mechanism none ",
+    }
+    smp_options = {
+        "enabled": True,
+        "parameters": {
+            "microbatches": 4,
+            "placement_strategy": "spread",
+            "pipeline": "interleaved",
+            "optimize": "speed",
+            "partitions": 4,
+            "ddp": True,
+        },
+    }
+
+    distribution = {"smdistributed": {"modelparallel": smp_options}, "mpi": mpi_options}
+
+    # creates estimator
+    estimator = HuggingFace(
+        entry_point="run_glue_model_parallelism.py",
+        source_dir=TEST_PATH,
+        role=SAGEMAKER_ROLE,
+        image_uri=ECR_IMAGE,
+        base_job_name=f"{BASE_NAME}-{instance_count}-sm-model",
+        instance_count=instance_count,
+        instance_type=instance_type,
+        debugger_hook_config=False,
+        hyperparameters=hyperparameters,
+        metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
+        py_version="py3",
+        distribution=distribution,
+    )
+    # run training
+    estimator.fit()
+
+    # test csv
+    TrainingJobAnalytics(estimator.latest_training_job.name).export_csv(
+        f"{TEST_PATH}/{BASE_NAME}_{instance_count}_sm_model_metrics.csv"
+    )
+
+    result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
+
+    train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
+    eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
+    total_batch_size = list(result_metrics_df[result_metrics_df.metric_name == "total_batch_size"]["value"])
+    eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+
+    assert all(t <= 700 for t in train_runtime)
+    assert all(t >= 0.3 for t in eval_accuracy)
+    assert all(t <= 1.1 for t in eval_loss)

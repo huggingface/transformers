@@ -1,0 +1,7 @@
+,timestamp,metric_name,value
+0,0.0,train_runtime,607.8891
+1,0.0,eval_accuracy,0.3182
+2,120.0,eval_accuracy,0.3182
+3,0.0,eval_loss,1.0989
+4,120.0,eval_loss,1.099
+5,0.0,total_batch_size,32.0
