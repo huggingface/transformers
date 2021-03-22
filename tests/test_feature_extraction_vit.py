@@ -102,7 +102,7 @@ class ViTFeatureExtractionTester(unittest.TestCase):
 @require_torchvision
 class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ViTFeatureExtractor if is_torchvision_available() else None
+    self.feature_extraction_class = ViTFeatureExtractor if is_torchvision_available() else None
 
     def setUp(self):
         self.feature_extract_tester = ViTFeatureExtractionTester(self)
