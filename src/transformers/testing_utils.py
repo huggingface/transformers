@@ -248,7 +248,7 @@ def require_torchvision(test_case):
     These tests are skipped when torchvision isn't installed.
 
     """
-    if not is_torchvision_available:
+    if not is_torchvision_available():
         return unittest.skip("test requires torchvision")(test_case)
     else:
         return test_case

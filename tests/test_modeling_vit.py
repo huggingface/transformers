@@ -159,7 +159,17 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester = ConfigTester(self, config_class=ViTConfig, hidden_size=37)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        config = self.config_tester.config_class(**self.config_tester.inputs_dict)
+        # we omit vocab_size since ViT does not use this
+        self.config_tester.parent.assertTrue(hasattr(config, "hidden_size"))
+        self.config_tester.parent.assertTrue(hasattr(config, "num_attention_heads"))
+        self.config_tester.parent.assertTrue(hasattr(config, "num_hidden_layers"))
+
+        self.config_tester.create_and_test_config_to_json_string()
+        self.config_tester.create_and_test_config_to_json_file()
+        self.config_tester.create_and_test_config_from_and_save_pretrained()
+        self.config_tester.create_and_test_config_with_num_labels()
+        self.config_tester.check_config_can_be_init_without_params()
 
     def test_inputs_embeds(self):
         # ViT does not use inputs_embeds

@@ -19,7 +19,7 @@ from typing import List, Union
 import numpy as np
 import torch
 from PIL import Image
-from torchvision import transforms as T
+from torchvision.transforms import Compose, Normalize, Resize, ToPILImage, ToTensor
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...utils import logging
@@ -76,9 +76,13 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
 
         Args:
             images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, numpy array or a Torch
-                tensor. In case of a numpy array/Torch tensor, each image should be of shape (C, H, W), where C is a
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or a PyTorch
+                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+
+        Returns:
+            :obj:`torch.Tensor` of shape :obj:`(batch_size, num_channels, height, width)`: A PyTorch tensor containing
+            the preprocessed images.
         """
         # Input type checking for clearer error
         valid_images = False
@@ -106,24 +110,24 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
                 # PIL expects the channel dimension as last dimension
                 images = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in images]
             elif isinstance(images[0], torch.Tensor):
-                images = [T.ToPILImage()(image).convert("RGB") for image in images]
+                images = [ToPILImage()(image).convert("RGB") for image in images]
         else:
             if isinstance(images, np.ndarray):
                 # PIL expects the channel dimension as last dimension
                 images = [Image.fromarray(np.moveaxis(images, 0, -1))]
             elif isinstance(images, torch.Tensor):
-                images = [T.ToPILImage()(images).convert("RGB")]
+                images = [ToPILImage()(images).convert("RGB")]
             else:
                 images = [images]
 
         # step 2: define transformations (resizing + normalization)
         transformations = []
         if self.do_resize and self.size is not None:
-            transformations.append(T.Resize(size=(self.size, self.size)))
+            transformations.append(Resize(size=(self.size, self.size)))
         if self.do_normalize:
-            normalization = T.Compose([T.ToTensor(), T.Normalize(self.image_mean, self.image_std)])
+            normalization = Compose([ToTensor(), Normalize(self.image_mean, self.image_std)])
             transformations.append(normalization)
-        transforms = T.Compose(transformations)
+        transforms = Compose(transformations)
 
         # step 3: apply transformations to images and stack
         pixel_values = [transforms(image) for image in images]

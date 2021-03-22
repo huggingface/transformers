@@ -42,7 +42,7 @@ VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from
+# Inspired by
 # https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
 # From PyTorch internals
 def _ntuple(n):
@@ -56,13 +56,12 @@ def _ntuple(n):
 
 to_2tuple = _ntuple(2)
 
-
+# Based on timm implementation, which can be found here:
+# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 class ViTEmbeddings(nn.Module):
     """
-    Construct the cls token, position and patch embeddings.
+    Construct the CLS token, position and patch embeddings.
 
-    Based on timm implementation, which can be found here:
-    https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
     """
 
     def __init__(self, config):
@@ -90,12 +89,12 @@ class ViTEmbeddings(nn.Module):
         return embeddings
 
 
+# Based on timm implementation, which can be found here:
+# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
 
-    Based on timm implementation, which can be found here:
-    https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
     """
 
     def __init__(self, image_size=224, patch_size=16, num_channels=3, embed_dim=768):
@@ -112,9 +111,10 @@ class PatchEmbeddings(nn.Module):
     def forward(self, pixel_values):
         batch_size, num_channels, height, width = pixel_values.shape
         # FIXME look at relaxing size constraints
-        assert (
-            height == self.image_size[0] and width == self.image_size[1]
-        ), f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
         x = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return x
 
@@ -143,12 +143,7 @@ class ViTSelfAttention(nn.Module):
         x = x.view(*new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    def forward(
-        self,
-        hidden_states,
-        head_mask=None,
-        output_attentions=False,
-    ):
+    def forward(self, hidden_states, head_mask=None, output_attentions=False):
         mixed_query_layer = self.query(hidden_states)
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
@@ -309,7 +304,7 @@ class ViTLayer(nn.Module):
         # in ViT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
-        # feedforward chunking not working for now
+        # TODO feedforward chunking not working for now
         # layer_output = apply_chunking_to_forward(
         #     self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layer_output
         # )
@@ -381,15 +376,7 @@ class ViTEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
-                ]
-                if v is not None
-            )
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=all_hidden_states,
@@ -408,19 +395,23 @@ class ViTPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding, nn.Conv2d)):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, (nn.Linear, nn.Conv2d)) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 VIT_START_DOCSTRING = r"""
-    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ sub-class. Use
+    This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 

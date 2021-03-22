@@ -832,7 +832,6 @@ if is_torch_available():
         [
             "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViTForImageClassification",
-            "ViTLayer",
             "ViTModel",
             "ViTPreTrainedModel",
         ]
@@ -1426,7 +1425,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig, ViTFeatureExtractor
+    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -1951,7 +1950,6 @@ if TYPE_CHECKING:
         from .models.vit import (
             VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViTForImageClassification,
-            ViTLayer,
             ViTModel,
             ViTPreTrainedModel,
         )
