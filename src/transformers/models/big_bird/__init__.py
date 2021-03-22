@@ -31,15 +31,15 @@ if is_tokenizers_available():
 if is_torch_available():
     _import_structure["modeling_big_bird"] = [
         "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "BigBirdForMaskedLM",
         "BigBirdForCausalLM",
+        "BigBirdForMaskedLM",
         "BigBirdForMultipleChoice",
+        "BigBirdForPreTraining",
         "BigBirdForQuestionAnswering",
         "BigBirdForSequenceClassification",
         "BigBirdForTokenClassification",
         "BigBirdLayer",
         "BigBirdModel",
-        "BigBirdForPreTraining",
         "BigBirdPreTrainedModel",
         "load_tf_weights_in_big_bird",
     ]

@@ -148,13 +148,13 @@ _import_structure = {
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
+    "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "BlenderbotSmallConfig",
         "BlenderbotSmallTokenizer",
     ],
-    "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
@@ -471,6 +471,22 @@ if is_torch_available():
             "load_tf_weights_in_bert_generation",
         ]
     )
+    _import_structure["models.big_bird"].extend(
+        [
+            "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BigBirdForCausalLM",
+            "BigBirdForMaskedLM",
+            "BigBirdForMultipleChoice",
+            "BigBirdForPreTraining",
+            "BigBirdForQuestionAnswering",
+            "BigBirdForSequenceClassification",
+            "BigBirdForTokenClassification",
+            "BigBirdLayer",
+            "BigBirdModel",
+            "BigBirdPreTrainedModel",
+            "load_tf_weights_in_big_bird",
+        ]
+    )
     _import_structure["models.blenderbot"].extend(
         [
             "BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -485,22 +501,6 @@ if is_torch_available():
             "BlenderbotSmallForCausalLM",
             "BlenderbotSmallForConditionalGeneration",
             "BlenderbotSmallModel",
-        ]
-    )
-    _import_structure["models.big_bird"].extend(
-        [
-            "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BigBirdForMaskedLM",
-            "BigBirdForCausalLM",
-            "BigBirdForMultipleChoice",
-            "BigBirdForQuestionAnswering",
-            "BigBirdForSequenceClassification",
-            "BigBirdForTokenClassification",
-            "BigBirdLayer",
-            "BigBirdModel",
-            "BigBirdForPreTraining",
-            "BigBirdPreTrainedModel",
-            "load_tf_weights_in_big_bird",
         ]
     )
     _import_structure["models.camembert"].extend(
