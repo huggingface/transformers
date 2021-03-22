@@ -1,3 +1,3 @@
-# git+https://github.com/huggingface/transformers.git@master # install master or adjust ist with vX.X.X for installing version specific transforms
-transformers>=4.4.2
+git+https://github.com/huggingface/transformers.git@sm-trainer-smp-init-fix # install master or adjust ist with vX.X.X for installing version specific transforms
+# transformers>=4.4.2
 datasets>=1.5.0

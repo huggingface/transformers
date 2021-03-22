@@ -18,8 +18,8 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # current DLCs are only in us-ea
 os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed to work in the pipeline
 
 SAGEMAKER_ROLE = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
-# ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:pytorch1.6.0-transformers4.3.1-tokenizers0.10.1-datasets1.2.1-py36-gpu-cu110"
-ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-py36-gpu-cu110-ubuntu18.04"
+ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.7.1-transformers4.4.0-py36-gpu-cu110-ubuntu18.04"
+# ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-py36-gpu-cu110-ubuntu18.04"
 BASE_NAME = "sm-pt-transfromers-test"
 TEST_PATH = "./tests/sagemaker/scripts/pytorch"
 
@@ -243,7 +243,7 @@ def test_multi_node_sm_model_parallel(instance_type, instance_count, model_name_
     mpi_options = {
         "enabled": True,
         "processes_per_host": 8,
-        "custom_mpi_options": "--mca btl_vader_single_copy_mechanism none ",
+        # "custom_mpi_options": "--mca btl_vader_single_copy_mechanism none ",
     }
     smp_options = {
         "enabled": True,
@@ -291,4 +291,4 @@ def test_multi_node_sm_model_parallel(instance_type, instance_count, model_name_
 
     assert all(t <= 700 for t in train_runtime)
     assert all(t >= 0.3 for t in eval_accuracy)
-    assert all(t <= 1.1 for t in eval_loss)
+    assert all(t <= 1.2 for t in eval_loss)
