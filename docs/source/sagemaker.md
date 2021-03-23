@@ -200,7 +200,7 @@ In addition to the Deep Learning Container and the SageMaker SDK, we have implem
 
 ### Distributed Training: Data-Parallel
 
-You can use [SageMaker Data Parallelism Library](https://aws.amazon.com/blogs/aws/managed-data-parallelism-in-amazon-sagemaker-simplifies-training-on-large-datasets/) out of the box for distributed training. We added the functionality of Data Parallelism directly into the [Trainer](http://127.0.0.1:5500/docs/_build/html/main_classes/trainer.html). If your train.py uses the [Trainer](http://127.0.0.1:5500/docs/_build/html/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.
+You can use [SageMaker Data Parallelism Library](https://aws.amazon.com/blogs/aws/managed-data-parallelism-in-amazon-sagemaker-simplifies-training-on-large-datasets/) out of the box for distributed training. We added the functionality of Data Parallelism directly into the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html). If your train.py uses the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.
 
 - [Example Notebook PyTorch](https://github.com/huggingface/notebooks/blob/master/sagemaker/04_distributed_training_model_parallelism/sagemaker-notebook.ipynb)
 - [Example Notebook TensorFlow](https://github.com/huggingface/notebooks/blob/master/sagemaker/07_tensorflow_distributed_training_data_parallelism/sagemaker-notebook.ipynb)
