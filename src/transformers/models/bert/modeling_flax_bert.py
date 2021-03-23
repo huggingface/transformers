@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Dict, Tuple
+from typing import Callable, Tuple
 
 import numpy as np
 
@@ -21,7 +21,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.core.frozen_dict import FrozenDict
-from flax.linen.attention import dot_product_attention
+from flax.linen import dot_product_attention
 from jax import lax
 from jax.random import PRNGKey
 
