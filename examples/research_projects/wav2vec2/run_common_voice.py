@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
 import datasets
+from datasets import concatenate_datasets
 import numpy as np
 import torch
 import torchaudio
@@ -27,6 +28,8 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+import soundfile as sf
+from audiomentations import Compose, AddGaussianNoise, Gain, PitchShift
 
 
 if is_apex_available():
@@ -391,11 +394,18 @@ def main():
     # Preprocessing the datasets.
     # We need to read the aduio files as arrays and tokenize the targets.
     def speech_file_to_array_fn(batch):
-        speech_array, sampling_rate = torchaudio.load(batch["path"])
-        batch["speech"] = resampler(speech_array).squeeze().numpy()
+        try:
+            speech_array, sampling_rate = sf.read(batch["path"] + ".wav")
+        except:
+            speech_array, sampling_rate = torchaudio.load(batch["path"])
+            speech_array = resampler(speech_array).squeeze().numpy()
+            sf.write(batch["path"] + ".wav", speech_array, sampling_rate, subtype='PCM_24')
+        batch["speech"] = speech_array
         batch["sampling_rate"] = 16_000
         batch["target_text"] = batch["text"]
         return batch
+    
+    augmented_dataset = train_dataset
 
     train_dataset = train_dataset.map(
         speech_file_to_array_fn,
@@ -407,6 +417,38 @@ def main():
         remove_columns=eval_dataset.column_names,
         num_proc=data_args.preprocessing_num_workers,
     )
+    
+    
+    # augmenting the datasets.
+    # We need to read the aduio files as arrays, minupulate the audio randomly and tokenize the targets.
+    augment = Compose([
+        AddGaussianNoise(min_amplitude=0.0001, max_amplitude=0.001, p=0.8),
+        PitchShift(min_semitones=-1, max_semitones=1, p=0.8),
+        Gain(min_gain_in_db=-6, max_gain_in_db=6, p=0.8)
+    ])
+    def augment_speech_file_to_array_fn(batch):
+        try:
+            speech_array, sampling_rate = sf.read(batch["path"] + ".wav")
+        except:
+            speech_array, sampling_rate = torchaudio.load(batch["path"])
+            speech_array = resampler(speech_array).squeeze().numpy()
+            speech_array = augment(samples=speech_array, sample_rate=sampling_rate)
+            sf.write(batch["path"] + ".wav", speech_array, sampling_rate, subtype='PCM_24')
+        batch["speech"] = speech_array
+        batch["sampling_rate"] = 16_000
+        batch["target_text"] = batch["text"]
+        return batch
+    
+    
+    augmented_dataset = augmented_dataset.map(
+        augment_speech_file_to_array_fn,
+        remove_columns=train_dataset.column_names,
+        num_proc=data_args.preprocessing_num_workers,
+    )
+    
+    #we need to concatenate the augmented dataset and the raw dataset
+    train_dataset = concatenate_datasets([train_dataset, augmented_dataset])
+
 
     def prepare_dataset(batch):
         # check that all files have the correct sampling rate
