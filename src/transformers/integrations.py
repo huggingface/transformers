@@ -20,6 +20,7 @@ import json
 import numbers
 import os
 import re
+import sys
 import tempfile
 from copy import deepcopy
 from pathlib import Path
@@ -269,7 +270,71 @@ def rewrite_logs(d):
     return new_d
 
 
-def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
+_deepspeed_is_zero3_enabled = None
+def deepspeed_is_zero3_enabled(enable=None):
+    """A Getter/setter function to know whether deepspeed is going to be run using ZeRO Stage 3
+
+    Other than manual getter this function also includes an auto-discovery method, see comments in
+    the code for details.
+
+    Args:
+        enable: if set to True will make `deepspeed_is_zero3_enabled` return True
+
+    Returns: True if either it was explicitly enabled via ``deepspeed_is_zero3_enabled(True)`` or
+    the auto-detector was able to derive that the trainer will be running via zero 3 stage
+    deepspeed.
+
+    """
+    global _deepspeed_is_zero3_enabled
+
+    #return False
+
+
+    if enable is not None:
+        _deepspeed_is_zero3_enabled = enable
+    elif _deepspeed_is_zero3_enabled == None:
+        # Try to auto-discover if we are about to use DeepSpeed with ZeRO3 enabled. This will only
+        # work for scripts using cli to pass --deepspeed ds_config.json. If cmd args aren't used,
+        # then to get the model efficiently loaded across multiple-gpus one has to explicitly call
+        # deepspeed_is_zero3_enabled(True) **before** instantiating a model object
+        if "--deepspeed" in sys.argv:
+            idx = sys.argv.index("--deepspeed")
+            ds_config = sys.argv[idx+1]
+            if not os.path.exists(ds_config):
+                 raise ValueError("--deepspeed requires a valid path to a config file")
+            config = deepspeed_parse_config(ds_config)
+            if (
+                "zero_optimization" in config
+                and "stage" in config["zero_optimization"]
+                and config["zero_optimization"]["stage"] == 3
+            ):
+                _deepspeed_is_zero3_enabled = True
+            else:
+                _deepspeed_is_zero3_enabled = False
+
+    return _deepspeed_is_zero3_enabled == True
+
+def deepspeed_parse_config(ds_config):
+    """
+
+    """
+    import deepspeed
+
+    require_version("deepspeed>0.3.12")
+
+    if isinstance(ds_config, dict):
+        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
+        # modified it, it will not be accepted here again, since some config params must be not set by users
+        config = deepcopy(ds_config)
+    elif isinstance(ds_config, str):
+        with io.open(ds_config, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    else:
+        raise ValueError("expecting either a path to a config file or a pre-populated dict")
+
+    return config
+
+def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -285,21 +350,10 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     """
     import deepspeed
 
-    require_version("deepspeed>0.3.12")
-
     args = trainer.args
-    ds_config_file = args.deepspeed
     model = trainer.model
 
-    if isinstance(args.deepspeed, dict):
-        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
-        # modified it, it will not be accepted here again, since some config params must be not set by users
-        config = deepcopy(args.deepspeed)
-    elif isinstance(args.deepspeed, str):
-        with io.open(ds_config_file, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    else:
-        raise ValueError("expecting either a path to a config file or a pre-populated dict")
+    config = deepspeed_parse_config(args.deepspeed)
 
     # The following code translates relevant trainer's cl args into the DS config
 
@@ -326,7 +380,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
 
     if "gradient_clipping" in config:
         logger.info(
-            f"Keeping the `gradient_clipping` config from {ds_config_file} intact, ignoring any gradient clipping-specific cl args"
+            f"Keeping the `gradient_clipping` config intact, ignoring any gradient clipping-specific cl args"
         )
     else:  # override only if the ds config doesn't already have this section
         config["gradient_clipping"] = args.max_grad_norm
@@ -345,7 +399,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
 
     optimizer = None
     if "optimizer" in config:
-        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        logger.info(f"Updating the `scheduler` config with other command line arguments")
 
         # to avoid inconsistent values of lr and warm up steps the command line args override config
         params = dict(
@@ -385,7 +439,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
     lr_scheduler = None
     if "scheduler" in config:
-        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        logger.info(f"Updating the `scheduler` config with other command line arguments")
         # the user won't easily know the correct num_training_steps should they use WarmupDecayLR,
         # so let's set it to the correct value
         if config["scheduler"]["type"] == "WarmupDecayLR":
@@ -419,7 +473,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
         if trainer.fp16_backend == "apex":
             if "amp" in config:
                 logger.info(
-                    f"Keeping the `amp` config from {ds_config_file} intact, ignoring any amp-specific cl args"
+                    f"Keeping the `amp` config intact, ignoring any amp-specific cl args"
                 )
             else:
                 config["amp"] = {
@@ -429,7 +483,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
         elif trainer.fp16_backend == "amp":
             if "fp16" in config:
                 logger.info(
-                    f"Keeping the `fp16` config from {ds_config_file} intact, ignoring any fp16-specific cl args"
+                    f"Keeping the `fp16` config intact, ignoring any fp16-specific cl args"
                 )
             else:
                 config["fp16"] = {

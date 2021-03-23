@@ -40,7 +40,7 @@ from .integrations import (  # isort: split
     is_ray_tune_available,
     run_hp_search_optuna,
     run_hp_search_ray,
-    init_deepspeed,
+    deepspeed_init,
 )
 
 import numpy as np
@@ -882,7 +882,7 @@ class Trainer:
             logger.info(f"Loading model from {resume_from_checkpoint}).")
 
             if self.deepspeed:
-                # will be resumed in init_deepspeed
+                # will be resumed in deepspeed_init
                 pass
             elif isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(resume_from_checkpoint)
@@ -926,7 +926,7 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
-            deepspeed_engine, optimizer, lr_scheduler = init_deepspeed(
+            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
             )
             self.model = deepspeed_engine.module
@@ -1303,7 +1303,7 @@ class Trainer:
             return
 
         if self.deepspeed:
-            # deepspeed loads optimizer/lr_scheduler together with the model in init_deepspeed
+            # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
         if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(

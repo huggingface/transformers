@@ -1037,8 +1037,7 @@ For full details on this method please refer to `Registering External Parameters
 Constructing Massive Models
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-DeepSpeed/ZeRO-3 can handle models with Trillions of parameters which may not fit onto the existing RAM. In such cases
-but also if you want the initialization to happen much faster, initialize the model using `deepspeed.zero.Init()`
+DeepSpeed/ZeRO-3 can handle models with Trillions of parameters which may not fit onto the existing RAM. In such cases, but also if you want the initialization to happen much faster, initialize the model using `deepspeed.zero.Init()`
 context manager (which is also a function decorator), like so:
 
 .. code-block:: python
@@ -1049,7 +1048,19 @@ context manager (which is also a function decorator), like so:
        config = T5Config.from_pretrained("t5-small")
        model = T5ForConditionalGeneration(config)
 
-As you can see this gives you a random model. At the moment there is no way to do that for a pretrained model.
+As you can see this gives you a randomly initialized model.
+
+If you want to use a pretrained model, ``model_class.from_pretrained`` will activate this feature as long as ``deepspeed_is_zero3_enabled()`` returns ``True``. Therefore to enable this feature here is the required sequence:
+
+.. code-block:: python
+
+    from transformers.integrations import deepspeed_is_zero3_enabled
+    deepspeed_is_zero3_enabled(True)
+    model = T5ForConditionalGeneration.from_pretrained("t5-small")
+
+If you're using Trainer command line arguments which include ``--deepspeed ds_config.json`` with ZeRO3 config enabled, then you can skip ``deepspeed_is_zero3_enabled(True)`` as it will try to discover whether it'll be run under zero3 and ``from_pretrained`` will automatically activate this feature.
+
+Note: If the fp16 weights of the model can't fit onto the memory of a single GPU this feature must be used.
 
 For full details on this method and other related features please refer to `Constructing Massive Models
 <https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models>`__.

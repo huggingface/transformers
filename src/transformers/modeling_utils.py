@@ -42,7 +42,10 @@ from .file_utils import (
 )
 from .generation_utils import GenerationMixin
 from .utils import logging
+from .integrations import deepspeed_is_zero3_enabled
 
+if deepspeed_is_zero3_enabled():
+    import deepspeed
 
 logger = logging.get_logger(__name__)
 
@@ -1055,7 +1058,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        model = cls(config, *model_args, **model_kwargs)
+
+        if deepspeed_is_zero3_enabled():
+            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+            # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
+            with deepspeed.zero.Init():
+                model = cls(config, *model_args, **model_kwargs)
+        else:
+            model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
             try:
@@ -1113,15 +1123,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             # so we need to apply the function recursively.
             def load(module: nn.Module, prefix=""):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                module._load_from_state_dict(
-                    state_dict,
-                    prefix,
-                    local_metadata,
-                    True,
-                    missing_keys,
-                    unexpected_keys,
-                    error_msgs,
-                )
+                args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                if deepspeed_is_zero3_enabled():
+                    # because zero3 puts placeholders in model params, this context
+                    # manager gathers (unpartitions) the params of the current layer, then loads from
+                    # the state dict and then re-partitions them again
+                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                        if torch.distributed.get_rank() == 0:
+                            module._load_from_state_dict(*args)
+                else:
+                    module._load_from_state_dict(*args)
+
                 for name, child in module._modules.items():
                     if child is not None:
                         load(child, prefix + name + ".")
