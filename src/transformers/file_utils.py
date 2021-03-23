@@ -84,31 +84,24 @@ else:
 if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
     _tf_available = importlib.util.find_spec("tensorflow") is not None
     if _tf_available:
+        candidates = (
+            "tensorflow",
+            "tensorflow-cpu",
+            "tensorflow-gpu",
+            "tf-nightly",
+            "tf-nightly-cpu",
+            "tf-nightly-gpu",
+            "intel-tensorflow",
+        )
+        _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
-        try:
-            _tf_version = importlib_metadata.version("tensorflow")
-        except importlib_metadata.PackageNotFoundError:
+        for pkg in candidates:
             try:
-                _tf_version = importlib_metadata.version("tensorflow-cpu")
+                _tf_version = importlib_metadata.version(pkg)
+                break
             except importlib_metadata.PackageNotFoundError:
-                try:
-                    _tf_version = importlib_metadata.version("tensorflow-gpu")
-                except importlib_metadata.PackageNotFoundError:
-                    try:
-                        _tf_version = importlib_metadata.version("tf-nightly")
-                    except importlib_metadata.PackageNotFoundError:
-                        try:
-                            _tf_version = importlib_metadata.version("tf-nightly-cpu")
-                        except importlib_metadata.PackageNotFoundError:
-                            try:
-                                _tf_version = importlib_metadata.version("tf-nightly-gpu")
-                            except importlib_metadata.PackageNotFoundError:
-                                # Support for intel-tensorflow version
-                                try:
-                                    _tf_version = importlib_metadata.version("intel-tensorflow")
-                                except importlib_metadata.PackageNotFoundError:
-                                    _tf_version = None
-                                    _tf_available = False
+                pass
+        _tf_available = _tf_version is not None
     if _tf_available:
         if version.parse(_tf_version) < version.parse("2"):
             logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
