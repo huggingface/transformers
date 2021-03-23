@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from torch.nn import functional as F
 
 from .file_utils import ModelOutput
@@ -1268,26 +1269,43 @@ class GenerationMixin:
             input_ids, max_length
         )
 
+        this_peer_finished = False
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                #print(f"{dist.get_rank()} Finished? {this_peer_finished_flag}")
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    #print(f"{dist.get_rank()} All peers finished!")
+                    break
+            elif this_peer_finished:
+                break
+
+            # if this_peer_finished:
+            #     break
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            # forward pass to get next token
-            # print(self)
-            # die
-            # deepspeed.optimizer.param_coordinator.reset_step()
-            # print(torch._C.is_grad_enabled())
-            # die
-            import torch.distributed as dist
-
-            print(f"{dist.get_rank()} generate {cur_len}/{max_length}")
-            # outputs = deepspeed(
+            #print(f"{dist.get_rank()} generate {cur_len}/{max_length}")
             outputs = self(
                 **model_inputs,
                 return_dict=True,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+
+                # don't waste resources running the code we don't need
+                continue
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # Store scores, attentions and hidden_states when required
@@ -1338,27 +1356,27 @@ class GenerationMixin:
 
             # stop when there is a </s> in each sentence, or if we exceed the maximum length
             if unfinished_sequences.max() == 0:
-                print(f"{dist.get_rank()} unfinished_sequences")
-                break
+                #print(f"{dist.get_rank()} unfinished_sequences {cur_len}/{max_length}")
+                this_peer_finished = True
 
-            if stopping_criteria(input_ids, scores):
-                print(f"{dist.get_rank()} hit stopping_criteria")
-                break
+            if not this_peer_finished and stopping_criteria(input_ids, scores):
+                #print(f"{dist.get_rank()} hit stopping_criteria {cur_len}/{max_length}")
+                this_peer_finished = True
 
-        if synced_gpus:
-            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
-            # must continue running forward so that the other gpus who may have not finished their
-            # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length - cur_len):
-                # _ = deepspeed(
-                _ = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
 
-        print(f"{dist.get_rank()} finished {cur_len}/{max_length}")
+        # if synced_gpus:
+        #     # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
+        #     # must continue running forward so that the other gpus who may have not finished their
+        #     # generate yet, can complete as they rely on this gpu to received its slice of params
+        #     for _ in range(max_length - cur_len):
+        #         # _ = deepspeed(
+        #         _ = self(
+        #             **model_inputs,
+        #             return_dict=True,
+        #             output_attentions=output_attentions,
+        #             output_hidden_states=output_hidden_states,
+        #         )
+        # #print(f"{dist.get_rank()} finished {cur_len}/{max_length}")
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
