@@ -428,12 +428,12 @@ def main():
     ])
     def augment_speech_file_to_array_fn(batch):
         try:
-            speech_array, sampling_rate = sf.read(batch["path"] + ".wav")
+            speech_array, sampling_rate = sf.read(batch["path"] + "augmented.wav")
         except:
             speech_array, sampling_rate = torchaudio.load(batch["path"])
             speech_array = resampler(speech_array).squeeze().numpy()
             speech_array = augment(samples=speech_array, sample_rate=sampling_rate)
-            sf.write(batch["path"] + ".wav", speech_array, sampling_rate, subtype='PCM_24')
+            sf.write(batch["path"] + "augmented.wav", speech_array, sampling_rate, subtype='PCM_24')
         batch["speech"] = speech_array
         batch["sampling_rate"] = 16_000
         batch["target_text"] = batch["text"]
