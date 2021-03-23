@@ -68,10 +68,7 @@ test-examples:
 # Run tests for SageMaker DLC release
 
 test-sagemaker: # install sagemaker dependencies in advance with pip install .[sagemaker]
-	# TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
-	# TEST_SAGEMAKER=True python -m pytest -s -v ./tests/sagemaker/test_tensorflow_dlc.py
-	TEST_SAGEMAKER=True python -m pytest -s -v ./tests/sagemaker/test_pytorch_dlc.py -k 'test_multi_node_sm_model_parallel'
-	# TEST_SAGEMAKER=True python -m pytest -n auto -s -v ./tests/sagemaker/test_pytorch_dlc.py
+	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
 
 
 

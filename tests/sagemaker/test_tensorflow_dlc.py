@@ -18,8 +18,8 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # current DLCs are only in us-ea
 os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed to work in the pipeline
 
 SAGEMAKER_ROLE = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
-# ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-training:tensorflow2.3.1-transformers4.3.1-tokenizers0.10.1-datasets1.2.1-py37-gpu-cu110"
-ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.4.2-py37-gpu-cu110-ubuntu18.04"
+ECR_IMAGE = "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.4.2-gpu-py37-cu110-ubuntu18.04"
+# ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-tensorflow-training:2.4.1-transformers4.4.2-py37-gpu-cu110-ubuntu18.04"
 BASE_NAME = "sm-tf-transfromers-test"
 TEST_PATH = "./tests/sagemaker/scripts/tensorflow"
 
@@ -64,7 +64,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
         metric_definitions=METRIC_DEFINITIONS,
-        py_version="py3",
+        py_version="py37",
     )
     # run training
     estimator.fit()

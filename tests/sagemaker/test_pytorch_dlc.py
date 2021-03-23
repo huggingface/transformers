@@ -18,7 +18,7 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # current DLCs are only in us-ea
 os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed to work in the pipeline
 
 SAGEMAKER_ROLE = "arn:aws:iam::558105141721:role/sagemaker_execution_role"
-ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.7.1-transformers4.4.0-py36-gpu-cu110-ubuntu18.04"
+ECR_IMAGE = "763104351884.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-gpu-py36-cu110-ubuntu18.04"
 # ECR_IMAGE = "564829616587.dkr.ecr.us-east-1.amazonaws.com/huggingface-pytorch-training:1.6.0-transformers4.4.2-py36-gpu-cu110-ubuntu18.04"
 BASE_NAME = "sm-pt-transfromers-test"
 TEST_PATH = "./tests/sagemaker/scripts/pytorch"
@@ -97,7 +97,7 @@ def test_single_node_fine_tuning(instance_type, instance_count, model_name_or_pa
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
         metric_definitions=METRIC_DEFINITIONS,
-        py_version="py3",
+        py_version="py36",
     )
     # run training
     estimator.fit()
@@ -149,7 +149,7 @@ def test_multi_node_sm_data_parallel(instance_type, instance_count, model_name_o
         hyperparameters=hyperparameters,
         metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
         distribution=distribution,
-        py_version="py3",
+        py_version="py36",
     )
     # run training
     estimator.fit()
@@ -200,7 +200,7 @@ def test_multi_node_pytorch_ddp(instance_type, instance_count, model_name_or_pat
         debugger_hook_config=False,
         hyperparameters=hyperparameters,
         metric_definitions=DISTRIBUTED_METRIC_DEFINITIONS,
-        py_version="py3",
+        py_version="py36",
     )
     # run training
     estimator.fit()
