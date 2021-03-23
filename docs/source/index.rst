@@ -363,6 +363,7 @@ TensorFlow and/or Flax.
     examples
     custom_datasets
     notebooks
+    sagemaker
     community
     converting_tensorflow_models
     migration
