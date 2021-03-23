@@ -452,9 +452,9 @@ class Adafactor(Optimizer):
         warmup_init=False,
     ):
         if lr is not None and relative_step:
-            raise ValueError("Cannot combine manual lr and relative_step=True options")
+            raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:
-            raise ValueError("warmup_init=True requires relative_step=True")
+            raise ValueError("`warmup_init=True` requires `relative_step=True`")
 
         defaults = dict(
             lr=lr,
