@@ -471,18 +471,8 @@ def main():
 
         trainer.log_metrics("test", metrics)
         trainer.save_metrics("test", metrics)
-
-        # write custom code for saving prediction according to task
-        # below code might varies across tasks
-        predictions = np.argmax(predictions, axis=1)
-        output_test_file = os.path.join(training_args.output_dir, f"test_predictions.txt")
-        if trainer.is_world_process_zero():
-            with open(output_test_file, "w") as writer:
-                logger.info(f"***** Test results *****")
-                writer.write("index\tprediction\n")
-                for index, item in enumerate(predictions):
-                    item = label_list[item]
-                    writer.write(f"{index}\t{item}\n")
+        
+        # write custom code for saving predictions according to task
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
