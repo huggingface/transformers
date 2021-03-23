@@ -201,7 +201,7 @@ class ViTSelfOutput(nn.Module):
 class ViTAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = ViTSelfAttention(config)
+        self.attention = ViTSelfAttention(config)
         self.output = ViTSelfOutput(config)
         self.pruned_heads = set()
 
@@ -209,18 +209,18 @@ class ViTAttention(nn.Module):
         if len(heads) == 0:
             return
         heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
+            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
         )
 
         # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
+        self.attention.query = prune_linear_layer(self.attention.query, index)
+        self.attention.key = prune_linear_layer(self.attention.key, index)
+        self.attention.value = prune_linear_layer(self.attention.value, index)
         self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
 
         # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
+        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
@@ -229,7 +229,7 @@ class ViTAttention(nn.Module):
         head_mask=None,
         output_attentions=False,
     ):
-        self_outputs = self.self(
+        self_outputs = self.attention(
             hidden_states,
             head_mask,
             output_attentions,

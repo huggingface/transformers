@@ -1110,20 +1110,24 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         in_proj_weight = state_dict.pop("blocks." + str(i) + ".attn.qkv.weight")
         in_proj_bias = state_dict.pop("blocks." + str(i) + ".attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict["vit.encoder.layer." + str(i) + ".attention.self.query.weight"] = in_proj_weight[
+        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.query.weight"] = in_proj_weight[
             : config.hidden_size, :
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.self.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.self.key.weight"] = in_proj_weight[
+        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.query.bias"] = in_proj_bias[
+            : config.hidden_size
+        ]
+        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.self.key.bias"] = in_proj_bias[
+        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.self.value.weight"] = in_proj_weight[
+        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.value.weight"] = in_proj_weight[
             -config.hidden_size :, :
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.self.value.bias"] = in_proj_bias[-config.hidden_size :]
+        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.value.bias"] = in_proj_bias[
+            -config.hidden_size :
+        ]
 
     # to do: add base model support
     if base_model:
