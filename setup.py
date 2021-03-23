@@ -134,7 +134,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
-    # TODO: add correct sagemaker version"sagemaker>=2.29.0",
+    "sagemaker>=2.31.0",
 ]
 
 
@@ -231,7 +231,9 @@ extras["speech"] = deps_list("soundfile", "torchaudio")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black")
+    deps_list(
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black"
+    )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
