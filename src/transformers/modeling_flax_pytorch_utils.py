@@ -94,13 +94,20 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         elif pt_tuple_key[-1] == "beta":
             pt_tuple_key = pt_tuple_key[:-1] + ("bias",)
 
-        # THIS WOULD BE NEEDED IF ATTENTION FN IS USED
+        # THIS AND MORE WOULD BE NEEDED IF ATTENTION FN IS USED
         #        elif flax_model.attention_layers_names is not None and any(is_sub_tuple(pt_tuple_key, attn_layer_name) for attn_layer_name in flax_model.attention_layers_names):
         #
         #            if pt_tuple_key[1:] in flax_model.pt_to_flax_look_up:
         #                pt_tuple_key = pt_tuple_key[:1] + flax_model.pt_to_flax_look_up[pt_tuple_key[1:]]
         #            elif pt_tuple_key in flax_model.pt_to_flax_look_up:
         #                pt_tuple_key = flax_model.pt_to_flax_look_up[pt_tuple_key]
+        #
+        #        if pt_tuple_key[-2] in ["key", "query", "value"]:
+        # do reshape
+        # ...
+        #        elif pt_tuple_key[-2] == "out":
+        # do different reshape
+        # ...
 
         if pt_tuple_key in random_flax_state_dict:
             if random_flax_state_dict[pt_tuple_key].shape != pt_tensor.shape:

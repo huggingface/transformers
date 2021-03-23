@@ -122,11 +122,6 @@ class FlaxPreTrainedModel(ABC):
             )
         self._params = freeze(params)
 
-    #    @staticmethod
-    #    @abstractmethod
-    #    def convert_from_pytorch(pt_state: Dict, config: PretrainedConfig) -> Dict:
-    #        raise NotImplementedError()
-
     @classmethod
     def from_pretrained(
         cls,

@@ -311,33 +311,6 @@ class FlaxBertAttention(nn.Module):
         return hidden_states
 
 
-class OldFlaxBertAttention(nn.Module):
-    config: BertConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-
-    def setup(self):
-        self.self_attention = nn.attention.SelfAttention(
-            num_heads=self.config.num_attention_heads,
-            qkv_features=self.config.hidden_size,
-            dropout_rate=self.config.attention_probs_dropout_prob,
-            kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            bias_init=jax.nn.initializers.zeros,
-            name="self",
-            dtype=self.dtype,
-        )
-        self.LayerNorm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size, name="LayerNorm", dtype=self.dtype)
-
-    def __call__(self, hidden_states, attention_mask, deterministic=True):
-        # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
-        # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
-        # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attention_mask = jnp.expand_dims(attention_mask, axis=(-3, -2))
-        self_attn_output = self.self_attention(hidden_states, attention_mask, deterministic=deterministic)
-
-        hidden_states = self.LayerNorm(self_attn_output + hidden_states)
-        return hidden_states
-
-
 class FlaxBertIntermediate(nn.Module):
     config: BertConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -515,6 +488,7 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         return self.module.init(rngs, input_ids, attention_mask, token_type_ids, position_ids)["params"]
 
 
+# THIS AND MORE WOULD BE NEEDED IF WE KEEP nn.self_attention
 #    @property
 #    def pt_to_flax_attention_weight_name(self):
 #        pt_to_flax_look_up = {}
