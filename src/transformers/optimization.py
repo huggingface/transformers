@@ -418,7 +418,7 @@ class Adafactor(Optimizer):
 
         Others reported the following combination to work well::
 
-            Adafactor(model.parameters(), scale_parameter=False, relative_step=True, warmup_init=True, lr=None)
+            Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
 
 
     Usage::
