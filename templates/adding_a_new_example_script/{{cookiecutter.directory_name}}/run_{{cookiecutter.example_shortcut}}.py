@@ -139,6 +139,10 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input test data file to predict the label on (a text file)."},
+    )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
@@ -160,10 +164,22 @@ class DataTrainingArguments:
             "value if set."
         },
     )
+    max_test_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
+            "value if set."
+        },
+    )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+            and self.test_file is None
+        ):
+            raise ValueError("Need either a dataset name or a training/validation/test file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
@@ -171,6 +187,9 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, a json or a txt file."
+            if self.test_file is not None:
+                extension = self.test_file.split(".")[-1]
+                assert extension in ["csv", "json", "txt"], "`test_file` should be a csv, a json or a txt file."
 
 
 def main():
@@ -238,9 +257,13 @@ def main():
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
+            extension = data_args.train_file.split(".")[-1]
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
+            extension = data_args.validation_file.split(".")[-1]
+        if data_args.test_file is not None:
+            data_files["test"] = data_args.test_file
+            extension = data_args.test_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
         datasets = load_dataset(extension, data_files=data_files)
@@ -326,8 +349,10 @@ def main():
     # First we tokenize all the texts.
     if training_args.do_train:
         column_names = datasets["train"].column_names
-    else:
+    elif training_args.do_eval:
         column_names = datasets["validation"].column_names
+    elif training_args.do_predict:
+        column_names = datasets["test"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     def tokenize_function(examples):
@@ -358,6 +383,22 @@ def main():
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
         # tokenize validation dataset
         eval_dataset = eval_dataset.map(
+            tokenize_function,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=[text_column_name],
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
+
+    if training_args.do_predict:
+        if "test" not in datasets:
+            raise ValueError("--do_predict requires a test dataset")
+        test_dataset = datasets["test"]
+        # Selecting samples from dataset
+        if data_args.max_test_samples is not None:
+            test_dataset = test_dataset.select(range(data_args.max_test_samples))
+        # tokenize test dataset
+        test_dataset = test_dataset.map(
             tokenize_function,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
@@ -420,6 +461,18 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
+    # Prediction
+    if training_args.do_predict:
+        logger.info("*** Predict ***")
+        predictions, labels, metrics = trainer.predict(test_dataset)
+
+        max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
+        metrics["test_samples"] = min(max_test_samples, len(test_dataset))
+
+        trainer.log_metrics("test", metrics)
+        trainer.save_metrics("test", metrics)
+        
+        # write custom code for saving predictions according to task
 
 def _mp_fn(index):
     # For xla_spawn (TPUs)
