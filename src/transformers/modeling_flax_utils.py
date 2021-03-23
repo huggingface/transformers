@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
@@ -29,8 +29,8 @@ from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
-from .utils import logging
 from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
+from .utils import logging
 
 
 logger = logging.get_logger(__name__)
@@ -122,10 +122,10 @@ class FlaxPreTrainedModel(ABC):
             )
         self._params = freeze(params)
 
-    @staticmethod
-    @abstractmethod
-    def convert_from_pytorch(pt_state: Dict, config: PretrainedConfig) -> Dict:
-        raise NotImplementedError()
+    #    @staticmethod
+    #    @abstractmethod
+    #    def convert_from_pytorch(pt_state: Dict, config: PretrainedConfig) -> Dict:
+    #        raise NotImplementedError()
 
     @classmethod
     def from_pretrained(
@@ -313,21 +313,12 @@ class FlaxPreTrainedModel(ABC):
 
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
-#                if from_pt:
-#                    state =
-#                    import torch
-#
-#                    state = torch.load(state_f)
-#
-#                    state = convert_state_dict_from_pt(, state, config)
         else:
             with open(resolved_archive_file, "rb") as state_f:
                 try:
                     state = from_bytes(cls, state_f.read())
                 except UnpicklingError:
-                    raise EnvironmentError(
-                        f"Unable to convert {archive_file} to Flax deserializable object. "
-                    )
+                    raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
@@ -396,13 +387,3 @@ class FlaxPreTrainedModel(ABC):
         with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
-
-
-def convert_state_dict_from_pt(model_class: ABC, state: Dict, config: PretrainedConfig):
-    """
-    Converts a PyTorch parameter state dict to an equivalent Flax parameter state dict
-    """
-    state = {k: v.numpy() for k, v in state.items()}
-    state = model_class.convert_from_pytorch(state, config)
-    state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
-    return state
