@@ -2393,11 +2393,6 @@ class ViTForImageClassification:
         requires_pytorch(self)
 
 
-class ViTLayer:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class ViTModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
