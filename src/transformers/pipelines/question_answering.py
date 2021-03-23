@@ -268,7 +268,7 @@ class QuestionAnsweringPipeline(Pipeline):
                 )
 
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
-                if self.tokenizer.cls_token_id:
+                if self.tokenizer.cls_token_id is not None:
                     cls_index = np.nonzero(encoded_inputs["input_ids"] == self.tokenizer.cls_token_id)
                     p_mask[cls_index] = 0
 
