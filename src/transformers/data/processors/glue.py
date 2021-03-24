@@ -26,7 +26,6 @@ from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
-
 if is_tf_available():
     import tensorflow as tf
 
@@ -40,12 +39,12 @@ DEPRECATION_WARNING = (
 
 
 def glue_convert_examples_to_features(
-    examples: Union[List[InputExample], "tf.data.Dataset"],
-    tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
-    task=None,
-    label_list=None,
-    output_mode=None,
+        examples: Union[List[InputExample], "tf.data.Dataset"],
+        tokenizer: PreTrainedTokenizer,
+        max_length: Optional[int] = None,
+        task=None,
+        label_list=None,
+        output_mode=None,
 ):
     """
     Loads a data file into a list of ``InputFeatures``
@@ -77,10 +76,10 @@ def glue_convert_examples_to_features(
 if is_tf_available():
 
     def _tf_glue_convert_examples_to_features(
-        examples: tf.data.Dataset,
-        tokenizer: PreTrainedTokenizer,
-        task=str,
-        max_length: Optional[int] = None,
+            examples: tf.data.Dataset,
+            tokenizer: PreTrainedTokenizer,
+            task=str,
+            max_length: Optional[int] = None,
     ) -> tf.data.Dataset:
         """
         Returns:
@@ -108,12 +107,12 @@ if is_tf_available():
 
 
 def _glue_convert_examples_to_features(
-    examples: List[InputExample],
-    tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
-    task=None,
-    label_list=None,
-    output_mode=None,
+        examples: List[InputExample],
+        tokenizer: PreTrainedTokenizer,
+        max_length: Optional[int] = None,
+        task=None,
+        label_list=None,
+        output_mode=None,
 ):
     if max_length is None:
         max_length = tokenizer.max_len
@@ -318,6 +317,50 @@ class ColaProcessor(DataProcessor):
         for (i, line) in enumerate(lines):
             guid = "%s-%s" % (set_type, i)
             text_a = line[text_index]
+            label = None if test_mode else line[1]
+            examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
+        return examples
+
+
+class MaterialProcessor(DataProcessor):
+    """Processor for the Material data set (GLUE version)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        warnings.warn(DEPRECATION_WARNING.format("processor"), FutureWarning)
+
+    def get_example_from_tensor_dict(self, tensor_dict):
+        """See base class."""
+        return InputExample(
+            tensor_dict["idx"].numpy(),
+            tensor_dict["sentence"].numpy().decode("utf-8"),
+            None,
+            str(tensor_dict["label"].numpy()),
+        )
+
+    def get_train_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "train.tsv")), "train")
+
+    def get_dev_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "dev.tsv")), "dev")
+
+    def get_test_examples(self, data_dir):
+        """See base class."""
+        return self._create_examples(self._read_tsv(os.path.join(data_dir, "test.tsv")), "test")
+
+    def get_labels(self):
+        """See base class."""
+        return ["0", "1"]
+
+    def _create_examples(self, lines, set_type):
+        """Creates examples for the training, dev and test sets."""
+        test_mode = set_type == "test"
+        examples = []
+        for (i, line) in enumerate(lines):
+            guid = "%s-%s" % (set_type, i)
+            text_a = line[0]
             label = None if test_mode else line[1]
             examples.append(InputExample(guid=guid, text_a=text_a, text_b=None, label=label))
         return examples
@@ -615,6 +658,7 @@ glue_tasks_num_labels = {
     "qnli": 2,
     "rte": 2,
     "wnli": 2,
+    "material": 2,
 }
 
 glue_processors = {
@@ -628,6 +672,7 @@ glue_processors = {
     "qnli": QnliProcessor,
     "rte": RteProcessor,
     "wnli": WnliProcessor,
+    "material": MaterialProcessor,
 }
 
 glue_output_modes = {
@@ -641,4 +686,5 @@ glue_output_modes = {
     "qnli": "classification",
     "rte": "classification",
     "wnli": "classification",
+    "material": "classification",
 }
