@@ -51,7 +51,7 @@ def infer_framework_from_model(model, model_classes: Optional[Dict[str, type]] =
     """
     Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
 
-    If :obj:`model` is instantiated, this function will just infer the framework from the mode class. Otherwise
+    If :obj:`model` is instantiated, this function will just infer the framework from the model class. Otherwise
     :obj:`model` is actually a checkpoint name and this method will try to instantiate it using :obj:`model_classes`.
     Since we don't want to instantiate the model twice, this model is returned for use by the pipeline.
 
