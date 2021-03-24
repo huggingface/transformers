@@ -24,6 +24,7 @@ import math
 import numpy as np
 import os
 import random
+import torch
 
 import datasets
 from datasets import ClassLabel, load_dataset, load_metric
@@ -180,6 +181,11 @@ def parse_args():
         choices=["ner", "pos", "chunk"],
         help="The name of the task (ner, pos...)."
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Activate debug mode and run training only with a subset of data.",
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -246,6 +252,10 @@ def main():
             data_files["validation"] = args.validation_file
         extension = args.train_file.split(".")[-1]
         hf_datasets = load_dataset(extension, data_files=data_files)
+    # Trim a number of training examples
+    if args.debug:
+        for split in hf_datasets.keys():
+            hf_datasets[split] = hf_datasets[split].select(range(100))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -426,21 +436,28 @@ def main():
     # Metrics
     metric = load_metric("seqeval")
 
-    def compute_metrics(p):
-        predictions, labels = p
-        predictions = np.argmax(predictions, axis=2)
+    def get_labels(predictions, references):
+        # Transform predictions and references tensos to numpy arrays
+        if device.type == 'cpu':
+            y_pred = predictions.detach().clone().numpy()
+            y_true = references.detach().clone().numpy()
+        else:
+            y_pred = predictions.detach().cpu().clone().numpy()
+            y_true = references.detach().cpu().clone().numpy()
 
         # Remove ignored index (special tokens)
         true_predictions = [
-            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
+            [label_list[p] for (p, l) in zip(pred, gold_label) if l != -100]
+            for pred, gold_label in zip(y_pred, y_true)
         ]
         true_labels = [
-            [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
+            [label_list[l] for (p, l) in zip(pred, gold_label) if l != -100]
+            for pred, gold_label in zip(y_pred, y_true)
         ]
+        return true_predictions, true_labels
 
-        results = metric.compute(predictions=true_predictions, references=true_labels)
+    def compute_metrics():
+        results = metric.compute()
         if args.return_entity_level_metrics:
             # Unpack nested dictionaries
             final_results = {}
@@ -493,15 +510,20 @@ def main():
 
             model.eval()
             for step, batch in enumerate(eval_dataloader):
-                outputs = model(**batch)
+                with torch.no_grad():
+                    outputs = model(**batch)
                 predictions = outputs.logits.argmax(dim=-1)
+                predictions_gathered = accelerator.gather(predictions)
+                labels_gathered = accelerator.gather(batch["labels"])
+                preds, refs = get_labels(predictions_gathered, labels_gathered)
                 metric.add_batch(
-                    predictions=accelerator.gather(predictions),
-                    references=accelerator.gather(batch["labels"]),
+                    predictions=preds,
+                    references=refs,
                 )
 
-            eval_metric = metric.compute()
-            logger.info(f"epoch {epoch}: {eval_metric}")
+            # eval_metric = metric.compute()
+            eval_metric = compute_metrics()
+            accelerator.print(f"epoch {epoch}:", eval_metric)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -511,5 +533,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

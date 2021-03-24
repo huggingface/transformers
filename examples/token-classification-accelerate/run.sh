@@ -19,4 +19,5 @@ python3 run_ner_accelerate.py \
   --pad_to_max_length \
   --do_train \
   --task_name ner \
-  --return_entity_level_metrics
+  --return_entity_level_metrics \
+  --debug
