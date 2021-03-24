@@ -1357,8 +1357,6 @@ class PegasusDecoderWrapper(PegasusPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Pegasus
 class PegasusForCausalLM(PegasusPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.encoder\.version", r"model\.decoder\.version"]
-
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
