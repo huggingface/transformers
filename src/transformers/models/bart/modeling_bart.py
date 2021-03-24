@@ -1200,12 +1200,8 @@ class BartModel(BartPretrainedModel):
 )
 class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.encoder\.version", r"model\.decoder\.version"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -1363,6 +1359,8 @@ class BartForConditionalGeneration(BartPretrainedModel):
     BART_START_DOCSTRING,
 )
 class BartForSequenceClassification(BartPretrainedModel):
+    _keys_to_ignore_on_load_unexpected = [r"model\.encoder\.version", r"model\.decoder\.version"]
+
     def __init__(self, config: BartConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = BartModel(config)
@@ -1469,6 +1467,8 @@ class BartForSequenceClassification(BartPretrainedModel):
     BART_START_DOCSTRING,
 )
 class BartForQuestionAnswering(BartPretrainedModel):
+    _keys_to_ignore_on_load_unexpected = [r"model\.encoder\.version", r"model\.decoder\.version"]
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -1595,6 +1595,8 @@ class BartDecoderWrapper(BartPretrainedModel):
 
 
 class BartForCausalLM(BartPretrainedModel):
+    _keys_to_ignore_on_load_unexpected = [r"model\.encoder\.version", r"model\.decoder\.version"]
+
     def __init__(self, config):
         super().__init__(config)
         config = copy.deepcopy(config)
