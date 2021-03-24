@@ -35,7 +35,8 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions, CausalLMOutputWithPast,
+    CausalLMOutputWithCrossAttentions,
+    CausalLMOutputWithPast,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -154,9 +155,7 @@ class Attention(nn.Module):
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-
-        self.attn_bias = nn.Parameter(torch.zeros(self.embed_dim))
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
@@ -230,9 +229,7 @@ class Attention(nn.Module):
 
         a = self.merge_heads(a)
         a = self.out_proj(a)
-        # a = self.resid_dropout(a)
-
-        a += self.attn_bias
+        a = self.resid_dropout(a)
 
         return (a, present) + attn_outputs[1:]  # a, present, (attentions)
 
@@ -240,7 +237,6 @@ class Attention(nn.Module):
 class LocalAttention(nn.Module):
     def __init__(self, nx, n_ctx, config, scale=False):
         super().__init__()
-        print("init local")
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         # [switch nx => n_state from Block to Attention to keep identical to TF implem]
         assert n_state % config.n_head == 0
@@ -268,9 +264,7 @@ class LocalAttention(nn.Module):
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
-
-        self.attn_bias = nn.Parameter(torch.zeros(self.embed_dim))
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
         self.window_size = config.window_size
 
@@ -350,8 +344,7 @@ class LocalAttention(nn.Module):
         attn = attn.reshape(-1, seq_len, self.embed_dim)
 
         attn = self.out_proj(attn)
-
-        attn += self.attn_bias
+        attn = self.resid_dropout(attn)
         return (attn,)
 
 
