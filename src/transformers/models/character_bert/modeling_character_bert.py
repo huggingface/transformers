@@ -58,6 +58,7 @@ from ...modeling_utils import (
 )
 from ...utils import logging
 from .configuration_character_bert import CharacterBertConfig
+from .tokenization_character_bert import CharacterMapper
 
 
 logger = logging.get_logger(__name__)
@@ -206,12 +207,8 @@ class CharacterCnn(torch.nn.Module):
     https://github.com/allenai/allennlp/blob/main/allennlp/modules/elmo.py#L254
     Computes context insensitive token representation using multiple CNNs.
     This embedder has input character ids of size (batch_size, sequence_length, 50)
-    and returns (batch_size, sequence_length + 2, embedding_dim), where embedding_dim
-    is specified as a parameter (typically 768).
-    We add special entries at the beginning and end of each sequence corresponding
-    to [CLS] and [SEP], the beginning and end of sentence tokens (as in BERT).
-    Note: this is a lower level class useful for advanced usage.  Most users should
-    use `CharacterBertTokenEmbedder` or `utils.character_bert.token_embedder` instead.
+    and returns (batch_size, sequence_length, hidden_size), where hidden_size
+    is typically 768.
     """
     def __init__(self, config):
         super().__init__()
@@ -237,11 +234,13 @@ class CharacterCnn(torch.nn.Module):
         self._init_projection()
 
     def _init_char_embedding(self):
-        weights = np.zeros((
-                self.character_vocab_size,
-                self.character_embeddings_dim),
-            dtype="float32")
-        weights[-1, :] *= 0.  # padding
+        weights = torch.zeros((
+            self.character_vocab_size,
+            self.character_embeddings_dim))
+        nn.init.kaiming_uniform_(
+            weights, a=math.sqrt(5))
+        weights[0, :] *= 0.  # token padding
+        weights[CharacterMapper.padding_character + 1, :] *= 0.  # character padding
         self._char_embedding_weights = torch.nn.Parameter(
             torch.FloatTensor(weights),
             requires_grad=True)
