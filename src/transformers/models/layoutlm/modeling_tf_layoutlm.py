@@ -51,8 +51,8 @@ _CONFIG_FOR_DOC = "LayoutLMConfig"
 _TOKENIZER_FOR_DOC = "LayoutLMTokenizer"
 
 TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "layoutlm-base-uncased",
-    "layoutlm-large-uncased",
+    "microsoft/layoutlm-base-uncased",
+    "microsoft/layoutlm-large-uncased",
 ]
 
 

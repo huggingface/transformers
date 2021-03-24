@@ -261,7 +261,7 @@ def prepare_layoutlm_batch_inputs():
 class TFLayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_no_head(self):
-        model = TFLayoutLMModel.from_pretrained("atahmasb/tf-layoutlm-base-uncased")
+        model = TFLayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
 
@@ -283,7 +283,7 @@ class TFLayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_sequence_classification(self):
         # initialize model with randomly initialized sequence classification head
-        model = TFLayoutLMForSequenceClassification.from_pretrained("atahmasb/tf-layoutlm-base-uncased", num_labels=2)
+        model = TFLayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased", num_labels=2)
 
         input_ids, attention_mask, bbox, token_type_ids, _ = prepare_layoutlm_batch_inputs()
 
@@ -309,7 +309,7 @@ class TFLayoutLMModelIntegrationTest(unittest.TestCase):
     @slow
     def test_forward_pass_token_classification(self):
         # initialize model with randomly initialized token classification head
-        model = TFLayoutLMForTokenClassification.from_pretrained("atahmasb/tf-layoutlm-base-uncased", num_labels=13)
+        model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased", num_labels=13)
 
         input_ids, attention_mask, bbox, token_type_ids, labels = prepare_layoutlm_batch_inputs()
 
