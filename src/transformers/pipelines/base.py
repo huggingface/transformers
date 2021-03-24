@@ -105,7 +105,10 @@ def get_framework(model, revision: Optional[str] = None):
             If both frameworks are installed, picks the one corresponding to the model passed (either a model class or
             the model name). If no specific model is provided, defaults to using PyTorch.
     """
-    warnings.warn("`get_framework` is deprecated and will be removed in v5, use `infer_framework_from_model` instead.")
+    warnings.warn(
+        "`get_framework` is deprecated and will be removed in v5, use `infer_framework_from_model` instead.",
+        FutureWarning,
+    )
     if not is_tf_available() and not is_torch_available():
         raise RuntimeError(
             "At least one of TensorFlow 2.0 or PyTorch should be installed. "
