@@ -21,12 +21,11 @@ Fine-tuning a 🤗 Transformers model on tokne classification task (NER) with ac
 import argparse
 import logging
 import math
-import numpy as np
 import os
 import random
-import torch
 
 import datasets
+import torch
 from datasets import ClassLabel, load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
@@ -41,7 +40,6 @@ from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
-    PretrainedConfig,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -56,7 +54,9 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task (NER) with accelerate library")
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a text classification task (NER) with accelerate library"
+    )
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -67,7 +67,7 @@ def parse_args():
         "--dataset_config_name",
         type=str,
         default=None,
-        help= "The configuration name of the dataset to use (via the datasets library).",
+        help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
@@ -179,7 +179,7 @@ def parse_args():
         type=str,
         default="ner",
         choices=["ner", "pos", "chunk"],
-        help="The name of the task (ner, pos...)."
+        help="The name of the task (ner, pos...).",
     )
     parser.add_argument(
         "--debug",
@@ -265,10 +265,8 @@ def main():
     else:
         column_names = hf_datasets["validation"].column_names
         features = hf_datasets["validation"].features
-    text_column_name = "tokens" if "tokens" in column_names else column_names[0]
-    label_column_name = (
-        f"{args.task_name}_tags" if f"{args.task_name}_tags" in column_names else column_names[1]
-    )
+    tokens_column_name = "tokens" if "tokens" in column_names else column_names[0]
+    label_column_name = f"{args.task_name}_tags" if f"{args.task_name}_tags" in column_names else column_names[1]
 
     # In the event the labels are not a `Sequence[ClassLabel]`, we will need to go through the dataset to get the
     # unique labels.
@@ -325,16 +323,13 @@ def main():
 
     # Preprocessing the hf_datasets.
     # First we tokenize all the texts.
-    column_names = hf_datasets["train"].column_names
-    tokens_column_name = "tokens" if "tokens" in column_names else column_names[0]
-
     padding = "max_length" if args.pad_to_max_length else False
 
     # Tokenize all texts and align the labels with them.
 
     def tokenize_and_align_labels(examples):
         tokenized_inputs = tokenizer(
-            examples[text_column_name],
+            examples[tokens_column_name],
             max_length=args.max_length,
             padding=padding,
             truncation=True,
@@ -438,7 +433,7 @@ def main():
 
     def get_labels(predictions, references):
         # Transform predictions and references tensos to numpy arrays
-        if device.type == 'cpu':
+        if device.type == "cpu":
             y_pred = predictions.detach().clone().numpy()
             y_true = references.detach().clone().numpy()
         else:
