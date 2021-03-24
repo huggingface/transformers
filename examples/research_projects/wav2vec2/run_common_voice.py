@@ -118,6 +118,9 @@ class DataTrainingArguments:
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
+    cache_audio_files: bool = field(
+        default=False, metadata={"help": "cache the preprocessed audio files or not."}
+    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
@@ -134,6 +137,12 @@ class DataTrainingArguments:
         metadata={
             "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
             "value if set."
+        },
+    )
+    augmentation_percentage: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "percentage of how many audio files should be augmented"
         },
     )
     chars_to_ignore: List[str] = list_field(
@@ -399,13 +408,18 @@ def main():
         except:
             speech_array, sampling_rate = torchaudio.load(batch["path"])
             speech_array = resampler(speech_array).squeeze().numpy()
-            sf.write(batch["path"] + ".wav", speech_array, sampling_rate, subtype='PCM_24')
+            if(data_args.cache_audio_files == True):
+                sf.write(batch["path"] + ".wav", speech_array, sampling_rate, subtype='PCM_24')
         batch["speech"] = speech_array
         batch["sampling_rate"] = 16_000
         batch["target_text"] = batch["text"]
         return batch
     
     augmented_dataset = train_dataset
+    if(data_args.augmentation_percentage >= 1):
+        convert_percantage = int(100/data_args.augmentation_percentage)
+        augmented_dataset.filter(lambda example, indice: indice % convert_percantage == 0, with_indices=True)
+
 
     train_dataset = train_dataset.map(
         speech_file_to_array_fn,
@@ -433,18 +447,19 @@ def main():
             speech_array, sampling_rate = torchaudio.load(batch["path"])
             speech_array = resampler(speech_array).squeeze().numpy()
             speech_array = augment(samples=speech_array, sample_rate=sampling_rate)
-            sf.write(batch["path"] + "augmented.wav", speech_array, sampling_rate, subtype='PCM_24')
+            if(data_args.cache_audio_files == True):
+                sf.write(batch["path"] + "augmented.wav", speech_array, sampling_rate, subtype='PCM_24')
         batch["speech"] = speech_array
         batch["sampling_rate"] = 16_000
         batch["target_text"] = batch["text"]
         return batch
     
-    
-    augmented_dataset = augmented_dataset.map(
-        augment_speech_file_to_array_fn,
-        remove_columns=train_dataset.column_names,
-        num_proc=data_args.preprocessing_num_workers,
-    )
+    if(data_args.augmentation_percentage >= 1):
+        augmented_dataset = augmented_dataset.map(
+            augment_speech_file_to_array_fn,
+            remove_columns=train_dataset.column_names,
+            num_proc=data_args.preprocessing_num_workers,
+        )
     
     #we need to concatenate the augmented dataset and the raw dataset
     train_dataset = concatenate_datasets([train_dataset, augmented_dataset])
