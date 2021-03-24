@@ -24,7 +24,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import ViTConfig, ViTForImageClassification
+from transformers import ViTConfig, ViTFeatureExtractor, ViTForImageClassification
 from transformers.utils import logging
 
 
@@ -1210,7 +1210,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
         config.num_attention_heads = 16
     elif vit_name[4:].startswith("huge"):
         config.hidden_size = 1280
-        config.intermediate_size = -1
+        config.intermediate_size = 5120
         config.num_hidden_layers = 32
         config.num_attention_heads = 16
 
@@ -1239,9 +1239,14 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
     assert logits.shape == outputs.logits.shape
     assert torch.allclose(logits, outputs.logits, atol=1e-3)
 
+    # load feature extractor and set size
+    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
+    print(f"Saving feature extractor to {pytorch_dump_folder_path}")
+    feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
