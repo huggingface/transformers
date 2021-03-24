@@ -417,7 +417,9 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         banned_mask_list = []
         for idx, batch_banned_tokens in enumerate(banned_tokens):
             for token in batch_banned_tokens:
-                banned_mask_list.append([idx, token])
+                # Eliminates invalid bad word IDs that are over the vocabulary size.
+                if token <= scores.shape[1]:
+                    banned_mask_list.append([idx, token])
         if not banned_mask_list:
             return scores
 
