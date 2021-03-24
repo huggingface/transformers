@@ -128,7 +128,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig", "GPTNeoTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -177,6 +176,7 @@ _import_structure = {
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
+    "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig", "GPTNeoTokenizer"],
     "models.herbert": ["HerbertTokenizer"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
@@ -409,21 +409,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
 
-    _import_structure["models.gpt_neo"].extend(
-        [
-            "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "GPTNeoForMaskedLM",
-            "GPTNeoForCausalLM",
-            "GPTNeoForMultipleChoice",
-            "GPTNeoForQuestionAnswering",
-            "GPTNeoForSequenceClassification",
-            "GPTNeoForTokenClassification",
-            "GPTNeoLayer",
-            "GPTNeoModel",
-            "GPTNeoPreTrainedModel",
-            "load_tf_weights_in_gpt_neo",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -651,6 +636,21 @@ if is_torch_available():
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
+        ]
+    )
+    _import_structure["models.gpt_neo"].extend(
+        [
+            "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTNeoForCausalLM",
+            "GPTNeoForMaskedLM",
+            "GPTNeoForMultipleChoice",
+            "GPTNeoForQuestionAnswering",
+            "GPTNeoForSequenceClassification",
+            "GPTNeoForTokenClassification",
+            "GPTNeoLayer",
+            "GPTNeoModel",
+            "GPTNeoPreTrainedModel",
+            "load_tf_weights_in_gpt_neo",
         ]
     )
     _import_structure["models.ibert"].extend(
@@ -1375,7 +1375,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig, GPTNeoTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1421,6 +1420,7 @@ if TYPE_CHECKING:
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
+    from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig, GPTNeoTokenizer
     from .models.herbert import HerbertTokenizer
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
@@ -1540,7 +1540,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.gpt_neo import GPTNeoTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1552,6 +1551,7 @@ if TYPE_CHECKING:
         from .models.electra import ElectraTokenizerFast
         from .models.funnel import FunnelTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
+        from .models.gpt_neo import GPTNeoTokenizerFast
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
         from .models.led import LEDTokenizerFast
@@ -1584,20 +1584,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.gpt_neo import (
-            GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTNeoForMaskedLM,
-            GPTNeoForCausalLM,
-            GPTNeoForMultipleChoice,
-            GPTNeoForQuestionAnswering,
-            GPTNeoForSequenceClassification,
-            GPTNeoForTokenClassification,
-            GPTNeoLayer,
-            GPTNeoModel,
-            GPTNeoPreTrainedModel,
-            load_tf_weights_in_gpt_neo,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1836,6 +1822,19 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
+        )
+        from .models.gpt_neo import (
+            GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTNeoForCausalLM,
+            GPTNeoForMaskedLM,
+            GPTNeoForMultipleChoice,
+            GPTNeoForQuestionAnswering,
+            GPTNeoForSequenceClassification,
+            GPTNeoForTokenClassification,
+            GPTNeoLayer,
+            GPTNeoModel,
+            GPTNeoPreTrainedModel,
+            load_tf_weights_in_gpt_neo,
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
