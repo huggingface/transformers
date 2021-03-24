@@ -1198,7 +1198,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
     # size of the architecture
     if vit_name[4:].startswith("small"):
         config.hidden_size = 768
-        config.intermediate_size = -1
+        config.intermediate_size = 2304
         config.num_hidden_layers = 8
         config.num_attention_heads = 8
     if vit_name[4:].startswith("base"):
