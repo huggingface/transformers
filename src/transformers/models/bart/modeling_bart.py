@@ -477,6 +477,7 @@ class BartClassificationHead(nn.Module):
 class BartPretrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
+    _keys_to_ignore_on_load_unexpected = [r"encoder\.version", r"decoder\.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -1200,12 +1201,7 @@ class BartModel(BartPretrainedModel):
 )
 class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
