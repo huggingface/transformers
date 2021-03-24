@@ -348,7 +348,7 @@ class ViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
         # TODO: replace namespace to google
-        model = ViTForImageClassification.from_pretrained("nielsr/vit-base-patch16-224").to(torch_device)
+        model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

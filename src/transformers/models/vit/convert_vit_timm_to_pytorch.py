@@ -1085,6 +1085,15 @@ def create_rename_keys(config, base_model=False):
         ]
     )
 
+    # pooler
+    if config.use_pooler:
+        rename_keys.extend(
+            [
+                ("pre_logits.fc.weight", "pooler.dense.weight"),
+                ("pre_logits.fc.bias", "pooler.dense.bias"),
+            ]
+        )
+
     # classification head
     rename_keys.extend(
         [
@@ -1179,6 +1188,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
         config.num_labels = 21843
         config.patch_size = int(vit_name[-12:-10])
         config.image_size = int(vit_name[-9:-6])
+        config.use_pooler = True
     else:
         config.num_labels = 1000
         config.id2label = id2class
@@ -1227,7 +1237,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
     outputs = model(img)
 
     assert logits.shape == outputs.logits.shape
-    assert torch.allclose(logits, outputs.logits, atol=1e-4)
+    assert torch.allclose(logits, outputs.logits, atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")

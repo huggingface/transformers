@@ -65,6 +65,8 @@ class ViTConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (:obj:`int`, `optional`, defaults to :obj:`3`):
             The number of input channels.
+        use_pooler (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Whether to use a pooler (linear layer + tanh) before calculating the classification logits.
 
 
     Example::
@@ -97,6 +99,7 @@ class ViTConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        use_pooler=False,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -114,3 +117,4 @@ class ViTConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.use_pooler = use_pooler
