@@ -15,7 +15,6 @@
 """ PyTorch GPTNeo model. """
 
 
-import math
 import os
 from typing import Tuple
 
@@ -23,33 +22,17 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss, MSELoss
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
     CausalLMOutputWithPast,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
-    SequenceSummary,
-    apply_chunking_to_forward,
-    find_pruneable_heads_and_indices,
-    prune_linear_layer,
-)
+from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_gpt_neo import GPTNeoConfig
 
@@ -60,11 +43,11 @@ _CONFIG_FOR_DOC = "GPTNeoConfig"
 _TOKENIZER_FOR_DOC = "GPTNeoTokenizer"
 
 GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "gpt_neo_xl",
+    "eleutherai/gpt_neo_xl",
     # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
 ]
 
-_CHECKPOINT_FOR_DOC = "gpt_neo_xl"
+_CHECKPOINT_FOR_DOC = "eleutherai/gpt_neo_xl"
 
 
 def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
@@ -282,16 +265,39 @@ class LocalAttention(nn.Module):
 
     def split_heads(self, x, k=False):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
-        x = x.view(*new_x_shape)  # in Tensorflow implem: fct split_states
+        x = x.view(*new_x_shape)
         if k:
-            return x.permute(0, 1, 3, 4, 2)  # (batch, head, head_features, seq_length)
+            return x.permute(0, 1, 3, 4, 2)  # (batch, chunks, head, head_features, seq_length)
         else:
-            return x.permute(0, 1, 3, 2, 4)  # (batch, head, seq_length, head_features)
+            return x.permute(0, 1, 3, 2, 4)  # (batch, chunks, head, seq_length, head_features)
 
     def merge_heads(self, x):
         x = x.permute(0, 1, 3, 2, 4).contiguous()
         new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
-        return x.view(*new_x_shape)  # in Tensorflow implem: fct merge_states
+        return x.view(*new_x_shape)
+
+    def create_buckets(self, tensor, num_buckets, block_length):
+        return tensor.reshape(tensor.size()[0], num_buckets, block_length, -1)
+
+    def create_attention_mask(self, bs, seq_len, windows, block_length):
+        ticker = torch.arange(seq_len)[None, :]
+        b_t = ticker.reshape(1, windows, block_length)
+
+        bq_t = b_t
+        bq_k = self.look_around(b_t, block_length, self.window_size)
+
+        # compute attn mask
+        # this matches the original implem in mess-tensorflow
+        relative_position = bq_k.unsqueeze(-2) - bq_t.unsqueeze(-1)
+        relative_position = relative_position.transpose(-1, -2)
+        sequence_id = torch.ones(bs, seq_len)
+        q_seq = sequence_id.reshape(1, windows, block_length)
+        m_seq = sequence_id.reshape(1, windows, block_length)
+        m_seq = self.look_around(m_seq, block_length, self.window_size)
+        visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
+        visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
+        mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
+        return mask
 
     def forward(
         self,
@@ -302,56 +308,45 @@ class LocalAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        q = self.q_proj(hidden_states)
-        k = self.k_proj(hidden_states)
-        v = self.v_proj(hidden_states)
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
 
+        # compute block length and windows
         bs, seq_len = hidden_states.shape[:2]
         block_length = self.window_size
         while seq_len % block_length != 0:
             block_length -= 1
         windows = seq_len // block_length
 
-        # create chunks
-        bucket_fn = lambda t: t.reshape(bs, windows, block_length, -1)
-        bq, bk, bv = map(bucket_fn, (q, k, v))
+        # create buckets
+        query = self.create_buckets(query, windows, block_length)
+        key = self.create_buckets(key, windows, block_length)
+        value = self.create_buckets(value, windows, block_length)
 
-        bk = self.look_around(bk, block_length, self.window_size)
-        bv = self.look_around(bv, block_length, self.window_size)
+        key = self.look_around(key, block_length, self.window_size)
+        value = self.look_around(value, block_length, self.window_size)
 
-        bq = self.split_heads(bq)
-        bk = self.split_heads(bk, k=True)
-        bv = self.split_heads(bv)
+        query = self.split_heads(query)
+        key = self.split_heads(key, k=True)
+        value = self.split_heads(value)
 
-        ticker = torch.arange(seq_len, device=hidden_states.device, dtype=hidden_states.dtype)[None, :]
-        b_t = ticker.reshape(1, windows, block_length)
-
-        bq_t = b_t
-        bq_k = self.look_around(b_t, block_length, self.window_size)
-
-        # compute attn mask
-        # this matches the original implem in mess-tensorflow
-        relative_position = bq_k.unsqueeze(-2) - bq_t.unsqueeze(-1)
-        relative_position = relative_position.transpose(-1, -2)
-        sequence_id = torch.ones(bs, seq_len, device=hidden_states.device, dtype=hidden_states.dtype)
-        q_seq = sequence_id.reshape(1, windows, block_length)
-        m_seq = sequence_id.reshape(1, windows, block_length)
-        m_seq = self.look_around(m_seq, block_length, self.window_size)
-        visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
-        visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
-        mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
+        mask = self.create_attention_mask(bs, seq_len, windows, block_length)
+        mask = mask.to(hidden_states.device)
 
         # attn
-        w = torch.matmul(bq, bk)
+        w = torch.matmul(query, key)
         w = torch.where(mask, w, self.masked_bias.to(w.dtype))
 
         attn = w.softmax(dim=-1)
-        attn = torch.matmul(attn, bv)
+        attn = torch.matmul(attn, value)
+
         attn = self.merge_heads(attn)
         attn = attn.reshape(-1, seq_len, self.embed_dim)
 
         attn = self.out_proj(attn)
         attn = self.resid_dropout(attn)
+
         return (attn,)
 
 
@@ -361,7 +356,6 @@ class GPTNeoAttention(nn.Module):
         self.layer_id = layer_id
         self.attn_layers = config.attn_layers
         self.attention_type = self.attn_layers[layer_id]
-        hidden_size = config.n_embd
 
         if self.attention_type == "global":
             self.attention = Attention(nx, n_ctx, config, scale)
@@ -565,54 +559,10 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
         return_dict (:obj:`bool`, `optional`):
             Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
 """
-PARALLELIZE_DOCSTRING = r"""
-    This is an experimental feature and is a subject to change at a moment's notice.
-
-    Uses a device map to distribute attention modules of the model across several devices. If no device map is given,
-    it will evenly distribute blocks across all devices.
-
-    Args:
-        device_map (:obj:`Dict[int, list]`, optional, defaults to None):
-            A dictionary that maps attention modules to devices. Note that the embedding module and LMHead are always
-            automatically mapped to the first device (for esoteric reasons). That means that the first device should
-            have fewer attention modules mapped to it than other devices. For reference, the gpt2 models have the
-            following number of attention modules:
-
-                - gpt2: 12
-                - gpt2-medium: 24
-                - gpt2-large: 36
-                - gpt2-xl: 48
-
-    Example::
-
-            # Here is an example of a device map on a machine with 4 GPUs using gpt2-xl, which has a total of 48 attention modules:
-            model = GPT2LMHeadModel.from_pretrained('gpt2-xl')
-            device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-
-                          1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
-                          2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
-                          3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47]}
-            model.parallelize(device_map)
-"""
-DEPARALLELIZE_DOCSTRING = r"""
-    Moves the model to cpu from a model parallel state.
-
-    Example::
-
-        # On a 4 GPU machine with gpt2-large:
-        model = GPT2LMHeadModel.from_pretrained('gpt2-large')
-        device_map = {0: [0, 1, 2, 3, 4, 5, 6, 7],
-
-                    1: [8, 9, 10, 11, 12, 13, 14, 15],
-                    2: [16, 17, 18, 19, 20, 21, 22, 23],
-                    3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35]}
-        model.parallelize(device_map) # Splits the model across several devices
-        model.deparallelize() # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
-"""
 
 
 @add_start_docstrings(
-    "The bare GPT2 Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare GPTNeo Model transformer outputting raw hidden-states without any specific head on top.",
     GPT_NEO_START_DOCSTRING,
 )
 class GPTNeoModel(GPTNeoPreTrainedModel):
@@ -793,7 +743,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The GPT2 Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The GPTNeo Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
     GPT_NEO_START_DOCSTRING,
@@ -858,8 +808,6 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
         labels=None,
         use_cache=None,
         output_attentions=None,
