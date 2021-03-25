@@ -1087,7 +1087,7 @@ if is_tf_available():
     _import_structure["models.layoutlm"].extend(
         [
             "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFLaoutLMMainLayer",
+            "TFLayoutLMMainLayer",
             "TFLayoutLMForMaskedLM",
             "TFLayoutLMForSequenceClassification",
             "TFLayoutLMForTokenClassification",
