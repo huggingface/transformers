@@ -391,6 +391,22 @@ class BigBirdModelTester:
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "attention_mask": input_mask}
         return config, inputs_dict
 
+    def create_and_check_for_auto_padding(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        model = BigBirdModel(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
 
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
@@ -553,6 +569,11 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
                     atol=1e-3,
                 )
             )
+
+    def test_auto_padding(self):
+        self.model_tester.seq_length = 241
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_auto_padding(*config_and_inputs)
 
 
 @require_torch
@@ -1092,3 +1113,190 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         answer = tokenizer.batch_decode(answer)
 
         self.assertTrue(answer == ["32", "[SEP]"])
+
+    def test_auto_padding(self):
+        model = BigBirdModel.from_pretrained(
+            "google/bigbird-roberta-base", attention_type="block_sparse", num_random_blocks=3, block_size=16
+        )
+        model.to(torch_device)
+        model.eval()
+
+        input_ids = torch.tensor([200 * [10] + 40 * [2] + [1]], device=torch_device, dtype=torch.long)
+        output = model(input_ids).to_tuple()[0]
+
+        target = torch.tensor(
+            [
+                [
+                    -4.5136e-02,
+                    -6.8013e-02,
+                    1.2246e-01,
+                    -1.3560e-02,
+                    1.8386e-02,
+                    2.5333e-02,
+                    -4.4439e-03,
+                    -3.0996e-03,
+                    -6.4031e-02,
+                    6.4390e-04,
+                ],
+                [
+                    -4.5018e-02,
+                    -6.7638e-02,
+                    1.2317e-01,
+                    -1.3998e-02,
+                    1.9216e-02,
+                    2.5695e-02,
+                    -4.3705e-03,
+                    -3.1895e-03,
+                    -6.3153e-02,
+                    8.8899e-04,
+                ],
+                [
+                    -4.5042e-02,
+                    -6.7305e-02,
+                    1.2340e-01,
+                    -1.4512e-02,
+                    2.0057e-02,
+                    2.6084e-02,
+                    -4.6150e-03,
+                    -3.1728e-03,
+                    -6.2442e-02,
+                    1.0263e-03,
+                ],
+                [
+                    -4.4589e-02,
+                    -6.7655e-02,
+                    1.2416e-01,
+                    -1.4287e-02,
+                    1.9416e-02,
+                    2.6065e-02,
+                    -5.0958e-03,
+                    -2.7020e-03,
+                    -6.3158e-02,
+                    4.8270e-04,
+                ],
+                [
+                    -4.4627e-02,
+                    -6.7535e-02,
+                    1.2390e-01,
+                    -1.4319e-02,
+                    1.9491e-02,
+                    2.6213e-02,
+                    -5.9482e-03,
+                    -2.5906e-03,
+                    -6.3116e-02,
+                    1.4669e-04,
+                ],
+                [
+                    -4.4899e-02,
+                    -6.7704e-02,
+                    1.2337e-01,
+                    -1.4231e-02,
+                    1.9256e-02,
+                    2.6345e-02,
+                    -6.5565e-03,
+                    -2.2938e-03,
+                    -6.3433e-02,
+                    -1.1409e-04,
+                ],
+                [
+                    -4.5599e-02,
+                    -6.7764e-02,
+                    1.2235e-01,
+                    -1.4151e-02,
+                    1.9206e-02,
+                    2.6417e-02,
+                    -6.8965e-03,
+                    -2.4494e-03,
+                    -6.3313e-02,
+                    -4.4499e-06,
+                ],
+                [
+                    -4.5557e-02,
+                    -6.8372e-02,
+                    1.2199e-01,
+                    -1.3747e-02,
+                    1.7962e-02,
+                    2.6103e-02,
+                    -7.0607e-03,
+                    -2.3552e-03,
+                    -6.4470e-02,
+                    -4.8756e-04,
+                ],
+                [
+                    -4.5334e-02,
+                    -6.8913e-02,
+                    1.2170e-01,
+                    -1.3566e-02,
+                    1.6930e-02,
+                    2.5745e-02,
+                    -6.3110e-03,
+                    -2.4903e-03,
+                    -6.5575e-02,
+                    -6.7190e-04,
+                ],
+                [
+                    -4.5171e-02,
+                    -6.8726e-02,
+                    1.2164e-01,
+                    -1.3688e-02,
+                    1.7139e-02,
+                    2.5629e-02,
+                    -5.2130e-03,
+                    -2.9412e-03,
+                    -6.5237e-02,
+                    -2.0669e-04,
+                ],
+                [
+                    -4.4411e-02,
+                    -6.9267e-02,
+                    1.2206e-01,
+                    -1.3645e-02,
+                    1.6212e-02,
+                    2.5589e-02,
+                    -4.4121e-03,
+                    -2.9720e-03,
+                    -6.6277e-02,
+                    -6.7963e-04,
+                ],
+                [
+                    -4.3487e-02,
+                    -6.9792e-02,
+                    1.2320e-01,
+                    -1.3663e-02,
+                    1.5303e-02,
+                    2.6130e-02,
+                    -3.6294e-03,
+                    -3.0616e-03,
+                    -6.7483e-02,
+                    -1.2642e-03,
+                ],
+                [
+                    -4.2622e-02,
+                    -6.9287e-02,
+                    1.2469e-01,
+                    -1.3936e-02,
+                    1.6204e-02,
+                    2.6474e-02,
+                    -4.0534e-03,
+                    -2.7365e-03,
+                    -6.6994e-02,
+                    -1.4148e-03,
+                ],
+                [
+                    -4.1879e-02,
+                    -7.0031e-02,
+                    1.2593e-01,
+                    -1.4047e-02,
+                    1.5082e-02,
+                    2.7751e-02,
+                    -4.0683e-03,
+                    -2.7189e-03,
+                    -6.8985e-02,
+                    -2.7146e-03,
+                ],
+            ],
+            device=torch_device,
+        )
+
+        self.assertEqual(output.shape, torch.Size((1, 241, 768)))
+        self.assertTrue(torch.allclose(output[0, 64:78, 300:310], target, atol=0.0001))
