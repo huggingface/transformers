@@ -1733,7 +1733,14 @@ class BigBirdModel(BigBirdPreTrainedModel):
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         if self.config.attention_type == "block_sparse":
-            padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_block_size(
+            (
+                padding_len,
+                input_ids,
+                attention_mask,
+                token_type_ids,
+                position_ids,
+                inputs_embeds,
+            ) = self._pad_to_block_size(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 token_type_ids=token_type_ids,
