@@ -17,29 +17,32 @@
 ####################################################################################################
 
 import argparse
-import os
+
 import torch
-from   transformers import GPT2Config, GPT2Tokenizer, GPT2LMHeadModel
+
+from transformers import GPT2Config, GPT2LMHeadModel, GPT2Tokenizer
+
 
 ####################################################################################################
+
 
 def main():
 
     # Create the argument parser.
     parser = argparse.ArgumentParser()
-    parser.add_argument('checkpoint', type=str)
+    parser.add_argument("checkpoint", type=str, help="See examples in README.md.")
     args = parser.parse_args()
 
     # The tokenizer. Megatron was trained with standard tokenizer(s).
-    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 
     # The config file.
-    config_file = os.path.join(args.checkpoint, 'config.json')
+    config_file = args.checkpoint + "_config.json"
     # Load the GPT2 config.
     config = GPT2Config.from_pretrained(config_file)
 
     # The checkpoint file.
-    checkpoint_file = os.path.join(args.checkpoint, 'checkpoint.pt')
+    checkpoint_file = args.checkpoint + "_checkpoint.pt"
     # Load GPT2 model from transformers.
     model = GPT2LMHeadModel.from_pretrained(checkpoint_file, config=config)
 
@@ -48,12 +51,12 @@ def main():
 
     # Copy to the device and use FP16.
     assert torch.cuda.is_available()
-    device = torch.device('cuda')
+    device = torch.device("cuda")
     model.to(device)
     model.half()
 
     # Create an empty sentence.
-    input = tokenizer.encode('', return_tensors='pt')
+    input = tokenizer.encode("", return_tensors="pt")
     input = input.to(device)
 
     # The token ids.
@@ -63,13 +66,15 @@ def main():
         input_ids = input
 
     # Generate the sentence.
-    output = model.generate(input_ids=input_ids,
-                            max_length=128,
-                            temperature=1.0,
-                            top_k=0,
-                            top_p=0.9,
-                            do_sample=True,
-                            num_return_sequences=1)
+    output = model.generate(
+        input_ids=input_ids,
+        max_length=128,
+        temperature=1.0,
+        top_k=0,
+        top_p=0.9,
+        do_sample=True,
+        num_return_sequences=1,
+    )
 
     # Output the text.
     for sentence in output:
@@ -77,10 +82,10 @@ def main():
         text = tokenizer.decode(sentence, clean_up_tokenization_spaces=True)
         print(text)
 
+
 ####################################################################################################
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 ####################################################################################################
-

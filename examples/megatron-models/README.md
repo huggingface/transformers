@@ -22,37 +22,36 @@
 
 ## Get the checkpoints from the NVIDIA GPU Cloud 
 
-The first step is to create a directory in the current folder (`examples/megatron-lm`) to store the 
-checkpoints.
+The first step is to create a directory called `models` from the `examples/megatron-models` folder.
 
 ```
-mkdir -p models/{bert, gpt2}
+mkdir models
 ```
 
-Then, you can download the checkpoints from the NVIDIA GPU Cloud (NGC). For that you have to 
-[sign up](https://ngc.nvidia.com/signup) for and setup the NVIDIA GPU Cloud (NGC) Registry CLI. 
-Further documentation for downloading models can be found in the 
-[NGC documentation](https://docs.nvidia.com/dgx/ngc-registry-cli-user-guide/index.html#topic_6_4_1).
-
+You can download the checkpoints from the NVIDIA GPU Cloud (NGC). For that you
+have to [sign up](https://ngc.nvidia.com/signup) for and setup the NVIDIA GPU
+Cloud (NGC) Registry CLI.  Further documentation for downloading models can be
+found in the [NGC
+documentation](https://docs.nvidia.com/dgx/ngc-registry-cli-user-guide/index.html#topic_6_4_1).
 
 Alternatively, you can directly download the checkpoints using:
 
 ### BERT 345M cased
 
 ```
-wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_cased/zip -O models/bert/megatron_bert_345m_v0_1_cased.zip
+wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_cased/zip -O models/megatron_bert_345m_v0_1_cased.zip
 ```
 
 ### BERT 345M uncased
 
 ```
-wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_uncased/zip -O models/bert/megatron_bert_345m_v0_1_uncased.zip
+wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_uncased/zip -O models/megatron_bert_345m_v0_1_uncased.zip
 ```
 
 ### GPT2 345M 
 
 ```
-wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_lm_345m/versions/v0.0/zip -O models/gpt2/megatron_gpt2_345m_v0_0.zip
+wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_lm_345m/versions/v0.0/zip -O models/megatron_gpt2_345m_v0_0.zip
 ```
 
 ## Converting the checkpoints
@@ -60,22 +59,30 @@ wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_
 In order to be loaded into `Transformers`, the checkpoints have to be converted. You should run the following
 commands for that purpose.
 
+For the conversion, we use scripts stored in
+`src/transformers/models/megatron_bert` and
+`src/transformers/models/megatron_gpt2`. We define the relative path as:
+
+```
+export PATH_TO_TRANSFORMERS=../../src/transformers
+```
+
 ### BERT 345M cased
 
 ```
-python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py models/bert/megatron_bert_345m_v0_1_cased.zip
+python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py models/megatron_bert_345m_v0_1_cased.zip
 ```
 
 ### BERT 345M uncased
 
 ```
-python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py models/bert/megatron_bert_345m_v0_1_uncased.zip
+python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py models/megatron_bert_345m_v0_1_uncased.zip
 ```
 
 ### GPT2 345M 
 
 ```
-python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py models/gpt2/megatron_gpt2_345m_v0_0.zip
+python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py models/megatron_gpt2_345m_v0_0.zip
 ```
 
 ## Running the samples
@@ -87,15 +94,15 @@ the Transformers API. The first task is `MegatronBERTForMaskedLM` and the second
 ### Masked LM
 
 ```
-python3 ./run_bert.py --masked-lm ./models/bert/megatron_bert_345m_v0_1_cased
-python3 ./run_bert.py --masked-lm ./models/bert/megatron_bert_345m_v0_1_uncased
+python3 ./run_bert.py --masked-lm ./models/megatron_bert_345m_v0_1_cased
+python3 ./run_bert.py --masked-lm ./models/megatron_bert_345m_v0_1_uncased
 ```
 
 ### Next sentence prediction
 
 ```
-python3 ./run_bert.py ./models/bert/megatron_bert_345m_v0_1_cased
-python3 ./run_bert.py ./models/bert/megatron_bert_345m_v0_1_uncased
+python3 ./run_bert.py ./models/megatron_bert_345m_v0_1_cased
+python3 ./run_bert.py ./models/megatron_bert_345m_v0_1_uncased
 ```
 
 ### Text generation
@@ -103,6 +110,6 @@ python3 ./run_bert.py ./models/bert/megatron_bert_345m_v0_1_uncased
 For GPT2, we created a simple for text generation.
 
 ```
-python3 ./run_gpt2.py models/gpt2/megatron_gpt2_345m_v0_0
+python3 ./run_gpt2.py models/megatron_gpt2_345m_v0_0
 ```
 

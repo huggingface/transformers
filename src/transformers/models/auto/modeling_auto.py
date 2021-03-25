@@ -177,14 +177,14 @@ from ..mbart.modeling_mbart import (
     MBartModel,
 )
 from ..megatron_bert.modeling_megatron_bert import (
-    MegatronBertModel,
     MegatronBertForMaskedLM,
+    MegatronBertForMultipleChoice,
     MegatronBertForNextSentencePrediction,
     MegatronBertForPreTraining,
-    MegatronBertForSequenceClassification,
-    MegatronBertForMultipleChoice,
-    MegatronBertForTokenClassification,
     MegatronBertForQuestionAnswering,
+    MegatronBertForSequenceClassification,
+    MegatronBertForTokenClassification,
+    MegatronBertModel,
 )
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,

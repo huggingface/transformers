@@ -740,10 +740,13 @@ if is_torch_available():
     _import_structure["models.megatron_bert"].extend(
         [
             "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "MegatronBertForCausalLM",
-            "MegatronBertForConditionalGeneration",
+            "MegatronBertForMaskedLM",
+            "MegatronBertForMultipleChoice",
+            "MegatronBertForNextSentencePrediction",
+            "MegatronBertForPreTraining",
             "MegatronBertForQuestionAnswering",
             "MegatronBertForSequenceClassification",
+            "MegatronBertForTokenClassification",
             "MegatronBertModel",
         ]
     )
@@ -1944,15 +1947,15 @@ if TYPE_CHECKING:
         )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            MegatronBertLayer,
-            MegatronBertModel,
             MegatronBertForMaskedLM,
+            MegatronBertForMultipleChoice,
             MegatronBertForNextSentencePrediction,
             MegatronBertForPreTraining,
-            MegatronBertForSequenceClassification,
-            MegatronBertForMultipleChoice,
-            MegatronBertForTokenClassification,
             MegatronBertForQuestionAnswering,
+            MegatronBertForSequenceClassification,
+            MegatronBertForTokenClassification,
+            MegatronBertLayer,
+            MegatronBertModel,
         )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (

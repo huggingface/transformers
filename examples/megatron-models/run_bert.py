@@ -17,43 +17,45 @@
 ####################################################################################################
 
 import argparse
-import os
+
 import torch
-from   transformers import BertTokenizer
-from   transformers import MegatronBertConfig
-from   transformers import MegatronBertForMaskedLM, MegatronBertForNextSentencePrediction
+
+from transformers import (
+    BertTokenizer,
+    MegatronBertConfig,
+    MegatronBertForMaskedLM,
+    MegatronBertForNextSentencePrediction,
+)
+
 
 ####################################################################################################
+
 
 def main():
 
     # Create the argument parser.
     parser = argparse.ArgumentParser()
-    parser.add_argument('--masked-lm', action='store_true')
-    parser.add_argument('checkpoint', type=str,
-        help="""Path to the folder containing the config.json and checkpoint.pt extracted from the
-        NGC checkpoint using the convert_megatron_bert_checkpoint.py script.""")
+    parser.add_argument("--masked-lm", action="store_true")
+    parser.add_argument("checkpoint", type=str, help="See examples in README.md.")
     args = parser.parse_args()
 
     # Do we use the cased/uncased model.
-    is_uncased = 'uncased' in args.checkpoint
+    is_uncased = "uncased" in args.checkpoint
 
     # The base model.
-    bert = 'bert-base-' + ('uncased' if is_uncased else 'cased')
+    bert = "bert-base-" + ("uncased" if is_uncased else "cased")
     # The tokenizer. Megatron was trained with standard tokenizer(s).
     tokenizer = BertTokenizer.from_pretrained(bert)
 
     # The config file.
-    config_file = os.path.join(args.checkpoint, 'config.json')
+    config_file = args.checkpoint + "_config.json"
     # Load the config.
     config = MegatronBertConfig.from_pretrained(config_file)
-    # Make sure we do not try to tie embeddings.
-    config.tie_word_embeddings = False
 
     # The model class.
     model_cls = MegatronBertForMaskedLM if args.masked_lm else MegatronBertForNextSentencePrediction
     # The checkpoint file.
-    checkpoint_file = os.path.join(args.checkpoint, 'checkpoint.pt')
+    checkpoint_file = args.checkpoint + "_checkpoint.pt"
     # Load the model from transformers.
     model = model_cls.from_pretrained(checkpoint_file, config=config)
 
@@ -62,7 +64,7 @@ def main():
 
     # Copy to the device and use FP16.
     assert torch.cuda.is_available()
-    device = torch.device('cuda')
+    device = torch.device("cuda")
     model.to(device)
     model.half()
 
@@ -70,15 +72,15 @@ def main():
 
     # Create a dummy sentence (from the BERT example page).
     if args.masked_lm:
-        input = tokenizer('the capital of france is [MASK]', return_tensors='pt')
+        input = tokenizer("The capital of France is [MASK]", return_tensors="pt")
         input = input.to(device)
-        label = tokenizer('the capital of france is paris', return_tensors='pt')['input_ids']
+        label = tokenizer("The capital of France is Paris", return_tensors="pt")["input_ids"]
         label = label.to(device)
         output = model(**input, labels=label)
     else:
-        prompt = 'In Italy, pizza served in formal settings is presented unsliced.'
-        next_sentence = 'The sky is blue due to the shorter wavelength of blue light.'
-        input = tokenizer(prompt, next_sentence, return_tensors='pt')
+        prompt = "In Italy, pizza served in formal settings is presented unsliced."
+        next_sentence = "The sky is blue due to the shorter wavelength of blue light."
+        input = tokenizer(prompt, next_sentence, return_tensors="pt")
         input = input.to(device)
         label = torch.LongTensor([1])
         label = label.to(device)
@@ -87,13 +89,13 @@ def main():
     output = model(**input, labels=label)
 
     # Outputs.
-    print('loss:   ', output.loss)
-    print('logits: ', output.logits)
+    print("loss:   ", output.loss)
+    print("logits: ", output.logits)
+
 
 ####################################################################################################
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
 ####################################################################################################
-

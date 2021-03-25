@@ -1811,6 +1811,78 @@ class MBartModel:
         requires_pytorch(self)
 
 
+MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class MegatronBertForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertLayer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MegatronBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class MMBTForClassification:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)

@@ -17,7 +17,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from typing import TYPE_CHECKING
-from ...file_utils import _BaseLazyModule, is_tf_available, is_torch_available, is_tokenizers_available
+
+from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+
+
 _import_structure = {
     "configuration_megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "tokenization_megatron_bert": ["MegatronBertTokenizer"],
@@ -30,22 +33,14 @@ if is_torch_available():
     _import_structure["modeling_megatron_bert"] = [
         "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MegatronBertForMaskedLM",
+        "MegatronBertForMultipleChoice",
         "MegatronBertForNextSentencePrediction",
-        "MegatronBertForConditionalGeneration",
+        "MegatronBertForPreTraining",
         "MegatronBertForQuestionAnswering",
         "MegatronBertForSequenceClassification",
-        "MegatronBertForCausalLM",
+        "MegatronBertForTokenClassification",
         "MegatronBertModel",
-        "MegatronBertLMHeadModel",
-        "MegatronBertPreTrainedModel",
     ]
-
-# if is_tf_available():
-#     _import_structure["modeling_tf_megatron_bert"] = [
-#         "TFMegatronBertForConditionalGeneration",
-#         "TFMegatronBertModel",
-#         "TFMegatronBertPreTrainedModel",
-#     ]
 
 if TYPE_CHECKING:
     from .configuration_megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
@@ -58,22 +53,14 @@ if TYPE_CHECKING:
         from .modeling_megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             MegatronBertForMaskedLM,
+            MegatronBertForMultipleChoice,
             MegatronBertForNextSentencePrediction,
-            MegatronBertForConditionalGeneration,
-            MegatronBertForCausalLM,
+            MegatronBertForPreTraining,
             MegatronBertForQuestionAnswering,
             MegatronBertForSequenceClassification,
+            MegatronBertForTokenClassification,
             MegatronBertModel,
-            MegatronBertLMHeadModel,
-            MegatronBertPreTrainedModel,
         )
-
-#     if is_tf_available():
-#         from .modeling_tf_megatron_bert import (
-#             TFMegatronBertForConditionalGeneration,
-#             TFMegatronBertModel,
-#             TFMegatronBertPreTrainedModel,
-#         )
 
 else:
     import importlib
@@ -92,4 +79,3 @@ else:
             return importlib.import_module("." + module_name, self.__name__)
 
     sys.modules[__name__] = _LazyModule(__name__, _import_structure)
-

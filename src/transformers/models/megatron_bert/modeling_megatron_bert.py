@@ -67,6 +67,7 @@ MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MegatronBERT models at https://huggingface.co/models?filter=megatron_bert
 ]
 
+
 def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
     """Load tf checkpoints in a pytorch model."""
     try:
@@ -635,13 +636,10 @@ class MegatronBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.transform = MegatronBertPredictionHeadTransform(config)
-
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
         self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
@@ -691,7 +689,7 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
 
     config_class = MegatronBertConfig
     load_tf_weights = load_tf_weights_in_megatron_bert
-    base_model_prefix = "megatron-bert"
+    base_model_prefix = "bert"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
@@ -986,8 +984,8 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MegatronBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
-    sentence prediction (classification)` head.
+    MegatronBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
+    `next sentence prediction (classification)` head.
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
@@ -1090,7 +1088,8 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning. """, MEGATRON_BERT_START_DOCSTRING
+    """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning. """,
+    MEGATRON_BERT_START_DOCSTRING,
 )
 class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
 
@@ -1445,8 +1444,8 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MegatronBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
-    output) e.g. for GLUE tasks.
+    MegatronBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
+    pooled output) e.g. for GLUE tasks.
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
@@ -1527,10 +1526,11 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
-    MegatronBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
-    softmax) e.g. for RocStories/SWAG tasks.
+    MegatronBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output
+    and a softmax) e.g. for RocStories/SWAG tasks.
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
@@ -1544,7 +1544,9 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="megatron-bert-uncased-345m",
@@ -1620,8 +1622,8 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MegatronBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
-    Named-Entity-Recognition (NER) tasks.
+    MegatronBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
+    for Named-Entity-Recognition (NER) tasks.
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
@@ -1711,8 +1713,8 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    MegatronBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    MegatronBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     MEGATRON_BERT_START_DOCSTRING,
 )
@@ -1809,4 +1811,3 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-

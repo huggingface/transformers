@@ -18,6 +18,7 @@
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
+
 logger = logging.get_logger(__name__)
 
 MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
@@ -28,9 +29,10 @@ MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class MegatronBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.MegatronBertModel` or a
-    :class:`~transformers.TFMegatronBertModel`. It is used to instantiate a MEGATRON_BERT model according to the specified arguments,
-    defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration
-    to that of the MEGATRON_BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+    :class:`~transformers.TFMegatronBertModel`. It is used to instantiate a MEGATRON_BERT model according to the
+    specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a
+    similar configuration to that of the MEGATRON_BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__
+    architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -38,8 +40,8 @@ class MegatronBertConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 30522):
-            Vocabulary size of the MEGATRON_BERT model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.MegatronBertModel` or
+            Vocabulary size of the MEGATRON_BERT model. Defines the number of different tokens that can be represented
+            by the :obj:`inputs_ids` passed when calling :class:`~transformers.MegatronBertModel` or
             :class:`~transformers.TFMegatronBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 1024):
             Dimensionality of the encoder layers and the pooler layer.
@@ -60,8 +62,8 @@ class MegatronBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.MegatronBertModel` or
-            :class:`~transformers.TFMegatronBertModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling
+            :class:`~transformers.MegatronBertModel` or :class:`~transformers.TFMegatronBertModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -131,7 +133,7 @@ class MegatronBertConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-        
+
     # @property
     # def num_attention_heads(self) -> int:
     #     return self.num_attention_heads
