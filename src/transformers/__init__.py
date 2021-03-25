@@ -1215,7 +1215,9 @@ if is_tf_available():
             "TFLayoutLMForMaskedLM",
             "TFLayoutLMForSequenceClassification",
             "TFLayoutLMForTokenClassification",
+            "TFLaoutLMMainLayer",
             "TFLayoutLMModel",
+            "TFLayoutLMPreTrainedModel",
         ]
     )
     _import_structure["models.xlnet"].extend(

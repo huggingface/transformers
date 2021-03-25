@@ -70,7 +70,6 @@ if TYPE_CHECKING:
     if is_tf_available():
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFLayoutLMEmbeddings,
             TFLayoutLMForMaskedLM,
             TFLayoutLMForSequenceClassification,
             TFLayoutLMForTokenClassification,
