@@ -18,7 +18,9 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
+from .tokenization_layoutlm import LayoutLMTokenizer
 
 
 _import_structure = {
@@ -38,6 +40,17 @@ if is_torch_available():
         "LayoutLMModel",
     ]
 
+if is_tf_available():
+    _import_structure["modeling_tf_layoutlm"] = [
+        "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFLayoutLMForMaskedLM",
+        "TFLayoutLMForTokenClassification",
+        "TFLayoutLMForSequenceClassification",
+        "TFLayoutLMMainLayer",
+        "TFLayoutLMModel",
+        "TFLayoutLMPreTrainedModel",
+    ]
+
 
 if TYPE_CHECKING:
     from .configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
@@ -53,6 +66,16 @@ if TYPE_CHECKING:
             LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
+        )
+    if is_tf_available():
+        from .modeling_tf_layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMMainLayer,
+            TFLayoutLMModel,
+            TFLayoutLMPreTrainedModel,
         )
 
 else:
