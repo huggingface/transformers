@@ -2,7 +2,7 @@ from sklearn.model_selection import train_test_split
 import torch
 from transformers import BertTokenizer
 from transformers import BertForSequenceClassification, Trainer, TrainingArguments
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from datasets import load_metric
 
 
 def read_material_split(file_path):
@@ -49,17 +49,7 @@ val_dataset = materialDataset(val_encodings, val_labels)
 test_dataset = materialDataset(test_encodings, test_labels)
 
 
-def compute_metrics(pred):
-    labels = pred.label_ids
-    preds = pred.predictions.argmax(-1)
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
-    acc = accuracy_score(labels, preds)
-    return {
-        'accuracy': acc,
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
-    }
+metric = load_metric('glue', 'mrpc')
 
 
 training_args = TrainingArguments(
@@ -80,11 +70,19 @@ trainer = Trainer(
     args=training_args,  # training arguments, defined above
     train_dataset=train_dataset,  # training dataset
     eval_dataset=val_dataset,  # evaluation dataset
-    compute_metrics=compute_metrics()
+    # compute_metrics=metric
 )
 
 trainer.train()
-metric = trainer.evaluate()
-print(metric)
+trainer.evaluate()
+
+
+# Example of typical usage
+for batch in val_dataset:
+    inputs, references = batch
+    predictions = model(inputs)
+    metric.add_batch(predictions=predictions, references=references)
+score = metric.compute()
+print(score)
 
 trainer.save_model(training_args.output_dir)
