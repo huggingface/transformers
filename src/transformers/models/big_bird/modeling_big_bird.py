@@ -1732,6 +1732,18 @@ class BigBirdModel(BigBirdPreTrainedModel):
         if token_type_ids is None:
             token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
+        if self.config.attention_type == "block_sparse":
+            padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds = self._pad_to_block_size(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                token_type_ids=token_type_ids,
+                position_ids=position_ids,
+                inputs_embeds=inputs_embeds,
+                pad_token_id=self.config.pad_token_id,
+            )
+        else:
+            padding_len = 0
+
         if self.attention_type == "block_sparse":
             block_size = self.block_size
             blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
@@ -1798,6 +1810,11 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
         pooler_output = self.activation(self.pooler(sequence_output[:, 0, :])) if (self.pooler is not None) else None
 
+        # undo padding
+        if padding_len > 0:
+            # unpad `sequence_output` because the calling function is expecting a length == input_ids.size(1)
+            sequence_output = sequence_output[:, :-padding_len]
+
         if not return_dict:
             return (sequence_output, pooler_output) + encoder_outputs[1:]
 
@@ -1846,6 +1863,48 @@ class BigBirdModel(BigBirdPreTrainedModel):
         to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
 
         return blocked_encoder_mask, band_mask, from_mask, to_mask
+
+    def _pad_to_block_size(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor,
+        position_ids: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        pad_token_id: int,
+    ):
+        """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
+        # padding
+        block_size = self.config.block_size
+
+        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
+        batch_size, seq_len = input_shape[:2]
+
+        padding_len = (block_size - seq_len % block_size) % block_size
+        if padding_len > 0:
+            logger.info(
+                "Input ids are automatically padded from {} to {} to be a multiple of `config.block_size`: {}".format(
+                    seq_len, seq_len + padding_len, block_size
+                )
+            )
+            if input_ids is not None:
+                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
+            if position_ids is not None:
+                # pad with position_id = pad_token_id as in modeling_bigbird.BigBirdEmbeddings
+                position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
+            if inputs_embeds is not None:
+                input_ids_padding = inputs_embeds.new_full(
+                    (batch_size, padding_len),
+                    self.config.pad_token_id,
+                    dtype=torch.long,
+                )
+                inputs_embeds_padding = self.embeddings(input_ids_padding)
+                inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
+
+            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
+            token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
+
+        return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
 
 class BigBirdForPreTraining(BigBirdPreTrainedModel):
