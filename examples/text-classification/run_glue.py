@@ -40,7 +40,6 @@ from transformers import (
 )
 from transformers.trainer_utils import is_main_process
 
-
 task_to_keys = {
     "cola": ("sentence", None),
     "mnli": ("premise", "hypothesis"),
@@ -51,6 +50,7 @@ task_to_keys = {
     "sst2": ("sentence", None),
     "stsb": ("sentence1", "sentence2"),
     "wnli": ("sentence1", "sentence2"),
+    "material": ("sentence", None)
 }
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class DataTrainingArguments:
         default=128,
         metadata={
             "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+                    "than this will be truncated, sequences shorter will be padded."
         },
     )
     overwrite_cache: bool = field(
@@ -84,7 +84,7 @@ class DataTrainingArguments:
         default=True,
         metadata={
             "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+                    "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
     train_file: Optional[str] = field(
@@ -147,10 +147,10 @@ def main():
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
     if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
+            os.path.exists(training_args.output_dir)
+            and os.listdir(training_args.output_dir)
+            and training_args.do_train
+            and not training_args.overwrite_output_dir
     ):
         raise ValueError(
             f"Output directory ({training_args.output_dir}) already exists and is not empty. "
@@ -275,9 +275,9 @@ def main():
     # Some models have set the order of the labels to use, so let's make sure we do use it.
     label_to_id = None
     if (
-        model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
-        and data_args.task_name is not None
-        and is_regression
+            model.config.label2id != PretrainedConfig(num_labels=num_labels).label2id
+            and data_args.task_name is not None
+            and is_regression
     ):
         # Some have all caps in their config, some don't.
         label_name_to_id = {k.lower(): v for k, v in model.config.label2id.items()}
@@ -318,6 +318,7 @@ def main():
     # Get the metric function
     if data_args.task_name is not None:
         metric = load_metric("glue", data_args.task_name)
+
     # TODO: When datasets metrics include regular accuracy, make an else here and remove special branch from
     # compute_metrics
 

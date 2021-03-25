@@ -8,7 +8,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from chardet.universaldetector import UniversalDetector
 from pathlib import Path
-from typing import Any
 import logging
 
 logging.basicConfig(level=logging.INFO, format='[%(threadName)-9s] %(message)s')
@@ -45,7 +44,6 @@ def convert_encode2utf8(file, original_encode, des_encode):
 
 
 def covert_all(file_path):
-    file_content = read_file(file_path)
     encode_info = get_encode_info(file_path)
     if encode_info != 'utf-8':
         convert_encode2utf8(file_path, encode_info, 'utf-8')
@@ -55,7 +53,7 @@ def covert_all(file_path):
 def merge_text(filenames):
     with open('result.txt', 'w') as outfile:
         for names in filenames:
-            with open(names) as infile:
+            with open(names,encoding='utf-8') as infile:
                 outfile.write(infile.read())
             outfile.write("\n")
 
@@ -67,6 +65,8 @@ def multip_process(task: list):
 
 
 if __name__ == '__main__':
-    root_path = r"/home/wuyan/usr/material/bert_corpus"
-    path = [str(x) for x in Path(root_path).glob("**/*.txt")]
-    multip_process(path)
+    root_path = r"I:\\BTU\\annotation\\"
+    paths = [str(x) for x in Path(root_path).glob("**/*.txt")]
+    multip_process(paths)
+    # for path in paths:
+    #     covert_all(path)
