@@ -234,16 +234,16 @@ class CharacterCnn(torch.nn.Module):
         self._init_projection()
 
     def _init_char_embedding(self):
-        weights = torch.zeros((
+        weights = torch.empty((
             self.character_vocab_size,
             self.character_embeddings_dim))
-        nn.init.kaiming_uniform_(
-            weights, a=math.sqrt(5))
-        weights[0, :] *= 0.  # token padding
-        weights[CharacterMapper.padding_character + 1, :] *= 0.  # character padding
+        nn.init.normal_(weights)
+        weights[0].fill_(0.)  # token padding
+        weights[CharacterMapper.padding_character + 1].fill_(0.)  # character padding
         self._char_embedding_weights = torch.nn.Parameter(
             torch.FloatTensor(weights),
-            requires_grad=True)
+            requires_grad=True
+        )
 
     def _init_cnn_weights(self):
         convolutions = []
