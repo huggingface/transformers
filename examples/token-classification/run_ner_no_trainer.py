@@ -179,7 +179,7 @@ def parse_args():
         type=str,
         default="ner",
         choices=["ner", "pos", "chunk"],
-        help="The name of the task (ner, pos...).",
+        help="The name of the task.",
     )
     parser.add_argument(
         "--debug",
@@ -514,7 +514,7 @@ def main():
                 metric.add_batch(
                     predictions=preds,
                     references=refs,
-                )
+                )  # predictions and preferences are expected to be a nested list
 
             # eval_metric = metric.compute()
             eval_metric = compute_metrics()
