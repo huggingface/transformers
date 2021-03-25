@@ -45,6 +45,9 @@ IGNORE_NON_TESTED = [
     "BlenderbotDecoderWrapper",  # Building part of bigger (tested) model.
     "MBartEncoder",  # Building part of bigger (tested) model.
     "MBartDecoderWrapper",  # Building part of bigger (tested) model.
+    "MegatronBertEncoder",  # Building part of bigger (tested) model.
+    "MegatronBertDecoder",  # Building part of bigger (tested) model.
+    "MegatronBertDecoderWrapper", # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
@@ -105,6 +108,9 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "MBartEncoder",
     "MBartDecoder",
     "MBartDecoderWrapper",
+    "MegatronBertEncoder",
+    "MegatronBertDecoder",
+    "MegatronBertDecoderWrapper",
     "OpenAIGPTDoubleHeadsModel",
     "PegasusEncoder",
     "PegasusDecoder",
