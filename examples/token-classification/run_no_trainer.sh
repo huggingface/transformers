@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-python3 run_ner_accelerate.py \
+python3 run_ner_no_trainer.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name conll2003 \
   --output_dir /tmp/test-ner \
