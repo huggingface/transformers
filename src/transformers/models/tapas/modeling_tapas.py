@@ -1357,7 +1357,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                     torch.ones_like(labels, dtype=torch.float32),
                     self.config.positive_label_weight * torch.ones_like(labels, dtype=torch.float32),
                 )
-                selection_loss_per_token = -dist_per_token.log_prob(labels) * weight
+                selection_loss_per_token = -dist_per_token.log_prob(labels.float()) * weight
                 selection_loss_per_example = torch.sum(selection_loss_per_token * input_mask_float, dim=1) / (
                     torch.sum(input_mask_float, dim=1) + EPSILON_ZERO_DIVISION
                 )
