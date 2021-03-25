@@ -346,6 +346,12 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+else:
+    from .utils import dummy_vision_objects
+
+    _import_structure["utils.dummy_vision_objects"] = [
+        name for name in dir(dummy_vision_objects) if not name.startswith("_")
+    ]
 
 # PyTorch-backed objects
 if is_torch_available():
@@ -1542,6 +1548,8 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+    else:
+        from .utils.dummy_vision_objects import *
 
     # Modeling
     if is_torch_available():
