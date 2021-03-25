@@ -134,13 +134,11 @@ class Attention(nn.Module):
         self.register_buffer(
             "bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(1, 1, n_ctx, n_ctx)
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4))
+        self.register_buffer("masked_bias", torch.tensor(-1e9))
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
 
-        # self.c_attn = Conv1D(3 * n_state, nx)
-        # self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
@@ -159,8 +157,8 @@ class Attention(nn.Module):
 
     def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
-        # if self.scale:
-        #     w = w / (float(v.size(-1)) ** 0.5)
+        if self.scale:
+            w = w / (self.head_dim ** 0.5)
         nd, ns = w.size(-2), w.size(-1)
 
         mask = self.bias[:, :, ns - nd : ns, :ns]
@@ -205,15 +203,14 @@ class Attention(nn.Module):
         output_attentions=False,
     ):
 
-        query = self.q_proj(hidden_states) * self.scaling
+        query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
-
-        # query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
+
         if layer_past is not None:
             past_key, past_value = layer_past[0].transpose(-2, -1), layer_past[1]  # transpose back cf below
             key = torch.cat((past_key, key), dim=-1)
@@ -243,13 +240,11 @@ class LocalAttention(nn.Module):
         self.register_buffer(
             "bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(1, 1, n_ctx, n_ctx)
         )
-        self.register_buffer("masked_bias", torch.tensor(-1e4))
+        self.register_buffer("masked_bias", torch.tensor(-1e9))
         self.n_head = config.n_head
         self.split_size = n_state
         self.scale = scale
 
-        # self.c_attn = Conv1D(3 * n_state, nx)
-        # self.c_proj = Conv1D(n_state, nx)
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
 
@@ -287,6 +282,14 @@ class LocalAttention(nn.Module):
             parts = [self.shift(margin, num_complete_blocks + 1)] + parts
         return torch.cat(parts, dim=2)
 
+    def split_heads(self, x, k=False):
+        new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
+        x = x.view(*new_x_shape)  # in Tensorflow implem: fct split_states
+        if k:
+            return x.permute(0, 2, 3, 1)  # (batch, head, head_features, seq_length)
+        else:
+            return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+
     def forward(
         self,
         hidden_states,
@@ -296,12 +299,11 @@ class LocalAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        query = self.q_proj(hidden_states) * self.scaling
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
+        q = self.q_proj(hidden_states)
+        k = self.k_proj(hidden_states)
+        v = self.v_proj(hidden_states)
 
-        merge_into_batch = lambda t: t.reshape(-1, *t.shape[-2:])
-        q, k, v = map(merge_into_batch, (query, key, value))
+        query = self.split_heads(q).transpose(1, 2)
 
         bs, seq_len = hidden_states.shape[:2]
         block_length = self.window_size
@@ -332,11 +334,14 @@ class LocalAttention(nn.Module):
         m_seq = self.look_around(m_seq, block_length, self.window_size)
         visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
         visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
-        visible = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2)
-        mask = visible.ne(True)
+        mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2)
 
         # attn
         w = torch.matmul(bq, bk.transpose(-1, -2))
+
+        if self.scale:
+            w = w / (self.head_dim ** 0.5)
+
         w = torch.where(mask, w, self.masked_bias.to(w.dtype))
 
         attn = w.softmax(dim=-1)
@@ -440,7 +445,8 @@ class Block(nn.Module):
         if use_cache:
             outputs = (hidden_states,) + outputs
         else:
-            outputs = (hidden_states,) + outputs[1:]
+            #             outputs = (hidden_states,) + outputs[1:]
+            outputs = (hidden_states, attn_output)
 
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
