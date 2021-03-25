@@ -243,7 +243,7 @@ def main():
     # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        hf_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
+        raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
     else:
         data_files = {}
         if args.train_file is not None:
@@ -251,20 +251,20 @@ def main():
         if args.validation_file is not None:
             data_files["validation"] = args.validation_file
         extension = args.train_file.split(".")[-1]
-        hf_datasets = load_dataset(extension, data_files=data_files)
+        raw_datasets = load_dataset(extension, data_files=data_files)
     # Trim a number of training examples
     if args.debug:
-        for split in hf_datasets.keys():
-            hf_datasets[split] = hf_datasets[split].select(range(100))
+        for split in raw_datasets.keys():
+            raw_datasets[split] = raw_datasets[split].select(range(100))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     if args.do_train:
-        column_names = hf_datasets["train"].column_names
-        features = hf_datasets["train"].features
+        column_names = raw_datasets["train"].column_names
+        features = raw_datasets["train"].features
     else:
-        column_names = hf_datasets["validation"].column_names
-        features = hf_datasets["validation"].features
+        column_names = raw_datasets["validation"].column_names
+        features = raw_datasets["validation"].features
     tokens_column_name = "tokens" if "tokens" in column_names else column_names[0]
     label_column_name = f"{args.task_name}_tags" if f"{args.task_name}_tags" in column_names else column_names[1]
 
@@ -283,7 +283,7 @@ def main():
         # No need to convert the labels since they are already ints.
         label_to_id = {i: i for i in range(len(label_list))}
     else:
-        label_list = get_label_list(hf_datasets["train"][label_column_name])
+        label_list = get_label_list(raw_datasets["train"][label_column_name])
         label_to_id = {l: i for i, l in enumerate(label_list)}
     num_labels = len(label_list)
 
@@ -321,7 +321,7 @@ def main():
 
     model.resize_token_embeddings(len(tokenizer))
 
-    # Preprocessing the hf_datasets.
+    # Preprocessing the raw_datasets.
     # First we tokenize all the texts.
     padding = "max_length" if args.pad_to_max_length else False
 
@@ -360,12 +360,12 @@ def main():
         tokenized_inputs["labels"] = labels
         return tokenized_inputs
 
-    processed_hf_datasets = hf_datasets.map(
-        tokenize_and_align_labels, batched=True, remove_columns=hf_datasets["train"].column_names
+    processed_raw_datasets = raw_datasets.map(
+        tokenize_and_align_labels, batched=True, remove_columns=raw_datasets["train"].column_names
     )
 
-    train_dataset = processed_hf_datasets["train"]
-    eval_dataset = processed_hf_datasets["validation"]
+    train_dataset = processed_raw_datasets["train"]
+    eval_dataset = processed_raw_datasets["validation"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
