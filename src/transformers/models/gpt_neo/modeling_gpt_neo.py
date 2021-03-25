@@ -157,8 +157,6 @@ class Attention(nn.Module):
 
     def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
         w = torch.matmul(q, k)
-        if self.scale:
-            w = w / (self.head_dim ** 0.5)
         nd, ns = w.size(-2), w.size(-1)
 
         mask = self.bias[:, :, ns - nd : ns, :ns]
@@ -286,9 +284,14 @@ class LocalAttention(nn.Module):
         new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
         x = x.view(*new_x_shape)  # in Tensorflow implem: fct split_states
         if k:
-            return x.permute(0, 2, 3, 1)  # (batch, head, head_features, seq_length)
+            return x.permute(0, 1, 3, 4, 2)  # (batch, head, head_features, seq_length)
         else:
-            return x.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+            return x.permute(0, 1, 3, 2, 4)  # (batch, head, seq_length, head_features)
+
+    def merge_heads(self, x):
+        x = x.permute(0, 1, 3, 2, 4).contiguous()
+        new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
+        return x.view(*new_x_shape)  # in Tensorflow implem: fct merge_states
 
     def forward(
         self,
@@ -303,8 +306,6 @@ class LocalAttention(nn.Module):
         k = self.k_proj(hidden_states)
         v = self.v_proj(hidden_states)
 
-        query = self.split_heads(q).transpose(1, 2)
-
         bs, seq_len = hidden_states.shape[:2]
         block_length = self.window_size
         while seq_len % block_length != 0:
@@ -317,6 +318,10 @@ class LocalAttention(nn.Module):
 
         bk = self.look_around(bk, block_length, self.window_size)
         bv = self.look_around(bv, block_length, self.window_size)
+
+        bq = self.split_heads(bq)
+        bk = self.split_heads(bk, k=True)
+        bv = self.split_heads(bv)
 
         ticker = torch.arange(seq_len, device=hidden_states.device, dtype=hidden_states.dtype)[None, :]
         b_t = ticker.reshape(1, windows, block_length)
@@ -334,18 +339,15 @@ class LocalAttention(nn.Module):
         m_seq = self.look_around(m_seq, block_length, self.window_size)
         visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
         visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
-        mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2)
+        mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
 
         # attn
-        w = torch.matmul(bq, bk.transpose(-1, -2))
-
-        if self.scale:
-            w = w / (self.head_dim ** 0.5)
-
+        w = torch.matmul(bq, bk)
         w = torch.where(mask, w, self.masked_bias.to(w.dtype))
 
         attn = w.softmax(dim=-1)
         attn = torch.matmul(attn, bv)
+        attn = self.merge_heads(attn)
         attn = attn.reshape(-1, seq_len, self.embed_dim)
 
         attn = self.out_proj(attn)
