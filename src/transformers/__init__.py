@@ -1084,6 +1084,17 @@ if is_tf_available():
             "TFGPT2PreTrainedModel",
         ]
     )
+    _import_structure["models.layoutlm"].extend(
+        [
+            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLaoutLMMainLayer",
+            "TFLayoutLMForMaskedLM",
+            "TFLayoutLMForSequenceClassification",
+            "TFLayoutLMForTokenClassification",
+            "TFLayoutLMModel",
+            "TFLayoutLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
     _import_structure["models.longformer"].extend(
         [
@@ -1212,17 +1223,6 @@ if is_tf_available():
             "TFXLMRobertaForSequenceClassification",
             "TFXLMRobertaForTokenClassification",
             "TFXLMRobertaModel",
-        ]
-    )
-    _import_structure["models.layoutlm"].extend(
-        [
-            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFLayoutLMForMaskedLM",
-            "TFLayoutLMForSequenceClassification",
-            "TFLayoutLMForTokenClassification",
-            "TFLaoutLMMainLayer",
-            "TFLayoutLMModel",
-            "TFLayoutLMPreTrainedModel",
         ]
     )
     _import_structure["models.xlnet"].extend(
