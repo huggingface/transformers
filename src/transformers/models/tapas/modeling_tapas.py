@@ -1351,7 +1351,12 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
 
             # Compute cell selection loss per example.
             selection_loss_per_example = None
-            if not self.config.select_one_column:
+            if self.config.select_one_column:
+                selection_loss_per_example, logits = _single_column_cell_selection_loss(
+                    logits, column_logits, labels, cell_index, col_index, cell_mask
+                )
+                dist_per_token = torch.distributions.Bernoulli(logits=logits)
+            else:
                 weight = torch.where(
                     labels == 0,
                     torch.ones_like(labels, dtype=torch.float32),
@@ -1361,11 +1366,6 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 selection_loss_per_example = torch.sum(selection_loss_per_token * input_mask_float, dim=1) / (
                     torch.sum(input_mask_float, dim=1) + EPSILON_ZERO_DIVISION
                 )
-            else:
-                selection_loss_per_example, logits = _single_column_cell_selection_loss(
-                    logits, column_logits, labels, cell_index, col_index, cell_mask
-                )
-                dist_per_token = torch.distributions.Bernoulli(logits=logits)
 
             # Supervised cell selection
             if self.config.disable_per_token_loss:
@@ -1433,11 +1433,14 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 total_loss += torch.mean(per_example_additional_loss)
 
         else:
-            # if no label ids are provided, set them to zeros in order to properly compute logits
-            labels = torch.zeros_like(logits)
-            _, logits = _single_column_cell_selection_loss(
-                logits, column_logits, labels, cell_index, col_index, cell_mask
-            )
+            if config.select_one_column:
+                # if no label ids are provided, set them to zeros in order to properly compute logits
+                labels = torch.zeros_like(logits)
+                _, logits = _single_column_cell_selection_loss(
+                    logits, column_logits, labels, cell_index, col_index, cell_mask
+                )
+            else:
+                pass
         if not return_dict:
             output = (logits, logits_aggregation) + outputs[2:]
             return ((total_loss,) + output) if calculate_loss else output
