@@ -39,15 +39,15 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "gpt_neo_xl": "https://huggingface.co/eleutherai/gpt_neo_xl/resolve/main/vocab.json",
+        "eleutherai/gpt_neo_xl": "https://huggingface.co/eleutherai/gpt_neo_xl/resolve/main/vocab.json",
     },
     "merges_file": {
-        "gpt_neo_xl": "https://huggingface.co/eleutherai/gpt_neo_xl/resolve/main/merges.txt",
+        "eleutherai/gpt_neo_xl": "https://huggingface.co/eleutherai/gpt_neo_xl/resolve/main/merges.txt",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "gpt_neo_xl": 2048,
+    "eleutherai/gpt_neo_xl": 2048,
 }
 
 
