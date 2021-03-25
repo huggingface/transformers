@@ -1,5 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
+    Copyright 2021 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -19,10 +19,12 @@ Overview
 The BigBird model was proposed in `Big Bird: Transformers for Longer Sequences <https://arxiv.org/abs/2007.14062>`__ by
 Zaheer, Manzil and Guruganesh, Guru and Dubey, Kumar Avinava and Ainslie, Joshua and Alberti, Chris and Ontanon,
 Santiago and Pham, Philip and Ravula, Anirudh and Wang, Qifan and Yang, Li and others. BigBird, is a sparse-attention
-based transformer which extends Transformer based models, such as BERT to much longer sequences. Moreover, BigBird
-comes along with a theoretical understanding of the capabilities of a complete transformer that the sparse model can
-handle. As a consequence of the capability to handle longer context, BigBird drastically improves performance on
-various NLP tasks such as question answering and summarization.
+based transformer which extends Transformer based models, such as BERT to much longer sequences. In addition to sparse
+attention, BigBird also applies global attention as well as random attention to the input sequence. Theoretically, it
+has been shown that applying sparse, global, and random attention approximates full attention, while being
+computationally much more efficient for longer sequences. As a consequence of the capability to handle longer context,
+BigBird has shown improved performance on various long document NLP tasks, such as question answering and
+summarization, compared to BERT or RoBERTa.
 
 The abstract from the paper is the following:
 

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright Vasudev Gupta and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Vasudev Gupta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -73,18 +73,18 @@ class BigBirdConfig(PretrainedConfig):
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
-        attention_type (:obj:`str`, `optional`, defaults to :obj:`block_sparse`)
+        attention_type (:obj:`str`, `optional`, defaults to :obj:`"block_sparse"`)
             Whether to use block sparse attention (with n time) as introduced in paper or original attention layer
-            (with n^2 time). Possible values are `original_full` & `block_sparse`.
+            (with n^2 time). Possible values are :obj:`"original_full"` & :obj:`"block_sparse"`..
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to use bias in query, key, value.
         rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)
             Whether to rescale embeddings with (hidden_size ** 0.5)
-        block_size (:obj:`int`, `optional`, defaults to :obj:`64`)
-            Size of each block. Useful only when `attention_type` is `block_sparse`.
-        num_random_blocks (:obj:`int`, `optional`, defaults to :obj:`3`)
-            Each query is going to attend these many number of random blocks. Useful only when `attention_type` is
-            `block_sparse`.
+        block_size (:obj:`int`, `optional`, defaults to 64)
+            Size of each block. Useful only when `attention_type == "block_sparse"`.
+        num_random_blocks (:obj:`int`, `optional`, defaults to 3)
+            Each query is going to attend these many number of random blocks. Useful only when `attention_type ==
+            "block_sparse"`.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
 
