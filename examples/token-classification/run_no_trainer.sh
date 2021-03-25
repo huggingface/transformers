@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-python3 run_ner_no_trainer.py \
+accelerate launch run_ner_no_trainer.py \
   --model_name_or_path bert-base-uncased \
   --dataset_name conll2003 \
   --output_dir /tmp/test-ner \
   --pad_to_max_length \
   --do_train \
   --task_name ner \
-  --return_entity_level_metrics
+  --return_entity_level_metrics \
+  --debug
