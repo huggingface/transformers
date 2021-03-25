@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding=utf-8
-# Copyright The HuggingFace, Daniel Stancl and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on tokne classification task (NER) with accelerate library.
+Fine-tuning a 🤗 Transformers model on token classification tasks (NER, POS, CHUNKS) relying on the accelerate library
+without using a Trainer.
 """
-# You can also adapt this script on your own token-classification-accelerate task. Pointers for this are left as comments.
 
 import argparse
 import logging
