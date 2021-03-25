@@ -1214,6 +1214,17 @@ if is_tf_available():
             "TFXLMRobertaModel",
         ]
     )
+    _import_structure["models.layoutlm"].extend(
+        [
+            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLayoutLMForMaskedLM",
+            "TFLayoutLMForSequenceClassification",
+            "TFLayoutLMForTokenClassification",
+            "TFLaoutLMMainLayer",
+            "TFLayoutLMModel",
+            "TFLayoutLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.xlnet"].extend(
         [
             "TF_XLNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2010,6 +2021,15 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_utils import tf_top_k_top_p_filtering
+        from .modeling_tf_layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMMainLayer,
+            TFLayoutLMModel,
+            TFLayoutLMPreTrainedModel,
+        )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
