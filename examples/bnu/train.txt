@@ -851,4 +851,3 @@ The calculated primary solidification regions in Nb-rich corner are in accordanc
 The authors would like to thank CompuTherm LLC for their support of using Pandat program, and Prof. Y.A. Chang (University of Wisconsin-Madison) for experimental support and discussion.	0
 Low cycle fatigue and creep-fatigue behaviors are systematically explored.	0
 Cracking modes and damage mechanisms under different loading waveforms are investigated.	0
-
