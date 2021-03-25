@@ -326,6 +326,10 @@ def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
 
+def is_vision_available():
+    return importlib.util.find_spec("PIL") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
