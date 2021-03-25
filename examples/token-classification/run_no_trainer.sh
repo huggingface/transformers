@@ -19,5 +19,4 @@ python3 run_ner_no_trainer.py \
   --pad_to_max_length \
   --do_train \
   --task_name ner \
-  --return_entity_level_metrics \
-  --debug
+  --return_entity_level_metrics
