@@ -195,6 +195,9 @@ def infer_shapes(nlp: Pipeline, framework: str) -> Tuple[List[str], List[str], D
 
     tokens = nlp.tokenizer("This is a sample output", return_tensors=framework)
     seq_len = tokens.input_ids.shape[-1]
+    if framework == "pt":
+        # Make sure both the model and inputs are on the same device
+        tokens = tokens.to(nlp.device)
     outputs = nlp.model(**tokens) if framework == "pt" else nlp.model(tokens)
     if isinstance(outputs, ModelOutput):
         outputs = outputs.to_tuple()
