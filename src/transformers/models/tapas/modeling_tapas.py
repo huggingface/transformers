@@ -1433,7 +1433,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
                 total_loss += torch.mean(per_example_additional_loss)
 
         else:
-            if config.select_one_column:
+            if self.config.select_one_column:
                 # if no label ids are provided, set them to zeros in order to properly compute logits
                 labels = torch.zeros_like(logits)
                 _, logits = _single_column_cell_selection_loss(
