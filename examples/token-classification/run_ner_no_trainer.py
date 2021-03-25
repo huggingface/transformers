@@ -233,11 +233,11 @@ def main():
         set_seed(args.seed)
 
     # Get the datasets: you can either provide your own CSV/JSON/TXT training and evaluation files (see below)
-    # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
+    # or just provide the name of one of the public datasets for token classification task available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
     #
-    # For CSV/JSON files, this script will use the column called 'text' or the first column if no column called
-    # 'text' is found. You can easily tweak this behavior (see below).
+    # For CSV/JSON files, this script will use the column called 'tokens' or the first column if no column called
+    # 'tokens' is found. You can easily tweak this behavior (see below).
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
@@ -265,7 +265,7 @@ def main():
     else:
         column_names = raw_datasets["validation"].column_names
         features = raw_datasets["validation"].features
-    tokens_column_name = "tokens" if "tokens" in column_names else column_names[0]
+    text_column_name = "tokens" if "tokens" in column_names else column_names[0]
     label_column_name = f"{args.task_name}_tags" if f"{args.task_name}_tags" in column_names else column_names[1]
 
     # In the event the labels are not a `Sequence[ClassLabel]`, we will need to go through the dataset to get the
@@ -329,7 +329,7 @@ def main():
 
     def tokenize_and_align_labels(examples):
         tokenized_inputs = tokenizer(
-            examples[tokens_column_name],
+            examples[text_column_name],
             max_length=args.max_length,
             padding=padding,
             truncation=True,
