@@ -67,6 +67,9 @@ role = sagemaker.get_execution_role()
 **Local environment**
 
 ```python
+import sagemaker
+import boto3
+
 iam_client = boto3.client('iam')
 role = iam_client.get_role(RoleName='role-name-of-your-iam-role-with-right-permissions')['Role']['Arn']
 sess = sagemaker.Session()
@@ -113,7 +116,7 @@ For a complete example of a 🤗 Transformers training script, see [train.py](ht
 
 ### Create an HuggingFace Estimator
 
-You run 🤗 Transformers training scripts on SageMaker by creating `HuggingFace` Estimators. The Estimator handles end-to-end Amazon SageMaker training. The training of your script is invoked when you call `fit` on a `HuggingFace` Estimator. In the Estimator you define, which fine-tuning script should be used as `entry_point`, which `instance_type` should be used, which `hyperparameters` are passed in, you can find all possible `HuggingFace` Parameter [here](https://link-me-to-the-a-sagemaker-sdk-hf-estimator.py). and an example of a fine-tuning script [here](https://github.com/huggingface/notebooks/blob/master/sagemaker/01_getting_started_pytorch/scripts/train.py).
+You run 🤗 Transformers training scripts on SageMaker by creating `HuggingFace` Estimators. The Estimator handles end-to-end Amazon SageMaker training. The training of your script is invoked when you call `fit` on a `HuggingFace` Estimator. In the Estimator you define, which fine-tuning script should be used as `entry_point`, which `instance_type` should be used, which `hyperparameters` are passed in, you can find all possible `HuggingFace` Parameter [here](https://sagemaker.readthedocs.io/en/stable/frameworks/huggingface/sagemaker.huggingface.html#huggingface-estimator). and an example of a fine-tuning script [here](https://github.com/huggingface/notebooks/blob/master/sagemaker/01_getting_started_pytorch/scripts/train.py).
 You can find all useable `instance_types` [here](https://aws.amazon.com/de/sagemaker/pricing/).
 
 The following code sample shows how you train a custom `HuggingFace` script `train.py`, passing in three hyperparameters (`epochs`, `per_device_train_batch_size`, and `model_name_or_path`).
@@ -387,4 +390,4 @@ huggingface_estimator = HuggingFace(
 
 - [Amazon SageMaker documentation for Hugging Face](https://docs.aws.amazon.com/sagemaker/latest/dg/hugging-face.html)
 
-- [SageMaker Python SDK](https://sagemaker.readthedocs.io/en/stable/index.html)
+- [SageMaker Python SDK](https://sagemaker.readthedocs.io/en/stable/frameworks/huggingface/index.html)
