@@ -39,7 +39,7 @@ from transformers import (
     AutoConfig,
     AutoModelForTokenClassification,
     AutoTokenizer,
-    DataCollatorForTokenClassification,
+    DataCollatorWithPadding,
     SchedulerType,
     default_data_collator,
     get_scheduler,
@@ -81,7 +81,7 @@ def parse_args():
         default=128,
         help=(
             "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
+            " sequences shorter will be padded if `--pad_to_max_lenght` is passed."
         ),
     )
     parser.add_argument(
@@ -106,6 +106,11 @@ def parse_args():
         type=str,
         default=None,
         help="Pretrained tokenizer name or path if not the same as model_name",
+    )
+    parser.add_argument(
+        "--use_slow_tokenizer",
+        action="store_true",
+        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -157,12 +162,6 @@ def parse_args():
         default=None,
         help="Model type to use if training from scratch.",
         choices=MODEL_TYPES,
-    )
-    parser.add_argument("--do_train", action="store_true", help="Run training. Otherwise only evaluation is done.")
-    parser.add_argument(
-        "--label_all_tokens",
-        action="store_true",
-        help="Setting labels of all special tokens to -100 and thus PyTorch will ignore them.",
     )
     parser.add_argument(
         "--return_entity_level_metrics",
@@ -250,7 +249,7 @@ def main():
     # Trim a number of training examples
     if args.debug:
         for split in raw_datasets.keys():
-            raw_datasets[split] = raw_datasets[split].select(range(1000))
+            raw_datasets[split] = raw_datasets[split].select(range(100))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -295,9 +294,9 @@ def main():
         logger.warning("You are instantiating a new config instance from scratch.")
 
     if args.tokenizer_name:
-        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=True)
+        tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name, use_fast=not args.use_slow_tokenizer)
     elif args.model_name_or_path:
-        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=True)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path, use_fast=not args.use_slow_tokenizer)
     else:
         raise ValueError(
             "You are instantiating a new tokenizer from scratch. This is not supported by this script."
@@ -375,9 +374,7 @@ def main():
         # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-        data_collator = DataCollatorForTokenClassification(
-            tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None)
-        )
+        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -505,13 +502,23 @@ def main():
                 with torch.no_grad():
                     outputs = model(**batch)
                 predictions = outputs.logits.argmax(dim=-1)
+                labels = batch["labels"]
+                if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
+                    labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
+
                 predictions_gathered = accelerator.gather(predictions)
-                labels_gathered = accelerator.gather(batch["labels"])
+                labels_gathered = accelerator.gather(labels)
                 preds, refs = get_labels(predictions_gathered, labels_gathered)
                 metric.add_batch(
                     predictions=preds,
                     references=refs,
-                )  # predictions and preferences are expected to be a nested list with labels, not label_id
+                )  # predictions and preferences are expected to be a nested list of labels, not label_ids
+                preds, refs = get_labels(predictions_gathered, labels_gathered)
+                metric.add_batch(
+                    predictions=preds,
+                    references=refs,
+                )  # predictions and preferences are expected to be a nested list
 
             # eval_metric = metric.compute()
             eval_metric = compute_metrics()
