@@ -119,6 +119,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt2_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
+        print("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
 
     return model
@@ -475,7 +476,7 @@ class GPTNeoPreTrainedModel(PreTrainedModel):
     """
 
     config_class = GPTNeoConfig
-    load_tf_weights = load_tf_weights_in_gpt2
+    load_tf_weights = load_tf_weights_in_gpt_neo
     base_model_prefix = "transformer"
 
     def __init__(self, *inputs, **kwargs):
