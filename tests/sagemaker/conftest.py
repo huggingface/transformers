@@ -1,9 +1,12 @@
 # we define a fixture function below and it will be "used" by
 # referencing its name from tests
 
-from attr import dataclass
-import pytest
 import os
+
+import pytest
+
+from attr import dataclass
+
 
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"  # current DLCs are only in us-east-1 available
 os.environ["AWS_PROFILE"] = "hf-sm"  # local profile FIXME: needs to be removed to work in the pipeline

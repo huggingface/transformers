@@ -1,13 +1,13 @@
 import os
-import pytest
 import subprocess
-from ast import literal_eval
-from sagemaker.huggingface import HuggingFace
-from sagemaker import TrainingJobAnalytics
-
 import unittest
+from ast import literal_eval
+
 import pytest
+
 from parameterized import parameterized, parameterized_class
+from sagemaker import TrainingJobAnalytics
+from sagemaker.huggingface import HuggingFace
 
 
 @pytest.mark.skipif(
@@ -51,6 +51,7 @@ class MultiNodeTest(unittest.TestCase):
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count):
+        job_name = f"{self.env.base_job_name}-{instance_count}-{'ddp' if 'ddp' in self.script else 'smd'}"
         # distributed data settings
         distribution = {"smdistributed": {"dataparallel": {"enabled": True}}}
 
@@ -60,7 +61,7 @@ class MultiNodeTest(unittest.TestCase):
             source_dir=self.env.test_path,
             role=self.env.role,
             image_uri=self.env.image_uri,
-            base_job_name=f"{self.env.base_job_name}-{instance_count}-{self.script.split('.')[0].replace('_','-')}",
+            base_job_name=job_name,
             instance_count=instance_count,
             instance_type=self.instance_type,
             debugger_hook_config=False,

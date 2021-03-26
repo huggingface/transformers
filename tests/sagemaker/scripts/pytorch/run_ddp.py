@@ -1,8 +1,9 @@
-from argparse import ArgumentParser
-import os
 import json
-import subprocess
 import logging
+import os
+import subprocess
+from argparse import ArgumentParser
+
 
 logger = logging.getLogger(__name__)
 

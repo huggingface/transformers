@@ -1,11 +1,11 @@
 import argparse
 import logging
-import os
-import time
 import sys
+import time
 
 import tensorflow as tf
 from datasets import load_dataset
+
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 

@@ -27,7 +27,7 @@ import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
-from transformers import (
+from transformers import (  # Trainer,; TrainingArguments,
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -35,16 +35,15 @@ from transformers import (
     EvalPrediction,
     HfArgumentParser,
     PretrainedConfig,
-    # Trainer,
-    # TrainingArguments,
     default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
 
 # Will import SageMaker Model parallelism specific Trainer
-from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments, SageMakerTrainer as Trainer
+from transformers.sagemaker import SageMakerTrainer as Trainer
+from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
+from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.

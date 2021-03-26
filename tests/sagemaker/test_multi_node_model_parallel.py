@@ -1,24 +1,12 @@
 import os
-import pytest
-import subprocess
-from ast import literal_eval
-from sagemaker.huggingface import HuggingFace
-from sagemaker import TrainingJobAnalytics
-
-# from sagemaker.huggingface import HuggingFace
-
-# TODO add in setup.py there is a release
-# | bert-finetuning-pytorch       | testbertfinetuningusingBERTfromtransformerlib+PT                  | SageMaker createTrainingJob | 1        | Accuracy, time to train |
-# |-------------------------------|-------------------------------------------------------------------|-----------------------------|----------|-------------------------|
-# | bert-finetuning-pytorch-ddp   | test bert finetuning using BERT from transformer lib+ PT DPP      | SageMaker createTrainingJob | 2/4/8/16 | Accuracy, time to train |
-# | bert-finetuning-pytorch-smddp | test bert finetuning using BERT from transformer lib+ PT SM DDP   | SageMaker createTrainingJob | 2/4/8/16 | Accuracy, time to train |
-# | deberta-finetuning-smmp       | test deberta finetuning using BERT from transformer lib+ PT SM MP | SageMaker createTrainingJob | 2/4/8/16 | Accuracy, time to train |
-
-# content of test_unittest_db.py
-
 import unittest
+from ast import literal_eval
+
 import pytest
+
 from parameterized import parameterized, parameterized_class
+from sagemaker import TrainingJobAnalytics
+from sagemaker.huggingface import HuggingFace
 
 
 @pytest.mark.skipif(
@@ -42,11 +30,11 @@ class MultiNodeTest(unittest.TestCase):
         assert hasattr(self, "env")
 
     def create_estimator(self, instance_count):
+
         # configuration for running training on smdistributed Model Parallel
         mpi_options = {
             "enabled": True,
             "processes_per_host": 8,
-            # "custom_mpi_options": "--mca btl_vader_single_copy_mechanism none ",
         }
         smp_options = {
             "enabled": True,
@@ -68,7 +56,7 @@ class MultiNodeTest(unittest.TestCase):
             source_dir=self.env.test_path,
             role=self.env.role,
             image_uri=self.env.image_uri,
-            base_job_name=f"{self.env.base_job_name}-{instance_count}-{self.script.split('.')[0].replace('_','-')}",
+            base_job_name=f"{self.env.base_job_name}-{instance_count}-smp",
             instance_count=instance_count,
             instance_type=self.instance_type,
             debugger_hook_config=False,
