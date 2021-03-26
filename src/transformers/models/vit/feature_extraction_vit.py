@@ -36,32 +36,24 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        image_mean (:obj:`int`, defaults to [0.5, 0.5, 0.5]):
+        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to [0.5, 0.5, 0.5]):
+        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to :obj:`224`):
+        size (:obj:`int`, `optional`, defaults to 224):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
     """
 
     model_input_names = ["pixel_values"]
 
-    def __init__(
-        self,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        do_normalize=True,
-        do_resize=True,
-        size=224,
-        **kwargs
-    ):
+    def __init__(self, image_mean=None, image_std=None, do_normalize=True, do_resize=True, size=224, **kwargs):
         super().__init__(**kwargs)
-        self.image_mean = image_mean
-        self.image_std = image_std
+        self.image_mean = [0.5, 0.5, 0.5]
+        self.image_std = [0.5, 0.5, 0.5]
         self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
@@ -73,6 +65,11 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
+
+        .. warning::
+
+           NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
+           PIL images.
 
         Args:
             images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):

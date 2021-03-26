@@ -1546,9 +1546,6 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_tokenizers_objects import *
 
-    if is_torchvision_available():
-        from .models.vit import ViTFeatureExtractor
-
     # Modeling
     if is_torch_available():
 
@@ -2309,6 +2306,10 @@ if TYPE_CHECKING:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
+
+    if is_torchvision_available():
+        from .models.vit import ViTFeatureExtractor
+
 else:
     import importlib
     import os

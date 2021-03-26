@@ -342,12 +342,12 @@ def prepare_img():
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO: add .from_pretrained()
-        return ViTFeatureExtractor() if is_torchvision_available() else None
+        return (
+            ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_torchvision_available() else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        # TODO: replace namespace to google
         model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
