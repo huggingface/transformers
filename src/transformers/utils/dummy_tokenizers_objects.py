@@ -119,6 +119,15 @@ class GPT2TokenizerFast:
         requires_tokenizers(self)
 
 
+class GPTNeoTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
 class HerbertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
