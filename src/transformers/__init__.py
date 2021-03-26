@@ -48,6 +48,7 @@ from .file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    is_vision_available,
 )
 from .utils import logging
 
@@ -105,6 +106,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_tpu_available",
+        "is_vision_available",
     ],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
@@ -339,6 +341,16 @@ else:
 
     _import_structure["utils.dummy_tokenizers_objects"] = [
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
+    ]
+
+# Vision-specific objects
+if is_vision_available():
+    _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+else:
+    from .utils import dummy_vision_objects
+
+    _import_structure["utils.dummy_vision_objects"] = [
+        name for name in dir(dummy_vision_objects) if not name.startswith("_")
     ]
 
 # PyTorch-backed objects
@@ -1317,6 +1329,7 @@ if TYPE_CHECKING:
         is_tokenizers_available,
         is_torch_available,
         is_torch_tpu_available,
+        is_vision_available,
     )
     from .hf_argparser import HfArgumentParser
 
@@ -1543,6 +1556,11 @@ if TYPE_CHECKING:
             from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
     else:
         from .utils.dummy_tokenizers_objects import *
+
+    if is_vision_available():
+        from .image_utils import ImageFeatureExtractionMixin
+    else:
+        from .utils.dummy_vision_objects import *
 
     # Modeling
     if is_torch_available():
