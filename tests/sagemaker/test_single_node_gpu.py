@@ -6,8 +6,13 @@ from ast import literal_eval
 import pytest
 
 from parameterized import parameterized_class
-from sagemaker import TrainingJobAnalytics
-from sagemaker.huggingface import HuggingFace
+
+from . import is_sagemaker_available
+
+
+if is_sagemaker_available():
+    from sagemaker import TrainingJobAnalytics
+    from sagemaker.huggingface import HuggingFace
 
 
 @pytest.mark.skipif(
