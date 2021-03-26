@@ -36,7 +36,7 @@ def get_random_image(height, width):
 
 
 @require_vision
-class Speech2TextFeatureExtractionTester(unittest.TestCase):
+class ImageFeatureExtractionTester(unittest.TestCase):
     def test_conversion_image_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
         image = get_random_image(16, 32)

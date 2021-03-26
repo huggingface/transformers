@@ -16,7 +16,11 @@
 import numpy as np
 import PIL.Image
 
-from .file_utils import _is_torch
+from .file_utils import _is_torch, is_torch_available
+
+
+def is_torch_tensor(obj):
+    return _is_torch(obj) if is_torch_available() else False
 
 
 # In the future we can add a TF implementation here when we have TF models.
@@ -26,7 +30,7 @@ class ImageFeatureExtractionMixin:
     """
 
     def _ensure_format_supported(self, image):
-        if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not _is_torch(image):
+        if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not is_torch_tensor(image):
             raise ValueError(
                 f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
                 "`torch.Tensor` are."
@@ -46,7 +50,7 @@ class ImageFeatureExtractionMixin:
         """
         self._ensure_format_supported(image)
 
-        if _is_torch(image):
+        if is_torch_tensor(image):
             image = image.numpy()
 
         if isinstance(image, np.ndarray):
@@ -82,7 +86,7 @@ class ImageFeatureExtractionMixin:
         if isinstance(image, PIL.Image.Image):
             image = np.array(image)
 
-        if _is_torch(image):
+        if is_torch_tensor(image):
             image = image.numpy()
 
         if rescale is None:
@@ -119,7 +123,7 @@ class ImageFeatureExtractionMixin:
                 mean = np.array(mean)
             if not isinstance(std, np.ndarray):
                 std = np.array(std)
-        elif _is_torch(image):
+        elif is_torch_tensor(image):
             import torch
 
             if not isinstance(mean, torch.Tensor):
