@@ -50,7 +50,7 @@ GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "eleutherai/gpt_neo_xl"
 
 
-def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
+def load_tf_weights_in_gpt_neo(model, config, gpt2_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
         import re
@@ -69,15 +69,28 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     names = []
     arrays = []
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array.squeeze())
+        if "global_step" not in name and "adam" not in name:
+            array = tf.train.load_variable(tf_path, name)
+            array = tf.dtypes.cast(array.squeeze(), tf.float32).numpy()
+            name = name.replace("attn/q", "attn/attention/q_proj/w")
+            name = name.replace("attn/k", "attn/attention/k_proj/w")
+            name = name.replace("attn/v", "attn/attention/v_proj/w")
+            name = name.replace("attn/o", "attn/attention/out_proj/w")
+            name = name.replace("norm_1", "ln_1")
+            name = name.replace("norm_2", "ln_2")
+            name = name.replace("attn/compute_output_bias/o_b", "attn/attention/out_proj/b")
+            name = name.replace("conv1d_main/c_fc/kernel", "c_fc/w")
+            name = name.replace("conv1d_main/c_fc/bias", "c_fc/b")
+            name = name.replace("conv1d_main/c_proj/kernel", "c_proj/w")
+            name = name.replace("conv1d_main/c_proj/bias", "c_proj/b")
+
+            names.append(name)
+            arrays.append(array)
 
     for name, array in zip(names, arrays):
-        name = name[6:]  # skip "model/"
+        name = name[5:]  # skip "gpt2/"
         name = name.split("/")
-        pointer = model
+        pointer = model.transformer
         for m_name in name:
             if re.fullmatch(r"[A-Za-z]+\d+", m_name):
                 scope_names = re.split(r"(\d+)", m_name)
@@ -95,15 +108,19 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
                 pointer = pointer[num]
+
+        if name[-1] == "w" and name[-2] in ["out_proj", "k_proj", "q_proj", "v_proj", "c_proj", "c_fc"]:
+            array = array.transpose()
+
         try:
             assert (
                 pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
+            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched {name}"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        logger.info("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
+
     return model
 
 
@@ -213,13 +230,6 @@ class LocalAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        max_positions = config.n_ctx
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
-                1, 1, max_positions, max_positions
-            ),
-        )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
@@ -283,6 +293,7 @@ class LocalAttention(nn.Module):
 
         # compute attn mask
         # this matches the original implem in mess-tensorflow
+        # https://github.com/tensorflow/mesh/blob/8bd599a21bad01cef1300a8735c17306ce35db6e/mesh_tensorflow/transformer/attention.py#L805
         relative_position = bq_k.unsqueeze(-2) - bq_t.unsqueeze(-1)
         relative_position = relative_position.transpose(-1, -2)
         sequence_id = torch.ones(bs, seq_len)
@@ -332,11 +343,9 @@ class LocalAttention(nn.Module):
         while seq_len % block_length != 0:
             block_length -= 1
         windows = seq_len // block_length
-        # print(seq_len, self.window_size, block_length, windows)
 
         # create buckets
         query = self.create_buckets(query, windows, block_length)
-        # print(query.shape)
         key = self.create_buckets(key, windows, block_length)
         value = self.create_buckets(value, windows, block_length)
 
@@ -733,7 +742,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 presents = presents + (outputs[1],)
 
             if output_attentions:
-                # print(outputs[1].shape)
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
         hidden_states = self.ln_f(hidden_states)
