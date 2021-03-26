@@ -326,6 +326,10 @@ def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
 
+def is_vision_available():
+    return importlib.util.find_spec("PIL") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -490,6 +494,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 """
 
 
+# docstyle-ignore
+VISION_IMPORT_ERROR = """
+{0} requires the PIL library but it was not found in your environment. You can install it with pip:
+`pip install pillow`
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -554,6 +565,12 @@ def requires_scatter(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_scatter_available():
         raise ImportError(SCATTER_IMPORT_ERROR.format(name))
+
+
+def requires_vision(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_vision_available():
+        raise ImportError(VISION_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):
