@@ -62,38 +62,3 @@ GPTNeoForCausalLM
 
 .. autoclass:: transformers.GPTNeoForCausalLM
     :members: forward
-
-
-GPTNeoForMaskedLM
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoForMaskedLM
-    :members: forward
-
-
-GPTNeoForSequenceClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoForSequenceClassification
-    :members: forward
-
-
-GPTNeoForMultipleChoice
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoForMultipleChoice
-    :members: forward
-
-
-GPTNeoForTokenClassification
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoForTokenClassification
-    :members: forward
-
-
-GPTNeoForQuestionAnswering
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoForQuestionAnswering
-    :members: forward
