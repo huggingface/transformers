@@ -14,15 +14,14 @@
 
 import unittest
 
-from transformers import AutoTokenizer, is_torch_available, pipeline
+import numpy as np
+
+from transformers import AutoTokenizer, pipeline
 from transformers.pipelines import Pipeline, TokenClassificationArgumentHandler
 from transformers.testing_utils import require_tf, require_torch, slow
 
 from .test_pipelines_common import CustomInputPipelineCommonMixin
 
-
-if is_torch_available():
-    import numpy as np
 
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
