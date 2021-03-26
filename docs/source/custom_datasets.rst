@@ -16,9 +16,9 @@ Fine-tuning with custom datasets
 .. note::
 
     The datasets used in this tutorial are available and can be more easily accessed using the `🤗 Datasets library
-    <https://github.com/huggingface/datasets>`_. We do not use this library to access the datasets here since this tutorial
-    meant to illustrate how to work with your own data. A brief of introduction can be found at the end of the tutorial
-    in the section ":ref:`datasetslib`".
+    <https://github.com/huggingface/datasets>`_. We do not use this library to access the datasets here since this
+    tutorial meant to illustrate how to work with your own data. A brief of introduction can be found at the end of the
+    tutorial in the section ":ref:`datasetslib`".
 
 This tutorial will take you through several examples of using 🤗 Transformers models with your own datasets. The guide
 shows one of many valid workflows for using these models and is meant to be illustrative rather than definitive. We
@@ -686,7 +686,8 @@ This tutorial demonstrates how to read in datasets from various raw text formats
 Transformers so that you can do the same thing with your own custom datasets. However, we recommend users use the `🤗
 Datasets library <https://github.com/huggingface/datasets>`_ for working with the 150+ datasets included in the `hub
 <https://huggingface.co/datasets>`_, including the three datasets used in this tutorial. As a very brief overview, we
-will show how to use the Datasets library to download and prepare the IMDb dataset from the first example, :ref:`seq_imdb`.
+will show how to use the Datasets library to download and prepare the IMDb dataset from the first example,
+:ref:`seq_imdb`.
 
 Start by downloading the dataset:
 
@@ -724,5 +725,5 @@ dataset elements.
     >>> {key: val.shape for key, val in train[0].items()})
     {'labels': TensorShape([]), 'input_ids': TensorShape([512]), 'attention_mask': TensorShape([512])}
 
-We now have a fully-prepared dataset. Check out `the 🤗 Datasets docs <https://huggingface.co/docs/datasets/processing.html>`_ for a
-more thorough introduction.
+We now have a fully-prepared dataset. Check out `the 🤗 Datasets docs
+<https://huggingface.co/docs/datasets/processing.html>`_ for a more thorough introduction.
