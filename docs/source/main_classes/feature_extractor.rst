@@ -39,3 +39,10 @@ BatchFeature
 
 .. autoclass:: transformers.BatchFeature
     :members:
+
+
+ImageFeatureExtractionMixin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.image_utils.ImageFeatureExtractionMixin
+    :members:
