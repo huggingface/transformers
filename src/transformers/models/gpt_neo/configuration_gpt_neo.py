@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "gpt_neo_xl": "https://huggingface.co/gpt_neo_xl/resolve/main/config.json",
+    "eleutherai/gpt_neo_xl": "https://huggingface.co/eleutherai/gpt_neo_xl/resolve/main/config.json",
     # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
 }
 
@@ -31,7 +31,7 @@ class GPTNeoConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.GPTNeoModel`. It is used to
     instantiate an GPTNeo model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTNeo `gpt_neo_xl
-    <https://huggingface.co/gpt_neo_xl>`__ architecture.
+    <https://huggingface.co/eleutherai/gpt_neo_xl>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -43,6 +43,9 @@ class GPTNeoConfig(PretrainedConfig):
             :obj:`inputs_ids` passed when calling :class:`~transformers.GPTNeoModel` or
             :class:`~transformers.TFGPTNeoModel`. Vocabulary size of the model. Defines the different tokens that can
             be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.GPTNeoModel`.
+        attn_layers (:obj:`Tuple[str]`, `optional`, defaults to :obj:`("global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local")`):
+            Tuple of attention layer types in ascending order. It can be chosen between a Attention layer
+            (:obj:`"global"`) and a LocalAttention layer (:obj:`"local"`).
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -124,6 +127,7 @@ class GPTNeoConfig(PretrainedConfig):
         ),
         n_head=16,
         n_inner=None,
+        window_size=256,
         activation_function="gelu_new",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
@@ -150,6 +154,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.n_layer = n_layer
         self.n_head = n_head
         self.n_inner = n_inner
+        self.window_size = window_size
         self.activation_function = activation_function
         self.resid_pdrop = resid_pdrop
         self.embd_pdrop = embd_pdrop
@@ -162,7 +167,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         self.gradient_checkpointing = gradient_checkpointing
-        self.use_cache = use_cache
+        self.use_cache = False  # caching is not implemented for GPTNeo
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
