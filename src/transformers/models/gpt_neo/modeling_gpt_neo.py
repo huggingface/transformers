@@ -286,14 +286,14 @@ class LocalAttention(nn.Module):
         relative_position = bq_k.unsqueeze(-2) - bq_t.unsqueeze(-1)
         relative_position = relative_position.transpose(-1, -2)
         sequence_id = torch.ones(bs, seq_len)
-        q_seq = sequence_id.reshape(1, windows, block_length)
-        m_seq = sequence_id.reshape(1, windows, block_length)
+        q_seq = sequence_id.reshape(-1, windows, block_length)
+        m_seq = sequence_id.reshape(-1, windows, block_length)
         m_seq = self.look_around(m_seq, block_length, self.window_size)
         visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
         visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
         mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
         return mask
-    
+
     def _attn(self, q, k, v, causal_mask, head_mask=None, output_attentions=False):
         # attn
         attn_weights = torch.matmul(q, k)
@@ -305,12 +305,12 @@ class LocalAttention(nn.Module):
         # Mask heads if we want to
         if head_mask is not None:
             attn_weights = attn_weights * head_mask
-        
+
         attn_output = torch.matmul(attn_weights, v)
 
         outputs = (attn_output,)
         if output_attentions:
-            outputs += (attn_weights, )
+            outputs += (attn_weights,)
         return outputs
 
     def forward(
@@ -332,9 +332,11 @@ class LocalAttention(nn.Module):
         while seq_len % block_length != 0:
             block_length -= 1
         windows = seq_len // block_length
+        # print(seq_len, self.window_size, block_length, windows)
 
         # create buckets
         query = self.create_buckets(query, windows, block_length)
+        # print(query.shape)
         key = self.create_buckets(key, windows, block_length)
         value = self.create_buckets(value, windows, block_length)
 
@@ -452,8 +454,7 @@ class Block(nn.Module):
         if use_cache:
             outputs = (hidden_states,) + outputs
         else:
-            #             outputs = (hidden_states,) + outputs[1:]
-            outputs = (hidden_states, attn_output)
+            outputs = (hidden_states,) + outputs[1:]
 
         return outputs  # hidden_states, present, (attentions, cross_attentions)
 
@@ -732,6 +733,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                 presents = presents + (outputs[1],)
 
             if output_attentions:
+                # print(outputs[1].shape)
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
         hidden_states = self.ln_f(hidden_states)
