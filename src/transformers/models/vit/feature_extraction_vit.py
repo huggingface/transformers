@@ -14,21 +14,22 @@
 # limitations under the License.
 """Feature extractor class for ViT."""
 
-from typing import List, Union
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToPILImage, ToTensor
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
+from ...file_utils import TensorType
+from ...image_utils import ImageFeatureExtractionMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ViTFeatureExtractor(FeatureExtractionMixin):
+class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a ViT feature extractor.
 
@@ -61,6 +62,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
     def __call__(
         self,
         images: Union[Image.Image, np.ndarray, torch.Tensor, List[Image.Image], List[np.ndarray], List[torch.Tensor]],
+        return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
         """
@@ -73,13 +75,21 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
 
         Args:
             images (:obj:`PIL.Image.Image`, :obj:`np.ndarray`, :obj:`torch.Tensor`, :obj:`List[PIL.Image.Image]`, :obj:`List[np.ndarray]`, :obj:`List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or a PyTorch
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
+            return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
+                * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+
         Returns:
-            :obj:`torch.Tensor` of shape :obj:`(batch_size, num_channels, height, width)`: A PyTorch tensor containing
-            the preprocessed images.
+            :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:
+
+            - **pixel_values** -- Pixel values to be fed to a model.
         """
         # Input type checking for clearer error
         valid_images = False
@@ -101,37 +111,17 @@ class ViTFeatureExtractor(FeatureExtractionMixin):
             isinstance(images, (list, tuple)) and (isinstance(images[0], (Image.Image, np.ndarray, torch.Tensor)))
         )
 
-        # step 1: make images a list of PIL images no matter what
-        if is_batched:
-            if isinstance(images[0], np.ndarray):
-                # PIL expects the channel dimension as last dimension
-                images = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in images]
-            elif isinstance(images[0], torch.Tensor):
-                images = [ToPILImage()(image).convert("RGB") for image in images]
-        else:
-            if isinstance(images, np.ndarray):
-                # PIL expects the channel dimension as last dimension
-                images = [Image.fromarray(np.moveaxis(images, 0, -1))]
-            elif isinstance(images, torch.Tensor):
-                images = [ToPILImage()(images).convert("RGB")]
-            else:
-                images = [images]
+        if not is_batched:
+            images = [images]
 
-        # step 2: define transformations (resizing + normalization)
-        transformations = []
+        # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            transformations.append(Resize(size=(self.size, self.size)))
+            images = [self.resize(image=image, size=self.size) for image in images]
         if self.do_normalize:
-            normalization = Compose([ToTensor(), Normalize(self.image_mean, self.image_std)])
-            transformations.append(normalization)
-        transforms = Compose(transformations)
-
-        # step 3: apply transformations to images and stack
-        pixel_values = [transforms(image) for image in images]
-        pixel_values = torch.stack(pixel_values)
+            images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
         # return as BatchFeature
-        data = {"pixel_values": pixel_values}
-        encoded_inputs = BatchFeature(data=data)
+        data = {"pixel_values": images}
+        encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_inputs

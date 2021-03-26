@@ -1281,8 +1281,8 @@ else:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 
-# Torchvision-backed objects
-if is_torchvision_available():
+# Vision-backed objects
+if is_vision_available():
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 
 # Direct imports for type-checking
@@ -2348,6 +2348,10 @@ if TYPE_CHECKING:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
+
+    # Vision-backed objects
+    if is_vision_available():
+        from .models.vit import ViTFeatureExtractor
 
 else:
     import importlib

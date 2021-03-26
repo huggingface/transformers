@@ -19,8 +19,8 @@ import inspect
 import unittest
 
 import requests
-from transformers.file_utils import cached_property, is_torch_available, is_torchvision_available
-from transformers.testing_utils import require_torch, require_torchvision, slow, torch_device
+from transformers.file_utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -33,7 +33,7 @@ if is_torch_available():
     from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
-if is_torchvision_available():
+if is_vision_available():
     from PIL import Image
 
     from transformers import ViTFeatureExtractor
@@ -338,13 +338,11 @@ def prepare_img():
     return img
 
 
-@require_torchvision
+@require_vision
 class ViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_torchvision_available() else None
-        )
+        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

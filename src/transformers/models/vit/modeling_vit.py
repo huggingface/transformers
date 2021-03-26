@@ -498,7 +498,7 @@ class ViTModel(ViTPreTrainedModel):
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224')
 
-            >>> inputs = feature_extractor(images=image)
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> last_hidden_states = outputs.last_hidden_state
         """
@@ -592,11 +592,12 @@ class ViTForImageClassification(ViTPreTrainedModel):
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
             >>> model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
 
-            >>> inputs = feature_extractor(images=image)
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
             >>> # model predicts one of the 1000 ImageNet classes
-            >>> predicted_class = logits.argmax(-1).item()
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

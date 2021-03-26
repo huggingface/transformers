@@ -18,8 +18,8 @@ import unittest
 
 import numpy as np
 
-from transformers.file_utils import is_torch_available, is_torchvision_available
-from transformers.testing_utils import require_torchvision
+from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.testing_utils import require_vision
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
@@ -27,7 +27,7 @@ from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 if is_torch_available():
     import torch
 
-if is_torchvision_available():
+if is_vision_available():
     from PIL import Image
 
     from transformers import ViTFeatureExtractor
@@ -99,10 +99,10 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         return image_inputs
 
 
-@require_torchvision
+@require_vision
 class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ViTFeatureExtractor if is_torchvision_available() else None
+    feature_extraction_class = ViTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
         self.feature_extract_tester = ViTFeatureExtractionTester(self)
@@ -131,7 +131,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             self.assertIsInstance(image, Image.Image)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0]).pixel_values
+        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -143,7 +143,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs).pixel_values
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -163,7 +163,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             self.assertIsInstance(image, np.ndarray)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0]).pixel_values
+        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -175,7 +175,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs).pixel_values
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -195,7 +195,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             self.assertIsInstance(image, torch.Tensor)
 
         # Test not batched input
-        encoded_images = feature_extractor(image_inputs[0]).pixel_values
+        encoded_images = feature_extractor(image_inputs[0], return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
@@ -207,7 +207,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
         )
 
         # Test batched
-        encoded_images = feature_extractor(image_inputs).pixel_values
+        encoded_images = feature_extractor(image_inputs, return_tensors="pt").pixel_values
         self.assertEqual(
             encoded_images.shape,
             (
