@@ -127,14 +127,8 @@ class GPTNeoModelTester:
             n_embd=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            # intermediate_size=self.intermediate_size,
-            # hidden_act=self.hidden_act,
-            # hidden_dropout_prob=self.hidden_dropout_prob,
-            # attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             n_positions=self.max_position_embeddings,
             n_ctx=self.max_position_embeddings,
-            # type_vocab_size=self.type_vocab_size,
-            # initializer_range=self.initializer_range,
             use_cache=not gradient_checkpointing,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
@@ -247,10 +241,9 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
     all_model_classes = (GPTNeoModel, GPTNeoForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
-    all_parallelizable_model_classes = (GPTNeoForCausalLM,) if is_torch_available() else ()
     test_missing_keys = False
     test_pruning = False
-    test_model_parallel = True
+    test_model_parallel = False
 
     # special case for DoubleHeads model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -289,11 +282,9 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         block_length = window_size
         while seq_len % block_length != 0:
             block_length -= 1
-        partial_size = window_size % block_length
-        return window_size + partial_size
+        return window_size + block_length
 
     def test_attention_outputs(self):
-        pass
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
@@ -301,8 +292,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -327,10 +316,16 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
+            # test global attention shape
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, seq_len],
+            )
+            # test local attention shape
             encoder_key_length = self._get_local_attn_seq_len(seq_len, chunk_length)
             self.assertListEqual(
-                list(attentions[-1].shape[-4:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
+                list(attentions[-1].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, encoder_key_length],
             )
 
             out_len = len(outputs)
@@ -346,8 +341,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
             else:
                 added_hidden_states = 1
             self.assertEqual(out_len + added_hidden_states, len(outputs))
@@ -355,16 +348,18 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+
+            # test global attention shape
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, seq_len],
+            )
+
+            # test local attention shape
+            self.assertListEqual(
+                list(self_attentions[-1].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, encoder_key_length],
+            )
 
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
