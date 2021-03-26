@@ -278,11 +278,13 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         config_and_inputs = self.model_tester.prepare_config_and_inputs(gradient_checkpointing=True)
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs)
 
-    def _get_local_attn_seq_len(self, seq_len, window_size):
+    def _get_local_attn_seq_len_block_len_windows(self, seq_len, window_size):
         block_length = window_size
         while seq_len % block_length != 0:
             block_length -= 1
-        return window_size + block_length
+        windows = seq_len // block_length
+        local_seq_len = window_size + block_length
+        return local_seq_len, block_length, windows
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -322,7 +324,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
                 [self.model_tester.num_attention_heads, encoder_seq_length, seq_len],
             )
             # test local attention shape
-            encoder_key_length = self._get_local_attn_seq_len(seq_len, chunk_length)
+            encoder_key_length = self._get_local_attn_seq_len_block_len_windows(seq_len, chunk_length)[0]
             self.assertListEqual(
                 list(attentions[-1].shape[-3:]),
                 [self.model_tester.num_attention_heads, seq_len, encoder_key_length],
@@ -364,30 +366,47 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):
-        # self.assertIsInstance(attentions, tuple)
-        # self.assertListEqual(
-        #     [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
-        # )
-        # self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        for idx, iter_attentions in enumerate(attentions):
+            tgt_len = min_length + idx
+            src_len = min_length + idx
+            global_expected_shape = (
+                batch_size * num_beam_groups,
+                config.num_attention_heads,
+                tgt_len,
+                src_len,
+            )
 
-        # for idx, iter_attentions in enumerate(attentions):
-        #     tgt_len = min_length + idx if not use_cache else 1
-        #     src_len = min_length + idx
+            local_seq_len, block_len, windows = self._get_local_attn_seq_len_block_len_windows(
+                src_len, config.window_size
+            )
+            local_expected_shape = (
+                batch_size * num_beam_groups,
+                windows,
+                config.num_attention_heads,
+                block_len,
+                local_seq_len,
+            )
 
-        #     expected_shape = (
-        #         batch_size * num_beam_groups,
-        #         config.num_attention_heads,
-        #         tgt_len,
-        #         src_len,
-        #     )
-        #     # check attn size
-        #     self.assertListEqual(
-        #         [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
-        #     )
+            shapes = [layer_attention.shape for layer_attention in iter_attentions]
+
+            # every other layer is local attention layers
+            # so alternate between expected shapes
+            expected_shape = [
+                global_expected_shape if i % 2 == 0 else local_expected_shape for i, _ in enumerate(iter_attentions)
+            ]
+            # check attn size
+            self.assertListEqual(shapes, expected_shape)
+
+    # caching is not implemented
+    def test_beam_search_generate_dict_outputs_use_cache(self):
         pass
 
-    # caching is not yet implemented
-    def test_beam_search_generate_dict_outputs_use_cache(self):
+    def test_greedy_generate_dict_outputs_use_cache(self):
         pass
 
     # batch generation is not supported yet
@@ -407,7 +426,7 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
     @slow
     def test_lm_generate_gpt_neo(self):
         for checkpointing in [True, False]:
-            model = GPTNeoForCausalLM.from_pretrained("gpt_neo", gradient_checkpointing=checkpointing)
+            model = GPTNeoForCausalLM.from_pretrained("eleutherai/gpt_neo_xl", gradient_checkpointing=checkpointing)
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             expected_output_ids = [
@@ -437,8 +456,8 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_neo_sample(self):
-        tokenizer = GPTNeoTokenizer.from_pretrained("gpt_neo")
-        model = GPTNeoForCausalLM.from_pretrained("gpt_neo")
+        tokenizer = GPTNeoTokenizer.from_pretrained("eleutherai/gpt_neo_xl")
+        model = GPTNeoForCausalLM.from_pretrained("eleutherai/gpt_neo_xl")
         model.to(torch_device)
 
         torch.manual_seed(0)
