@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,8 +44,8 @@ class GPTNeoConfig(PretrainedConfig):
             :class:`~transformers.TFGPTNeoModel`. Vocabulary size of the model. Defines the different tokens that can
             be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.GPTNeoModel`.
         attn_layers (:obj:`Tuple[str]`, `optional`, defaults to :obj:`("global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local")`):
-            Tuple of attention layer types in ascending order. It can be chosen between a Attention layer
-            (:obj:`"global"`) and a LocalAttention layer (:obj:`"local"`).
+            Tuple of attention layer types in ascending order. It can be chosen between a :obj:`Attention` layer
+            (:obj:`"global"`) and a :obj:`LocalAttention` layer (:obj:`"local"`).
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -81,10 +81,10 @@ class GPTNeoConfig(PretrainedConfig):
 
         >>> from transformers import GPTNeoModel, GPTNeoConfig
 
-        >>> # Initializing a GPTNeo gpt_neo_xl style configuration
+        >>> # Initializing a GPTNeo eleutherai/gpt_neo_xl style configuration
         >>> configuration = GPTNeoConfig()
 
-        >>> # Initializing a model from the gpt_neo_xl style configuration
+        >>> # Initializing a model from the eleutherai/gpt_neo_xl style configuration
         >>> model = GPTNeoModel(configuration)
 
         >>> # Accessing the model configuration

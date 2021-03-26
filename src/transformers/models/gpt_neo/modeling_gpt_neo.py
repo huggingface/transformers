@@ -50,7 +50,7 @@ GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
 _CHECKPOINT_FOR_DOC = "eleutherai/gpt_neo_xl"
 
 
-def load_tf_weights_in_gpt_neo(model, config, gpt2_checkpoint_path):
+def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     """Load tf checkpoints in a pytorch model"""
     try:
         import re
@@ -62,7 +62,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt2_checkpoint_path):
             "https://www.tensorflow.org/install/ for installation instructions."
         )
         raise
-    tf_path = os.path.abspath(gpt2_checkpoint_path)
+    tf_path = os.path.abspath(gpt_neo_checkpoint_path)
     logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
