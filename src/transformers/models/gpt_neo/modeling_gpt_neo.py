@@ -122,6 +122,11 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
         print("Initialize PyTorch weight {}".format(name))
         pointer.data = torch.from_numpy(array)
 
+    # init the final linear layer using word embeddings
+    embs = model.transformer.wte.weight
+    lin = nn.Linear(embs.size()[1], embs.size()[0], bias=False)
+    lin.weight = embs
+    model.set_output_embeddings(lin)
     return model
 
 
