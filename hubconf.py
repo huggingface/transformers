@@ -78,7 +78,7 @@ def model(*args, **kwargs):
             model = torch.hub.load('huggingface/transformers', 'model', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
             assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             model = torch.hub.load('huggingface/transformers', 'model', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
@@ -97,7 +97,7 @@ def modelWithLMHead(*args, **kwargs):
         model = torch.hub.load('huggingface/transformers', 'modelWithLMHead', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
         assert model.config.output_attentions == True
         # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-        config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+        config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
         model = torch.hub.load('huggingface/transformers', 'modelWithLMHead', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
     """
@@ -115,7 +115,7 @@ def modelForSequenceClassification(*args, **kwargs):
             model = torch.hub.load('huggingface/transformers', 'modelForSequenceClassification', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
             assert model.config.output_attentions == True
             # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             model = torch.hub.load('huggingface/transformers', 'modelForSequenceClassification', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
         """
@@ -134,7 +134,7 @@ def modelForQuestionAnswering(*args, **kwargs):
         model = torch.hub.load('huggingface/transformers', 'modelForQuestionAnswering', 'bert-base-uncased', output_attentions=True)  # Update configuration during loading
         assert model.config.output_attentions == True
         # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-        config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+        config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
         model = torch.hub.load('huggingface/transformers', 'modelForQuestionAnswering', './tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
 
     """

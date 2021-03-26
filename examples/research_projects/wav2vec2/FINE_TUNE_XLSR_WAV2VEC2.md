@@ -131,7 +131,108 @@ Awesome you have successfully trained a XLSR-Wav2Vec2 model 😎. Now you can ju
 
 ### Local machine
 
-To fill...
+We have provided `run_common_voice.py` script to run fine-tuning on local machine. The script is similar to the colab but allows you to launch training using command line, save and continue training from previous checkpoints and launch training on multiple GPUs.
+For bigger datasets, we recommend to train Wav2Vec2 locally instead of in a google colab.
+
+1. To begin with, we should clone transformers localy and install all the required packages.
+
+First, you need to clone the `transformers` repo with:
+
+```
+$ git clone https://github.com/huggingface/transformers.git
+```
+
+Second, head over to the `examples/research_projects/wav2vec2` directory, where the `run_common_voice.py` script is located.
+
+```
+$ cd transformers/examples/research_projects/wav2vec2
+```
+
+Third, install the required packages. The
+packages are listed in the `requirements.txt` file and can be installed with
+
+```
+$ pip install -r requirements.txt
+```
+
+	**Note**: Installing the latest version of `torchaudio` will also upgrade `torch` to it's latest stable version. If you are using specific version of `torch` then make sure
+	to use the correct `torchaudio` version compatible with your version of `torch`. By default the `requirements.txt` will install the latest version of `torchaudio`.
+
+2. Next, take a look at the `run_common_voice.py` script to get an understanding of how it works. In short the script does the following:
+
+	- Load the given common voice dataset
+	- Create vocab for the language
+	- Load the model with given hyperparameters
+	- Pre-process the dataset to input into the model
+	- Run training
+	- Run evaluation
+
+3. The following examples show how you can launch fine-tuning for the common voice dataset. 
+Here we will run the script on the *Turkish* Common Voice dataset for demonstration purposes.
+	
+	**To lanuch fine-tuninig on a single GPU:**
+	
+	```bash
+	python run_common_voice.py \
+		--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
+		--dataset_config_name="tr" \ # use this argument to specify the language code
+		--output_dir=./wav2vec2-large-xlsr-turkish-demo \
+		--overwrite_output_dir \
+		--num_train_epochs="5" \
+		--per_device_train_batch_size="16" \
+		--learning_rate="3e-4" \
+		--warmup_steps="500" \
+		--evaluation_strategy="steps" \
+		--save_steps="400" \
+		--eval_steps="400" \
+		--logging_steps="400" \
+		--save_total_limit="3" \
+		--freeze_feature_extractor \
+		--feat_proj_dropout="0.0" \
+		--layerdrop="0.1" \
+		--gradient_checkpointing \
+		--fp16 \
+		--group_by_length \
+		--do_train --do_eval
+	```
+
+	**To lanuch fine-tuninig on multiple GPUs:**
+	
+	```bash
+	python -m torch.distributed.launch \
+		--nproc_per_node 4 run_common_voice.py \
+		--model_name_or_path="facebook/wav2vec2-large-xlsr-53" \
+		--dataset_config_name="tr" \ # use this argument to specify the language code
+		--output_dir=./wav2vec2-large-xlsr-turkish-demo \
+		--overwrite_output_dir \
+		--num_train_epochs="5" \
+		--per_device_train_batch_size="16" \
+		--learning_rate="3e-4" \
+		--warmup_steps="500" \
+		--evaluation_strategy="steps" \
+		--save_steps="400" \
+		--eval_steps="400" \
+		--logging_steps="400" \
+		--save_total_limit="3" \
+		--freeze_feature_extractor \
+		--feat_proj_dropout="0.0" \
+		--layerdrop="0.1" \
+		--gradient_checkpointing \
+		--fp16 \
+		--group_by_length \
+		--do_train --do_eval
+	```
+
+	The above command will launch the training on 4 GPUs. Use the `--nproc_per_node` option to specify the number of GPUs.
+
+	Once the training is finished, the model and checkpoints will be saved under the directory specified by the `--output_dir` argument.
+
+4. The script also allows you to resume training from the last saved checkpoint. To resume training from last saved checkpoint remove the `--overwrite_output_dir` option and run the same command again.  And to continue training from a specific checkpoint, keep the `--overwrite_output_dir`
+option and pass the path of the checkpoint as `--model_name_or_path`.
+
+As the script is based on the `Trainer` API, refer to the [Trainer docs](https://huggingface.co/transformers/main_classes/trainer.html) for more information about ``Trainer`` and ``TrainingArguments``.
+
+[OVH cloud](https://www.ovh.com/world/) has generously offered free compute for this sprint. Please refer to [this video](https://www.youtube.com/watch?v=2hlkWAESMk8&ab_channel=Databuzzword) to get started with OVH. 
 
 
 ## How to upload my trained checkpoint
@@ -174,7 +275,7 @@ All these questions should be answered in a model card which is the first thing 
 visiting your model on the hub under `https://huggingface.co/{your_username}/{your_modelname}`.
 
 **Note**:
-It is extremely that you add this model card or else we cannot find your model and thus cannot take the model into 
+It is extremely important that you add this model card or else we cannot find your model and thus cannot take the model into 
 account for the final evaluation.
 
 ### How to create the readme
@@ -203,7 +304,7 @@ tags:
 - xlsr-fine-tuning-week
 license: apache-2.0
 model-index:
-- name: {model_id} #TODO: replace {model_id} with your model id. The model id consists of {your_username}/{your_modelname}, *e.g.* `elgeish/wav2vec2-large-xlsr-53-arabic`
+- name: {human_readable_name} #TODO: replace {human_readable_name} with a name of your model as it should appear on the leaderboard. It could be something like `Elgeish XLSR Wav2Vec2 Large 53`
   results:
   - task: 
       name: Speech Recognition
@@ -300,7 +401,7 @@ def evaluate(batch):
 	with torch.no_grad():
 		logits = model(inputs.input_values.to("cuda"), attention_mask=inputs.attention_mask.to("cuda")).logits
 
-  pred_ids = torch.argmax(logits, dim=-1)
+	pred_ids = torch.argmax(logits, dim=-1)
 	batch["pred_strings"] = processor.batch_decode(pred_ids)
 	return batch
 
@@ -326,7 +427,7 @@ Your model in then available under *huggingface.co/{your_username}/{your_chosen_
 
 Having uploaded your model, you should now evaluate your model in a final step. This should be as simple as 
 copying the evaluation code of your model card into a python script and running it. Make sure to note 
-the final result on the model card.
+the final result on the model card **both** under the YAML tags at the very top **and** below your evaluation code under "Test Results".
 
 ## Rules of training and evaluation
 

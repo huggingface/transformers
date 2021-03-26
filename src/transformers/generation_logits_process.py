@@ -22,6 +22,10 @@ import numpy as np
 import torch
 
 from .file_utils import add_start_docstrings
+from .utils.logging import get_logger
+
+
+logger = get_logger(__name__)
 
 
 LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
@@ -417,7 +421,14 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         banned_mask_list = []
         for idx, batch_banned_tokens in enumerate(banned_tokens):
             for token in batch_banned_tokens:
-                banned_mask_list.append([idx, token])
+                # Eliminates invalid bad word IDs that are over the vocabulary size.
+                if token <= scores.shape[1]:
+                    banned_mask_list.append([idx, token])
+                else:
+                    logger.error(
+                        f"An invalid bad word ID is defined: {token}. This ID is not contained in the"
+                        f"vocabulary, and is therefore ignored."
+                    )
         if not banned_mask_list:
             return scores
 
@@ -565,4 +576,21 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
             num_tokens = scores.shape[1]
             scores[:, [i for i in range(num_tokens) if i != self.eos_token_id]] = -float("inf")
             scores[:, self.eos_token_id] = 0
+        return scores
+
+
+class InfNanRemoveLogitsProcessor(LogitsProcessor):
+    r"""
+    :class:`~transformers.LogitsProcessor` that removes all :obj:`nan` and :obj:`inf` values to avoid the generation
+    method to fail. Note that using the logits processor should only be used if necessary since it can slow down the
+    generation method. :obj:`max_length` is reached.
+    """
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        # set all nan values to 0.0
+        scores[scores != scores] = 0.0
+
+        # set all inf values to max possible value
+        scores[scores == float("inf")] = torch.finfo(scores.dtype).max
+
         return scores

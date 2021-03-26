@@ -84,31 +84,24 @@ else:
 if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
     _tf_available = importlib.util.find_spec("tensorflow") is not None
     if _tf_available:
+        candidates = (
+            "tensorflow",
+            "tensorflow-cpu",
+            "tensorflow-gpu",
+            "tf-nightly",
+            "tf-nightly-cpu",
+            "tf-nightly-gpu",
+            "intel-tensorflow",
+        )
+        _tf_version = None
         # For the metadata, we have to look for both tensorflow and tensorflow-cpu
-        try:
-            _tf_version = importlib_metadata.version("tensorflow")
-        except importlib_metadata.PackageNotFoundError:
+        for pkg in candidates:
             try:
-                _tf_version = importlib_metadata.version("tensorflow-cpu")
+                _tf_version = importlib_metadata.version(pkg)
+                break
             except importlib_metadata.PackageNotFoundError:
-                try:
-                    _tf_version = importlib_metadata.version("tensorflow-gpu")
-                except importlib_metadata.PackageNotFoundError:
-                    try:
-                        _tf_version = importlib_metadata.version("tf-nightly")
-                    except importlib_metadata.PackageNotFoundError:
-                        try:
-                            _tf_version = importlib_metadata.version("tf-nightly-cpu")
-                        except importlib_metadata.PackageNotFoundError:
-                            try:
-                                _tf_version = importlib_metadata.version("tf-nightly-gpu")
-                            except importlib_metadata.PackageNotFoundError:
-                                # Support for intel-tensorflow version
-                                try:
-                                    _tf_version = importlib_metadata.version("intel-tensorflow")
-                                except importlib_metadata.PackageNotFoundError:
-                                    _tf_version = None
-                                    _tf_available = False
+                pass
+        _tf_available = _tf_version is not None
     if _tf_available:
         if version.parse(_tf_version) < version.parse("2"):
             logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
@@ -342,6 +335,10 @@ def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
 
+def is_vision_available():
+    return importlib.util.find_spec("PIL") is not None
+
+
 def is_in_notebook():
     try:
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
@@ -510,6 +507,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 """
 
 
+# docstyle-ignore
+VISION_IMPORT_ERROR = """
+{0} requires the PIL library but it was not found in your environment. You can install it with pip:
+`pip install pillow`
+"""
+
+
 def requires_datasets(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_datasets_available():
@@ -574,6 +578,12 @@ def requires_scatter(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_scatter_available():
         raise ImportError(SCATTER_IMPORT_ERROR.format(name))
+
+
+def requires_vision(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_vision_available():
+        raise ImportError(VISION_IMPORT_ERROR.format(name))
 
 
 def add_start_docstrings(*docstr):

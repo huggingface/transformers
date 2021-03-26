@@ -26,7 +26,7 @@ _re_single_line_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
 _re_test_backend = re.compile(r"^\s+if\s+is\_([a-z]*)\_available\(\):\s*$")
 
 
-BACKENDS = ["torch", "tf", "flax", "sentencepiece", "tokenizers"]
+BACKENDS = ["torch", "tf", "flax", "sentencepiece", "tokenizers", "vision"]
 
 
 DUMMY_CONSTANT = """
@@ -68,7 +68,7 @@ def read_init():
     backend_specific_objects = {}
     # Go through the end of the file
     while line_index < len(lines):
-        # If the line is an if is_backemd_available, we grab all objects associated.
+        # If the line is an if is_backend_available, we grab all objects associated.
         if _re_test_backend.search(lines[line_index]) is not None:
             backend = _re_test_backend.search(lines[line_index]).groups()[0]
             line_index += 1

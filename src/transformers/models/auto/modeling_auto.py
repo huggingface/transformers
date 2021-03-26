@@ -811,7 +811,7 @@ class AutoModel:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -905,7 +905,7 @@ class AutoModelForPreTraining:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForPreTraining.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1010,7 +1010,7 @@ class AutoModelWithLMHead:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelWithLMHead.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         warnings.warn(
@@ -1109,7 +1109,7 @@ class AutoModelForCausalLM:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/gpt2_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/gpt2_tf_model_config.json')
             >>> model = AutoModelForCausalLM.from_pretrained('./tf_model/gpt2_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1202,7 +1202,7 @@ class AutoModelForMaskedLM:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1298,7 +1298,7 @@ class AutoModelForSeq2SeqLM:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/t5_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/t5_tf_model_config.json')
             >>> model = AutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1396,7 +1396,7 @@ class AutoModelForSequenceClassification:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1493,7 +1493,7 @@ class AutoModelForQuestionAnswering:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1593,7 +1593,7 @@ class AutoModelForTableQuestionAnswering:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/tapas_tf_checkpoint.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/tapas_tf_checkpoint.json')
             >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/tapas_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1691,7 +1691,7 @@ class AutoModelForTokenClassification:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1791,7 +1791,7 @@ class AutoModelForMultipleChoice:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForMultipleChoice.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1891,7 +1891,7 @@ class AutoModelForNextSentencePrediction:
             True
 
             >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-            >>> config = AutoConfig.from_json_file('./tf_model/bert_tf_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./tf_model/bert_tf_model_config.json')
             >>> model = AutoModelForNextSentencePrediction.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)

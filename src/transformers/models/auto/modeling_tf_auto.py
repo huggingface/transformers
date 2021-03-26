@@ -102,6 +102,12 @@ from ..funnel.modeling_tf_funnel import (
     TFFunnelModel,
 )
 from ..gpt2.modeling_tf_gpt2 import TFGPT2ForSequenceClassification, TFGPT2LMHeadModel, TFGPT2Model
+from ..layoutlm.modeling_tf_layoutlm import (
+    TFLayoutLMForMaskedLM,
+    TFLayoutLMForSequenceClassification,
+    TFLayoutLMForTokenClassification,
+    TFLayoutLMModel,
+)
 from ..led.modeling_tf_led import TFLEDForConditionalGeneration, TFLEDModel
 from ..longformer.modeling_tf_longformer import (
     TFLongformerForMaskedLM,
@@ -189,6 +195,7 @@ from .configuration_auto import (
     FlaubertConfig,
     FunnelConfig,
     GPT2Config,
+    LayoutLMConfig,
     LEDConfig,
     LongformerConfig,
     LxmertConfig,
@@ -227,6 +234,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaModel),
         (LongformerConfig, TFLongformerModel),
         (RobertaConfig, TFRobertaModel),
+        (LayoutLMConfig, TFLayoutLMModel),
         (BertConfig, TFBertModel),
         (OpenAIGPTConfig, TFOpenAIGPTModel),
         (GPT2Config, TFGPT2Model),
@@ -260,6 +268,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (CamembertConfig, TFCamembertForMaskedLM),
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
         (BertConfig, TFBertForPreTraining),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -289,6 +298,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (OpenAIGPTConfig, TFOpenAIGPTLMHeadModel),
         (GPT2Config, TFGPT2LMHeadModel),
@@ -330,6 +340,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForMaskedLM),
         (LongformerConfig, TFLongformerForMaskedLM),
         (RobertaConfig, TFRobertaForMaskedLM),
+        (LayoutLMConfig, TFLayoutLMForMaskedLM),
         (BertConfig, TFBertForMaskedLM),
         (MobileBertConfig, TFMobileBertForMaskedLM),
         (FlaubertConfig, TFFlaubertWithLMHeadModel),
@@ -366,6 +377,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForSequenceClassification),
         (LongformerConfig, TFLongformerForSequenceClassification),
         (RobertaConfig, TFRobertaForSequenceClassification),
+        (LayoutLMConfig, TFLayoutLMForSequenceClassification),
         (BertConfig, TFBertForSequenceClassification),
         (XLNetConfig, TFXLNetForSequenceClassification),
         (MobileBertConfig, TFMobileBertForSequenceClassification),
@@ -414,6 +426,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (XLMRobertaConfig, TFXLMRobertaForTokenClassification),
         (LongformerConfig, TFLongformerForTokenClassification),
         (RobertaConfig, TFRobertaForTokenClassification),
+        (LayoutLMConfig, TFLayoutLMForTokenClassification),
         (BertConfig, TFBertForTokenClassification),
         (MobileBertConfig, TFMobileBertForTokenClassification),
         (XLNetConfig, TFXLNetForTokenClassification),
@@ -605,7 +618,7 @@ class TFAutoModel(object):
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModel.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -699,7 +712,7 @@ class TFAutoModelForPreTraining(object):
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForPreTraining.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -804,7 +817,7 @@ class TFAutoModelWithLMHead(object):
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelWithLMHead.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         warnings.warn(
@@ -904,7 +917,7 @@ class TFAutoModelForCausalLM:
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/gpt2_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/gpt2_pt_model_config.json')
             >>> model = TFAutoModelForCausalLM.from_pretrained('./pt_model/gpt2_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -997,7 +1010,7 @@ class TFAutoModelForMaskedLM:
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForMaskedLM.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1093,7 +1106,7 @@ class TFAutoModelForSeq2SeqLM:
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/t5_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/t5_pt_model_config.json')
             >>> model = TFAutoModelForSeq2SeqLM.from_pretrained('./pt_model/t5_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1191,7 +1204,7 @@ class TFAutoModelForSequenceClassification(object):
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForSequenceClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1288,7 +1301,7 @@ class TFAutoModelForQuestionAnswering(object):
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForQuestionAnswering.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1384,7 +1397,7 @@ class TFAutoModelForTokenClassification:
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForTokenClassification.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1482,7 +1495,7 @@ class TFAutoModelForMultipleChoice:
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForMultipleChoice.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)
@@ -1580,7 +1593,7 @@ class TFAutoModelForNextSentencePrediction:
             True
 
             >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-            >>> config = AutoConfig.from_json_file('./pt_model/bert_pt_model_config.json')
+            >>> config = AutoConfig.from_pretrained('./pt_model/bert_pt_model_config.json')
             >>> model = TFAutoModelForNextSentencePrediction.from_pretrained('./pt_model/bert_pytorch_model.bin', from_pt=True, config=config)
         """
         config = kwargs.pop("config", None)

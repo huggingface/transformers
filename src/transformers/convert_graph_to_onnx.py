@@ -19,9 +19,9 @@ from typing import Dict, List, Optional, Tuple
 
 from packaging.version import Version, parse
 
-from .file_utils import ModelOutput, is_tf_available, is_torch_available
-from .pipelines import Pipeline, pipeline
-from .tokenization_utils import BatchEncoding
+from transformers.file_utils import ModelOutput, is_tf_available, is_torch_available
+from transformers.pipelines import Pipeline, pipeline
+from transformers.tokenization_utils import BatchEncoding
 
 
 # This is the minimal required version to

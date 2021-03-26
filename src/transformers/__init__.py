@@ -48,7 +48,7 @@ from .file_utils import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
-    is_torchvision_available,
+    is_vision_available,
 )
 from .utils import logging
 
@@ -106,7 +106,7 @@ _import_structure = {
         "is_tokenizers_available",
         "is_torch_available",
         "is_torch_tpu_available",
-        "is_torchvision_available",
+        "is_vision_available",
     ],
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
@@ -344,6 +344,16 @@ else:
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
     ]
 
+# Vision-specific objects
+if is_vision_available():
+    _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+else:
+    from .utils import dummy_vision_objects
+
+    _import_structure["utils.dummy_vision_objects"] = [
+        name for name in dir(dummy_vision_objects) if not name.startswith("_")
+    ]
+
 # PyTorch-backed objects
 if is_torch_available():
     _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
@@ -372,7 +382,10 @@ if is_torch_available():
     ]
     _import_structure["generation_beam_search"] = ["BeamScorer", "BeamSearchScorer"]
     _import_structure["generation_logits_process"] = [
+        "ForcedBOSTokenLogitsProcessor",
+        "ForcedEOSTokenLogitsProcessor",
         "HammingDiversityLogitsProcessor",
+        "InfNanRemoveLogitsProcessor",
         "LogitsProcessor",
         "LogitsProcessorList",
         "LogitsWarper",
@@ -1093,6 +1106,17 @@ if is_tf_available():
             "TFGPT2PreTrainedModel",
         ]
     )
+    _import_structure["models.layoutlm"].extend(
+        [
+            "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLayoutLMForMaskedLM",
+            "TFLayoutLMForSequenceClassification",
+            "TFLayoutLMForTokenClassification",
+            "TFLayoutLMMainLayer",
+            "TFLayoutLMModel",
+            "TFLayoutLMPreTrainedModel",
+        ]
+    )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
     _import_structure["models.longformer"].extend(
         [
@@ -1318,6 +1342,7 @@ if TYPE_CHECKING:
         is_tokenizers_available,
         is_torch_available,
         is_torch_tpu_available,
+        is_vision_available,
     )
     from .hf_argparser import HfArgumentParser
 
@@ -1546,6 +1571,11 @@ if TYPE_CHECKING:
     else:
         from .utils.dummy_tokenizers_objects import *
 
+    if is_vision_available():
+        from .image_utils import ImageFeatureExtractionMixin
+    else:
+        from .utils.dummy_vision_objects import *
+
     # Modeling
     if is_torch_available():
 
@@ -1576,7 +1606,10 @@ if TYPE_CHECKING:
         )
         from .generation_beam_search import BeamScorer, BeamSearchScorer
         from .generation_logits_process import (
+            ForcedBOSTokenLogitsProcessor,
+            ForcedEOSTokenLogitsProcessor,
             HammingDiversityLogitsProcessor,
+            InfNanRemoveLogitsProcessor,
             LogitsProcessor,
             LogitsProcessorList,
             LogitsWarper,
@@ -2027,6 +2060,15 @@ if TYPE_CHECKING:
         # Benchmarks
         from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation_tf_utils import tf_top_k_top_p_filtering
+        from .modeling_tf_layoutlm import (
+            TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMForMaskedLM,
+            TFLayoutLMForSequenceClassification,
+            TFLayoutLMForTokenClassification,
+            TFLayoutLMMainLayer,
+            TFLayoutLMModel,
+            TFLayoutLMPreTrainedModel,
+        )
         from .modeling_tf_utils import TFPreTrainedModel, TFSequenceSummary, TFSharedEmbeddings, shape_list
         from .models.albert import (
             TF_ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2306,9 +2348,6 @@ if TYPE_CHECKING:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
-
-    if is_torchvision_available():
-        from .models.vit import ViTFeatureExtractor
 
 else:
     import importlib
