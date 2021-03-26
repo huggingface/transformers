@@ -308,7 +308,10 @@ class LocalAttention(nn.Module):
         
         attn_output = torch.matmul(attn_weights, v)
 
-        return attn_output
+        outputs = (attn_output,)
+        if output_attentions:
+            outputs += (attn_weights, )
+        return outputs
 
     def forward(
         self,
@@ -346,7 +349,8 @@ class LocalAttention(nn.Module):
         mask = mask.to(hidden_states.device)
 
         # attn
-        attn = self._attn(query, key, value, mask, head_mask, output_attentions)
+        attn_outputs = self._attn(query, key, value, mask, head_mask, output_attentions)
+        attn = attn_outputs[0]
 
         attn = self.merge_heads(attn)
         attn = attn.reshape(-1, seq_len, self.embed_dim)
@@ -354,7 +358,7 @@ class LocalAttention(nn.Module):
         attn = self.out_proj(attn)
         attn = self.resid_dropout(attn)
 
-        return (attn,)
+        return (attn, None) + attn_outputs[1:]
 
 
 class GPTNeoAttention(nn.Module):
@@ -579,7 +583,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
         self.drop = nn.Dropout(config.embd_pdrop)
-        self.h = nn.ModuleList([Block(config.n_ctx, config, scale=True, layer_id=i) for i in range(config.n_layer)])
+        self.h = nn.ModuleList([Block(config, layer_id=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 
         self.init_weights()
