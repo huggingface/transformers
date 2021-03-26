@@ -26,7 +26,7 @@ class ImageFeatureExtractionMixin:
     """
 
     def _ensure_format_supported(self, image):
-        if not isinstance(image, (PIL.Image.Image, np.ndarray)) or _is_torch(image):
+        if not isinstance(image, (PIL.Image.Image, np.ndarray)) and not _is_torch(image):
             raise ValueError(
                 f"Got type {type(image)} which is not supported, only `PIL.Image.Image`, `np.array` and "
                 "`torch.Tensor` are."
@@ -44,6 +44,8 @@ class ImageFeatureExtractionMixin:
                 Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will
                 default to :obj:`True` if the image type is a floating type, :obj:`False` otherwise.
         """
+        self._ensure_format_supported(image)
+
         if _is_torch(image):
             image = image.numpy()
 
@@ -70,25 +72,28 @@ class ImageFeatureExtractionMixin:
                 The image to convert to a NumPy array.
             rescale (:obj:`bool`, `optional`):
                 Whether or not to apply the scaling factor (to make pixel values floats between 0. and 1.). Will
-                default to :obj:`True` if the image is a PIL Image, :obj:`False` otherwise.
+                default to :obj:`True` if the image is a PIL Image or an array/tensor of integers, :obj:`False`
+                otherwise.
             channel_first (:obj:`bool`, `optional`, defaults to :obj:`True`):
                 Whether or not to permute the dimensions of the image to put the channel dimension first.
         """
-        if rescale is None:
-            rescale = isinstance(image, PIL.Image.Image)
+        self._ensure_format_supported(image)
 
         if isinstance(image, PIL.Image.Image):
             image = np.array(image)
-            if rescale:
-                image = image.astype(np.float32) / 255.0
-        elif rescale:
-            image = image / 255.0
 
         if _is_torch(image):
             image = image.numpy()
 
+        if rescale is None:
+            rescale = isinstance(image.flat[0], np.integer)
+
+        if rescale:
+            image = image.astype(np.float32) / 255.0
+
         if channel_first:
             image = image.transpose(2, 0, 1)
+
         return image
 
     def normalize(self, image, mean, std):
@@ -104,6 +109,8 @@ class ImageFeatureExtractionMixin:
             std (:obj:`List[float]` or :obj:`np.ndarray` or :obj:`torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
         """
+        self._ensure_format_supported(image)
+
         if isinstance(image, PIL.Image.Image):
             image = self.to_numpy_array(image)
 
@@ -137,6 +144,8 @@ class ImageFeatureExtractionMixin:
             resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
                 The filter to user for resampling.
         """
+        self._ensure_format_supported(image)
+
         if not isinstance(size, tuple):
             size = (size, size)
         if not isinstance(image, PIL.Image.Image):
