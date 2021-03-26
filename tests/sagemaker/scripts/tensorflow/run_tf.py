@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # Hyperparameters sent by the client are passed as command-line arguments to the script.
-    parser.add_argument("--epochs", type=int, default=3)
+    parser.add_argument("--epochs", type=int, default=1)
     parser.add_argument("--per_device_train_batch_size", type=int, default=16)
     parser.add_argument("--per_device_eval_batch_size", type=int, default=8)
     parser.add_argument("--model_name_or_path", type=str)
@@ -24,6 +24,10 @@ if __name__ == "__main__":
     parser.add_argument("--output_dir", type=str)
 
     args, _ = parser.parse_known_args()
+
+    # overwrite batch size until we have tf_glue.py
+    args.per_device_train_batch_size = 16
+    args.per_device_eval_batch_size = 16
 
     # Set up logging
     logger = logging.getLogger(__name__)

@@ -71,7 +71,6 @@ test-sagemaker: # install sagemaker dependencies in advance with pip install .[s
 	TEST_SAGEMAKER=True python -m pytest -n auto  -s -v ./tests/sagemaker
 
 
-
 # Check that docs can build
 
 docs:
