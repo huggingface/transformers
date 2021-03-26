@@ -136,26 +136,26 @@ class Attention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
-        w = torch.matmul(q, k)
-        nd, ns = w.size(-2), w.size(-1)
+        attn_weights = torch.matmul(q, k)
+        nd, ns = attn_weights.size(-2), attn_weights.size(-1)
 
         mask = self.bias[:, :, ns - nd : ns, :ns]
-        w = torch.where(mask.bool(), w, self.masked_bias.to(w.dtype))
+        attn_weights = torch.where(mask.bool(), attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         if attention_mask is not None:
             # Apply the attention mask
-            w = w + attention_mask
+            attn_weights = attn_weights + attention_mask
 
-        w = nn.Softmax(dim=-1)(w)
-        w = self.attn_dropout(w)
+        attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
         if head_mask is not None:
-            w = w * head_mask
+            attn_weights = attn_weights * head_mask
 
-        outputs = (torch.matmul(w, v),)
+        outputs = (torch.matmul(attn_weights, v),)
         if output_attentions:
-            outputs += (w,)
+            outputs += (attn_weights,)
         return outputs
 
     def merge_heads(self, x):
@@ -293,6 +293,22 @@ class LocalAttention(nn.Module):
         visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
         mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
         return mask
+    
+    def _attn(self, q, k, v, causal_mask, head_mask=None, output_attentions=False):
+        # attn
+        attn_weights = torch.matmul(q, k)
+        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
+
+        attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = self.attn_dropout(attn_weights)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+        
+        attn_output = torch.matmul(attn_weights, v)
+
+        return attn_output
 
     def forward(
         self,
@@ -330,11 +346,7 @@ class LocalAttention(nn.Module):
         mask = mask.to(hidden_states.device)
 
         # attn
-        w = torch.matmul(query, key)
-        w = torch.where(mask, w, self.masked_bias.to(w.dtype))
-
-        attn = w.softmax(dim=-1)
-        attn = torch.matmul(attn, value)
+        attn = self._attn(query, key, value, mask, head_mask, output_attentions)
 
         attn = self.merge_heads(attn)
         attn = attn.reshape(-1, seq_len, self.embed_dim)
