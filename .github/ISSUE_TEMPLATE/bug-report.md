@@ -54,7 +54,7 @@ Model hub:
 
 HF projects:
 
-- nlp datasets: [different repo](https://github.com/huggingface/nlp)
+- datasets: [different repo](https://github.com/huggingface/datasets)
 - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
 
 Examples:

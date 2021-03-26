@@ -15,10 +15,10 @@ Fine-tuning with custom datasets
 
 .. note::
 
-    The datasets used in this tutorial are available and can be more easily accessed using the `🤗 NLP library
-    <https://github.com/huggingface/nlp>`_. We do not use this library to access the datasets here since this tutorial
-    meant to illustrate how to work with your own data. A brief of introduction can be found at the end of the tutorial
-    in the section ":ref:`nlplib`".
+    The datasets used in this tutorial are available and can be more easily accessed using the `🤗 Datasets library
+    <https://github.com/huggingface/datasets>`_. We do not use this library to access the datasets here since this
+    tutorial meant to illustrate how to work with your own data. A brief of introduction can be found at the end of the
+    tutorial in the section ":ref:`datasetslib`".
 
 This tutorial will take you through several examples of using 🤗 Transformers models with your own datasets. The guide
 shows one of many valid workflows for using these models and is meant to be illustrative rather than definitive. We
@@ -41,7 +41,7 @@ Sequence Classification with IMDb Reviews
 .. note::
 
     This dataset can be explored in the Hugging Face model hub (`IMDb <https://huggingface.co/datasets/imdb>`_), and
-    can be alternatively downloaded with the 🤗 NLP library with ``load_dataset("imdb")``.
+    can be alternatively downloaded with the 🤗 Datasets library with ``load_dataset("imdb")``.
 
 In this example, we'll show how to download, tokenize, and train a model on the IMDb reviews dataset. This task takes
 the text of a review and requires the model to predict whether the sentiment of the review is positive or negative.
@@ -260,7 +260,7 @@ Token Classification with W-NUT Emerging Entities
 .. note::
 
     This dataset can be explored in the Hugging Face model hub (`WNUT-17 <https://huggingface.co/datasets/wnut_17>`_),
-    and can be alternatively downloaded with the 🤗 NLP library with ``load_dataset("wnut_17")``.
+    and can be alternatively downloaded with the 🤗 Datasets library with ``load_dataset("wnut_17")``.
 
 Next we will look at token classification. Rather than classifying an entire sequence, this task classifies token by
 token. We'll demonstrate how to do this with `Named Entity Recognition
@@ -459,7 +459,7 @@ Question Answering with SQuAD 2.0
 .. note::
 
     This dataset can be explored in the Hugging Face model hub (`SQuAD V2
-    <https://huggingface.co/datasets/squad_v2>`_), and can be alternatively downloaded with the 🤗 NLP library with
+    <https://huggingface.co/datasets/squad_v2>`_), and can be alternatively downloaded with the 🤗 Datasets library with
     ``load_dataset("squad_v2")``.
 
 Question answering comes in many forms. In this example, we'll look at the particular type of extractive QA that
@@ -677,22 +677,23 @@ Additional Resources
   - :doc:`Preprocessing <preprocessing>`. Docs page on data preprocessing.
   - :doc:`Training <training>`. Docs page on training and fine-tuning.
 
-.. _nlplib:
+.. _datasetslib:
 
-Using the 🤗 NLP Datasets & Metrics library
+Using the 🤗 Datasets & Metrics library
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This tutorial demonstrates how to read in datasets from various raw text formats and prepare them for training with 🤗
 Transformers so that you can do the same thing with your own custom datasets. However, we recommend users use the `🤗
-NLP library <https://github.com/huggingface/nlp>`_ for working with the 150+ datasets included in the `hub
+Datasets library <https://github.com/huggingface/datasets>`_ for working with the 150+ datasets included in the `hub
 <https://huggingface.co/datasets>`_, including the three datasets used in this tutorial. As a very brief overview, we
-will show how to use the NLP library to download and prepare the IMDb dataset from the first example, :ref:`seq_imdb`.
+will show how to use the Datasets library to download and prepare the IMDb dataset from the first example,
+:ref:`seq_imdb`.
 
 Start by downloading the dataset:
 
 .. code-block:: python
 
-    from nlp import load_dataset
+    from datasets import load_dataset
     train = load_dataset("imdb", split="train")
 
 Each dataset has multiple columns corresponding to different features. Let's see what our columns are.
@@ -724,5 +725,5 @@ dataset elements.
     >>> {key: val.shape for key, val in train[0].items()})
     {'labels': TensorShape([]), 'input_ids': TensorShape([512]), 'attention_mask': TensorShape([512])}
 
-We now have a fully-prepared dataset. Check out `the 🤗 NLP docs <https://huggingface.co/nlp/processing.html>`_ for a
-more thorough introduction.
+We now have a fully-prepared dataset. Check out `the 🤗 Datasets docs
+<https://huggingface.co/docs/datasets/processing.html>`_ for a more thorough introduction.
