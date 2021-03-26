@@ -92,11 +92,11 @@ class GPTNeoConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=50257,
-        n_positions=1024,
-        n_ctx=1024,
-        n_embd=768,
-        n_layer=12,
-        attn_layers=[
+        n_positions=2048,
+        n_ctx=2048,
+        n_embd=2048,
+        n_layer=24,
+        attn_layers=(
             "global",
             "local",
             "global",
@@ -109,8 +109,20 @@ class GPTNeoConfig(PretrainedConfig):
             "local",
             "global",
             "local",
-        ],
-        n_head=12,
+            "global",
+            "local",
+            "global",
+            "local",
+            "global",
+            "local",
+            "global",
+            "local",
+            "global",
+            "local",
+            "global",
+            "local",
+        ),
+        n_head=16,
         n_inner=None,
         activation_function="gelu_new",
         resid_pdrop=0.1,
@@ -155,7 +167,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        self.attn_layers = attn_layers
+        self.attn_layers = list(attn_layers)
 
     @property
     def max_position_embeddings(self):

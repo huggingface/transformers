@@ -108,19 +108,17 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
 
 
 class Attention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False):
+    def __init__(self, config):
         super().__init__()
 
-        n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implem]
-        assert n_state % config.n_head == 0
+        max_positions = config.n_ctx
         self.register_buffer(
-            "bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(1, 1, n_ctx, n_ctx)
+            "bias",
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+                1, 1, max_positions, max_positions
+            ),
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
-        self.n_head = config.n_head
-        self.split_size = n_state
-        self.scale = scale
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -131,7 +129,6 @@ class Attention(nn.Module):
         assert (
             self.head_dim * self.num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
-        self.scaling = self.head_dim ** -0.5
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -167,7 +164,7 @@ class Attention(nn.Module):
         return x.view(*new_x_shape)  # in Tensorflow implem: fct merge_states
 
     def split_heads(self, x, k=False):
-        new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
+        new_x_shape = x.size()[:-1] + (self.num_heads, x.size(-1) // self.num_heads)
         x = x.view(*new_x_shape)  # in Tensorflow implem: fct split_states
         if k:
             return x.permute(0, 2, 3, 1)  # (batch, head, head_features, seq_length)
@@ -213,18 +210,17 @@ class Attention(nn.Module):
 
 
 class LocalAttention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False):
+    def __init__(self, config):
         super().__init__()
-        n_state = nx  # in Attention: n_state=768 (nx=n_embd)
-        # [switch nx => n_state from Block to Attention to keep identical to TF implem]
-        assert n_state % config.n_head == 0
+
+        max_positions = config.n_ctx
         self.register_buffer(
-            "bias", torch.tril(torch.ones((n_ctx, n_ctx), dtype=torch.uint8)).view(1, 1, n_ctx, n_ctx)
+            "bias",
+            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
+                1, 1, max_positions, max_positions
+            ),
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
-        self.n_head = config.n_head
-        self.split_size = n_state
-        self.scale = scale
 
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -235,7 +231,6 @@ class LocalAttention(nn.Module):
         assert (
             self.head_dim * self.num_heads == self.embed_dim
         ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
-        self.scaling = self.head_dim ** -0.5
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
@@ -264,7 +259,7 @@ class LocalAttention(nn.Module):
         return torch.cat(parts, dim=2)
 
     def split_heads(self, x, k=False):
-        new_x_shape = x.size()[:-1] + (self.n_head, x.size(-1) // self.n_head)
+        new_x_shape = x.size()[:-1] + (self.num_heads, x.size(-1) // self.num_heads)
         x = x.view(*new_x_shape)
         if k:
             return x.permute(0, 1, 3, 4, 2)  # (batch, chunks, head, head_features, seq_length)
@@ -351,16 +346,16 @@ class LocalAttention(nn.Module):
 
 
 class GPTNeoAttention(nn.Module):
-    def __init__(self, nx, n_ctx, config, scale=False, layer_id=0):
+    def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
         self.attn_layers = config.attn_layers
         self.attention_type = self.attn_layers[layer_id]
 
         if self.attention_type == "global":
-            self.attention = Attention(nx, n_ctx, config, scale)
+            self.attention = Attention(config)
         elif self.attention_type == "local":
-            self.attention = LocalAttention(nx, n_ctx, config, scale)
+            self.attention = LocalAttention(config)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attn_layers`: {}. Select attn layer types from ['global', 'local'] only.".format(
@@ -403,12 +398,12 @@ class MLP(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, n_ctx, config, layer_id, scale=False):
+    def __init__(self, config, layer_id):
         super().__init__()
         hidden_size = config.n_embd
         inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
-        self.attn = GPTNeoAttention(hidden_size, n_ctx, config, scale, layer_id)
+        self.attn = GPTNeoAttention(config, layer_id)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.mlp = MLP(inner_dim, config)
 
