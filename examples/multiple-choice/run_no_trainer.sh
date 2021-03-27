@@ -3,3 +3,4 @@ accelerate launch run_swag_no_trainer.py \
   --dataset_name swag \
   --output_dir /tmp/test-swag-no-trainer \
   --pad_to_max_length \
+  --debug
