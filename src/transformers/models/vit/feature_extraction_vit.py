@@ -84,7 +84,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
                 * :obj:`'tf'`: Return TensorFlow :obj:`tf.constant` objects.
                 * :obj:`'pt'`: Return PyTorch :obj:`torch.Tensor` objects.
-                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.
+                * :obj:`'np'`: Return Numpy :obj:`np.ndarray` objects.s
+                * :obj:`'jax'`: Return JAX :obj:`jnp.ndarray` objects.
 
         Returns:
             :class:`~transformers.BatchFeature`: A :class:`~transformers.BatchFeature` with the following fields:

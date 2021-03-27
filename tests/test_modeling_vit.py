@@ -350,10 +350,13 @@ class ViTModelIntegrationTest(unittest.TestCase):
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
-        inputs = feature_extractor(images=image).to(torch_device)
+        inputs = feature_extractor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        outputs = model(**inputs)
+        # currently failing
+        # see https://discuss.pytorch.org/t/runtimeerror-expected-object-of-scalar-type-double-but-got-scalar-type-float-for-argument-2-weight/38961/2
+        outputs = model(inputs["pixel_values"])
+        # outputs = model(**inputs)
 
         # verify the logits
         expected_shape = torch.Size((1, 1000))

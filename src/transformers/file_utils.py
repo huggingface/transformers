@@ -184,14 +184,6 @@ except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
 
-_torchvision_available = importlib.util.find_spec("torchvision") is not None
-try:
-    _torchvision_version = importlib_metadata.version("torchvision")
-    logger.debug(f"Successfully imported torchvision version {_torchvision_version}")
-except importlib_metadata.PackageNotFoundError:
-    _torchvision_available = False
-
-
 torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
 old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 # New default cache, shared with the Datasets library
@@ -385,10 +377,6 @@ def is_soundfile_availble():
 
 def is_torchaudio_available():
     return _torchaudio_available
-
-
-def is_torchvision_available():
-    return _torchvision_available
 
 
 def torch_only_method(fn):
