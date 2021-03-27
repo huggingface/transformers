@@ -479,7 +479,7 @@ def main():
                 references=accelerator.gather(batch["labels"]),
             )
 
-        eval_metric = metric.compute()
+        eval_metric = compute_metrics()
         accelerator.print(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
