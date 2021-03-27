@@ -253,7 +253,7 @@ def main():
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
-    if args.do_train:
+    if raw_datasets["train"] is not None:
         column_names = raw_datasets["train"].column_names
         features = raw_datasets["train"].features
     else:
@@ -481,50 +481,49 @@ def main():
     progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
     completed_steps = 0
 
-    if args.do_train:
-        for epoch in range(args.num_train_epochs):
-            model.train()
-            for step, batch in enumerate(train_dataloader):
+    for epoch in range(args.num_train_epochs):
+        model.train()
+        for step, batch in enumerate(train_dataloader):
+            outputs = model(**batch)
+            loss = outputs.loss
+            loss = loss / args.gradient_accumulation_steps
+            accelerator.backward(loss)
+            if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
+                progress_bar.update(1)
+                completed_steps += 1
+
+            if completed_steps >= args.max_train_steps:
+                break
+
+        model.eval()
+        for step, batch in enumerate(eval_dataloader):
+            with torch.no_grad():
                 outputs = model(**batch)
-                loss = outputs.loss
-                loss = loss / args.gradient_accumulation_steps
-                accelerator.backward(loss)
-                if step % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
-                    progress_bar.update(1)
-                    completed_steps += 1
+            predictions = outputs.logits.argmax(dim=-1)
+            labels = batch["labels"]
+            if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
+                labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
 
-                if completed_steps >= args.max_train_steps:
-                    break
+            predictions_gathered = accelerator.gather(predictions)
+            labels_gathered = accelerator.gather(labels)
+            preds, refs = get_labels(predictions_gathered, labels_gathered)
+            metric.add_batch(
+                predictions=preds,
+                references=refs,
+            )  # predictions and preferences are expected to be a nested list of labels, not label_ids
+            preds, refs = get_labels(predictions_gathered, labels_gathered)
+            metric.add_batch(
+                predictions=preds,
+                references=refs,
+            )  # predictions and preferences are expected to be a nested list
 
-            model.eval()
-            for step, batch in enumerate(eval_dataloader):
-                with torch.no_grad():
-                    outputs = model(**batch)
-                predictions = outputs.logits.argmax(dim=-1)
-                labels = batch["labels"]
-                if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
-                    predictions = accelerator.pad_across_processes(predictions, dim=1, pad_index=-100)
-                    labels = accelerator.pad_across_processes(labels, dim=1, pad_index=-100)
-
-                predictions_gathered = accelerator.gather(predictions)
-                labels_gathered = accelerator.gather(labels)
-                preds, refs = get_labels(predictions_gathered, labels_gathered)
-                metric.add_batch(
-                    predictions=preds,
-                    references=refs,
-                )  # predictions and preferences are expected to be a nested list of labels, not label_ids
-                preds, refs = get_labels(predictions_gathered, labels_gathered)
-                metric.add_batch(
-                    predictions=preds,
-                    references=refs,
-                )  # predictions and preferences are expected to be a nested list
-
-            # eval_metric = metric.compute()
-            eval_metric = compute_metrics()
-            accelerator.print(f"epoch {epoch}:", eval_metric)
+        # eval_metric = metric.compute()
+        eval_metric = compute_metrics()
+        accelerator.print(f"epoch {epoch}:", eval_metric)
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
