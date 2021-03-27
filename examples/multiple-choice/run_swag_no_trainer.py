@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on multiple choice.
+Fine-tuning a 🤗 Transformers model on multiple choice relying on the accelerate library withou using a Trainer.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
@@ -434,10 +434,6 @@ def main():
     # Metrics
     metric = load_metric("accuracy")
 
-    def compute_metrics():
-        results = metric.compute()
-        return {"accuracy": results["overall_accuracy"]}
-
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
 
@@ -479,7 +475,7 @@ def main():
                 references=accelerator.gather(batch["labels"]),
             )
 
-        eval_metric = compute_metrics()
+        eval_metric = metric.compute()
         accelerator.print(f"epoch {epoch}: {eval_metric}")
 
     if args.output_dir is not None:
