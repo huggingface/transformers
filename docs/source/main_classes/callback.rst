@@ -96,6 +96,7 @@ Another way to register a callback is to call ``trainer.add_callback()`` as foll
 
 .. code-block:: python
 
+    trainer = Trainer(...)
     trainer.add_callback(MyCallback)
 
 
