@@ -17,7 +17,6 @@ accelerate launch run_ner_no_trainer.py \
   --dataset_name conll2003 \
   --output_dir /tmp/test-ner \
   --pad_to_max_length \
-  --do_train \
   --task_name ner \
   --return_entity_level_metrics \
   --debug
