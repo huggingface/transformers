@@ -41,7 +41,6 @@ from transformers import (
     AutoConfig,
     AutoModelForMultipleChoice,
     AutoTokenizer,
-    PretrainedConfig,
     PreTrainedTokenizerBase,
     SchedulerType,
     default_data_collator,
@@ -69,7 +68,7 @@ def parse_args():
         "--dataset_config_name",
         type=str,
         default=None,
-        help= "The configuration name of the dataset to use (via the datasets library).",
+        help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
@@ -284,16 +283,14 @@ def main():
     # Trim a number of training examples
     if args.debug:
         for split in raw_datasets.keys():
-            raw_datasets[split] = raw_datasets[split].select(range(20))
+            raw_datasets[split] = raw_datasets[split].select(range(100))
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
     if raw_datasets["train"] is not None:
         column_names = raw_datasets["train"].column_names
-        features = raw_datasets["train"].features
     else:
         column_names = raw_datasets["validation"].column_names
-        features = raw_datasets["validation"].features
 
     # When using your own dataset or a different dataset from swag, you will probably need to change this.
     ending_names = [f"ending{i}" for i in range(4)]
@@ -384,7 +381,9 @@ def main():
         # Otherwise, `DataCollatorWithPadding` will apply dynamic padding for us (by padding to the maximum length of
         # the samples passed). When using mixed precision, we add `pad_to_multiple_of=8` to pad all tensors to multiple
         # of 8s, which will enable the use of Tensor Cores on NVIDIA hardware with compute capability >= 7.5 (Volta).
-        data_collator = DataCollatorForMultipleChoice(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
+        data_collator = DataCollatorForMultipleChoice(
+            tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None)
+        )
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -434,9 +433,8 @@ def main():
 
     # Metrics
     metric = load_metric("accuracy")
-    def compute_metrics(eval_predictions):
-        predictions, label_ids = eval_predictions
-        preds = np.argmax(predictions, axis=1)
+
+    def compute_metrics():
         results = metric.compute()
         return {"accuracy": results["overall_accuracy"]}
 
@@ -492,5 +490,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
