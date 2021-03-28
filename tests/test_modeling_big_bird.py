@@ -407,6 +407,24 @@ class BigBirdModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
+    def create_and_check_for_change_to_full_attn(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+    ):
+        model = BigBirdModel(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        # the config should not be changed
+        self.parent.assertTrue(model.config.attention_type == "block_sparse")
+
 
 @require_torch
 class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
@@ -574,6 +592,11 @@ class BigBirdModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.seq_length = 241
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_auto_padding(*config_and_inputs)
+
+    def test_for_change_to_full_attn(self):
+        self.model_tester.seq_length = 9
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
 
 
 @require_torch
@@ -1113,6 +1136,18 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
         answer = tokenizer.batch_decode(answer)
 
         self.assertTrue(answer == ["32", "[SEP]"])
+
+    def test_fill_mask(self):
+        tokenizer = BigBirdTokenizer.from_pretrained("google/bigbird-roberta-base")
+        model = BigBirdForMaskedLM.from_pretrained("google/bigbird-roberta-base")
+        model.to(torch_device)
+
+        input_ids = tokenizer("The goal of life is [MASK] .", return_tensors="pt").input_ids.to(torch_device)
+        logits = model(input_ids).logits
+
+        # [MASK] is token at 6th position
+        pred_token = tokenizer.decode(torch.argmax(logits[0, 6:7], axis=-1))
+        self.assertEqual(pred_token, "happiness")
 
     def test_auto_padding(self):
         model = BigBirdModel.from_pretrained(
