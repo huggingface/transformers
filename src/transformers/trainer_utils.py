@@ -17,16 +17,18 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
+import datetime
 import gc
 import inspect
 import os
 import random
 import re
+import threading
 import time
-import tracemalloc
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
+import psutil
 
 from .file_utils import (
     ExplicitEnum,
@@ -224,6 +226,15 @@ def total_processes_number(local_rank):
     return 1
 
 
+def secs2timedelta(secs):
+    """
+    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    """
+
+    msec = int(abs(secs - int(secs)) * 100)
+    return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
+
+
 def speed_metrics(split, start_time, num_samples=None):
     """
     Measure and return speed performance metrics.
@@ -238,7 +249,7 @@ def speed_metrics(split, start_time, num_samples=None):
     - num_samples: number of samples processed
     """
     runtime = time.time() - start_time
-    result = {f"{split}_runtime": round(runtime, 4)}
+    result = {f"{split}_runtime": secs2timedelta(runtime)}
     if num_samples is not None:
         samples_per_second = 1 / (runtime / num_samples)
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)
@@ -319,6 +330,8 @@ class TrainerMemoryTracker:
         else:
             self.torch = None
 
+        self.process = psutil.Process(os.getpid())
+
         self.cur_stage = None
         self.cpu = {}
         self.init_reported = False
@@ -334,6 +347,21 @@ class TrainerMemoryTracker:
                 f"was called from {caller}, but only expect to be called from one of {self.stages.keys()}"
             )
 
+    def cpu_mem_used(self):
+        return self.process.memory_info().rss
+
+    def peak_monitor_func(self):
+        self.cpu_mem_used_peak = -1
+
+        while True:
+            self.cpu_mem_used_peak = max(self.cpu_mem_used(), self.cpu_mem_used_peak)
+
+            # can't sleep or will not catch the peak right
+            # time.sleep(0.001) # 1msec
+
+            if not self.peak_monitoring:
+                break
+
     def start(self):
         """ start tracking for the caller's stage """
         if self.skip_memory_metrics:
@@ -346,21 +374,23 @@ class TrainerMemoryTracker:
 
         self.cur_stage = stage
 
+        gc.collect()
+
         if self.torch is not None:
             self.torch.cuda.reset_peak_memory_stats()
             self.torch.cuda.empty_cache()
 
-        gc.collect()
-
         # gpu
         if self.torch is not None:
-            self.gpu[self.cur_stage] = {}
-            self.gpu[self.cur_stage]["alloc"] = self.torch.cuda.memory_allocated()
-            self.gpu[self.cur_stage]["peaked"] = 0
+            self.gpu_mem_used_at_start = self.torch.cuda.memory_allocated()
 
         # cpu
-        self.cpu[self.cur_stage] = {}
-        tracemalloc.start()
+        self.cpu_mem_used_at_start = self.cpu_mem_used()
+
+        self.peak_monitoring = True
+        peak_monitor_thread = threading.Thread(target=self.peak_monitor_func)
+        peak_monitor_thread.daemon = True
+        peak_monitor_thread.start()
 
     def stop(self, stage):
         """ stop tracking for the passed stage """
@@ -369,24 +399,35 @@ class TrainerMemoryTracker:
         if self.cur_stage is not None and self.cur_stage != stage:
             return
 
+        # this sends a signal to peak_monitor_func to complete its loop
+        self.peak_monitoring = False
+
+        # first ensure all objects get collected and their memory is freed
+        gc.collect()
+
         if self.torch is not None:
             self.torch.cuda.empty_cache()
 
-        gc.collect()
+        # concepts:
+        # - alloc_delta:  the difference of allocated memory between the end and the start
+        # - peaked_delta: the difference between the peak memory and the current memory
+        # in order to know how much memory the measured code consumed one needs to sum these two
 
         # gpu
         if self.torch is not None:
-            mem_cur = self.torch.cuda.memory_allocated()
-            # this is the difference between the start and the end allocated memory
-            self.gpu[self.cur_stage]["alloc"] = mem_cur - self.gpu[self.cur_stage]["alloc"]  # can be negative
-            # this is the difference if any between the start and the peak
-            self.gpu[self.cur_stage]["peaked"] = max(0, self.torch.cuda.max_memory_allocated() - mem_cur)
+            self.gpu_mem_used_now = self.torch.cuda.memory_allocated()
+            self.gpu_mem_used_peak = self.torch.cuda.max_memory_allocated()
+            self.gpu[self.cur_stage] = dict(
+                alloc=(self.gpu_mem_used_now - self.gpu_mem_used_at_start),
+                peaked=max(0, self.gpu_mem_used_peak - self.gpu_mem_used_now),
+            )
 
         # cpu
-        cpu_mem_used_delta, cpu_mem_used_peak = tracemalloc.get_traced_memory()
-        tracemalloc.stop()  # reset accounting
-        self.cpu[self.cur_stage]["alloc"] = cpu_mem_used_delta  # can be negative
-        self.cpu[self.cur_stage]["peaked"] = max(0, cpu_mem_used_peak - cpu_mem_used_delta)
+        self.cpu_mem_used_now = self.cpu_mem_used()
+        self.cpu[self.cur_stage] = dict(
+            alloc=(self.cpu_mem_used_now - self.cpu_mem_used_at_start),
+            peaked=max(0, self.cpu_mem_used_peak - self.cpu_mem_used_now),
+        )
 
         # reset - cycle finished
         self.cur_stage = None
