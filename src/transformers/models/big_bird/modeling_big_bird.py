@@ -297,7 +297,6 @@ class BigBirdEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->BigBird
 class BigBirdSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -311,16 +310,11 @@ class BigBirdSelfAttention(nn.Module):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.use_bias)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x):
@@ -378,29 +372,13 @@ class BigBirdSelfAttention(nn.Module):
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BigBirdModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = F.softmax(attention_scores, dim=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -1224,6 +1202,7 @@ class BigBirdSelfOutput(nn.Module):
 class BigBirdAttention(nn.Module):
     def __init__(self, config, seed=None):
         super().__init__()
+        self.attention_type = config.attention_type
         self.config = config
         self.seed = seed
 
@@ -1244,23 +1223,22 @@ class BigBirdAttention(nn.Module):
             "block_sparse",
         ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
         # attention type is already correctly set
-        if value == self.config.attention_type:
+        if value == self.attention_type:
             return
 
+        self.attention_type = value
         if value == "original_full":
             # copy all weights to new full attention class
             attn_weights = BigBirdSelfAttention(self.config)
-            attn_weights.query = self.self.query
-            attn_weights.value = self.self.value
-            attn_weights.key = self.self.key
-            self.self = attn_weights
         else:
             # copy all weights to new sparse attention class
             attn_weights = BigBirdBlockSparseAttention(self.config, self.seed)
-            attn_weights.query = self.self.query
-            attn_weights.value = self.self.value
-            attn_weights.key = self.self.key
-            self.self = attn_weights
+
+        attn_weights.query = self.self.query
+        attn_weights.value = self.self.value
+        attn_weights.key = self.self.key
+        self.self = attn_weights
+        self.attention_type = value
 
         if not self.training:
             self.self.eval()
@@ -1282,7 +1260,7 @@ class BigBirdAttention(nn.Module):
         to_blocked_mask=None,
     ):
 
-        if self.config.attention_type == "original_full":
+        if self.attention_type == "original_full":
             self_outputs = self.self(
                 hidden_states,
                 attention_mask,
@@ -1340,6 +1318,7 @@ class BigBirdLayer(nn.Module):
     def __init__(self, config, seed=None):
         super().__init__()
         self.config = config
+        self.attention_type = config.attention_type
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
         self.attention = BigBirdAttention(config, seed=seed)
@@ -1352,13 +1331,14 @@ class BigBirdLayer(nn.Module):
         self.output = BigBirdOutput(config)
 
     def set_attention_type(self, value: str):
-        # attention type is already correctly set
-        if value == self.config.attention_type:
-            return
         assert value in [
             "original_full",
             "block_sparse",
         ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
         self.attention.set_attention_type(value)
 
     def forward(
@@ -1446,19 +1426,21 @@ class BigBirdEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.attention_type = config.attention_type
 
         self.layer = nn.ModuleList(
             [BigBirdLayer(config, seed=layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
 
     def set_attention_type(self, value: str):
-        # attention type is already correctly set
-        if value == self.config.attention_type:
-            return
         assert value in [
             "original_full",
             "block_sparse",
         ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
         for layer in self.layer:
             layer.set_attention_type(value)
 
@@ -1785,14 +1767,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
-
         self.attention_type = self.config.attention_type
-        if config.attention_type != "original_full" and config.add_cross_attention:
-            logger.warning(
-                "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`"
-            )
-            self.attention_type = "original_full"
-
         self.config = config
 
         self.block_size = self.config.block_size
@@ -1807,6 +1782,12 @@ class BigBirdModel(BigBirdPreTrainedModel):
             self.pooler = None
             self.activation = None
 
+        if config.attention_type != "original_full" and config.add_cross_attention:
+            logger.warning(
+                "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`"
+            )
+            self.set_attention_type("original_full")
+
         self.init_weights()
 
     def get_input_embeddings(self):
@@ -1816,13 +1797,14 @@ class BigBirdModel(BigBirdPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def set_attention_type(self, value: str):
-        # attention type is already correctly set
-        if value == self.config.attention_type:
-            return
         assert value in [
             "original_full",
             "block_sparse",
         ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        # attention type is already correctly set
+        if value == self.attention_type:
+            return
+        self.attention_type = value
         self.encoder.set_attention_type(value)
 
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
@@ -1911,7 +1893,6 @@ class BigBirdModel(BigBirdPreTrainedModel):
             logger.warning(
                 f"Attention type 'block_sparse' is not possible if sequence_length: {sequence_length} <= num global tokens: 2 * config.block_size + min. num sliding tokens: 3 * config.block_size + config.num_random_blocks * config.block_size + additional buffer: 3 * config.block_size = {max_tokens_to_attend} with config.block_size = {self.config.block_size}, config.num_random_blocks = {self.config.num_random_blocks}. Changing attention type to 'original_full'"
             )
-            self.attention_type = "original_full"
             self.set_attention_type("original_full")
 
         if self.attention_type == "block_sparse":
