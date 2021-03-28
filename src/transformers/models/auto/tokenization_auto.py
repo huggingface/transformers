@@ -36,7 +36,6 @@ from ..flaubert.tokenization_flaubert import FlaubertTokenizer
 from ..fsmt.tokenization_fsmt import FSMTTokenizer
 from ..funnel.tokenization_funnel import FunnelTokenizer
 from ..gpt2.tokenization_gpt2 import GPT2Tokenizer
-from ..gpt_neo.tokenization_gpt_neo import GPTNeoTokenizer
 from ..herbert.tokenization_herbert import HerbertTokenizer
 from ..layoutlm.tokenization_layoutlm import LayoutLMTokenizer
 from ..led.tokenization_led import LEDTokenizer
@@ -158,7 +157,6 @@ if is_tokenizers_available():
     from ..electra.tokenization_electra_fast import ElectraTokenizerFast
     from ..funnel.tokenization_funnel_fast import FunnelTokenizerFast
     from ..gpt2.tokenization_gpt2_fast import GPT2TokenizerFast
-    from ..gpt_neo.tokenization_gpt_neo_fast import GPTNeoTokenizerFast
     from ..herbert.tokenization_herbert_fast import HerbertTokenizerFast
     from ..layoutlm.tokenization_layoutlm_fast import LayoutLMTokenizerFast
     from ..led.tokenization_led_fast import LEDTokenizerFast
@@ -243,7 +241,6 @@ TOKENIZER_MAPPING = OrderedDict(
         (BertConfig, (BertTokenizer, BertTokenizerFast)),
         (OpenAIGPTConfig, (OpenAIGPTTokenizer, OpenAIGPTTokenizerFast)),
         (GPT2Config, (GPT2Tokenizer, GPT2TokenizerFast)),
-        (GPTNeoConfig, (GPTNeoTokenizer, GPTNeoTokenizerFast)),
         (TransfoXLConfig, (TransfoXLTokenizer, None)),
         (XLNetConfig, (XLNetTokenizer, XLNetTokenizerFast)),
         (FlaubertConfig, (FlaubertTokenizer, None)),
