@@ -279,7 +279,7 @@ class TrainerMemoryTracker:
         metrics = {"train_runtime": 10.5}
         self._memory_tracker.stop_and_update_metrics(metrics)
 
-    At the moment gpu tracking is only for pytorch, but can be extended to support tensorflow.
+    At the moment GPU tracking is only for ``pytorch``, but can be extended to support ``tensorflow``.
 
     Understanding the reports:
 
@@ -293,8 +293,23 @@ class TrainerMemoryTracker:
     memory was needed to complete that stage.
 
     The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
-    main process does the bulk of work, but it could be not quite so if model parallel is used and then other gpus may
-    use a different amount of gpu RAM. Perhaps in the future this tracker will evolve to measure those too.
+    main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
+    use a different amount of gpu memory. Perhaps in the future this tracker will evolve to measure those too.
+
+    The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
+    memory shared with other processes. It is important to note that it does not include swapped out memory, so the
+    reports could be imprecise.
+
+    The CPU peak memory is measured using a sampling thread. Due to python's GIL it may miss some of the peak memory if
+    that thread didn't get a chance to run when the highest memory was used. Therefore this report can be less than
+    reality. Using ``tracemalloc`` would have reported the exact peak memory, but it doesn't report memory allocations
+    outside of python. So if some C++ CUDA extension allocated its own memory it won't be reported. And therefore it
+    was dropped in favor of sampling approach which reads the current process memory usage.
+
+    The GPU allocated and peak memory reporting is done with ``torch.cuda.memory_allocated()`` and
+    ``torch.cuda.max_memory_allocated()``. This metric reports only "deltas" for pytorch-specific allocations, as
+    ``torch.cuda`` memory management system doesn't track any memory allocated outside of pytorch. For example, the
+    very first cuda call typically loads CUDA kernels, which may take from 0.5 to 2GB of GPU memory.
 
     Note that this tracker doesn't account for memory allocations outside of :class:`~transformers.Trainer`'s
     ``__init__``, ``train``, ``evaluate`` and ``predict`` calls.
@@ -310,6 +325,8 @@ class TrainerMemoryTracker:
     ``torch.cuda.reset_peak_memory_stats``, the gpu peak memory stats could be invalid. And the
     :class:`~transformers.Trainer` will disrupt the normal behavior of any such tools that rely on calling
     ``torch.cuda.reset_peak_memory_stats`` themselves.
+
+    For best performance you may want to consider turning the memory profiling off for production runs.
 
     """
 
@@ -330,7 +347,7 @@ class TrainerMemoryTracker:
         else:
             self.torch = None
 
-        self.process = psutil.Process(os.getpid())
+        self.process = psutil.Process()
 
         self.cur_stage = None
         self.cpu = {}
@@ -348,6 +365,7 @@ class TrainerMemoryTracker:
             )
 
     def cpu_mem_used(self):
+        """ get resident set size memory for the current process """
         return self.process.memory_info().rss
 
     def peak_monitor_func(self):
@@ -356,7 +374,7 @@ class TrainerMemoryTracker:
         while True:
             self.cpu_mem_used_peak = max(self.cpu_mem_used(), self.cpu_mem_used_peak)
 
-            # can't sleep or will not catch the peak right
+            # can't sleep or will not catch the peak right (this comment is here on purpose)
             # time.sleep(0.001) # 1msec
 
             if not self.peak_monitoring:
