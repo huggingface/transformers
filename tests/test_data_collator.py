@@ -160,6 +160,15 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
 
+        data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, pad_to_multiple_of=8)
+        batch = data_collator(no_pad_features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 16)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 16)))
+
+        batch = data_collator(pad_features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 16)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 16)))
+
         tokenizer._pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
         with self.assertRaises(ValueError):
@@ -180,6 +189,23 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(pad_features)
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 10)))
+
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(torch.any(masked_tokens))
+        self.assertTrue(all(x == -100 for x in batch["labels"][~masked_tokens].tolist()))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        batch = data_collator(no_pad_features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 16)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 16)))
+
+        masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
+        self.assertTrue(torch.any(masked_tokens))
+        self.assertTrue(all(x == -100 for x in batch["labels"][~masked_tokens].tolist()))
+
+        batch = data_collator(pad_features)
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 16)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 16)))
 
         masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
         self.assertTrue(torch.any(masked_tokens))
@@ -225,6 +251,14 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"].shape, torch.Size((2, 5)))
         self.assertEqual(batch["next_sentence_label"].shape, torch.Size((2,)))
 
+        data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 8)))
+        self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 8)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 8)))
+        self.assertEqual(batch["next_sentence_label"].shape, torch.Size((2,)))
+
     def test_sop(self):
         tokenizer = BertTokenizer(self.vocab_file)
         features = [
@@ -241,4 +275,12 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 5)))
         self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 5)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 5)))
+        self.assertEqual(batch["sentence_order_label"].shape, torch.Size((2,)))
+
+        data_collator = DataCollatorForLanguageModeling(tokenizer, pad_to_multiple_of=8)
+        batch = data_collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, torch.Size((2, 8)))
+        self.assertEqual(batch["token_type_ids"].shape, torch.Size((2, 8)))
+        self.assertEqual(batch["labels"].shape, torch.Size((2, 8)))
         self.assertEqual(batch["sentence_order_label"].shape, torch.Size((2,)))
