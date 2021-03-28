@@ -1341,6 +1341,9 @@ class BigBirdLayer(nn.Module):
         self.attention_type = value
         self.attention.set_attention_type(value)
 
+        if self.add_cross_attention:
+            self.crossattention.set_attention_type(value)
+
     def forward(
         self,
         hidden_states,
@@ -1782,7 +1785,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
             self.pooler = None
             self.activation = None
 
-        if config.attention_type != "original_full" and config.add_cross_attention:
+        if self.attention_type != "original_full" and config.add_cross_attention:
             logger.warning(
                 "When using `BigBirdForCausalLM` as decoder, then `attention_type` must be `original_full`. Setting `attention_type=original_full`"
             )
@@ -1891,7 +1894,15 @@ class BigBirdModel(BigBirdPreTrainedModel):
             # change attention_type from block_sparse to original_full
             sequence_length = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
             logger.warning(
-                f"Attention type 'block_sparse' is not possible if sequence_length: {sequence_length} <= num global tokens: 2 * config.block_size + min. num sliding tokens: 3 * config.block_size + config.num_random_blocks * config.block_size + additional buffer: 3 * config.block_size = {max_tokens_to_attend} with config.block_size = {self.config.block_size}, config.num_random_blocks = {self.config.num_random_blocks}. Changing attention type to 'original_full'"
+                "Attention type 'block_sparse' is not possible if sequence_length: "
+                f"{sequence_length} <= num global tokens: 2 * config.block_size "
+                "+ min. num sliding tokens: 3 * config.block_size "
+                "+ config.num_random_blocks * config.block_size "
+                "+ additional buffer: 3 * config.block_size "
+                f"= {max_tokens_to_attend} with config.block_size "
+                f"= {self.config.block_size}, config.num_random_blocks "
+                f"= {self.config.num_random_blocks}."
+                "Changing attention type to 'original_full'..."
             )
             self.set_attention_type("original_full")
 
