@@ -1,7 +1,8 @@
 from sklearn.model_selection import train_test_split
 import torch
-from transformers import BertTokenizer
+from transformers import BertTokenizer, EvalPrediction
 from transformers import BertForSequenceClassification, Trainer, TrainingArguments
+import numpy as np
 from datasets import load_metric
 
 
@@ -21,12 +22,9 @@ train_texts, train_labels = read_material_split('./train.txt')
 #
 test_texts, test_labels = read_material_split('./test.txt')
 
-train_texts, val_texts, train_labels, val_labels = train_test_split(train_texts, train_labels, test_size=.2)
-
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 train_encodings = tokenizer(train_texts, truncation=True, padding=True)
-val_encodings = tokenizer(val_texts, truncation=True, padding=True)
 test_encodings = tokenizer(test_texts, truncation=True, padding=True)
 
 
@@ -45,21 +43,29 @@ class materialDataset(torch.utils.data.Dataset):
 
 
 train_dataset = materialDataset(train_encodings, train_labels)
-val_dataset = materialDataset(val_encodings, val_labels)
 test_dataset = materialDataset(test_encodings, test_labels)
 
+metric = load_metric("glue", 'mrpc', cache_dir='./metric_dir')
 
-metric = load_metric('glue', 'mrpc')
+
+def compute_metrics(p: EvalPrediction):
+    preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+    result = metric.compute(predictions=preds, references=p.label_ids)
+    if len(result) > 1:
+        result["combined_score"] = np.mean(list(result.values())).item()
+        return result
+    else:
+        return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
 
 training_args = TrainingArguments(
-    output_dir='./results_2',  # output directory
+    output_dir='results',  # output directory
     num_train_epochs=3,  # total number of training epochs
     per_device_train_batch_size=16,  # batch size per device during training
     per_device_eval_batch_size=64,  # batch size for evaluation
     warmup_steps=500,  # number of warmup steps for learning rate scheduler
     weight_decay=0.01,  # strength of weight decay
-    logging_dir='./logs_2',  # directory for storing logs
+    logging_dir='logs',  # directory for storing logs
     logging_steps=10,
 )
 
@@ -69,20 +75,11 @@ trainer = Trainer(
     model=model,  # the instantiated 🤗 Transformers model to be trained
     args=training_args,  # training arguments, defined above
     train_dataset=train_dataset,  # training dataset
-    eval_dataset=val_dataset,  # evaluation dataset
-    # compute_metrics=metric
+    eval_dataset=test_dataset,  # evaluation dataset
+    # compute_metrics=compute_metrics
 )
 
 trainer.train()
-trainer.evaluate()
-
-
-# Example of typical usage
-for batch in val_dataset:
-    inputs, references = batch
-    predictions = model(inputs)
-    metric.add_batch(predictions=predictions, references=references)
-score = metric.compute()
-print(score)
-
+eval_result = trainer.evaluate()
+print(eval_result)
 trainer.save_model(training_args.output_dir)
