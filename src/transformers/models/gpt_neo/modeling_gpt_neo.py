@@ -340,29 +340,51 @@ class LocalAttention(nn.Module):
         output_attentions=False,
     ):
         query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
+
+        if layer_past is not None:
+            past = layer_past[0]
+            key_value_hidden_states = torch.cat([past, hidden_states], dim=1)
+            past_length = past.size()[1]
+        else:
+            key_value_hidden_states = hidden_states
+            past_length = 0
+
+        key = self.k_proj(key_value_hidden_states)
+        value = self.v_proj(key_value_hidden_states)
 
         # compute block length and windows
         bs, seq_len = hidden_states.shape[:2]
+        full_seq_length = seq_len + past_length
         block_length = self.window_size
-        while seq_len % block_length != 0:
+        while full_seq_length % block_length != 0:
             block_length -= 1
-        windows = seq_len // block_length
+        windows = full_seq_length // block_length
 
         # create buckets
-        query = self.create_buckets(query, windows, block_length)
+        if layer_past is not None:
+            # we just need 1 window with block_length 1 when caching is enabled
+            query = self.create_buckets(query, 1, 1)
+        else:
+            query = self.create_buckets(query, windows, block_length)
+
         key = self.create_buckets(key, windows, block_length)
         value = self.create_buckets(value, windows, block_length)
 
         key = self.look_around(key, block_length, self.window_size)
         value = self.look_around(value, block_length, self.window_size)
 
+        # select key/value vectors only for the last window
+        if layer_past is not None:
+            key = key[:, -1:, ...]
+            value = value[:, -1:, ...]
+
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        mask = self.create_attention_mask(bs, seq_len, windows, block_length)
+        mask = self.create_attention_mask(bs, full_seq_length, windows, block_length)
+        if layer_past is not None:
+            mask = mask[:, -1:, :, -1:, :]  # only take the mask for the last window
         mask = mask.to(hidden_states.device)
 
         # attn
@@ -370,12 +392,11 @@ class LocalAttention(nn.Module):
         attn = attn_outputs[0]
 
         attn = self.merge_heads(attn)
-        attn = attn.reshape(-1, seq_len, self.embed_dim)
+        attn = attn.reshape(bs, seq_len, self.embed_dim)
 
         attn = self.out_proj(attn)
         attn = self.resid_dropout(attn)
-
-        return (attn, None) + attn_outputs[1:]
+        return (attn,) + attn_outputs[1:]
 
 
 class GPTNeoAttention(nn.Module):
@@ -405,7 +426,7 @@ class GPTNeoAttention(nn.Module):
         use_cache=False,
         output_attentions=False,
     ):
-        return self.attention(
+        outputs = self.attention(
             hidden_states,
             layer_past=layer_past,
             attention_mask=attention_mask,
@@ -413,6 +434,16 @@ class GPTNeoAttention(nn.Module):
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
+
+        # cache the hidden_states instead of key_value_states
+        # for local attention layer
+        if self.attention_type == "local":
+            if layer_past is None:
+                past = hidden_states
+            else:
+                past = torch.cat([layer_past[0], hidden_states], dim=1)
+            outputs = (outputs[0], (past,)) + outputs[1:]
+        return outputs
 
 
 class MLP(nn.Module):

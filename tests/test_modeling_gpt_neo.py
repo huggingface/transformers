@@ -30,10 +30,10 @@ if is_torch_available():
 
     from transformers import (
         GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
+        GPT2Tokenizer,
         GPTNeoConfig,
         GPTNeoForCausalLM,
         GPTNeoModel,
-        GPTNeoTokenizer,
     )
 
 
@@ -194,6 +194,42 @@ class GPTNeoModelTester:
         # past_key_values is not implemented
         # self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
+    def create_and_check_gpt_neo_model_past(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+        model = GPTNeoModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(input_ids, token_type_ids=token_type_ids, use_cache=True)
+        outputs_use_cache_conf = model(input_ids, token_type_ids=token_type_ids)
+        outputs_no_past = model(input_ids, token_type_ids=token_type_ids, use_cache=False)
+
+        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
+        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
+
+        output, past = outputs.to_tuple()
+
+        # create hypothetical next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+        next_token_types = ids_tensor([self.batch_size, 1], self.type_vocab_size)
+
+        # append to next input_ids and token_type_ids
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_token_type_ids = torch.cat([token_type_ids, next_token_types], dim=-1)
+
+        output_from_no_past = model(next_input_ids, token_type_ids=next_token_type_ids)["last_hidden_state"]
+        output_from_past = model(next_tokens, token_type_ids=next_token_types, past_key_values=past)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -1, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
     def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPTNeoForCausalLM(config)
         model.to(torch_device)
@@ -262,13 +298,8 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         self.model_tester.create_and_check_gpt_neo_model(*config_and_inputs)
 
     def test_gpt_neo_model_past(self):
-        pass
-
-    def test_gpt_neo_model_att_mask_past(self):
-        pass
-
-    def test_gpt_neo_model_past_large_inputs(self):
-        pass
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_gpt_neo_model_past(*config_and_inputs)
 
     def test_gpt_neo_lm_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -372,7 +403,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         )
         self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
         for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx
+            tgt_len = min_length + idx if not use_cache else 1
             src_len = min_length + idx
             global_expected_shape = (
                 batch_size * num_beam_groups,
@@ -384,6 +415,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             local_seq_len, block_len, windows = self._get_local_attn_seq_len_block_len_windows(
                 src_len, config.window_size
             )
+            block_len = 1 if use_cache else block_len
             local_expected_shape = (
                 batch_size * num_beam_groups,
                 windows,
@@ -393,7 +425,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             )
 
             shapes = [layer_attention.shape for layer_attention in iter_attentions]
-
             # every other layer is local attention layers
             # so alternate between expected shapes
             expected_shape = [
@@ -401,13 +432,6 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             ]
             # check attn size
             self.assertListEqual(shapes, expected_shape)
-
-    # caching is not implemented
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
 
     # batch generation is not supported yet
     @slow
@@ -456,7 +480,7 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
 
     @slow
     def test_gpt_neo_sample(self):
-        tokenizer = GPTNeoTokenizer.from_pretrained("eleutherai/gpt_neo_xl")
+        tokenizer = GPT2Tokenizer.from_pretrained("eleutherai/gpt_neo_xl")
         model = GPTNeoForCausalLM.from_pretrained("eleutherai/gpt_neo_xl")
         model.to(torch_device)
 

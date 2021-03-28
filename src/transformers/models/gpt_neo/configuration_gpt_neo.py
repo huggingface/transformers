@@ -167,7 +167,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
         self.gradient_checkpointing = gradient_checkpointing
-        self.use_cache = False  # caching is not implemented for GPTNeo
+        self.use_cache = use_cache
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
