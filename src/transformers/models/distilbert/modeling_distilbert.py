@@ -26,7 +26,7 @@ import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
-from ...activations import gelu
+from ...activations import ACT2FN, gelu
 from ...file_utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -35,6 +35,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import (
     BaseModelOutput,
+    CausalLMOutput,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -80,6 +81,7 @@ def create_sinusoidal_embeddings(n_pos, dim, out):
 
 
 class Embeddings(nn.Module):
+
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.dim, padding_idx=config.pad_token_id)
@@ -92,7 +94,12 @@ class Embeddings(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.dim, eps=1e-12)
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self, input_ids):
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
+        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
+
+
+    def forward(self, input_ids, position_ids=None, past_key_values_length=0):
         """
         Parameters:
             input_ids: torch.tensor(bs, max_seq_length) The token ids to embed.
@@ -101,8 +108,10 @@ class Embeddings(nn.Module):
         embeddings)
         """
         seq_length = input_ids.size(1)
-        position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
-        position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
+        # position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)  # (max_seq_length)
+        # position_ids = position_ids.unsqueeze(0).expand_as(input_ids)  # (bs, max_seq_length)
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         word_embeddings = self.word_embeddings(input_ids)  # (bs, max_seq_length, dim)
         position_embeddings = self.position_embeddings(position_ids)  # (bs, max_seq_length, dim)
@@ -128,6 +137,8 @@ class MultiHeadSelfAttention(nn.Module):
         self.v_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
         self.out_lin = nn.Linear(in_features=config.dim, out_features=config.dim)
 
+        self.is_decoder = config.is_decoder
+        
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -145,7 +156,19 @@ class MultiHeadSelfAttention(nn.Module):
         self.dim = attention_head_size * self.n_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def forward(self, query, key, value, mask, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        query,
+        key,
+        value,
+        mask,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        output_attentions=False,
+    ):
         """
         Parameters:
             query: torch.tensor(bs, seq_length, dim)
@@ -174,14 +197,43 @@ class MultiHeadSelfAttention(nn.Module):
             """ group heads """
             return x.transpose(1, 2).contiguous().view(bs, -1, self.n_heads * dim_per_head)
 
+        # q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
+        # k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+        # v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+
+        # If this is instantiated as a cross-attention module, the keys
+        # and values come from an encoder; the attention mask needs to be
+        # such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        if is_cross_attention and past_key_values is not None:
+            # reuse k,v, cross_attentions
+            k = past_key_values[0]
+            v = past_key_values[1]
+            attention_mask = encoder_attention_mask
+        elif is_cross_attention:
+            k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+            v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            attention_mask = encoder_attention_mask
+        elif past_key_values is not None:
+            k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+            v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+            k = torch.cat([past_key_values[0], k], dim=2)
+            v = torch.cat([past_key_values[1], v], dim=2)
+        else:
+            k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
+            v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
+
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
-        k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
-        v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
         q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
         scores = torch.matmul(q, k.transpose(2, 3))  # (bs, n_heads, q_length, k_length)
         mask = (mask == 0).view(mask_reshp).expand_as(scores)  # (bs, n_heads, q_length, k_length)
         scores.masked_fill_(mask, -float("inf"))  # (bs, n_heads, q_length, k_length)
+
+        if attention_mask is not None:
+            # Apply the attention mask is (precomputed for all layers in DistilBertModel forward() function)
+            scores = scores + attention_mask
 
         weights = nn.Softmax(dim=-1)(scores)  # (bs, n_heads, q_length, k_length)
         weights = self.dropout(weights)  # (bs, n_heads, q_length, k_length)
@@ -193,6 +245,9 @@ class MultiHeadSelfAttention(nn.Module):
         context = torch.matmul(weights, v)  # (bs, n_heads, q_length, dim_per_head)
         context = unshape(context)  # (bs, q_length, dim)
         context = self.out_lin(context)  # (bs, q_length, dim)
+
+        if self.is_decoder:
+            context = context + (past_key_values,)
 
         if output_attentions:
             return (context, weights)
@@ -234,7 +289,16 @@ class TransformerBlock(nn.Module):
         self.ffn = FFN(config)
         self.output_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
-    def forward(self, x, attn_mask=None, head_mask=None, output_attentions=False):
+    def forward(
+        self,
+        x,
+        attn_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        output_attentions=False,
+    ):
         """
         Parameters:
             x: torch.tensor(bs, seq_length, dim)
@@ -279,7 +343,16 @@ class Transformer(nn.Module):
         self.layer = nn.ModuleList([copy.deepcopy(layer) for _ in range(config.n_layers)])
 
     def forward(
-        self, x, attn_mask=None, head_mask=None, output_attentions=False, output_hidden_states=False, return_dict=None
+        self,
+        x,
+        attn_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=None,
     ):  # docstyle-ignore
         """
         Parameters:
@@ -324,6 +397,54 @@ class Transformer(nn.Module):
         return BaseModelOutput(
             last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
         )
+
+
+class DistilBertPredictionHeadTransform(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        if isinstance(config.activation, str):
+            self.transform_act_fn = ACT2FN[config.activation]
+        else:
+            self.transform_act_fn = config.activation
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+    def forward(self, hidden_states):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states)
+        return hidden_states
+
+
+class DistilBertLMPredictionHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.transform = DistilBertPredictionHeadTransform(config)
+
+        # The output weights are the same as the input embeddings, but there is
+        # an output-only bias for each token.
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+
+        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
+        self.decoder.bias = self.bias
+
+    def forward(self, hidden_states):
+        hidden_states = self.transform(hidden_states)
+        hidden_states = self.decoder(hidden_states)
+        return hidden_states
+
+
+class DistilBertOnlyMLMHead(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.predictions = DistilBertLMPredictionHead(config)
+
+    def forward(self, sequence_output):
+        prediction_scores = self.predictions(sequence_output)
+        return prediction_scores
 
 
 # INTERFACE FOR ENCODER AND TASK SPECIFIC MODEL #
@@ -449,6 +570,9 @@ class DistilBertModel(DistilBertPreTrainedModel):
         attention_mask=None,
         head_mask=None,
         inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -463,15 +587,22 @@ class DistilBertModel(DistilBertPreTrainedModel):
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
             input_shape = input_ids.size()
+            batch_size, seq_length = input_shape
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            batch_size, seq_length = input_shape
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+
+        # if attention_mask is None:
+        #     attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
         if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)  # (bs, seq_length)
+            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
         # Prepare head mask if needed
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
@@ -486,6 +617,123 @@ class DistilBertModel(DistilBertPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+
+@add_start_docstrings(
+    """DistilBERT Model with a `language modeling` head on top for CLM fine-tuning. """, DISTILBERT_START_DOCSTRING
+)
+class DistilBertForCausalLM(DistilBertPreTrainedModel):
+
+    authorized_unexpected_keys = [r"pooler"]
+    authorized_missing_keys = [r"position_ids", r"predictions.decoder.bias"]
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        if not config.is_decoder:
+            logger.warning("If you want to use `DistilBertLMHeadModel` as a standalone, add `is_decoder=True.`")
+
+        self.distilbert = DistilBertModel(config)
+        self.lm_head = DistilBertOnlyMLMHead(config)
+
+        self.init_weights()
+
+    def get_output_embeddings(self):
+        return self.lm_head.decoder
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head.decoder = new_embeddings
+
+    @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        head_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **maked**.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
+            ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
+            ignored (masked), the loss is only computed for the tokens with labels n ``[0, ..., config.vocab_size]``
+
+        Returns:
+
+        Example::
+
+            >>> from transformers import DistilBertTokenizer, DistilBertLMHeadModel, DistilBertConfig
+            >>> import torch
+
+            >>> tokenizer = DistilBertTokenizer.from_pretrained('bert-base-cased')
+            >>> config = DistilBertConfig.from_pretrained("bert-base-cased")
+            >>> config.is_decoder = True
+            >>> model = DistilBertLMHeadModel.from_pretrained('bert-base-cased', config=config, return_dict=True)
+
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+            >>> outputs = model(**inputs)
+
+            >>> prediction_logits = outputs.logits
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.distilbert(
+            input_ids,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+        prediction_scores = self.lm_head(sequence_output)
+
+        lm_loss = None
+        if labels is not None:
+            # we are doing next-token prediction; shift prediction scores and input ids by one
+            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
+            labels = labels[:, 1:].contiguous()
+            loss_fct = CrossEntropyLoss()
+            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+
+        if not return_dict:
+            output = (prediction_scores,) + outputs[1:]
+            return ((lm_loss,) + output) if lm_loss is not None else output
+
+        return CausalLMOutput(
+            loss=lm_loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
+        input_shape = input_ids.shape
+
+        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
+        if attention_mask is None:
+            attention_mask = input_ids.new_ones(input_shape)
+
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 @add_start_docstrings(

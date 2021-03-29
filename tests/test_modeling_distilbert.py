@@ -20,7 +20,7 @@ from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
@@ -29,6 +29,7 @@ if is_torch_available():
     from transformers import (
         DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         DistilBertConfig,
+        DistilBertForCausalLM,
         DistilBertForMaskedLM,
         DistilBertForMultipleChoice,
         DistilBertForQuestionAnswering,
@@ -116,6 +117,31 @@ if is_torch_available():
 
             return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
+        def prepare_config_and_inputs_for_decoder(self):
+            (
+                config,
+                input_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+            ) = self.prepare_config_and_inputs()
+
+            config.is_decoder = True
+            encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
+            encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
+
+            return (
+                config,
+                input_ids,
+                input_mask,
+                sequence_labels,
+                token_labels,
+                choice_labels,
+                encoder_hidden_states,
+                encoder_attention_mask,
+            )
+
         def create_and_check_distilbert_model(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
@@ -128,6 +154,59 @@ if is_torch_available():
                 result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
             )
 
+        def create_and_check_distilbert_as_decoder(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ):
+            config.add_cross_attention = True
+            model = DistilBertModel(config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+            )
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
+            self.parent.assertEqual(
+                result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size)
+            )
+            self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+        def create_and_check_distilbert_for_causal_lm(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ):
+            model = DistilBertForCausalLM(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
         def create_and_check_distilbert_for_masked_lm(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
@@ -137,6 +216,99 @@ if is_torch_available():
             result = model(input_ids, attention_mask=input_mask, labels=token_labels)
             self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+        def create_and_check_model_for_causal_lm_as_decoder(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ):
+            config.add_cross_attention = True
+            model = DistilBertForCausalLM(config=config)
+            model.to(torch_device)
+            model.eval()
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                labels=token_labels,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+            )
+            result = model(
+                input_ids,
+                attention_mask=input_mask,
+                token_type_ids=token_type_ids,
+                labels=token_labels,
+                encoder_hidden_states=encoder_hidden_states,
+            )
+            self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+        def create_and_check_decoder_model_past_large_inputs(
+            self,
+            config,
+            input_ids,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+            encoder_hidden_states,
+            encoder_attention_mask,
+        ):
+            config.is_decoder = True
+            config.add_cross_attention = True
+            model = DistilBertForCausalLM(config=config).to(torch_device).eval()
+
+            # first forward pass
+            outputs = model(
+                input_ids,
+                attention_mask=input_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                use_cache=True,
+            )
+            past_key_values = outputs.past_key_values
+
+            # create hypothetical multiple next token and extent to next_input_ids
+            next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+            next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+
+            # append to next input_ids and
+            next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+            next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+
+            output_from_no_past = model(
+                next_input_ids,
+                attention_mask=next_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                output_hidden_states=True,
+            )["hidden_states"][0]
+            output_from_past = model(
+                next_tokens,
+                attention_mask=next_attention_mask,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+                past_key_values=past_key_values,
+                output_hidden_states=True,
+            )["hidden_states"][0]
+
+            # select random slice
+            random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+            output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+            output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+            self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+            # test that outputs are equal for slice
+            self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
         def create_and_check_distilbert_for_question_answering(
             self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
         ):
@@ -144,7 +316,10 @@ if is_torch_available():
             model.to(torch_device)
             model.eval()
             result = model(
-                input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels
+                input_ids,
+                attention_mask=input_mask,
+                start_positions=sequence_labels,
+                end_positions=sequence_labels,
             )
             self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
             self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -199,6 +374,7 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DistilBertModel,
+            DistilBertForCausalLM,
             DistilBertForMaskedLM,
             DistilBertForMultipleChoice,
             DistilBertForQuestionAnswering,
@@ -223,9 +399,17 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_model(*config_and_inputs)
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_distilbert_for_causal_lm(*config_and_inputs)
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_distilbert_for_masked_lm(*config_and_inputs)
+
+    def test_for_causal_lm_decoder(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

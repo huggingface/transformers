@@ -67,6 +67,8 @@ class DistilBertConfig(PretrainedConfig):
         activation (:obj:`str` or :obj:`Callable`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
+        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         qa_dropout (:obj:`float`, `optional`, defaults to 0.1):
@@ -104,6 +106,7 @@ class DistilBertConfig(PretrainedConfig):
         attention_dropout=0.1,
         activation="gelu",
         initializer_range=0.02,
+        layer_norm_eps=1e-12,
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
@@ -121,6 +124,7 @@ class DistilBertConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation = activation
         self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
 
