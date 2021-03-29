@@ -345,7 +345,6 @@ class TrainerMemoryTracker:
         self.skip_memory_metrics = skip_memory_metrics
 
         if not is_psutil_available():
-            die
             # soft dependency on psutil
             self.skip_memory_metrics = True
 
