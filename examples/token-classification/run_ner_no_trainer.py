@@ -515,11 +515,6 @@ def main():
                 predictions=preds,
                 references=refs,
             )  # predictions and preferences are expected to be a nested list of labels, not label_ids
-            preds, refs = get_labels(predictions_gathered, labels_gathered)
-            metric.add_batch(
-                predictions=preds,
-                references=refs,
-            )  # predictions and preferences are expected to be a nested list
 
         # eval_metric = metric.compute()
         eval_metric = compute_metrics()
