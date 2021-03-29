@@ -40,7 +40,7 @@ from .configuration_gpt_neo import GPTNeoConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "GPTNeoConfig"
-_TOKENIZER_FOR_DOC = "GPTNeoTokenizer"
+_TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
 GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "eleutherai/gpt_neo_xl",

@@ -30,9 +30,9 @@ The :obj:`generate()` method can be used to generate text using GPT Neo model.
 
 .. code-block::
 
-    >>> from transformers import GPTNeoForCausalLM, GPTNeoTokenizer
+    >>> from transformers import GPTNeoForCausalLM, GPT2Tokenizer
     >>> model = GPTNeoForCausalLM.from_pretrained("eleutherai/gpt_neo_xl")
-    >>> tokenizer = GPTNeoTokenizer.from_pretrained("eleutherai/gpt_neo_xl")
+    >>> tokenizer = GPT2Tokenizer.from_pretrained("eleutherai/gpt_neo_xl")
 
     >>> prompt = "In a shocking finding, scientists discovered a herd of unicorns living in a remote, " \
     ...          "previously unexplored valley, in the Andes Mountains. Even more surprising to the " \
@@ -49,22 +49,6 @@ GPTNeoConfig
 
 .. autoclass:: transformers.GPTNeoConfig
     :members:
-
-
-GPTNeoTokenizer
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoTokenizer
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
-
-
-GPTNeoTokenizerFast
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.GPTNeoTokenizerFast
-    :members: build_inputs_with_special_tokens, get_special_tokens_mask,
-        create_token_type_ids_from_sequences, save_vocabulary
 
 
 GPTNeoModel
