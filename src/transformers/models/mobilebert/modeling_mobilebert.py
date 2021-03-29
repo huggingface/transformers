@@ -1238,6 +1238,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1257,6 +1258,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1327,6 +1329,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         start_positions=None,
         end_positions=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1350,6 +1353,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1428,6 +1432,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1458,6 +1463,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1524,6 +1530,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1542,6 +1549,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )

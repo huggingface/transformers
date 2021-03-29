@@ -240,6 +240,7 @@ class ElectraSelfAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         mixed_query_layer = self.query(hidden_states)
 
@@ -303,7 +304,7 @@ class ElectraSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.Softmax(dim=-1)(attention_scores) * attention_weights_scalar
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -376,6 +377,7 @@ class ElectraAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -385,6 +387,7 @@ class ElectraAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            attention_weights_scalar,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -446,6 +449,7 @@ class ElectraLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -454,6 +458,7 @@ class ElectraLayer(nn.Module):
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
@@ -481,6 +486,7 @@ class ElectraLayer(nn.Module):
                 encoder_attention_mask,
                 cross_attn_past_key_value,
                 output_attentions,
+                attention_weights_scalar,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
@@ -490,7 +496,10 @@ class ElectraLayer(nn.Module):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -523,6 +532,7 @@ class ElectraEncoder(nn.Module):
         past_key_values=None,
         use_cache=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
         output_hidden_states=False,
         return_dict=True,
     ):
@@ -549,7 +559,7 @@ class ElectraEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value, output_attentions, attention_weights_scalar)
 
                     return custom_forward
 
@@ -570,6 +580,7 @@ class ElectraEncoder(nn.Module):
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
+                    attention_weights_scalar,
                 )
 
             hidden_states = layer_outputs[0]

@@ -475,6 +475,7 @@ class TapasAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -484,6 +485,7 @@ class TapasAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            attention_weights_scalar,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -545,6 +547,7 @@ class TapasLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -553,6 +556,7 @@ class TapasLayer(nn.Module):
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
@@ -580,6 +584,7 @@ class TapasLayer(nn.Module):
                 encoder_attention_mask,
                 cross_attn_past_key_value,
                 output_attentions,
+                attention_weights_scalar,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
@@ -589,7 +594,10 @@ class TapasLayer(nn.Module):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
