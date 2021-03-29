@@ -28,10 +28,10 @@ import time
 from typing import Any, Dict, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
-import psutil
 
 from .file_utils import (
     ExplicitEnum,
+    is_psutil_available,
     is_sagemaker_distributed_available,
     is_tf_available,
     is_torch_available,
@@ -269,6 +269,8 @@ class TrainerMemoryTracker:
     """
     A helper class that tracks cpu and gpu memory.
 
+    This class will silently skip unless ``psutil`` is available. Install with ``pip install psutil``.
+
     When a stage completes, it can pass metrics dict to update with the memory metrics gathered during this stage.
 
     Example ::
@@ -339,6 +341,19 @@ class TrainerMemoryTracker:
     }
 
     def __init__(self, skip_memory_metrics=False):
+
+        self.skip_memory_metrics = skip_memory_metrics
+
+        if not is_psutil_available():
+            die
+            # soft dependency on psutil
+            self.skip_memory_metrics = True
+
+        if self.skip_memory_metrics:
+            return
+
+        import psutil  # noqa
+
         if is_torch_cuda_available():
             import torch
 
@@ -352,7 +367,6 @@ class TrainerMemoryTracker:
         self.cur_stage = None
         self.cpu = {}
         self.init_reported = False
-        self.skip_memory_metrics = skip_memory_metrics
 
     def derive_stage(self):
         """ derives the stage/caller name automatically """

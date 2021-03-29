@@ -228,7 +228,7 @@ extras["speech"] = deps_list("soundfile", "torchaudio")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "datasets", "pytest-sugar", "black")
+    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black")
     + extras["retrieval"]
     + extras["modelcreation"]
 )
@@ -269,7 +269,6 @@ install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
-    deps["psutil"],  # memory tracking
     deps["regex"],  # for OpenAI GPT
     deps["requests"],  # for downloading models over HTTPS
     deps["sacremoses"],  # for XLM
