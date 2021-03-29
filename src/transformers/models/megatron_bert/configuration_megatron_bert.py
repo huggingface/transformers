@@ -132,11 +132,3 @@ class MegatronBertConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
-
-    # @property
-    # def num_attention_heads(self) -> int:
-    #     return self.num_attention_heads
-
-    # @property
-    # def hidden_size(self) -> int:
-    #     return self.hidden_size
