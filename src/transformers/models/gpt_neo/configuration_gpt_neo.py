@@ -147,7 +147,7 @@ class GPTNeoConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         self.attention_types = attention_types
-        self.attn_layers = self.expand_attention_types_params(attention_types)
+        self.attention_layers = self.expand_attention_types_params(attention_types)
 
     @staticmethod
     def expand_attention_types_params(attention_types):

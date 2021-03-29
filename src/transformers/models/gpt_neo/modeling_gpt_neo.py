@@ -411,8 +411,8 @@ class GPTNeoAttention(nn.Module):
     def __init__(self, config, layer_id=0):
         super().__init__()
         self.layer_id = layer_id
-        self.attn_layers = config.attn_layers
-        self.attention_type = self.attn_layers[layer_id]
+        self.attention_layers = config.attention_layers
+        self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type == "global":
             self.attention = Attention(config)
@@ -420,8 +420,8 @@ class GPTNeoAttention(nn.Module):
             self.attention = LocalAttention(config)
         else:
             raise NotImplementedError(
-                "Only attn layer types 'global' and 'local' exist, but got `config.attn_layers`: {}. Select attn layer types from ['global', 'local'] only.".format(
-                    self.attn_layers
+                "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: {}. Select attn layer types from ['global', 'local'] only.".format(
+                    self.attention_layers
                 )
             )
 
@@ -749,7 +749,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
-            attn_type = self.config.attn_layers[i]
+            attn_type = self.config.attention_layers[i]
             attn_mask = global_attention_mask if attn_type == "global" else attention_mask
 
             if output_hidden_states:
