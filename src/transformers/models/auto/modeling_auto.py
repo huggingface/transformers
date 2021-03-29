@@ -92,6 +92,7 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2Model,
 )
 from ..distilbert.modeling_distilbert import (
+    DistilBertForCausalLM,
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
     DistilBertForQuestionAnswering,
@@ -405,6 +406,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (DistilBertConfig, DistilBertForMaskedLM),
         (AlbertConfig, AlbertForMaskedLM),
         (CamembertConfig, CamembertForMaskedLM),
+        (DistilBertConfig, DistilBertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForMaskedLM),
         (MarianConfig, MarianMTModel),
         (FSMTConfig, FSMTForConditionalGeneration),

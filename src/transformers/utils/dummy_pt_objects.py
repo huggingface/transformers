@@ -943,6 +943,11 @@ class DebertaV2PreTrainedModel:
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class DistilBertForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class DistilBertForMaskedLM:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
