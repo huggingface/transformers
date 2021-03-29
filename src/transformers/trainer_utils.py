@@ -17,7 +17,6 @@ Utilities for the Trainer and TFTrainer class. Should be independent from PyTorc
 """
 
 import copy
-import datetime
 import gc
 import inspect
 import os
@@ -226,15 +225,6 @@ def total_processes_number(local_rank):
     return 1
 
 
-def secs2timedelta(secs):
-    """
-    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
-    """
-
-    msec = int(abs(secs - int(secs)) * 100)
-    return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
-
-
 def speed_metrics(split, start_time, num_samples=None):
     """
     Measure and return speed performance metrics.
@@ -249,7 +239,7 @@ def speed_metrics(split, start_time, num_samples=None):
     - num_samples: number of samples processed
     """
     runtime = time.time() - start_time
-    result = {f"{split}_runtime": secs2timedelta(runtime)}
+    result = {f"{split}_runtime": runtime}
     if num_samples is not None:
         samples_per_second = 1 / (runtime / num_samples)
         result[f"{split}_samples_per_second"] = round(samples_per_second, 3)

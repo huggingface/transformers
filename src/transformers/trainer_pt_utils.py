@@ -16,6 +16,7 @@
 Torch utilities for the Trainer class.
 """
 
+import datetime
 import json
 import math
 import os
@@ -615,6 +616,15 @@ def _get_learning_rate(self):
     return last_lr
 
 
+def _secs2timedelta(secs):
+    """
+    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    """
+
+    msec = int(abs(secs - int(secs)) * 100)
+    return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
+
+
 def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format
@@ -631,6 +641,8 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     for k, v in metrics_copy.items():
         if "_mem_" in k:
             metrics_copy[k] = f"{ v >> 20 }MB"
+        elif "_runtime" in k:
+            metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
             metrics_copy[k] = f"{ int(v) >> 30 }GF"
         elif type(metrics_copy[k]) == float:
