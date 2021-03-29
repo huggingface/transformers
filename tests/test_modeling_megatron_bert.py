@@ -136,7 +136,6 @@ class MegatronBertModelTester:
     ):
         model = MegatronBertModel(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids)
         result = model(input_ids, token_type_ids=token_type_ids)
@@ -150,7 +149,6 @@ class MegatronBertModelTester:
     ):
         model = MegatronBertForMaskedLM(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
@@ -160,7 +158,6 @@ class MegatronBertModelTester:
     ):
         model = MegatronBertForNextSentencePrediction(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(
             input_ids,
@@ -175,7 +172,6 @@ class MegatronBertModelTester:
     ):
         model = MegatronBertForPreTraining(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(
             input_ids,
@@ -192,7 +188,6 @@ class MegatronBertModelTester:
     ):
         model = MegatronBertForQuestionAnswering(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(
             input_ids,
@@ -210,7 +205,6 @@ class MegatronBertModelTester:
         config.num_labels = self.num_labels
         model = MegatronBertForSequenceClassification(config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
@@ -221,7 +215,6 @@ class MegatronBertModelTester:
         config.num_labels = self.num_labels
         model = MegatronBertForTokenClassification(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
@@ -232,7 +225,6 @@ class MegatronBertModelTester:
         config.num_choices = self.num_choices
         model = MegatronBertForMultipleChoice(config=config)
         model.to(torch_device)
-        model.half()
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
@@ -354,7 +346,6 @@ class MegatronBertModelIntegrationTests(unittest.TestCase):
         checkpoint_file = basename + "_checkpoint.pt"
         model = MegatronBertModel.from_pretrained(checkpoint_file, config=config)
         model.to(torch_device)
-        model.half()
         input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]

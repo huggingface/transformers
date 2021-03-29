@@ -59,7 +59,7 @@ from .configuration_megatron_bert import MegatronBertConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MegatronBertConfig"
-_TOKENIZER_FOR_DOC = "MegatronBertTokenizer"
+_TOKENIZER_FOR_DOC = "BertTokenizer"
 
 
 MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -142,6 +142,7 @@ def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
     return model
 
 
+# Copied from transformers.models.bert.modeling_bert.BertEmbeddings with Bert->MegatronBert
 class MegatronBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -193,6 +194,7 @@ class MegatronBertEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->MegatronBert
 class MegatronBertSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -317,7 +319,7 @@ class MegatronBertSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
-
+# Based transformers.models.bert.modeling_bert.BertSelfOutput. Moved LayerNorm to MegatronBertAttention below.
 class MegatronBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -329,7 +331,7 @@ class MegatronBertSelfOutput(nn.Module):
         hidden_states = self.dropout(hidden_states)
         return residual + hidden_states
 
-
+# Based transformers.models.bert.modeling_bert.BertAttention. Added LayerNorm.
 class MegatronBertAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -381,6 +383,7 @@ class MegatronBertAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->MegatronBert
 class MegatronBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -395,7 +398,7 @@ class MegatronBertIntermediate(nn.Module):
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
-
+# Based transformers.models.bert.modeling_bert.BertOutput. Moved LayerNorm to MegatronBertLayer below.
 class MegatronBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -408,6 +411,7 @@ class MegatronBertOutput(nn.Module):
         return input_tensor + hidden_states
 
 
+# Based transformers.models.bert.modeling_bert.BertLayer. Added LayerNorm.
 class MegatronBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -493,6 +497,7 @@ class MegatronBertLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->MegatronBert
 class MegatronBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -600,6 +605,7 @@ class MegatronBertEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->MegatronBert
 class MegatronBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -615,6 +621,7 @@ class MegatronBertPooler(nn.Module):
         return pooled_output
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPredictionHeadTransform with Bert->MegatronBert
 class MegatronBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -632,6 +639,7 @@ class MegatronBertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLMPredictionHead with Bert->MegatronBert
 class MegatronBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -649,6 +657,7 @@ class MegatronBertLMPredictionHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyMLMHead with Bert->MegatronBert
 class MegatronBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -659,6 +668,7 @@ class MegatronBertOnlyMLMHead(nn.Module):
         return prediction_scores
 
 
+# Copied from transformers.models.bert.modeling_bert.BertOnlyNSPHead with Bert->MegatronBert
 class MegatronBertOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -669,6 +679,7 @@ class MegatronBertOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingHeads with Bert->MegatronBert
 class MegatronBertPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -681,6 +692,7 @@ class MegatronBertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->MegatronBert
 class MegatronBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -705,6 +717,7 @@ class MegatronBertPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
 
+# Copied from transformers.models.bert.modeling_bert.BertPreTrainingOutput with Bert->MegatronBert
 @dataclass
 class MegatronBertForPreTrainingOutput(ModelOutput):
     """
@@ -761,7 +774,7 @@ MEGATRON_BERT_INPUTS_DOCSTRING = r"""
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using :class:`~transformers.MegatronBertTokenizer`. See
+            Indices can be obtained using :class:`~transformers.BertTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
@@ -807,6 +820,7 @@ MEGATRON_BERT_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->MegatronBert
 @add_start_docstrings(
     "The bare MegatronBert Model transformer outputting raw hidden-states without any specific head on top.",
     MEGATRON_BERT_START_DOCSTRING,
@@ -853,7 +867,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-bert-uncased-345m",
+        checkpoint="nvidia/megatron-bert-uncased-345m",
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -982,6 +996,7 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with Bert->MegatronBert
 @add_start_docstrings(
     """
     MegatronBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a
@@ -1038,11 +1053,11 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MegatronBertTokenizer, MegatronBertForPreTraining
+            >>> from transformers import BertTokenizer, MegatronBertForPreTraining
             >>> import torch
 
-            >>> tokenizer = MegatronBertTokenizer.from_pretrained('megatron-bert-uncased-345m')
-            >>> model = MegatronBertForPreTraining.from_pretrained('megatron-bert-uncased-345m')
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
+            >>> model = MegatronBertForPreTraining.from_pretrained('nvidia/megatron-bert-uncased-345m')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1087,6 +1102,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertLMHeadModel with Bert->MegatronBert
 @add_start_docstrings(
     """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning. """,
     MEGATRON_BERT_START_DOCSTRING,
@@ -1160,13 +1176,13 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MegatronBertTokenizer, MegatronBertLMHeadModel, MegatronBertConfig
+            >>> from transformers import BertTokenizer, MegatronBertLMHeadModel, MegatronBertConfig
             >>> import torch
 
-            >>> tokenizer = MegatronBertTokenizer.from_pretrained('megatron-bert-cased-345m')
-            >>> config = MegatronBertConfig.from_pretrained("megatron-bert-cased-345m")
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
+            >>> config = MegatronBertConfig.from_pretrained("nvidia/megatron-bert-cased-345m")
             >>> config.is_decoder = True
-            >>> model = MegatronBertLMHeadModel.from_pretrained('megatron-bert-cased-345m', config=config)
+            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert-cased-345m', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1236,6 +1252,7 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
         return reordered_past
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with Bert->MegatronBert
 @add_start_docstrings("""MegatronBert Model with a `language modeling` head on top. """, MEGATRON_BERT_START_DOCSTRING)
 class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
 
@@ -1265,7 +1282,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-bert-uncased-345m",
+        checkpoint="nvidia/megatron-bert-uncased-345m",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1341,6 +1358,7 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with Bert->MegatronBert
 @add_start_docstrings(
     """MegatronBert Model with a `next sentence prediction (classification)` head on top. """,
     MEGATRON_BERT_START_DOCSTRING,
@@ -1385,11 +1403,11 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import MegatronBertTokenizer, MegatronBertForNextSentencePrediction
+            >>> from transformers import BertTokenizer, MegatronBertForNextSentencePrediction
             >>> import torch
 
-            >>> tokenizer = MegatronBertTokenizer.from_pretrained('megatron-bert-uncased-345m')
-            >>> model = MegatronBertForNextSentencePrediction.from_pretrained('megatron-bert-uncased-345m')
+            >>> tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
+            >>> model = MegatronBertForNextSentencePrediction.from_pretrained('nvidia/megatron-bert-uncased-345m')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1442,6 +1460,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForSentenceClassification with Bert->MegatronBert
 @add_start_docstrings(
     """
     MegatronBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the
@@ -1463,7 +1482,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-bert-uncased-345m",
+        checkpoint="nvidia/megatron-bert-uncased-345m",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1527,6 +1546,7 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MegatronBert
 @add_start_docstrings(
     """
     MegatronBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output
@@ -1549,7 +1569,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-bert-uncased-345m",
+        checkpoint="nvidia/megatron-bert-uncased-345m",
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1620,6 +1640,7 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MegatronBert
 @add_start_docstrings(
     """
     MegatronBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g.
@@ -1644,7 +1665,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-bert-uncased-345m",
+        checkpoint="nvidia/megatron-bert-uncased-345m",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1711,6 +1732,7 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MegatronBert
 @add_start_docstrings(
     """
     MegatronBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
@@ -1734,7 +1756,7 @@ class MegatronBertForQuestionAnswering(MegatronBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MEGATRON_BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="megatron-bert-uncased-345m",
+        checkpoint="nvidia/megatron-bert-uncased-345m",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
