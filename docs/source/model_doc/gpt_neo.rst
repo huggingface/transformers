@@ -20,8 +20,8 @@ The GPTNeo model was released in the `EleutherAI/gpt-neo <https://github.com/Ele
 Black, Stella Biderman, Leo Gao, Phil Wang and Connor Leahy. It is a GPT2 like causal language model trained on the
 `Pile <https://pile.eleuther.ai/>`__ dataset.
 
-The architecture is similar to GPT2 except the GPT Neo model uses local attention in every other layer with 256 window
-size so a token can only attend to last 256 positions.
+The architecture is similar to GPT2 except that GPT Neo uses local attention in every other layer with a window size of
+256 tokens.
 
 Generation
 _______________________________________________________________________________________________________________________

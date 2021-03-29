@@ -39,7 +39,7 @@ class GPTNeoConfig(PretrainedConfig):
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50257):
-            Vocabulary size of the GPTNeo model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the GPT Neo model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.GPTNeoModel`. Vocabulary size of the model.
             Defines the different tokens that can be represented by the `inputs_ids` passed to the forward method of
             :class:`~transformers.GPTNeoModel`.
