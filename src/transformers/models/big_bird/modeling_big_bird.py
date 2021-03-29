@@ -1887,8 +1887,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
         # in order to use block_sparse attention, sequence_length has to be at least
         # bigger than all global attentions: 2 * block_size
         # + sliding tokens: 3 * block_size
-        # + random tokens: num_random_blocks * block_size
-        # + additional buffer: num_random_blocks * block_size
+        # + random tokens: 2 * num_random_blocks * block_size
         max_tokens_to_attend = (5 + 2 * self.config.num_random_blocks) * self.config.block_size
         if self.attention_type == "block_sparse" and seq_length <= max_tokens_to_attend:
             # change attention_type from block_sparse to original_full
