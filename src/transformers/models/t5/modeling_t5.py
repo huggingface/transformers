@@ -238,8 +238,6 @@ class T5LayerNorm(nn.Module):
 
     def forward(self, hidden_states):
         # layer norm should always be calculated in float32
-        # XXX: getting variance=inf for some entries here in layer3
-
         detect_overflow(hidden_states, "T5LayerNorm")
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
         detect_overflow(variance, "T5LayerNorm variance")
