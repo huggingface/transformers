@@ -248,7 +248,7 @@ class T5LayerNorm(nn.Module):
 
         # convert into float16 if necessary
         if self.weight.dtype == torch.float16:
-           hidden_states = hidden_states.to(torch.float16)
+            hidden_states = hidden_states.to(torch.float16)
         detect_overflow(hidden_states, "T5LayerNorm hidden_states before return")
         return self.weight * hidden_states
 
