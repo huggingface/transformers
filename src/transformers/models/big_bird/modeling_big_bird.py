@@ -52,6 +52,7 @@ from .configuration_big_bird import BigBirdConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/bigbird-roberta-base"
 _CONFIG_FOR_DOC = "BigBirdConfig"
 _TOKENIZER_FOR_DOC = "BigBirdTokenizer"
 
@@ -224,7 +225,9 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
                     array = array.reshape(pointer.shape)
 
             if pointer.shape != array.shape:
-                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}.")
+                raise ValueError(
+                    f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}."
+                )
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
@@ -234,8 +237,8 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
         tf_weights.pop(txt_name, None)
         pt_names.remove(pt_weight_name)
 
-    logger.info("Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}.")
-    logger.info("Weights not initialized in PyTorch model: {', '.join(pt_names)}.")
+    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}.")
+    logger.info(f"Weights not initialized in PyTorch model: {', '.join(pt_names)}.")
     return model
 
 
@@ -542,9 +545,8 @@ class BigBirdBlockSparseAttention(nn.Module):
         # attention is calculated separately for q[0], q[1], q[2:-2], q[-2], q[-1] in order to use special trick of shifting tokens (for calculating sliding attention)
         # hence following code can be divided into 5 parts.
 
-        assert (
-            from_seq_len // from_block_size == to_seq_len // to_block_size
-        ), "Error the number of blocks needs to be same!"
+        if from_seq_len // from_block_size != to_seq_len // to_block_size:
+            raise ValueError("Error the number of blocks needs to be same!")
 
         rsqrt_d = 1 / math.sqrt(attention_head_size)
         bsz = batch_size
@@ -645,27 +647,13 @@ class BigBirdBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, : 3 * to_block_size],
                 to_mask[:, :, :, -to_block_size:],
-                torch.ones(
-                    bsz,
-                    1,
-                    1,
-                    n_rand_blocks * to_block_size,
-                    device=first_context_layer.device,
-                    dtype=first_context_layer.dtype,
-                ),
+                first_context_layer.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
             ],
             dim=3,
         )
         second_rand_pad = torch.cat(
             [
-                torch.ones(
-                    bsz,
-                    n_heads,
-                    from_block_size,
-                    4 * to_block_size,
-                    device=first_context_layer.device,
-                    dtype=first_context_layer.dtype,
-                ),
+                first_context_layer.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
                 rand_mask[:, :, 0],
             ],
             dim=3,
@@ -950,9 +938,11 @@ class BigBirdBlockSparseAttention(nn.Module):
     def torch_gather_b2(params, indices):
         # this operation is equilvalent to tf.gather when batch_dims=2
 
-        assert (
-            params.shape[:2] == indices.shape[:2]
-        ), f"Make sure that the first two dimensions of params and indices are identical, but they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
+        if params.shape[:2] != indices.shape[:2]:
+            raise ValueError(
+                f"Make sure that the first two dimensions of params and indices are identical, \
+                but they are params: {params.shape[:2]} vs. indices: {params.shape[:2]}"
+            )
         num_indices_to_gather = indices.shape[-2] * indices.shape[-1]
         num_indices_to_pick_from = params.shape[2]
 
@@ -1321,10 +1311,10 @@ class BigBirdAttention(nn.Module):
         self.output = BigBirdSelfOutput(config)
 
     def set_attention_type(self, value: str):
-        assert value in [
-            "original_full",
-            "block_sparse",
-        ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
         # attention type is already correctly set
         if value == self.attention_type:
             return
@@ -1434,10 +1424,10 @@ class BigBirdLayer(nn.Module):
         self.output = BigBirdOutput(config)
 
     def set_attention_type(self, value: str):
-        assert value in [
-            "original_full",
-            "block_sparse",
-        ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
         # attention type is already correctly set
         if value == self.attention_type:
             return
@@ -1488,9 +1478,11 @@ class BigBirdLayer(nn.Module):
 
         cross_attn_present_key_value = None
         if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with \
+                    cross-attention layers by setting `config.add_cross_attention=True`"
+                )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
@@ -1539,10 +1531,10 @@ class BigBirdEncoder(nn.Module):
         )
 
     def set_attention_type(self, value: str):
-        assert value in [
-            "original_full",
-            "block_sparse",
-        ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
         # attention type is already correctly set
         if value == self.attention_type:
             return
@@ -1742,15 +1734,19 @@ class BigBirdPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 BIG_BIRD_START_DOCSTRING = r"""
@@ -1777,6 +1773,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
@@ -1784,6 +1781,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
+
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
@@ -1795,6 +1793,7 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
@@ -1897,10 +1896,10 @@ class BigBirdModel(BigBirdPreTrainedModel):
         self.embeddings.word_embeddings = value
 
     def set_attention_type(self, value: str):
-        assert value in [
-            "original_full",
-            "block_sparse",
-        ], f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+        if value not in ["original_full", "block_sparse"]:
+            raise ValueError(
+                f"attention_type can only be set to either 'original_full' or 'block_sparse', but is {value}"
+            )
         # attention type is already correctly set
         if value == self.attention_type:
             return

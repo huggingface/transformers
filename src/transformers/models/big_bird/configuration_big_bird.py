@@ -71,8 +71,8 @@ class BigBirdConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`"block_sparse"`)
-            Whether to use block sparse attention (with n complexity) as introduced in paper or original attention layer
-            (with n^2 complexity). Possible values are :obj:`"original_full"` and :obj:`"block_sparse"`.
+            Whether to use block sparse attention (with n complexity) as introduced in paper or original attention
+            layer (with n^2 complexity). Possible values are :obj:`"original_full"` and :obj:`"block_sparse"`.
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to use bias in query, key, value.
         rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)
