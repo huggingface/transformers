@@ -244,6 +244,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
@@ -265,7 +266,7 @@ class TFBertSelfAttention(tf.keras.layers.Layer):
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1) * attention_weights_scalar
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -319,6 +320,7 @@ class TFBertAttention(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
@@ -326,6 +328,7 @@ class TFBertAttention(tf.keras.layers.Layer):
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             training=training,
         )
         attention_output = self.dense_output(
@@ -388,6 +391,7 @@ class TFBertLayer(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
@@ -395,6 +399,7 @@ class TFBertLayer(tf.keras.layers.Layer):
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             training=training,
         )
         attention_output = attention_outputs[0]
@@ -421,6 +426,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
@@ -435,6 +441,7 @@ class TFBertEncoder(tf.keras.layers.Layer):
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 output_attentions=output_attentions,
+                attention_weights_scalar=attention_weights_scalar,
                 training=training,
             )
             hidden_states = layer_outputs[0]
@@ -606,6 +613,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
@@ -621,6 +629,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
@@ -682,6 +691,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
             attention_mask=extended_attention_mask,
             head_mask=inputs["head_mask"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -825,6 +835,10 @@ BERT_INPUTS_DOCSTRING = r"""
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
             config will be used instead.
+        attention_weights_scalar ():obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+            For analyzing BERT models. It is multiplied by the attention weights, i.e., Softmax(Q*K'). Default is 1.0.
+
+            More details regarding this method can be found in the original paper: https://arxiv.org/abs/2004.11207
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
@@ -864,6 +878,7 @@ class TFBertModel(TFBertPreTrainedModel):
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
@@ -879,6 +894,7 @@ class TFBertModel(TFBertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             training=training,
@@ -892,6 +908,7 @@ class TFBertModel(TFBertPreTrainedModel):
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -951,6 +968,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -996,6 +1014,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             labels=labels,
@@ -1011,6 +1030,7 @@ class TFBertForPreTraining(TFBertPreTrainedModel, TFBertPreTrainingLoss):
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -1094,6 +1114,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1116,6 +1137,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             labels=labels,
@@ -1130,6 +1152,7 @@ class TFBertForMaskedLM(TFBertPreTrainedModel, TFMaskedLanguageModelingLoss):
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -1198,6 +1221,7 @@ class TFBertLMHeadModel(TFBertPreTrainedModel, TFCausalLanguageModelingLoss):
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1290,6 +1314,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         next_sentence_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1324,6 +1349,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             next_sentence_label=next_sentence_label,
@@ -1338,6 +1364,7 @@ class TFBertForNextSentencePrediction(TFBertPreTrainedModel, TFNextSentencePredi
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -1409,6 +1436,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1431,6 +1459,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             labels=labels,
@@ -1445,6 +1474,7 @@ class TFBertForSequenceClassification(TFBertPreTrainedModel, TFSequenceClassific
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -1519,6 +1549,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1541,6 +1572,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             labels=labels,
@@ -1586,6 +1618,7 @@ class TFBertForMultipleChoice(TFBertPreTrainedModel, TFMultipleChoiceLoss):
             head_mask=inputs["head_mask"],
             inputs_embeds=flat_inputs_embeds,
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -1675,6 +1708,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1696,6 +1730,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             labels=labels,
@@ -1710,6 +1745,7 @@ class TFBertForTokenClassification(TFBertPreTrainedModel, TFTokenClassificationL
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],
@@ -1782,6 +1818,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
+        attention_weights_scalar: Optional[float] = 1.0,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1809,6 +1846,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             start_positions=start_positions,
@@ -1824,6 +1862,7 @@ class TFBertForQuestionAnswering(TFBertPreTrainedModel, TFQuestionAnsweringLoss)
             head_mask=inputs["head_mask"],
             inputs_embeds=inputs["inputs_embeds"],
             output_attentions=inputs["output_attentions"],
+            attention_weights_scalar=inputs["attention_weights_scalar"],
             output_hidden_states=inputs["output_hidden_states"],
             return_dict=inputs["return_dict"],
             training=inputs["training"],

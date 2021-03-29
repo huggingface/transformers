@@ -112,6 +112,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
@@ -133,7 +134,7 @@ class TFElectraSelfAttention(tf.keras.layers.Layer):
             attention_scores = tf.add(attention_scores, attention_mask)
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1)
+        attention_probs = tf.nn.softmax(logits=attention_scores, axis=-1) * attention_weights_scalar
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -261,6 +262,7 @@ class TFElectraLayer(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         head_mask: tf.Tensor,
         output_attentions: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
@@ -268,6 +270,7 @@ class TFElectraLayer(tf.keras.layers.Layer):
             attention_mask=attention_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             training=training,
         )
         attention_output = attention_outputs[0]
@@ -295,6 +298,7 @@ class TFElectraEncoder(tf.keras.layers.Layer):
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
+        attention_weights_scalar: float = 1.0,
         training: bool = False,
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
         all_hidden_states = () if output_hidden_states else None
@@ -309,6 +313,7 @@ class TFElectraEncoder(tf.keras.layers.Layer):
                 attention_mask=attention_mask,
                 head_mask=head_mask[i],
                 output_attentions=output_attentions,
+                attention_weights_scalar=attention_weights_scalar,
                 training=training,
             )
             hidden_states = layer_outputs[0]
