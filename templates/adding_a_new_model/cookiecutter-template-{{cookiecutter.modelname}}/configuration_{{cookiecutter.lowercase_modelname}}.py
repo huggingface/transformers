@@ -44,8 +44,6 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model` or
             :class:`~transformers.TF{{cookiecutter.camelcase_modelname}}Model`.
-            Vocabulary size of the  model. Defines the different tokens that
-            can be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -75,7 +73,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+            If :obj:`True`, use gradient checkpointing to save memory at the expense of slower backward pass.
         {% else -%}
         vocab_size (:obj:`int`, `optional`, defaults to 50265):
             Vocabulary size of the {{cookiecutter.modelname}} model. Defines the number of different tokens that can be represented by the
