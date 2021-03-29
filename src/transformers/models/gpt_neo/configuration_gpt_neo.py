@@ -158,9 +158,6 @@ class GPTNeoConfig(PretrainedConfig):
                 "Please verify the value of `config.attention_types` argument."
             )
 
-        # GPTNeo uses the GPT2Tokenizer
-        self.tokenizer_class = "GPT2Tokenizer"
-
     @staticmethod
     def expand_attention_types_params(attention_types):
         attentions = []
