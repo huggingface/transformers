@@ -1888,8 +1888,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
         # bigger than all global attentions: 2 * block_size
         # + sliding tokens: 3 * block_size
         # + random tokens: num_random_blocks * block_size
-        # + additional buffer: 3 * block_size
-        max_tokens_to_attend = (8 + self.config.num_random_blocks) * self.config.block_size
+        # + additional buffer: num_random_blocks * block_size
+        max_tokens_to_attend = (5 + 2 * self.config.num_random_blocks) * self.config.block_size
         if self.attention_type == "block_sparse" and seq_length <= max_tokens_to_attend:
             # change attention_type from block_sparse to original_full
             sequence_length = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
@@ -1898,7 +1898,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 f"{sequence_length} <= num global tokens: 2 * config.block_size "
                 "+ min. num sliding tokens: 3 * config.block_size "
                 "+ config.num_random_blocks * config.block_size "
-                "+ additional buffer: 3 * config.block_size "
+                "+ additional buffer: config.num_random_blocks * config.block_size "
                 f"= {max_tokens_to_attend} with config.block_size "
                 f"= {self.config.block_size}, config.num_random_blocks "
                 f"= {self.config.num_random_blocks}."
