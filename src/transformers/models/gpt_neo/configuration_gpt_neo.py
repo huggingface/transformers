@@ -40,9 +40,9 @@ class GPTNeoConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50257):
             Vocabulary size of the GPTNeo model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.GPTNeoModel` or
-            :class:`~transformers.TFGPTNeoModel`. Vocabulary size of the model. Defines the different tokens that can
-            be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.GPTNeoModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.GPTNeoModel`. Vocabulary size of the model.
+            Defines the different tokens that can be represented by the `inputs_ids` passed to the forward method of
+            :class:`~transformers.GPTNeoModel`.
         attention_types (:obj:`List`, `optional`, defaults to :obj:`[[["global", "local"], 12]]`):
             The type of attention for each layer in a :obj:`List` of the following format :obj:`[[["attention_type"],
             num_layerss]]` e.g. for a 24 layer model :obj:`[[["global"], 24]]` or :obj:`[[["global", "local"], 12]]`
@@ -66,8 +66,7 @@ class GPTNeoConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.GPTNeoModel` or
-            :class:`~transformers.TFGPTNeoModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.GPTNeoModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
