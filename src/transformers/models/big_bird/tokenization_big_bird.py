@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Vasudev Gupta and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Google Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -87,8 +87,8 @@ class BigBirdTokenizer(PreTrainedTokenizer):
         self,
         vocab_file,
         unk_token="<unk>",
-        bos_token="</s>",
-        eos_token="<s>",
+        bos_token="<s>",
+        eos_token="</s>",
         pad_token="<pad>",
         sep_token="[SEP]",
         mask_token="[MASK]",

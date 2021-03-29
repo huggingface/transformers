@@ -45,7 +45,8 @@ Tips:
   **original_full** is advised as there is no benefit in using **block_sparse** attention.
 - The code currently uses window size of 3 blocks and 2 global blocks.
 - Sequence length must be divisible by block size.
-- Current code only supports absolute position embeddings when working with **block_sparse** attention.
+- Current implementation supports only **ITC**.
+- Current implementation doesn't support **num_random_blocks = 0**
 
 The original code can be found `here <https://github.com/google-research/bigbird>`__.
 

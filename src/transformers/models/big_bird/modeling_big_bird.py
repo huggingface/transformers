@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Vasudev Gupta The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Google Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all BigBird models at https://huggingface.co/models?filter=big_bird
 ]
 
-TRIVIA_QA_MAPPING = {
+_TRIVIA_QA_MAPPING = {
     "big_bird_attention": "attention/self",
     "output_layer_norm": "output/LayerNorm",
     "attention_output": "attention/output/dense",
@@ -112,7 +112,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
 
                 name_items[0] = f"bert/encoder/layer_{layer_name_items[2]}"
 
-            name = "/".join([TRIVIA_QA_MAPPING[x] if x in TRIVIA_QA_MAPPING else x for x in name_items])[
+            name = "/".join([_TRIVIA_QA_MAPPING[x] if x in _TRIVIA_QA_MAPPING else x for x in name_items])[
                 :-2
             ]  # remove last :0 in variable
 
