@@ -148,6 +148,16 @@ class GPTNeoConfig(PretrainedConfig):
         self.attention_types = attention_types
         self.attention_layers = self.expand_attention_types_params(attention_types)
 
+        if len(self.attention_layers) != self.num_layers:
+            raise ValueError(
+                "Configuration for convolutional module is incorrect."
+                "It is required that `len(config.attention_layers)` == `config.num_layers`"
+                f"but is `len(config.attention_layers) = {len(self.attention_layers)}`,"
+                f"`config.num_layers = {self.num_layers}`."
+                "`config.attention_layers` is prepared using `config.attention_types`."
+                "Please verify the value of `config.attention_types` argument."
+            )
+
         # GPTNeo uses the GPT2Tokenizer
         self.tokenizer_class = "GPT2Tokenizer"
 
