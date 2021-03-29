@@ -845,23 +845,25 @@ class BigBirdBlockSparseAttention(nn.Module):
             ]  # last key block (global)
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, second_attn_weights):
+                # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
                 for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                    attention_probs.view(
+                    # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                    attn_probs_view = attention_probs.view(
                         bsz,
                         n_heads,
                         from_seq_len // from_block_size,
                         from_block_size,
                         to_seq_len // to_block_size,
                         to_block_size,
-                    )[p1, p2, 1, :, i2[0]] = w2[:, 4 * to_block_size :].view(
-                        from_block_size, n_rand_blocks, to_block_size
                     )
+                    right_slice = w2[:, 4 * to_block_size :]
+                    attn_probs_view[p1, p2, 1, :, i2[0]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
 
             # Middle query blocks
             # corresponding to `context_layer`
             # sliding keys
             for q_idx in range(from_seq_len // from_block_size - 4):
-                slice = attention_probs.view(
+                attn_probs_view = attention_probs.view(
                     bsz,
                     n_heads,
                     from_seq_len // from_block_size,
@@ -869,11 +871,8 @@ class BigBirdBlockSparseAttention(nn.Module):
                     to_seq_len // to_block_size,
                     to_block_size,
                 )[:, :, 2:-2, :, 1:-1, :]
-                slice[:, :, q_idx, :, q_idx : q_idx + 3, :] = attn_weights[
-                    :, :, q_idx, :, to_block_size : 4 * to_block_size
-                ].view(
-                    bsz, n_heads, from_block_size, 3, to_block_size
-                )  # inner_band_product
+                right_slice = attn_weights[:, :, q_idx, :, to_block_size : 4 * to_block_size]
+                attn_probs_view[:, :, q_idx, :, q_idx : q_idx + 3, :] = right_slice.view(bsz, n_heads, from_block_size, 3, to_block_size)  # inner_band_product
             # global keys (correspomding to 1st key block)
             attention_probs[:, :, 2 * from_block_size : -2 * from_block_size, :to_block_size] = attn_weights[
                 :, :, :, :, :to_block_size
@@ -888,18 +887,13 @@ class BigBirdBlockSparseAttention(nn.Module):
             )  # last_band_product
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, attn_weights):
+                # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
                 for p2, i2, w2 in zip(range(n_heads), i1, w1):
+                    # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
                     for q_idx in range(1, len(i2) - 1):
-                        attention_probs.view(
-                            bsz,
-                            n_heads,
-                            from_seq_len // from_block_size,
-                            from_block_size,
-                            to_seq_len // to_block_size,
-                            to_block_size,
-                        )[p1, p2, q_idx + 1, :, i2[q_idx]] = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size].view(
-                            from_block_size, n_rand_blocks, to_block_size
-                        )
+                        attn_probs_view = attention_probs.view(bsz,n_heads,from_seq_len // from_block_size,from_block_size,to_seq_len // to_block_size,to_block_size,)
+                        right_slice = w2[q_idx - 1, :, 4 * to_block_size : -to_block_size]
+                        attn_probs_view[p1, p2, q_idx + 1, :, i2[q_idx]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
 
             # Second-last query block
             # corresponding to `second_last_context_layer`
@@ -913,17 +907,12 @@ class BigBirdBlockSparseAttention(nn.Module):
             ]  # last three blocks (global + sliding)
             # random keys
             for p1, i1, w1 in zip(range(bsz), rand_attn, second_last_attn_weights):
+                # p1, i1, w1 corresponds to batch_dim i.e. following operation is done for each sequence in batch
                 for p2, i2, w2 in zip(range(n_heads), i1, w1):
-                    attention_probs.view(
-                        bsz,
-                        n_heads,
-                        from_seq_len // from_block_size,
-                        from_block_size,
-                        to_seq_len // to_block_size,
-                        to_block_size,
-                    )[p1, p2, -2, :, i2[-1]] = w2[:, 4 * to_block_size :].view(
-                        from_block_size, n_rand_blocks, to_block_size
-                    )
+                    # p2, i2, w2 corresponds to head_dim i.e. following operation is done for each heads
+                    attn_probs_view = attention_probs.view(bsz, n_heads, from_seq_len // from_block_size, from_block_size, to_seq_len // to_block_size, to_block_size,)
+                    right_slice = w2[:, 4 * to_block_size :]
+                    attn_probs_view[p1, p2, -2, :, i2[-1]] = right_slice.view(from_block_size, n_rand_blocks, to_block_size)
 
             # last query block
             # corresponding to `last_context_layer`
@@ -2857,7 +2846,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @add_start_docstrings_to_model_forward(BIG_BIRD_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="google/bigbird-base-trivia-itc",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
