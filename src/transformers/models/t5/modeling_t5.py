@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...debug_utils import detect_oveflow
+from ...debug_utils import detect_overflow
 from ...file_utils import (
     DUMMY_INPUTS,
     DUMMY_MASK,
@@ -240,16 +240,16 @@ class T5LayerNorm(nn.Module):
         # layer norm should always be calculated in float32
         # XXX: getting variance=inf for some entries here in layer3
 
-        detect_oveflow(hidden_states, "T5LayerNorm")
+        detect_overflow(hidden_states, "T5LayerNorm")
         variance = hidden_states.to(torch.float32).pow(2).mean(-1, keepdim=True)
-        detect_oveflow(variance, "T5LayerNorm variance")
+        detect_overflow(variance, "T5LayerNorm variance")
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        detect_oveflow(hidden_states, "T5LayerNorm hidden_states")
+        detect_overflow(hidden_states, "T5LayerNorm hidden_states")
 
         # convert into float16 if necessary
         # if self.weight.dtype == torch.float16:
         #    hidden_states = hidden_states.to(torch.float16)
-        detect_oveflow(hidden_states, "T5LayerNorm hidden_states before return")
+        detect_overflow(hidden_states, "T5LayerNorm hidden_states before return")
         return self.weight * hidden_states
 
 
@@ -279,16 +279,16 @@ class T5DenseGatedGeluDense(nn.Module):
 
     def forward(self, hidden_states):
         hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
-        detect_oveflow(hidden_gelu, "gelu 1")
+        detect_overflow(hidden_gelu, "gelu 1")
         hidden_linear = self.wi_1(hidden_states)
-        detect_oveflow(hidden_linear, "gelu 2")
+        detect_overflow(hidden_linear, "gelu 2")
         hidden_states = hidden_gelu * hidden_linear
-        detect_oveflow(hidden_states, "gelu 3")
+        detect_overflow(hidden_states, "gelu 3")
         hidden_states = self.dropout(hidden_states)
-        detect_oveflow(hidden_states, "gelu 4")
+        detect_overflow(hidden_states, "gelu 4")
         # with torch.cuda.amp.autocast(enabled=False):
         hidden_states = self.wo(hidden_states)
-        detect_oveflow(hidden_states, "gelu 5")
+        detect_overflow(hidden_states, "gelu 5")
         return hidden_states
 
 
@@ -308,14 +308,14 @@ class T5LayerFF(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
-        detect_oveflow(hidden_states, "T5LayerFF: 1")
+        detect_overflow(hidden_states, "T5LayerFF: 1")
         with torch.cuda.amp.autocast(enabled=False):
             forwarded_states = self.layer_norm(hidden_states)
-            detect_oveflow(forwarded_states, "T5LayerFF: 2")
+            detect_overflow(forwarded_states, "T5LayerFF: 2")
             forwarded_states = self.DenseReluDense(forwarded_states)
-            detect_oveflow(forwarded_states, "T5LayerFF: 3")
+            detect_overflow(forwarded_states, "T5LayerFF: 3")
             hidden_states = hidden_states + self.dropout(forwarded_states)
-            detect_oveflow(hidden_states, "T5LayerFF: 5")
+            detect_overflow(hidden_states, "T5LayerFF: 5")
         return hidden_states
 
 
@@ -648,7 +648,7 @@ class T5Block(nn.Module):
         else:
             self_attn_past_key_value, cross_attn_past_key_value = None, None
 
-        detect_oveflow(hidden_states, "T5Block")
+        detect_overflow(hidden_states, "T5Block")
         self_attention_outputs = self.layer[0](
             hidden_states,
             attention_mask=attention_mask,
@@ -661,7 +661,7 @@ class T5Block(nn.Module):
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
 
-        detect_oveflow(hidden_states, "T5Block after T5LayerSelfAttention")
+        detect_overflow(hidden_states, "T5Block after T5LayerSelfAttention")
 
         # clamp inf values to enable fp16 training
         # if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -702,10 +702,10 @@ class T5Block(nn.Module):
             # Keep cross-attention outputs and relative position weights
             attention_outputs = attention_outputs + cross_attention_outputs[2:]
 
-        detect_oveflow(hidden_states, "T5Block before T5LayerFF")
+        detect_overflow(hidden_states, "T5Block before T5LayerFF")
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
-        detect_oveflow(hidden_states, "T5Block after T5LayerFF")
+        detect_overflow(hidden_states, "T5Block after T5LayerFF")
 
         # clamp inf values to enable fp16 training
         if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
@@ -945,15 +945,15 @@ class T5Stack(T5PreTrainedModel):
         all_cross_attentions = () if (output_attentions and self.is_decoder) else None
         position_bias = None
         encoder_decoder_position_bias = None
-        detect_oveflow(inputs_embeds, "T5Stack first init: input_embeds")
+        detect_overflow(inputs_embeds, "T5Stack first init: input_embeds")
         hidden_states = self.dropout(inputs_embeds)
-        detect_oveflow(hidden_states, "T5Stack first init: hidden_states")
+        detect_overflow(hidden_states, "T5Stack first init: hidden_states")
 
         for i, (layer_module, past_key_value) in enumerate(zip(self.block, past_key_values)):
             layer_head_mask = head_mask[i]
             encoder_layer_head_mask = encoder_head_mask[i]
 
-            detect_oveflow(hidden_states, "T5Stack loop start")
+            detect_overflow(hidden_states, "T5Stack loop start")
 
             # Model parallel
             if self.model_parallel:
@@ -993,7 +993,7 @@ class T5Stack(T5PreTrainedModel):
             # hidden-states, key-value-states, (self-attention weights), (self-attention position bias), (cross-attention weights), (cross-attention position bias)
             hidden_states, present_key_value_state = layer_outputs[:2]
 
-            detect_oveflow(hidden_states, "T5Stack loop end")
+            detect_overflow(hidden_states, "T5Stack loop end")
 
             # We share the position biases between the layers - the first layer store them
             # layer_outputs = hidden-states, key-value-states (self-attention weights),

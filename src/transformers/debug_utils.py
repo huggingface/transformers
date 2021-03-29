@@ -31,7 +31,6 @@ def detect_overflow(var, ctx):
         var: tensor variable to check
         ctx: the message to print as a context
     """
-    pass
     if torch.isnan(var).any().item():
         logger.warning(f"{ctx} has nans")
     if torch.isinf(var).any().item():
