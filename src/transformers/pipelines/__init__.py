@@ -34,7 +34,7 @@ from .base import (
     PipelineDataFormat,
     PipelineException,
     get_default_model,
-    get_framework,
+    infer_framework_from_model,
 )
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -341,10 +341,6 @@ def pipeline(
         # At that point framework might still be undetermined
         model = get_default_model(targeted_task, framework, task_options)
 
-    framework = framework or get_framework(model)
-
-    task_class, model_class = targeted_task["impl"], targeted_task[framework]
-
     # Try to infer tokenizer from model or config name (if provided as str)
     if tokenizer is None:
         if isinstance(model, str):
@@ -364,6 +360,12 @@ def pipeline(
         modelcard = model
     elif isinstance(config, str):
         modelcard = config
+
+    # Infer the framework form the model
+    if framework is None:
+        framework, model = infer_framework_from_model(model, targeted_task, revision=revision)
+
+    task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
@@ -406,16 +408,15 @@ def pipeline(
             )
 
         model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
-        if task == "translation" and model.config.task_specific_params:
-            for key in model.config.task_specific_params:
-                if key.startswith("translation"):
-                    task = key
-                    warnings.warn(
-                        '"translation" task was used, instead of "translation_XX_to_YY", defaulting to "{}"'.format(
-                            task
-                        ),
-                        UserWarning,
-                    )
-                    break
+
+    if task == "translation" and model.config.task_specific_params:
+        for key in model.config.task_specific_params:
+            if key.startswith("translation"):
+                task = key
+                warnings.warn(
+                    f'"translation" task was used, instead of "translation_XX_to_YY", defaulting to "{task}"',
+                    UserWarning,
+                )
+                break
 
     return task_class(model=model, tokenizer=tokenizer, modelcard=modelcard, framework=framework, task=task, **kwargs)
