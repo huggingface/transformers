@@ -249,6 +249,7 @@ class BertSelfAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         mixed_query_layer = self.query(hidden_states)
 
@@ -312,7 +313,7 @@ class BertSelfAttention(nn.Module):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = nn.Softmax(dim=-1)(attention_scores)
+        attention_probs = nn.Softmax(dim=-1)(attention_scores) * attention_weights_scalar
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
@@ -383,6 +384,7 @@ class BertAttention(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         self_outputs = self.self(
             hidden_states,
@@ -392,6 +394,7 @@ class BertAttention(nn.Module):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            attention_weights_scalar,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -450,6 +453,7 @@ class BertLayer(nn.Module):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -458,6 +462,7 @@ class BertLayer(nn.Module):
             attention_mask,
             head_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
@@ -485,6 +490,7 @@ class BertLayer(nn.Module):
                 encoder_attention_mask,
                 cross_attn_past_key_value,
                 output_attentions,
+                attention_weights_scalar,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
@@ -494,7 +500,10 @@ class BertLayer(nn.Module):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
+            self.feed_forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
         outputs = (layer_output,) + outputs
 
@@ -526,6 +535,7 @@ class BertEncoder(nn.Module):
         past_key_values=None,
         use_cache=None,
         output_attentions=False,
+        attention_weights_scalar=1.0,
         output_hidden_states=False,
         return_dict=True,
     ):
@@ -552,7 +562,7 @@ class BertEncoder(nn.Module):
 
                 def create_custom_forward(module):
                     def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
+                        return module(*inputs, past_key_value, output_attentions, attention_weights_scalar)
 
                     return custom_forward
 
@@ -573,6 +583,7 @@ class BertEncoder(nn.Module):
                     encoder_attention_mask,
                     past_key_value,
                     output_attentions,
+                    attention_weights_scalar,
                 )
 
             hidden_states = layer_outputs[0]
@@ -813,6 +824,10 @@ BERT_INPUTS_DOCSTRING = r"""
         output_attentions (:obj:`bool`, `optional`):
             Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under returned
             tensors for more detail.
+        attention_weights_scalar ():obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+            For analyzing BERT models. It is multiplied by the attention weights, i.e., Softmax(Q*K'). Default is 1.0.
+
+            More details regarding this method can be found in the original paper: https://arxiv.org/abs/2004.11207
         output_hidden_states (:obj:`bool`, `optional`):
             Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors for
             more detail.
@@ -884,6 +899,7 @@ class BertModel(BertPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -908,6 +924,7 @@ class BertModel(BertPreTrainedModel):
             decoding (see :obj:`past_key_values`).
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        attention_weights_scalar = attention_weights_scalar
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -977,6 +994,7 @@ class BertModel(BertPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            attention_weights_scalar=attention_weights_scalar,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1031,6 +1049,7 @@ class BertForPreTraining(BertPreTrainedModel):
         labels=None,
         next_sentence_label=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1074,6 +1093,7 @@ class BertForPreTraining(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1142,6 +1162,7 @@ class BertLMHeadModel(BertPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1202,6 +1223,7 @@ class BertLMHeadModel(BertPreTrainedModel):
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1294,6 +1316,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         encoder_attention_mask=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1316,6 +1339,7 @@ class BertForMaskedLM(BertPreTrainedModel):
             encoder_hidden_states=encoder_hidden_states,
             encoder_attention_mask=encoder_attention_mask,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1379,6 +1403,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
         **kwargs
@@ -1427,6 +1452,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1487,6 +1513,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1506,6 +1533,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1571,6 +1599,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1601,6 +1630,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1666,6 +1696,7 @@ class BertForTokenClassification(BertPreTrainedModel):
         inputs_embeds=None,
         labels=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1684,6 +1715,7 @@ class BertForTokenClassification(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
@@ -1757,6 +1789,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         start_positions=None,
         end_positions=None,
         output_attentions=None,
+        attention_weights_scalar=1.0,
         output_hidden_states=None,
         return_dict=None,
     ):
@@ -1780,6 +1813,7 @@ class BertForQuestionAnswering(BertPreTrainedModel):
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
+            attention_weights_scalar=1.0,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
