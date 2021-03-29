@@ -45,13 +45,13 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             :obj:`inputs_ids` passed when calling :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model` or
             :class:`~transformers.TF{{cookiecutter.camelcase_modelname}}Model`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
+            Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (:obj:`int`, `optional`, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (:obj:`int`, `optional`, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            Dimension of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler.
             If string, :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
@@ -80,7 +80,7 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
             :obj:`inputs_ids` passed when calling :class:`~transformers.{{cookiecutter.camelcase_modelname}}Model` or
             :class:`~transformers.TF{{cookiecutter.camelcase_modelname}}Model`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
-            Dimensionality of the layers and the pooler layer.
+            Dimension of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 12):
             Number of encoder layers.
         decoder_layers (:obj:`int`, `optional`, defaults to 12):
@@ -90,9 +90,9 @@ class {{cookiecutter.camelcase_modelname}}Config(PretrainedConfig):
         decoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer decoder.
         decoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
