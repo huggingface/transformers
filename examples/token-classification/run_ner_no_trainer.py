@@ -159,6 +159,11 @@ def parse_args():
         choices=MODEL_TYPES,
     )
     parser.add_argument(
+        "--label_all_tokens",
+        action="store_true",
+        help="Setting labels of all special tokens to -100 and thus PyTorch will ignore them.",
+    )
+    parser.add_argument(
         "--return_entity_level_metrics",
         action="store_true",
         help="Indication whether entity level metrics are to be returner.",
