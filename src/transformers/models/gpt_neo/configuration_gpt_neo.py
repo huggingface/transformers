@@ -149,6 +149,9 @@ class GPTNeoConfig(PretrainedConfig):
         self.attention_types = attention_types
         self.attention_layers = self.expand_attention_types_params(attention_types)
 
+        # GPTNeo uses the GPT2Tokenizer
+        self.tokenizer_class = "GPT2Tokenizer"
+
     @staticmethod
     def expand_attention_types_params(attention_types):
         attentions = []
