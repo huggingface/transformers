@@ -47,13 +47,20 @@ test_dataset = materialDataset(test_encodings, test_labels)
 
 metric = load_metric("glue", 'mrpc', cache_dir='./metric_dir')
 
+is_regression = False
+task_name = "material_paragraphy_classify"
+
 
 def compute_metrics(p: EvalPrediction):
     preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
-    result = metric.compute(predictions=preds, references=p.label_ids)
-    if len(result) > 1:
-        result["combined_score"] = np.mean(list(result.values())).item()
+    preds = np.squeeze(preds) if is_regression else np.argmax(preds, axis=1)
+    if task_name is not None:
+        result = metric.compute(predictions=preds, references=p.label_ids)
+        if len(result) > 1:
+            result["combined_score"] = np.mean(list(result.values())).item()
         return result
+    elif is_regression:
+        return {"mse": ((preds - p.label_ids) ** 2).mean().item()}
     else:
         return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
@@ -76,7 +83,7 @@ trainer = Trainer(
     args=training_args,  # training arguments, defined above
     train_dataset=train_dataset,  # training dataset
     eval_dataset=test_dataset,  # evaluation dataset
-    # compute_metrics=compute_metrics
+    compute_metrics=compute_metrics
 )
 
 trainer.train()
