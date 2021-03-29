@@ -17,12 +17,11 @@
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
-from ...image_utils import ImageFeatureExtractionMixin
+from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
 
@@ -61,7 +60,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def __call__(
         self,
-        images: Union[Image.Image, np.ndarray, torch.Tensor, List[Image.Image], List[np.ndarray], List[torch.Tensor]],
+        images: Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]],
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
@@ -96,10 +95,10 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         valid_images = False
 
         # Check that images has a valid type
-        if isinstance(images, (Image.Image, np.ndarray, torch.Tensor)):
+        if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
             valid_images = True
         elif isinstance(images, (list, tuple)):
-            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray, torch.Tensor)):
+            if len(images) == 0 or isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]):
                 valid_images = True
 
         if not valid_images:
@@ -109,7 +108,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             )
 
         is_batched = bool(
-            isinstance(images, (list, tuple)) and (isinstance(images[0], (Image.Image, np.ndarray, torch.Tensor)))
+            isinstance(images, (list, tuple)) and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
         )
 
         if not is_batched:

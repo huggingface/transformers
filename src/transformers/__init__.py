@@ -347,6 +347,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -1281,10 +1282,6 @@ else:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 
-# Vision-backed objects
-if is_vision_available():
-    _import_structure["models.vit"].append("ViTFeatureExtractor")
-
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -1573,6 +1570,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
@@ -2347,11 +2345,7 @@ if TYPE_CHECKING:
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
-        from .utils.dummy_flax_objects import *
-
-    # Vision-backed objects
-    if is_vision_available():
-        from .models.vit import ViTFeatureExtractor
+        from .utils.dummy_flax_objects import *    
 
 else:
     import importlib

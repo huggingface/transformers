@@ -141,12 +141,7 @@ def read_in_q_k_v(state_dict, config, base_model=False):
 
 
 def remove_classification_head_(state_dict):
-    ignore_keys = [
-        "norm.weight",
-        "norm.bias",
-        "head.weight",
-        "head.bias",
-    ]
+    ignore_keys = ["norm.weight", "norm.bias", "head.weight", "head.bias"]
     for k in ignore_keys:
         state_dict.pop(k, None)
 
