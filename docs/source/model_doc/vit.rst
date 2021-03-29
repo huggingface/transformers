@@ -16,8 +16,8 @@ Vision Transformer (ViT)
 .. note::
 
     This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight
-    breaking changes to fix it in the future. Note that the API of :class:`~transformers.ViTFeatureExtractor` will
-    change in the future, when more frameworks than just PyTorch are supported.
+    breaking changes to fix it in the future. If you see something strange, file a `Github Issue
+    <https://github.com/huggingface/transformers/issues/new?assignees=&labels=&template=bug-report.md&title>`__.
 
 
 Overview
