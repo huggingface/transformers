@@ -45,11 +45,11 @@ eval_loss = 0.44457291918821606
 
 Based on the script [run_ner_no_trainer.py](https://github.com/huggingface/transformers/blob/master/examples/multiple-choice/run_swag_no_trainer.py).
 
-Like `run_swag.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) on (as long as its architecture as a `ForMultipleChoice` version in the library)
+Like `run_swag.py`, this script allows you to fine-tune any of the models on the [hub](https://huggingface.co/models) (as long as its architecture as a `ForMultipleChoice` version in the library) on
 the SWAG dataset or your own data in a csv or a JSON file. The main difference is that this
 script exposes the bare training loop, to allow you to quickly experiment and add any customization you would like.
 
-It offers less options than the script with `Trainer` (for instance you can easily change the options for the optimizer
+It offers less options than the script with `Trainer` (but you can easily change the options for the optimizer
 or the dataloaders directly in the script) but still run in a distributed setup, on TPU and supports mixed precision by
 the mean of the [🤗 `Accelerate`](https://github.com/huggingface/accelerate) library. You can use the script normally
 after installing it:
@@ -85,7 +85,7 @@ and reply to the questions asked. Then
 accelerate test
 ```
 
-that will check everything is ready for training. Finally, you cna launch training with
+that will check everything is ready for training. Finally, you can launch training with
 
 ```bash
 export DATASET_NAME=swag

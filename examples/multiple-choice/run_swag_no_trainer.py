@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning a 🤗 Transformers model on multiple choice relying on the accelerate library withou using a Trainer.
+Fine-tuning a 🤗 Transformers model on multiple choice relying on the accelerate library without using a Trainer.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
