@@ -496,10 +496,18 @@ class Trainer:
 
         # Build the sampler.
         if self.args.group_by_length:
+            if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
+                lengths = (
+                    self.train_dataset[self.args.length_column_name]
+                    if self.args.length_column_name in self.train_dataset.column_names
+                    else None
+                )
+            else:
+                lengths = None
             model_input_name = self.tokenizer.model_input_names[0] if self.tokenizer is not None else None
             if self.args.world_size <= 1:
                 return LengthGroupedSampler(
-                    self.train_dataset, self.args.train_batch_size, model_input_name=model_input_name
+                    self.train_dataset, self.args.train_batch_size, lengths=lengths, model_input_name=model_input_name
                 )
             else:
                 return DistributedLengthGroupedSampler(
@@ -507,6 +515,7 @@ class Trainer:
                     self.args.train_batch_size,
                     num_replicas=self.args.world_size,
                     rank=self.args.process_index,
+                    lengths=lengths,
                     model_input_name=model_input_name,
                 )
 
