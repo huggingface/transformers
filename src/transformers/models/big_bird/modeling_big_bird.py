@@ -234,8 +234,8 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
         tf_weights.pop(txt_name, None)
         pt_names.remove(pt_weight_name)
 
-    logger.info("Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}."
-    logger.info("Weights not initialized in PyTorch model: {', '.join(pt_names)}."
+    logger.info("Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}.")
+    logger.info("Weights not initialized in PyTorch model: {', '.join(pt_names)}.")
     return model
 
 
