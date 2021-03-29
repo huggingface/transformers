@@ -18,5 +18,4 @@ accelerate launch run_ner_no_trainer.py \
   --output_dir /tmp/test-ner \
   --pad_to_max_length \
   --task_name ner \
-  --return_entity_level_metrics \
-  --debug
+  --return_entity_level_metrics
