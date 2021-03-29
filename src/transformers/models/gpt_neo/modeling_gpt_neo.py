@@ -130,7 +130,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     return model
 
 
-class Attention(nn.Module):
+class GPTNeoSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -232,7 +232,7 @@ class Attention(nn.Module):
         return (a, present) + attn_outputs[1:]  # a, present, (attentions)
 
 
-class LocalAttention(nn.Module):
+class GPTNeoLocalSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
@@ -287,8 +287,8 @@ class LocalAttention(nn.Module):
         new_x_shape = x.size()[:-2] + (x.size(-2) * x.size(-1),)
         return x.view(*new_x_shape)
 
-    def create_buckets(self, tensor, num_buckets, block_length):
-        return tensor.reshape(tensor.size()[0], num_buckets, block_length, -1)
+    def _split_seq_length_dim_to(self, tensors, num_blocks, block_length):
+        return tensors.reshape(tensors.size()[0], num_blocks, block_length, -1)
 
     def create_attention_mask(self, bs, seq_len, windows, block_length, attention_mask):
         ticker = torch.arange(seq_len)[None, :]
@@ -366,17 +366,17 @@ class LocalAttention(nn.Module):
         block_length = self.window_size
         while full_seq_length % block_length != 0:
             block_length -= 1
-        windows = full_seq_length // block_length
+        num_blocks = full_seq_length // block_length
 
         # create buckets
         if layer_past is not None:
             # we just need 1 window with block_length 1 when caching is enabled
-            query = self.create_buckets(query, 1, 1)
+            query = self._split_seq_length_dim_to(query, 1, 1)
         else:
-            query = self.create_buckets(query, windows, block_length)
+            query = self._split_seq_length_dim_to(query, num_blocks, block_length)
 
-        key = self.create_buckets(key, windows, block_length)
-        value = self.create_buckets(value, windows, block_length)
+        key = self._split_seq_length_dim_to(key, num_blocks, block_length)
+        value = self._split_seq_length_dim_to(value, num_blocks, block_length)
 
         key = self.look_around(key, block_length, self.window_size)
         value = self.look_around(value, block_length, self.window_size)
@@ -390,7 +390,7 @@ class LocalAttention(nn.Module):
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        mask = self.create_attention_mask(bs, full_seq_length, windows, block_length, attention_mask)
+        mask = self.create_attention_mask(bs, full_seq_length, num_blocks, block_length, attention_mask)
         if layer_past is not None:
             mask = mask[:, -1:, :, -1:, :]  # only take the mask for the last window
         mask = mask.to(hidden_states.device)
@@ -415,9 +415,9 @@ class GPTNeoAttention(nn.Module):
         self.attention_type = self.attention_layers[layer_id]
 
         if self.attention_type == "global":
-            self.attention = Attention(config)
+            self.attention = GPTNeoSelfAttention(config)
         elif self.attention_type == "local":
-            self.attention = LocalAttention(config)
+            self.attention = GPTNeoLocalSelfAttention(config)
         else:
             raise NotImplementedError(
                 "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: {}. Select attn layer types from ['global', 'local'] only.".format(
