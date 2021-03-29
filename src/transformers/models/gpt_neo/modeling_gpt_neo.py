@@ -143,8 +143,8 @@ class Attention(nn.Module):
         )
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.attn_dropout = nn.Dropout(config.attention_dropout)
+        self.resid_dropout = nn.Dropout(config.resid_dropout)
 
         self.embed_dim = config.n_embd
         self.num_heads = config.n_head
@@ -238,8 +238,8 @@ class LocalAttention(nn.Module):
 
         self.register_buffer("masked_bias", torch.tensor(-1e9))
 
-        self.attn_dropout = nn.Dropout(config.attn_pdrop)
-        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+        self.attn_dropout = nn.Dropout(config.attention_dropout)
+        self.resid_dropout = nn.Dropout(config.resid_dropout)
 
         self.embed_dim = config.n_embd
         self.num_heads = config.n_head
@@ -453,7 +453,7 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(nx, n_state)
         self.c_proj = nn.Linear(n_state, nx)
         self.act = ACT2FN[config.activation_function]
-        self.dropout = nn.Dropout(config.resid_pdrop)
+        self.dropout = nn.Dropout(config.resid_dropout)
 
     def forward(self, x):
         h = self.act(self.c_fc(x))
@@ -629,7 +629,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         self.wte = nn.Embedding(config.vocab_size, config.n_embd)
         self.wpe = nn.Embedding(config.n_positions, config.n_embd)
-        self.drop = nn.Dropout(config.embd_pdrop)
+        self.drop = nn.Dropout(config.embed_dropout)
         self.h = nn.ModuleList([Block(config, layer_id=i) for i in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
 

@@ -51,7 +51,7 @@ class GPTNeoModelTester:
         vocab_size=99,
         hidden_size=32,
         num_hidden_layers=4,
-        attn_layers=("global", "local", "global", "local"),
+        attention_types=[[["global", "local"], 2]],
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -92,7 +92,7 @@ class GPTNeoModelTester:
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
         self.chunk_length = window_size
-        self.attn_layers = attn_layers
+        self.attention_types = attention_types
 
     def get_large_model_config(self):
         return GPTNeoConfig.from_pretrained("gpt_neo")
@@ -133,7 +133,7 @@ class GPTNeoModelTester:
             pad_token_id=self.pad_token_id,
             gradient_checkpointing=gradient_checkpointing,
             window_size=self.window_size,
-            attn_layers=self.attn_layers,
+            attention_types=self.attention_types,
         )
 
         head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)

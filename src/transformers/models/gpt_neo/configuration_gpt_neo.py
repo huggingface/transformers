@@ -29,7 +29,7 @@ GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class GPTNeoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.GPTNeoModel`. It is used to
-    instantiate an GPTNeo model according to the specified arguments, defining the model architecture. Instantiating a
+    instantiate a GPT Neo model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the GPTNeo `gpt_neo_xl
     <https://huggingface.co/eleutherai/gpt_neo_xl>`__ architecture.
 
@@ -38,30 +38,31 @@ class GPTNeoConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+        vocab_size (:obj:`int`, `optional`, defaults to 50257):
             Vocabulary size of the GPTNeo model. Defines the number of different tokens that can be represented by the
             :obj:`inputs_ids` passed when calling :class:`~transformers.GPTNeoModel` or
             :class:`~transformers.TFGPTNeoModel`. Vocabulary size of the model. Defines the different tokens that can
             be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.GPTNeoModel`.
-        attn_layers (:obj:`Tuple[str]`, `optional`, defaults to :obj:`("global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local","global","local")`):
-            Tuple of attention layer types in ascending order. It can be chosen between a :obj:`Attention` layer
-            (:obj:`"global"`) and a :obj:`LocalAttention` layer (:obj:`"local"`).
-        hidden_size (:obj:`int`, `optional`, defaults to 768):
+        attention_types (:obj:`List`, `optional`, defaults to :obj:`[[["global", "local"], 12]]`):
+            The type of attention for each layer in a :obj:`List` of the following format :obj:`[[["attention_type"],
+            n_layers]]` e.g. for a 24 layer model :obj:`[[["global"], 24]]` or :obj:`[[["global", "local"], 12]]`
+            Choose the value of ``attention_type`` from :obj:`["global", "local"]`
+        n_embd (:obj:`int`, `optional`, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
+        n_layer (:obj:`int`, `optional`, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (:obj:`int`, `optional`, defaults to 12):
+        n_head (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (:obj:`int`, `optional`, defaults to 3072):
+        n_inner (:obj:`int`, `optional`, defaults to 8192):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        hidden_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        embed_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (:obj:`float`, `optional`, defaults to 0.1):
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 512):
+        n_ctx (:obj:`int`, `optional`, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
@@ -69,7 +70,7 @@ class GPTNeoConfig(PretrainedConfig):
             :class:`~transformers.TFGPTNeoModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
+        layer_norm_epsilon (:obj:`float`, `optional`, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -99,39 +100,14 @@ class GPTNeoConfig(PretrainedConfig):
         n_ctx=2048,
         n_embd=2048,
         n_layer=24,
-        attn_layers=(
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-            "global",
-            "local",
-        ),
+        attention_types=[[["global", "local"], 12]],
         n_head=16,
         n_inner=None,
         window_size=256,
         activation_function="gelu_new",
-        resid_pdrop=0.1,
-        embd_pdrop=0.1,
-        attn_pdrop=0.1,
+        resid_dropout=0.0,
+        embed_dropout=0.0,
+        attention_dropout=0.0,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
         summary_type="cls_index",
@@ -156,9 +132,9 @@ class GPTNeoConfig(PretrainedConfig):
         self.n_inner = n_inner
         self.window_size = window_size
         self.activation_function = activation_function
-        self.resid_pdrop = resid_pdrop
-        self.embd_pdrop = embd_pdrop
-        self.attn_pdrop = attn_pdrop
+        self.resid_dropout = resid_dropout
+        self.embed_dropout = embed_dropout
+        self.attention_dropout = attention_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
         self.summary_type = summary_type
@@ -172,7 +148,16 @@ class GPTNeoConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        self.attn_layers = list(attn_layers)
+        self.attention_types = attention_types
+        self.attn_layers = self.expand_attention_types_params(attention_types)
+
+    @staticmethod
+    def expand_attention_types_params(attention_types):
+        attentions = []
+        for item in attention_types:
+            for _ in range(item[1]):
+                attentions.extend(item[0])
+        return attentions
 
     @property
     def max_position_embeddings(self):
