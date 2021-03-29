@@ -45,24 +45,24 @@ class GPTNeoConfig(PretrainedConfig):
             be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.GPTNeoModel`.
         attention_types (:obj:`List`, `optional`, defaults to :obj:`[[["global", "local"], 12]]`):
             The type of attention for each layer in a :obj:`List` of the following format :obj:`[[["attention_type"],
-            n_layers]]` e.g. for a 24 layer model :obj:`[[["global"], 24]]` or :obj:`[[["global", "local"], 12]]`
+            num_layerss]]` e.g. for a 24 layer model :obj:`[[["global"], 24]]` or :obj:`[[["global", "local"], 12]]`
             Choose the value of ``attention_type`` from :obj:`["global", "local"]`
-        n_embd (:obj:`int`, `optional`, defaults to 2048):
+        hidden_size (:obj:`int`, `optional`, defaults to 2048):
             Dimensionality of the encoder layers and the pooler layer.
-        n_layer (:obj:`int`, `optional`, defaults to 24):
+        num_layers (:obj:`int`, `optional`, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        n_head (:obj:`int`, `optional`, defaults to 16):
+        num_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        n_inner (:obj:`int`, `optional`, defaults to 8192):
+        intermediate_size (:obj:`int`, `optional`, defaults to 8192):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
             :obj:`"gelu"`, :obj:`"relu"`, :obj:`"selu"` and :obj:`"gelu_new"` are supported.
-        embed_dropout (:obj:`float`, `optional`, defaults to 0.1):
+        embed_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout probabilitiy for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (:obj:`float`, `optional`, defaults to 0.1):
+        attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        n_ctx (:obj:`int`, `optional`, defaults to 512):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
@@ -96,13 +96,12 @@ class GPTNeoConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=50257,
-        n_positions=2048,
-        n_ctx=2048,
-        n_embd=2048,
-        n_layer=24,
+        max_position_embeddings=2048,
+        hidden_size=2048,
+        num_layers=24,
         attention_types=[[["global", "local"], 12]],
-        n_head=16,
-        n_inner=None,
+        num_heads=16,
+        intermediate_size=None,
         window_size=256,
         activation_function="gelu_new",
         resid_dropout=0.0,
@@ -124,12 +123,11 @@ class GPTNeoConfig(PretrainedConfig):
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
 
         self.vocab_size = vocab_size
-        self.n_ctx = n_ctx
-        self.n_positions = n_positions
-        self.n_embd = n_embd
-        self.n_layer = n_layer
-        self.n_head = n_head
-        self.n_inner = n_inner
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.num_layers = num_layers
+        self.num_heads = num_heads
+        self.intermediate_size = intermediate_size
         self.window_size = window_size
         self.activation_function = activation_function
         self.resid_dropout = resid_dropout
@@ -160,17 +158,9 @@ class GPTNeoConfig(PretrainedConfig):
         return attentions
 
     @property
-    def max_position_embeddings(self):
-        return self.n_positions
-
-    @property
-    def hidden_size(self):
-        return self.n_embd
-
-    @property
     def num_attention_heads(self):
-        return self.n_head
+        return self.num_heads
 
     @property
     def num_hidden_layers(self):
-        return self.n_layer
+        return self.num_layers

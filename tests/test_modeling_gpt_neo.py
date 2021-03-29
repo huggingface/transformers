@@ -122,11 +122,10 @@ class GPTNeoModelTester:
 
         config = GPTNeoConfig(
             vocab_size=self.vocab_size,
-            n_embd=self.hidden_size,
-            n_layer=self.num_hidden_layers,
-            n_head=self.num_attention_heads,
-            n_positions=self.max_position_embeddings,
-            n_ctx=self.max_position_embeddings,
+            hidden_size=self.hidden_size,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            max_position_embeddings=self.max_position_embeddings,
             use_cache=not gradient_checkpointing,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,

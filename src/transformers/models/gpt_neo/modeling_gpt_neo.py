@@ -134,7 +134,7 @@ class Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        max_positions = config.n_ctx
+        max_positions = config.max_position_embeddings
         self.register_buffer(
             "bias",
             torch.tril(torch.ones((max_positions, max_positions), dtype=torch.uint8)).view(
@@ -146,8 +146,8 @@ class Attention(nn.Module):
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.resid_dropout)
 
-        self.embed_dim = config.n_embd
-        self.num_heads = config.n_head
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
         assert (
             self.head_dim * self.num_heads == self.embed_dim
@@ -241,8 +241,8 @@ class LocalAttention(nn.Module):
         self.attn_dropout = nn.Dropout(config.attention_dropout)
         self.resid_dropout = nn.Dropout(config.resid_dropout)
 
-        self.embed_dim = config.n_embd
-        self.num_heads = config.n_head
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_heads
         self.head_dim = self.embed_dim // self.num_heads
         assert (
             self.head_dim * self.num_heads == self.embed_dim
@@ -447,11 +447,11 @@ class GPTNeoAttention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, n_state, config):  # in MLP: n_state=3072 (4 * n_embd)
+    def __init__(self, intermediate_size, config):  # in MLP: intermediate_size= 4 * hidden_size
         super().__init__()
-        nx = config.n_embd
-        self.c_fc = nn.Linear(nx, n_state)
-        self.c_proj = nn.Linear(n_state, nx)
+        embed_dim = config.hidden_size
+        self.c_fc = nn.Linear(embed_dim, intermediate_size)
+        self.c_proj = nn.Linear(intermediate_size, embed_dim)
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_dropout)
 
@@ -464,8 +464,8 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, config, layer_id):
         super().__init__()
-        hidden_size = config.n_embd
-        inner_dim = config.n_inner if config.n_inner is not None else 4 * hidden_size
+        hidden_size = config.hidden_size
+        inner_dim = config.intermediate_size if config.intermediate_size is not None else 4 * hidden_size
         self.ln_1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
         self.attn = GPTNeoAttention(config, layer_id)
         self.ln_2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_epsilon)
@@ -567,7 +567,7 @@ GPT_NEO_INPUTS_DOCSTRING = r"""
             details.
 
             `What are input IDs? <../glossary.html#input-ids>`__
-        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers`):
+        past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.num_layers`):
             Contains precomputed hidden-states (key and values in the attention blocks) as computed by the model (see
             :obj:`past_key_values` output below). Can be used to speed up sequential decoding. The ``input_ids`` which
             have their past given to this model should not be passed as ``input_ids`` as they have already been
@@ -627,11 +627,12 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.wte = nn.Embedding(config.vocab_size, config.n_embd)
-        self.wpe = nn.Embedding(config.n_positions, config.n_embd)
+        self.embed_dim = config.hidden_size
+        self.wte = nn.Embedding(config.vocab_size, self.embed_dim)
+        self.wpe = nn.Embedding(config.max_position_embeddings, self.embed_dim)
         self.drop = nn.Dropout(config.embed_dropout)
-        self.h = nn.ModuleList([Block(config, layer_id=i) for i in range(config.n_layer)])
-        self.ln_f = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+        self.h = nn.ModuleList([Block(config, layer_id=i) for i in range(config.num_layers)])
+        self.ln_f = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_epsilon)
 
         self.init_weights()
 
@@ -717,9 +718,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # head_mask has shape n_layer x batch x n_heads x N x N
-        head_mask = self.get_head_mask(head_mask, self.config.n_layer)
+        # attention_probs has shape bsz x num_headss x N x N
+        # head_mask has shape n_layer x batch x num_headss x N x N
+        head_mask = self.get_head_mask(head_mask, self.config.num_layers)
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
@@ -813,7 +814,7 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.transformer = GPTNeoModel(config)
-        self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         self.init_weights()
 
