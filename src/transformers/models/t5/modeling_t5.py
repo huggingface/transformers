@@ -328,9 +328,9 @@ class T5LayerFF(nn.Module):
             forwarded_states = self.DenseReluDense(forwarded_states)
             detect_nan_inf(forwarded_states, "T5LayerFF: 3")
             #with torch.cuda.amp.autocast(enabled=False):
-            x = self.dropout(forwarded_states.float())
-            detect_nan_inf(x, "T5LayerFF: 4")
-            hidden_states = hidden_states.float() + x.float()
+            # x = self.dropout(forwarded_states.float())
+            # detect_nan_inf(x, "T5LayerFF: 4")
+            hidden_states = hidden_states + self.dropout(forwarded_states)
             detect_nan_inf(hidden_states, "T5LayerFF: 5")
         return hidden_states
 
