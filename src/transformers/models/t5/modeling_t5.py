@@ -247,8 +247,8 @@ class T5LayerNorm(nn.Module):
         detect_overflow(hidden_states, "T5LayerNorm hidden_states")
 
         # convert into float16 if necessary
-        # if self.weight.dtype == torch.float16:
-        #    hidden_states = hidden_states.to(torch.float16)
+        if self.weight.dtype == torch.float16:
+           hidden_states = hidden_states.to(torch.float16)
         detect_overflow(hidden_states, "T5LayerNorm hidden_states before return")
         return self.weight * hidden_states
 
@@ -307,16 +307,25 @@ class T5LayerFF(nn.Module):
         self.layer_norm = T5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
-    def forward(self, hidden_states):
+    def _forward(self, hidden_states):
         detect_overflow(hidden_states, "T5LayerFF: 1")
-        with torch.cuda.amp.autocast(enabled=False):
-            forwarded_states = self.layer_norm(hidden_states)
-            detect_overflow(forwarded_states, "T5LayerFF: 2")
-            forwarded_states = self.DenseReluDense(forwarded_states)
-            detect_overflow(forwarded_states, "T5LayerFF: 3")
-            hidden_states = hidden_states + self.dropout(forwarded_states)
-            detect_overflow(hidden_states, "T5LayerFF: 5")
+        forwarded_states = self.layer_norm(hidden_states)
+        detect_overflow(forwarded_states, "T5LayerFF: 2")
+        forwarded_states = self.DenseReluDense(forwarded_states)
+        detect_overflow(forwarded_states, "T5LayerFF: 3")
+        hidden_states = hidden_states + self.dropout(forwarded_states)
+        detect_overflow(hidden_states, "T5LayerFF: 5")
         return hidden_states
+
+    def forward(self, hidden_states):
+        # many t5/mt5 models are trained in bfloat16 and don't do well under mixed precision (fp16).
+        # It appears that it's enough to disable autocast for this FF layer to avoid inf/nan
+        # problems for the whole model
+        if torch.is_autocast_enabled():
+            with torch.cuda.amp.autocast(enabled=False):
+                return self._forward(hidden_states)
+        else:
+            return self._forward(hidden_states)
 
 
 class T5Attention(nn.Module):
