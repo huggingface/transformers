@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch GPTNeo model. """
+""" Testing suite for the PyTorch GPT Neo model. """
 
 
 import unittest
@@ -64,7 +64,6 @@ class GPTNeoModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
-        scope=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,7 +88,6 @@ class GPTNeoModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
-        self.scope = None
         self.bos_token_id = vocab_size - 1
         self.eos_token_id = vocab_size - 1
         self.pad_token_id = vocab_size - 1
@@ -453,28 +451,9 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             model = GPTNeoForCausalLM.from_pretrained("eleutherai/gpt_neo_xl", gradient_checkpointing=checkpointing)
             model.to(torch_device)
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            expected_output_ids = [
-                464,
-                3290,
-                12,
-                3380,
-                4866,
-                286,
-                262,
-                1492,
-                11,
-                543,
-                318,
-                257,
-                4947,
-                286,
-                27126,
-                416,
-                262,
-                2739,
-                1772,
-                11,
-            ]  # The dog-eared copy of the book, which is a collection of essays by the late author,
+            # fmt: off
+            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # The dog-eared copy of the book, which is a collection of essays by the late author,
+            # fmt: on
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
 

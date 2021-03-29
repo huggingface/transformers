@@ -10,23 +10,23 @@
     an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
     specific language governing permissions and limitations under the License.
 
-EleutherAI GPT Neo
+GPT Neo
 -----------------------------------------------------------------------------------------------------------------------
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The GPTNeo model was released in the `EleutherAI/gpt-neo <https://github.com/EleutherAI/gpt-neo>`__ repository by Sid
-black, and Stella Biderman. It is a GPT2 like causal language model trained on the `Pile <https://pile.eleuther.ai/>`__
-dataset.
+Black, Stella Biderman, Leo Gao, Phil Wang and Connor Leahy. It is a GPT2 like causal language model trained on the
+`Pile <https://pile.eleuther.ai/>`__ dataset.
 
-The architecture is similar to GPT2 except the GPT Neo model uses local attention <> in every other layer with 256
-window size so a token can only attend to last 256 positions.
+The architecture is similar to GPT2 except the GPT Neo model uses local attention in every other layer with 256 window
+size so a token can only attend to last 256 positions.
 
 Generation
 _______________________________________________________________________________________________________________________
 
-The:obj:`generate()` method can be used to generate text using GPT Neo model.
+The :obj:`generate()` method can be used to generate text using GPT Neo model.
 
 .. code-block::
 
@@ -35,8 +35,8 @@ The:obj:`generate()` method can be used to generate text using GPT Neo model.
     >>> tokenizer = GPTNeoTokenizer.from_pretrained("eleutherai/gpt_neo_xl")
 
     >>> prompt = "In a shocking finding, scientists discovered a herd of unicorns living in a remote, " \
-    ...       "previously unexplored valley, in the Andes Mountains. Even more surprising to the " \
-    ...       "researchers was the fact that the unicorns spoke perfect English."
+    ...          "previously unexplored valley, in the Andes Mountains. Even more surprising to the " \
+    ...          "researchers was the fact that the unicorns spoke perfect English."
 
     >>> input_ids = tokenizer(unicorns, return_tensors="pt").input_ids
 

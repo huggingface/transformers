@@ -183,7 +183,7 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
-        ("gpt_neo", "GPTNeo"),
+        ("gpt_neo", "GPT Neo"),
         ("speech_to_text", "Speech2Text"),
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),

@@ -75,7 +75,6 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
-    GPTNeoConfig,
     IBertConfig,
     LayoutLMConfig,
     LEDConfig,
