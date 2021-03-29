@@ -598,7 +598,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             bsz, n_heads, to_seq_len // to_block_size - 2, n_rand_blocks * to_block_size, -1
         )  # [bsz, n_heads, to_seq_len//to_block_size-2, n_rand_blocks, to_block_size, -1]
 
-        ## 1st PART
+        # 1st PART
         # 1st block (global block) attention scores
         # q[0] x (k[0], k[1], k[2], k[3], k[4] .... )
 
@@ -613,7 +613,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         first_context_layer = self.torch_bmm_nd(first_attn_weights, value_layer, ndim=4)
         first_context_layer.unsqueeze_(2)
 
-        ## 2nd PART
+        # 2nd PART
         # 2nd block attention scores
         # q[1] x (sliding_keys, random_keys, global_keys)
         # sliding key blocks -> 2nd, 3rd blocks
@@ -682,7 +682,7 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         second_context_layer.unsqueeze_(2)
 
-        ## 3rd PART
+        # 3rd PART
         # Middle blocks attention scores
         # q[-2:2] x (sliding_keys, random_keys, global_keys)
         # sliding attn is calculated using special trick of shifting tokens as discussed in paper
@@ -760,7 +760,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             "bhlqk,bhkd->bhlqd", attn_weights[:, :, :, :, -to_block_size:], blocked_value_matrix[:, :, -1]
         )  # [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, to_block_size] x [bsz, n_heads, to_block_size, -1] ==> [bsz, n_heads, from_seq_len//from_block_size-4, from_block_size, -1]
 
-        ## 4th PART
+        # 4th PART
         # last 2nd token attention scores
         # q[-2] x (sliding_keys, random_keys, global_keys)
         # sliding key blocks -> last 3 blocks
@@ -821,7 +821,7 @@ class BigBirdBlockSparseAttention(nn.Module):
         second_last_context_layer = self.torch_bmm_nd(second_last_attn_weights, second_last_value_mat, ndim=4)
         second_last_context_layer.unsqueeze_(2)
 
-        ## 5th PART
+        # 5th PART
         # last block (global) attention scores
         # q[-1] x (k[0], k[1], k[2], k[3], .... )
 
