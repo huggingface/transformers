@@ -91,7 +91,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
         for name, shape in init_vars:
             array = tf.train.load_variable(tf_path, name)
             name = name.replace("bert/encoder/LayerNorm", "bert/embeddings/LayerNorm")
-            logger.info("Loading TF weight {} with shape {}".format(name, shape))
+            logger.info(f"Loading TF weight {name} with shape {shape}")
             names.append(name)
             tf_weights[name] = array
 
@@ -109,7 +109,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
                 if len(layer_name_items) < 3:
                     layer_name_items += [0]
 
-                name_items[0] = "bert/encoder/layer_" + str(layer_name_items[2])
+                name_items[0] = f"bert/encoder/layer_{layer_name_items[2]}"
 
             name = "/".join([TRIVIA_QA_MAPPING[x] if x in TRIVIA_QA_MAPPING else x for x in name_items])[
                 :-2
@@ -163,7 +163,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
             for n in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
         pointer = model
         pt_name = []
@@ -198,7 +198,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
                     pointer = getattr(pointer, scope_names[0])
                     pt_name.append(f"{scope_names[0]}")
                 except AttributeError:
-                    logger.info("Skipping {}".format(m_name))
+                    logger.info(f"Skipping {m_name}")
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
@@ -223,20 +223,19 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
                 else:
                     array = array.reshape(pointer.shape)
 
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}"
+            if pointer.shape != array.shape:
+                raise ValueError(f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched of {txt_name}.")
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
         pt_weight_name = ".".join(pt_name)
-        logger.info("Initialize PyTorch weight {} from {}".format(pt_weight_name, txt_name))
+        logger.info(f"Initialize PyTorch weight {pt_weight_name} from {txt_name}.")
         pointer.data = torch.from_numpy(array)
         tf_weights.pop(txt_name, None)
         pt_names.remove(pt_weight_name)
 
-    logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
-    logger.info("Weights not initialized in PyTorch model: {}".format(", ".join(pt_names)))
+    logger.info("Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}."
+    logger.info("Weights not initialized in PyTorch model: {', '.join(pt_names)}."
     return model
 
 
@@ -410,8 +409,8 @@ class BigBirdBlockSparseAttention(nn.Module):
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -794,19 +793,13 @@ class BigBirdBlockSparseAttention(nn.Module):
             [
                 to_mask[:, :, :, :to_block_size],
                 to_mask[:, :, :, -3 * to_block_size :],
-                torch.ones(
-                    [bsz, 1, 1, n_rand_blocks * to_block_size], device=context_layer.device, dtype=context_layer.dtype
-                ),
+                context_layer.new_ones([bsz, 1, 1, n_rand_blocks * to_block_size]),
             ],
             dim=3,
         )
         second_last_rand_pad = torch.cat(
             [
-                torch.ones(
-                    [bsz, n_heads, from_block_size, 4 * to_block_size],
-                    device=context_layer.device,
-                    dtype=context_layer.dtype,
-                ),
+                context_layer.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
                 rand_mask[:, :, -1],
             ],
             dim=3,
@@ -1784,8 +1777,6 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             `What are input IDs? <../glossary.html#input-ids>`__
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`{0}`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
-
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
@@ -1793,8 +1784,6 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`{0}`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
-
-
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
 
@@ -1806,8 +1795,6 @@ BIG_BIRD_INPUTS_DOCSTRING = r"""
             `What are position IDs? <../glossary.html#position-ids>`_
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 

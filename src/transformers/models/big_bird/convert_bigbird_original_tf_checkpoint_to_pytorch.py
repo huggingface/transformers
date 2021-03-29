@@ -38,7 +38,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, p
     load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=is_trivia_qa)
 
     # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    print(f"Save PyTorch model to {pytorch_dump_path}")
     model.save_pretrained(pytorch_dump_path)
 
 

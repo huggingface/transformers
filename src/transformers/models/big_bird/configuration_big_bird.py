@@ -42,9 +42,7 @@ class BigBirdConfig(PretrainedConfig):
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 50358):
             Vocabulary size of the BigBird model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdModel` or
-            :class:`~transformers.TFBigBirdModel`. Vocabulary size of the model. Defines the different tokens that can
-            be represented by the `inputs_ids` passed to the forward method of :class:`~transformers.BigBirdModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (:obj:`int`, `optional`, defaults to 12):
@@ -64,8 +62,7 @@ class BigBirdConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 1024 or 2048 or 4096).
         type_vocab_size (:obj:`int`, `optional`, defaults to 2):
-            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.BigBirdModel` or
-            :class:`~transformers.TFBigBirdModel`.
+            The vocabulary size of the :obj:`token_type_ids` passed when calling :class:`~transformers.BigBirdModel`.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -74,16 +71,16 @@ class BigBirdConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if ``config.is_decoder=True``.
         attention_type (:obj:`str`, `optional`, defaults to :obj:`"block_sparse"`)
-            Whether to use block sparse attention (with n time) as introduced in paper or original attention layer
-            (with n^2 time). Possible values are :obj:`"original_full"` & :obj:`"block_sparse"`..
+            Whether to use block sparse attention (with n complexity) as introduced in paper or original attention layer
+            (with n^2 complexity). Possible values are :obj:`"original_full"` and :obj:`"block_sparse"`.
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to use bias in query, key, value.
         rescale_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`)
-            Whether to rescale embeddings with (hidden_size ** 0.5)
+            Whether to rescale embeddings with (hidden_size ** 0.5).
         block_size (:obj:`int`, `optional`, defaults to 64)
-            Size of each block. Useful only when `attention_type == "block_sparse"`.
+            Size of each block. Useful only when :obj:`attention_type == "block_sparse"`.
         num_random_blocks (:obj:`int`, `optional`, defaults to 3)
-            Each query is going to attend these many number of random blocks. Useful only when `attention_type ==
+            Each query is going to attend these many number of random blocks. Useful only when :obj:`attention_type ==
             "block_sparse"`.
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             If True, use gradient checkpointing to save memory at the expense of slower backward pass.
