@@ -1,15 +1,15 @@
 # Testing new Hugging Face Deep Learning Container.
 
-This document explains the testing strategy for releasing the new Hugging Face Deep Learning Container. AWS maintains 14 days of currency with framework releases. Besides framework releases, AWS release train is bi-weekly on Monday. Code cutOff date for any changes is the Wednesday before release-Monday. 
+This document explains the testing strategy for releasing the new Hugging Face Deep Learning Container. AWS maintains 14 days of currency with framework releases. Besides framework releases, AWS release train is bi-weekly on Monday. Code cutoff date for any changes is the Wednesday before release-Monday. 
 
 
-## Test Case 1: Releasing a New Version of HuggingFace Transformers
+## Test Case 1: Releasing a New Version of 🤗 Transformers
 
 ### Requirements: Test should run on Release Candidate for new `transformers` release to validate the new release is compatible with the DLCs. To run these tests you need credentials for the HF SageMaker AWS Account. You can ask @philschmid or @n1t0 to get access.
 
 ### Run Tests:
 
-Before we can run the tests we need to adjust the `requirements.txt` for Pytorch under `/tests/sagemaker/scripts/pytorch` and for Tensorflow under `/tests/sagemaker/scripts/pytorch`. We adjust the branch to the new RC-tag.
+Before we can run the tests we need to adjust the `requirements.txt` for PyTorch under `/tests/sagemaker/scripts/pytorch` and for TensorFlow under `/tests/sagemaker/scripts/pytorch`. We adjust the branch to the new RC-tag.
 
 ```
 git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install master or adjust ist with vX.X.X for installing version specific-transforms
@@ -20,7 +20,7 @@ After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with.
 ```bash
 AWS_PROFILE=<enter-your-profile> make sagemaker-test
 ```
-These tests take around 10-15 minutes to finish. Preferrable make a screenshot of the successful ran tests.
+These tests take around 10-15 minutes to finish. Preferably make a screenshot of the successfully ran tests.
 
 ### After Transformers Release:
 
@@ -28,9 +28,9 @@ After we have released the Release Candidate we need to create a PR at the [Deep
 
 **Creating the update PR:**
 
-1. Update the two latest `buildspec.yaml` config for [pytorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [tensorflow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow). The two latest `buildspec.yaml` are the `buildspec.yaml` without a version tag and the one with the highest framework version, e.g. `buildspec-1-7-1.yml` and not `buildspec-1-6.yml`.  
+1. Update the two latest `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [TensorFlow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow). The two latest `buildspec.yaml` are the `buildspec.yaml` without a version tag and the one with the highest framework version, e.g. `buildspec-1-7-1.yml` and not `buildspec-1-6.yml`.  
 
-To update the `buildspec.yaml` we need to adjust either the `transformers_version` or the `datasets_version` or both. Example for upgrading to `transformers 4.5.0` and `datasets` `1.6.0`.
+To update the `buildspec.yaml` we need to adjust either the `transformers_version` or the `datasets_version` or both. Example for upgrading to `transformers 4.5.0` and `datasets 1.6.0`.
 ```yaml
 account_id: &ACCOUNT_ID <set-$ACCOUNT_ID-in-environment>
 region: &REGION <set-$REGION-in-environment>
@@ -90,7 +90,7 @@ After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with.
 ```bash
 AWS_PROFILE=<enter-your-profile> make sagemaker-test
 ```
-These tests take around 10-15 minutes to finish. Preferrable make a screenshot of the successful ran tests.
+These tests take around 10-15 minutes to finish. Preferably make a screenshot of the successfully ran tests.
 
 
 ### After successful Tests:
@@ -99,7 +99,7 @@ After we have successfully running tests for the new framework version we need t
 
 **Creating the update PR:**
 
-1. Create a new a `buildspec.yaml` config for [pytorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [tensorflow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`. 
+1. Create a new a `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [TensorFlow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`. 
 
 To create the new `buildspec.yaml` we need to adjust  the `version` and the `short_version`. Example for upgrading to `pytorch 1.7.1`. 
 
@@ -143,7 +143,7 @@ TODO: Add a screenshot of PR + Text template to make it easy to open.
 
 ## Current Tests
 
-| ID                                  | description                                                       | plattform                   | #GPUS | collected & evaluated metrics            |
+| ID                                  | Description                                                       | Platform                   | #GPUS | Collected & evaluated metrics            |
 |-------------------------------------|-------------------------------------------------------------------|-----------------------------|-------|------------------------------------------|
 | pytorch-transfromers-test-single    | test bert finetuning using BERT fromtransformerlib+PT             | SageMaker createTrainingJob | 1     | train_runtime, eval_accuracy & eval_loss |
 | pytorch-transfromers-test-2-ddp     | test bert finetuning using BERT from transformer lib+ PT DPP      | SageMaker createTrainingJob | 16    | train_runtime, eval_accuracy & eval_loss |

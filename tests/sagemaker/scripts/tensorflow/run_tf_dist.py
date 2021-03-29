@@ -36,10 +36,9 @@ def fit(model, loss, opt, train_dataset, epochs, train_batch_size, max_steps=Non
 
         pbar.set_description(f"Loss: {loss_value:.4f}")
 
-        if SDP_ENABLED:
-            if i == 0:
-                sdp.broadcast_variables(model.variables, root_rank=0)
-                sdp.broadcast_variables(opt.variables(), root_rank=0)
+        if SDP_ENABLED and if i == 0:
+            sdp.broadcast_variables(model.variables, root_rank=0)
+            sdp.broadcast_variables(opt.variables(), root_rank=0)
 
         if max_steps and i >= max_steps:
             break
