@@ -430,10 +430,49 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             # check attn size
             self.assertListEqual(shapes, expected_shape)
 
-    # batch generation is not supported yet
     @slow
     def test_batch_generation(self):
-        pass
+        model = GPTNeoForCausalLM.from_pretrained("eleutherai/gpt_neo_xl")
+        model.to(torch_device)
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+
+        tokenizer.padding_side = "left"
+
+        # Define PAD Token = EOS Token = 50256
+        tokenizer.pad_token = tokenizer.eos_token
+        model.config.pad_token_id = model.config.eos_token_id
+
+        # use different length sentences to test batching
+        sentences = [
+            "Hello, my dog is a little",
+            "Today, I am",
+        ]
+
+        inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+        input_ids = inputs["input_ids"].to(torch_device)
+
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
+
+        inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
+        output_non_padded = model.generate(input_ids=inputs_non_padded)
+
+        num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().cpu().item()
+        inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
+        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+
+        batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
+        padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
+
+        expected_output_sentence = [
+            "Hello, my dog is a little bit of a kitty. She is a very sweet and loving",
+            "Today, I am going to talk about the best way to get a job in the",
+        ]
+        self.assertListEqual(expected_output_sentence, batch_out_sentence)
+        self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
     @slow
     def test_model_from_pretrained(self):

@@ -290,7 +290,7 @@ class LocalAttention(nn.Module):
     def create_buckets(self, tensor, num_buckets, block_length):
         return tensor.reshape(tensor.size()[0], num_buckets, block_length, -1)
 
-    def create_attention_mask(self, bs, seq_len, windows, block_length):
+    def create_attention_mask(self, bs, seq_len, windows, block_length, attention_mask):
         ticker = torch.arange(seq_len)[None, :]
         b_t = ticker.reshape(1, windows, block_length)
 
@@ -302,10 +302,18 @@ class LocalAttention(nn.Module):
         # https://github.com/tensorflow/mesh/blob/8bd599a21bad01cef1300a8735c17306ce35db6e/mesh_tensorflow/transformer/attention.py#L805
         relative_position = bq_k.unsqueeze(-2) - bq_t.unsqueeze(-1)
         relative_position = relative_position.transpose(-1, -2)
+
         sequence_id = torch.ones(bs, seq_len)
         q_seq = sequence_id.reshape(-1, windows, block_length)
         m_seq = sequence_id.reshape(-1, windows, block_length)
         m_seq = self.look_around(m_seq, block_length, self.window_size)
+
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(m_seq.device)
+            attention_mask = attention_mask.reshape(-1, windows, block_length)
+            attention_mask = self.look_around(attention_mask, block_length, self.window_size)
+            m_seq *= attention_mask
+
         visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
         visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
         mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
@@ -382,7 +390,7 @@ class LocalAttention(nn.Module):
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
 
-        mask = self.create_attention_mask(bs, full_seq_length, windows, block_length)
+        mask = self.create_attention_mask(bs, full_seq_length, windows, block_length, attention_mask)
         if layer_past is not None:
             mask = mask[:, -1:, :, -1:, :]  # only take the mask for the last window
         mask = mask.to(hidden_states.device)
@@ -700,21 +708,23 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         # Attention mask.
         if attention_mask is not None:
             assert batch_size > 0, "batch_size has to be defined and > 0"
-            attention_mask = attention_mask.view(batch_size, -1)
+            global_attention_mask = attention_mask.view(batch_size, -1)
             # We create a 3D attention mask from a 2D tensor mask.
             # Sizes are [batch_size, 1, 1, to_seq_length]
             # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
             # this attention mask is more simple than the triangular masking of causal attention
             # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
-            attention_mask = attention_mask[:, None, None, :]
+            global_attention_mask = global_attention_mask[:, None, None, :]
 
-            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # Since global_attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
             # positions we want to attend and -10000.0 for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * -10000.0
+            global_attention_mask = global_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            global_attention_mask = (1.0 - global_attention_mask) * -10000.0
+        else:
+            global_attention_mask = None
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -739,6 +749,9 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+            attn_type = self.config.attn_layers[i]
+            attn_mask = global_attention_mask if attn_type == "global" else attention_mask
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -762,14 +775,14 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     create_custom_forward(block),
                     hidden_states,
                     None,
-                    attention_mask,
+                    attn_mask,
                     head_mask[i],
                 )
             else:
                 outputs = block(
                     hidden_states,
                     layer_past=layer_past,
-                    attention_mask=attention_mask,
+                    attention_mask=attn_mask,
                     head_mask=head_mask[i],
                     use_cache=use_cache,
                     output_attentions=output_attentions,
