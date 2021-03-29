@@ -754,7 +754,7 @@ def save_metrics(self, split, metrics, combined=True):
         combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Creates combined metrics by updating ``all_results.json`` with metrics of this call
 
-    To understand the metrics please read the docstring of :obj:`transformers.Trainer.log_metrics()`. The only
+    To understand the metrics please read the docstring of :meth:`~transformers.Trainer.log_metrics`. The only
     difference is that raw unformatted numbers are saved in the current method.
 
     """

@@ -273,7 +273,7 @@ class TrainerMemoryTracker:
 
     At the moment GPU tracking is only for ``pytorch``, but can be extended to support ``tensorflow``.
 
-    To understand this class' intricacies please read the documentation of :obj:`transformers.Trainer.log_metrics()`.
+    To understand this class' intricacies please read the documentation of :meth:`~transformers.Trainer.log_metrics`.
 
     """
 
