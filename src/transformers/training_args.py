@@ -277,6 +277,10 @@ class TrainingArguments:
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        length_column_name (:obj:`str`, `optional`, defaults to :obj:`"length"`):
+            Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
+            than computing them on train startup. Ignored unless :obj:`group_by_length` is :obj:`True` and the dataset
+            is an instance of :obj:`Dataset`.
         report_to (:obj:`str` or :obj:`List[str]`, `optional`, defaults to :obj:`"all"`):
             The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
             :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`. Use :obj:`"all"` to report to
@@ -493,6 +497,10 @@ class TrainingArguments:
     group_by_length: bool = field(
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
+    )
+    length_column_name: Optional[str] = field(
+        default="length",
+        metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
