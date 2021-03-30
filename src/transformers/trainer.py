@@ -1544,6 +1544,10 @@ class Trainer:
 
         Will only save from the main process.
         """
+
+        if output_dir is None:
+            output_dir = self.args.output_dir
+
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
         elif (
