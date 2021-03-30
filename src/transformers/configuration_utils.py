@@ -134,6 +134,9 @@ class PretrainedConfig(object):
           <../model_doc/mbart>` where the first generated token needs to be the target language token.
         - **forced_eos_token_id** (:obj:`int`, `optional`) -- The id of the token to force as the last generated token
           when :obj:`max_length` is reached.
+        - **remove_invalid_values** (:obj:`bool`, `optional`) -- Whether to remove possible `nan` and `inf` outputs of
+          the model to prevent the generation method to crash. Note that using ``remove_invalid_values`` can slow down
+          generation.
 
 
     Parameters for fine-tuning tasks
@@ -219,6 +222,7 @@ class PretrainedConfig(object):
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", False)
         self.forced_bos_token_id = kwargs.pop("forced_bos_token_id", None)
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
+        self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)

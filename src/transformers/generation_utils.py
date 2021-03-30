@@ -28,6 +28,7 @@ from .generation_logits_process import (
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
+    InfNanRemoveLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
@@ -582,6 +583,7 @@ class GenerationMixin:
         num_beams: int,
         num_beam_groups: int,
         diversity_penalty: float,
+        remove_invalid_values: bool,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -607,6 +609,9 @@ class GenerationMixin:
         )
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
         # instantiate processors list
         processors = LogitsProcessorList()
@@ -640,6 +645,8 @@ class GenerationMixin:
             processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
+        if remove_invalid_values is True:
+            processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
     def _get_stopping_criteria(
@@ -688,6 +695,7 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
@@ -770,9 +778,9 @@ class GenerationMixin:
                 enabled.
             prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
-                provided no constraint is applied. This function takes 2 arguments :obj:`inputs_ids` and the batch ID
-                :obj:`batch_id`. It has to return a list with the allowed tokens for the next generation step
-                conditioned on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`. This
+                provided no constraint is applied. This function takes 2 arguments: the batch ID :obj:`batch_id` and
+                :obj:`input_ids`. It has to return a list with the allowed tokens for the next generation step
+                conditioned on the batch ID :obj:`batch_id` and the previously generated tokens :obj:`inputs_ids`. This
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
@@ -791,8 +799,12 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            remove_invalid_values (:obj:`bool`, `optional`):
+                Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
                 Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -968,6 +980,7 @@ class GenerationMixin:
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
+            remove_invalid_values=remove_invalid_values,
         )
 
         stopping_criteria = self._get_stopping_criteria(
@@ -1562,6 +1575,7 @@ class GenerationMixin:
 
             # sample
             probs = F.softmax(next_token_scores, dim=-1)
+
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
             # add code that transfomers next_tokens to tokens_to_add
@@ -2124,6 +2138,7 @@ class GenerationMixin:
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
             probs = F.softmax(next_token_scores, dim=-1)
+
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
 
