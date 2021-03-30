@@ -1587,8 +1587,7 @@ class Trainer:
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
         elif is_sagemaker_mp_enabled():
-            # This seems a bit overkill, see if we can limit to just `smp_rank() == 0`
-            return smp.rank() == 0 and smp.local_rank() == 0 and smp.mp_rank() == 0 and smp.dp_rank() == 0
+            return smp.rank() == 0
         else:
             return self.args.process_index == 0
 
