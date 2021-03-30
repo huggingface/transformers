@@ -798,10 +798,8 @@ class AutoModel:
         if type(config) in MODEL_MAPPING.keys():
             return MODEL_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
         )
 
     @classmethod
@@ -840,10 +838,8 @@ class AutoModel:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
         )
 
 
@@ -892,10 +888,8 @@ class AutoModelForPreTraining:
         if type(config) in MODEL_FOR_PRETRAINING_MAPPING.keys():
             return MODEL_FOR_PRETRAINING_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -934,10 +928,8 @@ class AutoModelForPreTraining:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())}."
         )
 
 
@@ -997,10 +989,8 @@ class AutoModelWithLMHead:
         if type(config) in MODEL_WITH_LM_HEAD_MAPPING.keys():
             return MODEL_WITH_LM_HEAD_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1045,10 +1035,8 @@ class AutoModelWithLMHead:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())}."
         )
 
 
@@ -1096,10 +1084,8 @@ class AutoModelForCausalLM:
         if type(config) in MODEL_FOR_CAUSAL_LM_MAPPING.keys():
             return MODEL_FOR_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1138,10 +1124,8 @@ class AutoModelForCausalLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
         )
 
 
@@ -1189,10 +1173,8 @@ class AutoModelForMaskedLM:
         if type(config) in MODEL_FOR_MASKED_LM_MAPPING.keys():
             return MODEL_FOR_MASKED_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1231,10 +1213,8 @@ class AutoModelForMaskedLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())}."
         )
 
 
@@ -1283,12 +1263,8 @@ class AutoModelForSeq2SeqLM:
         if type(config) in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
             return MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1327,12 +1303,8 @@ class AutoModelForSeq2SeqLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
         )
 
 
@@ -1381,12 +1353,8 @@ class AutoModelForSequenceClassification:
         if type(config) in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
             return MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1425,12 +1393,8 @@ class AutoModelForSequenceClassification:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
         )
 
 
@@ -1478,12 +1442,8 @@ class AutoModelForQuestionAnswering:
             return MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1523,12 +1483,8 @@ class AutoModelForQuestionAnswering:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
 
@@ -1578,12 +1534,8 @@ class AutoModelForTableQuestionAnswering:
             return MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1623,12 +1575,8 @@ class AutoModelForTableQuestionAnswering:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
 
@@ -1676,12 +1624,8 @@ class AutoModelForTokenClassification:
             return MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1721,12 +1665,8 @@ class AutoModelForTokenClassification:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
         )
 
 
@@ -1776,12 +1716,8 @@ class AutoModelForMultipleChoice:
             return MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1821,12 +1757,8 @@ class AutoModelForMultipleChoice:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
         )
 
 
@@ -1876,12 +1808,8 @@ class AutoModelForNextSentencePrediction:
             return MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1921,10 +1849,6 @@ class AutoModelForNextSentencePrediction:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
         )

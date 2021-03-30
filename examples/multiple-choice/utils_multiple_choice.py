@@ -99,13 +99,7 @@ if is_torch_available():
             processor = processors[task]()
 
             cached_features_file = os.path.join(
-                data_dir,
-                "cached_{}_{}_{}_{}".format(
-                    mode.value,
-                    tokenizer.__class__.__name__,
-                    str(max_seq_length),
-                    task,
-                ),
+                data_dir, f"cached_{mode.value}_{tokenizer.__class__.__name__}_{max_seq_length}_{task}"
             )
 
             # Make sure only the first process in distributed training processes the dataset,
@@ -255,7 +249,7 @@ class RaceProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         high = os.path.join(data_dir, "train/high")
         middle = os.path.join(data_dir, "train/middle")
         high = self._read_txt(high)
@@ -264,7 +258,7 @@ class RaceProcessor(DataProcessor):
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         high = os.path.join(data_dir, "dev/high")
         middle = os.path.join(data_dir, "dev/middle")
         high = self._read_txt(high)
@@ -273,7 +267,7 @@ class RaceProcessor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} test".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} test")
         high = os.path.join(data_dir, "test/high")
         middle = os.path.join(data_dir, "test/middle")
         high = self._read_txt(high)
@@ -322,17 +316,17 @@ class SynonymProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mctrain.csv")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mchp.csv")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
 
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mctest.csv")), "test")
 
@@ -368,17 +362,17 @@ class SwagProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "train.csv")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "val.csv")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         raise ValueError(
             "For swag testing, the input file does not contain a label column. It can not be tested in current code"
             "setting!"
@@ -419,16 +413,16 @@ class ArcProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_json(os.path.join(data_dir, "train.jsonl")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_json(os.path.join(data_dir, "dev.jsonl")), "dev")
 
     def get_test_examples(self, data_dir):
-        logger.info("LOOKING AT {} test".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} test")
         return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
 
     def get_labels(self):

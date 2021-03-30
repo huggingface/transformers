@@ -293,12 +293,8 @@ class SingleSentenceClassificationProcessor(DataProcessor):
                 input_ids = input_ids + ([pad_token] * padding_length)
                 attention_mask = attention_mask + ([0 if mask_padding_with_zero else 1] * padding_length)
 
-            assert len(input_ids) == batch_length, "Error with input length {} vs {}".format(
-                len(input_ids), batch_length
-            )
-            assert len(attention_mask) == batch_length, "Error with input length {} vs {}".format(
-                len(attention_mask), batch_length
-            )
+            assert len(input_ids) == batch_length, f"Error with input length {len(input_ids)} vs {batch_length}"
+            assert len(attention_mask) == batch_length, f"Error with input length {len(attention_mask)} vs {batch_length}"
 
             if self.mode == "classification":
                 label = label_map[example.label]

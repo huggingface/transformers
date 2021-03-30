@@ -64,11 +64,7 @@ class TextDataset(Dataset):
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else directory,
-            "cached_lm_{}_{}_{}".format(
-                tokenizer.__class__.__name__,
-                str(block_size),
-                filename,
-            ),
+            f"cached_lm_{tokenizer.__class__.__name__}_{block_size}_{filename}",
         )
 
         # Make sure only the first process in distributed training processes the dataset,
@@ -365,11 +361,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
         directory, filename = os.path.split(file_path)
         cached_features_file = os.path.join(
             directory,
-            "cached_nsp_{}_{}_{}".format(
-                tokenizer.__class__.__name__,
-                str(block_size),
-                filename,
-            ),
+            f"cached_nsp_{tokenizer.__class__.__name__}_{block_size}_{filename}",
         )
 
         self.tokenizer = tokenizer

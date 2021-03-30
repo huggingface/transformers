@@ -592,7 +592,7 @@ class TFTrainer:
                     if self.args.save_steps > 0 and self.global_step % self.args.save_steps == 0:
                         ckpt_save_path = self.model.ckpt_manager.save()
 
-                        logger.info("Saving checkpoint for step {} at {}".format(self.global_step, ckpt_save_path))
+                        logger.info(f"Saving checkpoint for step {self.global_step} at {ckpt_save_path}")
 
                     if self.args.max_steps > 0 and self.global_step >= t_total:
                         break
@@ -607,7 +607,7 @@ class TFTrainer:
 
             end_time = datetime.datetime.now()
 
-            logger.info("Training took: {}".format(str(end_time - start_time)))
+            logger.info(f"Training took: {str(end_time - start_time)}")
 
         if self.args.past_index and hasattr(self, "_past"):
             # Clean the state at the end of training
@@ -782,7 +782,7 @@ class TFTrainer:
         """
         output_dir = output_dir if output_dir is not None else self.args.output_dir
 
-        logger.info("Saving model in {}".format(output_dir))
+        logger.info(f"Saving model in {output_dir}")
 
         if not isinstance(self.model, TFPreTrainedModel):
             raise ValueError("Trainer.model appears to not be a PreTrainedModel")

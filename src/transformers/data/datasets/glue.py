@@ -101,12 +101,7 @@ class GlueDataset(Dataset):
         # Load data features from cache or dataset file
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else args.data_dir,
-            "cached_{}_{}_{}_{}".format(
-                mode.value,
-                tokenizer.__class__.__name__,
-                str(args.max_seq_length),
-                args.task_name,
-            ),
+            f"cached_{mode.value}_{tokenizer.__class__.__name__}_{args.max_seq_length}_{args.task_name}",
         )
         label_list = self.processor.get_labels()
         if args.task_name in ["mnli", "mnli-mm"] and tokenizer.__class__.__name__ in (

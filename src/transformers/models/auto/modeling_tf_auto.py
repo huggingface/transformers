@@ -590,10 +590,8 @@ class TFAutoModel(object):
         if type(config) in TF_MODEL_MAPPING.keys():
             return TF_MODEL_MAPPING[type(config)](config, **kwargs)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_MAPPING.keys())}."
         )
 
     @classmethod
@@ -632,10 +630,8 @@ class TFAutoModel(object):
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_MAPPING.keys())}."
         )
 
 
@@ -684,10 +680,8 @@ class TFAutoModelForPreTraining(object):
         if type(config) in TF_MODEL_FOR_PRETRAINING_MAPPING.keys():
             return TF_MODEL_FOR_PRETRAINING_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -726,10 +720,8 @@ class TFAutoModelForPreTraining(object):
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_PRETRAINING_MAPPING.keys())}."
         )
 
 
@@ -789,10 +781,8 @@ class TFAutoModelWithLMHead(object):
         if type(config) in TF_MODEL_WITH_LM_HEAD_MAPPING.keys():
             return TF_MODEL_WITH_LM_HEAD_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())}."
         )
 
     @classmethod
@@ -838,10 +828,8 @@ class TFAutoModelWithLMHead(object):
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_WITH_LM_HEAD_MAPPING.keys())}."
         )
 
 
@@ -889,10 +877,8 @@ class TFAutoModelForCausalLM:
         if type(config) in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys():
             return TF_MODEL_FOR_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -931,10 +917,8 @@ class TFAutoModelForCausalLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
         )
 
 
@@ -982,10 +966,8 @@ class TFAutoModelForMaskedLM:
         if type(config) in TF_MODEL_FOR_MASKED_LM_MAPPING.keys():
             return TF_MODEL_FOR_MASKED_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MASKED_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1024,10 +1006,8 @@ class TFAutoModelForMaskedLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in TF_MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MASKED_LM_MAPPING.keys())}."
         )
 
 
@@ -1076,12 +1056,8 @@ class TFAutoModelForSeq2SeqLM:
         if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
             return TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config, **kwargs)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1120,12 +1096,8 @@ class TFAutoModelForSeq2SeqLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
         )
 
 
@@ -1174,12 +1146,8 @@ class TFAutoModelForSequenceClassification(object):
         if type(config) in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
             return TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1218,12 +1186,8 @@ class TFAutoModelForSequenceClassification(object):
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
         )
 
 
@@ -1271,12 +1235,8 @@ class TFAutoModelForQuestionAnswering(object):
         if type(config) in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
             return TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1315,12 +1275,8 @@ class TFAutoModelForQuestionAnswering(object):
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
 
@@ -1367,12 +1323,8 @@ class TFAutoModelForTokenClassification:
         if type(config) in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
             return TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1411,12 +1363,8 @@ class TFAutoModelForTokenClassification:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
         )
 
 
@@ -1465,12 +1413,8 @@ class TFAutoModelForMultipleChoice:
         if type(config) in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
             return TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1509,12 +1453,8 @@ class TFAutoModelForMultipleChoice:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
         )
 
 
@@ -1563,12 +1503,8 @@ class TFAutoModelForNextSentencePrediction:
         if type(config) in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
             return TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1607,10 +1543,6 @@ class TFAutoModelForNextSentencePrediction:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of TFAutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of TFAutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
         )

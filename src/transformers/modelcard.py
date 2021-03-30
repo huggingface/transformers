@@ -65,7 +65,7 @@ class ModelCard:
             try:
                 setattr(self, key, value)
             except AttributeError as err:
-                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
     def save_pretrained(self, save_directory_or_file):
@@ -77,7 +77,7 @@ class ModelCard:
             output_model_card_file = save_directory_or_file
 
         self.to_json_file(output_model_card_file)
-        logger.info("Model card saved in {}".format(output_model_card_file))
+        logger.info("Model card saved in {output_model_card_file}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -154,11 +154,9 @@ class ModelCard:
             # Load from URL or cache if already cached
             resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, proxies=proxies)
             if resolved_model_card_file == model_card_file:
-                logger.info("loading model card file {}".format(model_card_file))
+                logger.info(f"loading model card file {model_card_file}")
             else:
-                logger.info(
-                    "loading model card file {} from cache at {}".format(model_card_file, resolved_model_card_file)
-                )
+                logger.info(f"loading model card file {model_card_file} from cache at {resolved_model_card_file}")
             # Load model card
             modelcard = cls.from_json_file(resolved_model_card_file)
 

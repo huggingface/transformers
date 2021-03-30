@@ -1664,7 +1664,7 @@ class Trainer:
         number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - self.args.save_total_limit)
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
         for checkpoint in checkpoints_to_be_deleted:
-            logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
+            logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
             shutil.rmtree(checkpoint)
 
     def evaluate(

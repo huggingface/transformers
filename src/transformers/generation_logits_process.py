@@ -371,9 +371,7 @@ class NoBadWordsLogitsProcessor(LogitsProcessor):
         self.bad_words_ids = list(filter(lambda bad_token_seq: bad_token_seq != [eos_token_id], bad_words_ids))
 
         for banned_token_seq in self.bad_words_ids:
-            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
-                bad_words_ids
-            )
+            assert len(banned_token_seq) > 0, f"Banned words token sequences {bad_words_ids} cannot have an empty list"
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         banned_tokens = self._calc_banned_bad_words_ids(input_ids)

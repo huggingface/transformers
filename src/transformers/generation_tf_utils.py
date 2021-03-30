@@ -292,7 +292,7 @@ class TFGenerationMixin:
 
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(
-                "Setting `pad_token_id` to {} (first `eos_token_id`) to generate sequence".format(eos_token_id)
+                f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence"
             )
             pad_token_id = eos_token_id
 
@@ -315,8 +315,8 @@ class TFGenerationMixin:
             assert (
                 decoder_start_token_id is not None
             ), "decoder_start_token_id or bos_token_id has to be defined for encoder-decoder generation"
-            assert hasattr(self, "get_encoder"), "{} should have a 'get_encoder' function defined".format(self)
-            assert callable(self.get_encoder), "{} should be a method".format(self.get_encoder)
+            assert hasattr(self, "get_encoder"), f"{self} should have a 'get_encoder' function defined"
+            assert callable(self.get_encoder), f"{self.get_encoder} should be a method"
 
             # get encoder and store encoder outputs
             encoder = self.get_encoder()
@@ -763,7 +763,7 @@ class TFGenerationMixin:
                 if done[batch_idx]:
                     assert (
                         len(generated_hyps[batch_idx]) >= num_beams
-                    ), "Batch can only be done if at least {} beams have been generated".format(num_beams)
+                    ), f"Batch can only be done if at least {num_beams} beams have been generated."
                     assert (
                         eos_token_id is not None and pad_token_id is not None
                     ), "generated beams >= num_beams -> eos_token_id and pad_token have to be defined"
@@ -843,12 +843,14 @@ class TFGenerationMixin:
             if eos_token_id is not None and all(
                 (token_id % vocab_size).numpy().item() != eos_token_id for token_id in next_tokens[batch_idx]
             ):
-                assert tf.reduce_all(
+                if not tf.reduce_all(
                     next_scores[batch_idx, :num_beams] == tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
-                ), "If batch_idx is not done, final next scores: {} have to equal to accumulated beam_scores: {}".format(
-                    next_scores[:, :num_beams][batch_idx], tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]
-                )
-
+                ):
+                    raise ValueError(
+                        f"If batch_idx is not done, final next scores: {next_scores[:, :num_beams][batch_idx]} have "
+                        "to equal to accumulated beam_scores: "
+                        f"{tf.reshape(beam_scores, (batch_size, num_beams))[batch_idx]}"
+                    )
             # need to add best num_beams hypotheses to generated hyps
             for beam_id in range(num_beams):
                 effective_beam_id = batch_idx * num_beams + beam_id
@@ -871,9 +873,7 @@ class TFGenerationMixin:
                 best_hyp = sorted_hyps.pop()[1]
                 sent_lengths_list.append(len(best_hyp))
                 best.append(best_hyp)
-        assert output_batch_size == len(best), "Output batch size {} must match output beam hypotheses {}".format(
-            output_batch_size, len(best)
-        )
+        assert output_batch_size == len(best), f"Output batch size {output_batch_size} must match output beam hypotheses {len(best)}"
 
         sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int32)
 
@@ -992,9 +992,7 @@ def calc_banned_bad_words_ids(prev_input_ids, bad_words_ids):
         banned_tokens_slice = []
 
         for banned_token_seq in bad_words_ids:
-            assert len(banned_token_seq) > 0, "Banned words token sequences {} cannot have an empty list".format(
-                bad_words_ids
-            )
+            assert len(banned_token_seq) > 0, f"Banned words token sequences { bad_words_ids} cannot have an empty list"
 
             if _tokens_match(prev_input_ids_slice.numpy().tolist(), banned_token_seq[:-1]) is False:
                 # if tokens do not match continue
