@@ -226,6 +226,8 @@ and conversion utilities for the following models:
 48. :doc:`XLSR-Wav2Vec2 <model_doc/xlsr_wav2vec2>` (from Facebook AI) released with the paper `Unsupervised
     Cross-Lingual Representation Learning For Speech Recognition <https://arxiv.org/abs/2006.13979>`__ by Alexis
     Conneau, Alexei Baevski, Ronan Collobert, Abdelrahman Mohamed, Michael Auli.
+
+
 .. _bigtable:
 
 The table below represents the current support in the library for each of those models, whether they have a Python
