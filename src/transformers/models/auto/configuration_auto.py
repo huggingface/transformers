@@ -22,6 +22,7 @@ from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
+from ..big_bird.configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
 from ..blenderbot.configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from ..blenderbot_small.configuration_blenderbot_small import (
     BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -82,6 +83,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -130,6 +132,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("gpt_neo", GPTNeoConfig),
+        ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
         ("wav2vec2", Wav2Vec2Config),
         ("m2m_100", M2M100Config),
@@ -184,6 +187,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("gpt_neo", "GPT Neo"),
+        ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
