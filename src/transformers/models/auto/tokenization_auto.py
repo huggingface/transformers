@@ -60,6 +60,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BigBirdConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -111,6 +112,7 @@ if is_sentencepiece_available():
     from ..albert.tokenization_albert import AlbertTokenizer
     from ..barthez.tokenization_barthez import BarthezTokenizer
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
+    from ..big_bird.tokenization_big_bird import BigBirdTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
     from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
     from ..m2m_100 import M2M100Tokenizer
@@ -129,6 +131,7 @@ else:
     AlbertTokenizer = None
     BarthezTokenizer = None
     BertGenerationTokenizer = None
+    BigBirdTokenizer = None
     CamembertTokenizer = None
     DebertaV2Tokenizer = None
     MarianTokenizer = None
@@ -258,6 +261,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (TapasConfig, (TapasTokenizer, None)),
         (LEDConfig, (LEDTokenizer, LEDTokenizerFast)),
         (ConvBertConfig, (ConvBertTokenizer, ConvBertTokenizerFast)),
+        (BigBirdConfig, (BigBirdTokenizer, None)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
     ]
