@@ -418,6 +418,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
