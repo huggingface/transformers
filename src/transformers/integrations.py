@@ -19,7 +19,6 @@ import io
 import json
 import numbers
 import os
-import re
 import sys
 import tempfile
 from copy import deepcopy
