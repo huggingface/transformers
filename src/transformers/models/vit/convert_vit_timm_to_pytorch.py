@@ -23,7 +23,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import ViTConfig, ViTFeatureExtractor, ViTForImageClassification
+from transformers import ViTConfig, ViTFeatureExtractor, ViTModel, ViTForImageClassification
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 
@@ -58,29 +58,29 @@ def create_rename_keys(config, base_model=False):
         ]
     )
 
-    # pooler
-    if config.use_pooler:
+    if base_model:
+        # layernorm + pooler
         rename_keys.extend(
             [
+                ("norm.weight", "layernorm.weight"),
+                ("norm.bias", "layernorm.bias"),
                 ("pre_logits.fc.weight", "pooler.dense.weight"),
                 ("pre_logits.fc.bias", "pooler.dense.bias"),
             ]
         )
 
-    # classification head
-    rename_keys.extend(
-        [
-            ("head.weight", "classifier.weight"),
-            ("head.bias", "classifier.bias"),
-            ("norm.weight", "layernorm.weight"),
-            ("norm.bias", "layernorm.bias"),
-        ]
-    )
-
-    # to do: add base model support
-    # if just the base model, we should remove "vit" from all keys
-    if base_model:
-        pass
+        # if just the base model, we should remove "vit" from all keys that start with "vit"
+        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith('vit') else pair for pair in rename_keys]
+    else:
+        # layernorm + classification head
+        rename_keys.extend(
+            [
+                ("norm.weight", "vit.layernorm.weight"),
+                ("norm.bias", "vit.layernorm.bias"),
+                ("head.weight", "classifier.weight"),
+                ("head.bias", "classifier.bias"),
+            ]
+        )
 
     return rename_keys
 
@@ -88,30 +88,30 @@ def create_rename_keys(config, base_model=False):
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v(state_dict, config, base_model=False):
     for i in range(config.num_hidden_layers):
+        if base_model:
+            prefix=""
+        else:
+            prefix = "vit."
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop("blocks." + str(i) + ".attn.qkv.weight")
         in_proj_bias = state_dict.pop("blocks." + str(i) + ".attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"vit.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
-        state_dict[f"vit.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
-        state_dict[f"vit.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
         ]
-        state_dict[f"vit.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict[f"vit.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
             -config.hidden_size :, :
         ]
-        state_dict[f"vit.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
-
-    # to do: add base model support
-    if base_model:
-        pass
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
 def remove_classification_head_(state_dict):
-    ignore_keys = ["norm.weight", "norm.bias", "head.weight", "head.bias"]
+    ignore_keys = ["head.weight", "head.bias"]
     for k in ignore_keys:
         state_dict.pop(k, None)
 
@@ -129,19 +129,19 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False):
+def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     """
     Copy/paste/tweak model's weights to our ViT structure.
     """
 
-    # define HuggingFace configuration
+    # define default ViT configuration
     config = ViTConfig()
+    base_model = False
     # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
     if vit_name[-5:] == "in21k":
-        config.num_labels = 21843
+        base_model = True
         config.patch_size = int(vit_name[-12:-10])
         config.image_size = int(vit_name[-9:-6])
-        config.use_pooler = True
     else:
         config.num_labels = 1000
         config.id2label = id2label
@@ -173,26 +173,34 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
 
     # load state_dict of original model, remove and rename some keys
     state_dict = timm_model.state_dict()
+    if base_model:
+        remove_classification_head_(state_dict)
     rename_keys = create_rename_keys(config, base_model)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, base_model)
-    if base_model:
-        remove_classification_head_(state_dict)
 
     # load HuggingFace model
-    model = ViTForImageClassification(config).eval()
+    if vit_name[-5:] == "in21k":
+        model = ViTModel(config).eval()
+    else:
+        model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check logits on an image, prepared by ViTFeatureExtractor
+    # Check outputs on an image, prepared by ViTFeatureExtractor
     feature_extractor = ViTFeatureExtractor(size=config.image_size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
-    logits = timm_model(pixel_values)
     outputs = model(pixel_values)
 
-    assert logits.shape == outputs.logits.shape
-    assert torch.allclose(logits, outputs.logits, atol=1e-3)
+    if base_model:
+        timm_pooled_output = timm_model.forward_features(pixel_values)
+        assert timm_pooled_output.shape == outputs.pooler_output.shape
+        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-4)
+    else:
+        timm_logits = timm_model(pixel_values)
+        assert timm_logits.shape == outputs.logits.shape
+        assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")
@@ -213,11 +221,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
-    parser.add_argument(
-        "--base_model",
-        default=False,
-        action="store_true",
-        help="Whether to just load the base model without any head.",
-    )
+
     args = parser.parse_args()
     convert_vit_checkpoint(args.vit_name, args.pytorch_dump_folder_path)

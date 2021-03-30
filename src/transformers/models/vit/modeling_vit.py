@@ -436,6 +436,7 @@ class ViTModel(ViTPreTrainedModel):
         self.embeddings = ViTEmbeddings(config)
         self.encoder = ViTEncoder(config)
 
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pooler = ViTPooler(config) if add_pooling_layer else None
 
         self.init_weights()
@@ -506,6 +507,7 @@ class ViTModel(ViTPreTrainedModel):
             return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
+        sequence_output = self.layernorm(sequence_output)
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
@@ -550,7 +552,6 @@ class ViTForImageClassification(ViTPreTrainedModel):
         
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.init_weights()
 
@@ -604,7 +605,6 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        sequence_output = self.layernorm(sequence_output)
         logits = self.classifier(sequence_output[:,0,:])
 
         loss = None
@@ -618,7 +618,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[1:]
+            output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
