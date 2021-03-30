@@ -79,8 +79,9 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         if equal_resolution:
             image_inputs = []
             for i in range(self.batch_size):
-                image_inputs.append(np.random.randint(
-                    255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
+                image_inputs.append(
+                    np.random.randint(
+                        255, size=(self.num_channels, self.max_resolution, self.max_resolution), dtype=np.uint8
                     )
                 )
         else:

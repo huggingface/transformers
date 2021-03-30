@@ -60,7 +60,9 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def __call__(
         self,
-        images: Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]],
+        images: Union[
+            Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
+        ],
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
@@ -108,7 +110,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             )
 
         is_batched = bool(
-            isinstance(images, (list, tuple)) and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
+            isinstance(images, (list, tuple))
+            and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
         )
 
         if not is_batched:

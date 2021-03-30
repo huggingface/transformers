@@ -17,7 +17,6 @@
 
 import collections.abc
 import math
-from itertools import repeat
 
 import torch
 import torch.utils.checkpoint
@@ -49,6 +48,7 @@ def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
+
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py

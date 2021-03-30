@@ -264,7 +264,9 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
         # During the conversion rescale and channel first will be applied.
         expected = array.transpose(2, 0, 1).astype(np.float32) / 255.0
-        expected = (expected - np.array(mean)[:, None, None]) / np.array(std)[:, None, None]
+        expected = (expected - np.array(mean).astype(np.float32)[:, None, None]) / np.array(std).astype(np.float32)[
+            :, None, None
+        ]
         self.assertTrue(np.array_equal(normalized_image, expected))
 
     def test_normalize_array(self):

@@ -2345,7 +2345,7 @@ if TYPE_CHECKING:
     else:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
-        from .utils.dummy_flax_objects import *    
+        from .utils.dummy_flax_objects import *
 
 else:
     import importlib
