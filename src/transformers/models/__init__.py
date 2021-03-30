@@ -41,6 +41,7 @@ from . import (
     fsmt,
     funnel,
     gpt2,
+    gpt_neo,
     herbert,
     layoutlm,
     led,
