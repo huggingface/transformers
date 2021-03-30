@@ -110,6 +110,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.ds_config_dict["zero3"] = json.load(f)
 
     def get_config_dict(self, stage):
+        """ As the tests modify the dict, always make a copy """
         return deepcopy(self.ds_config_dict[stage])
 
     def test_fake_notebook_no_launcher(self):

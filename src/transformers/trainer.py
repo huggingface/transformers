@@ -1857,27 +1857,22 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        # if self.args.deepspeed and not self.args.do_train:
-        #     # no harm, but flagging to the user that deepspeed config is ignored for eval
-        #     # flagging only for when --do_train wasn't passed as only then it's redundant
-        #     logger.info("Detected the deepspeed argument but it will not be used for evaluation")
+        # if eval is called w/o train init deepspeed here
+        if self.args.deepspeed and not self.deepspeed:
+
+            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
+            # from the checkpoint eventually
+            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
+            self.model = deepspeed_engine.module
+            self.model_wrapped = deepspeed_engine
+            self.deepspeed = deepspeed_engine
+            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
+            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
+            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
+            deepspeed_engine.optimizer.optimizer = None
+            deepspeed_engine.lr_scheduler = None
 
         model = self._wrap_model(self.model, training=False)
-        # self.deepspeed.optimizer.param_coordinator.reset_step()
-        # for p in model.parameters():
-        #    p.all_gather()
-        # from deepspeed import DeepSpeedEngine
-        # from transformers import T5ForConditionalGeneration
-        # old_forward = T5ForConditionalGeneration.forward
-        # def new_forward(*args, **kwargs):
-        #     self.deepspeed.optimizer.param_coordinator.reset_step()
-        #     return old_forward(*args, **kwargs)
-        # T5ForConditionalGeneration.forward = new_forward
-
-        # self.model = model
-
-        # print(model)
-        # die
 
         # if full fp16 is wanted on eval and this ``evaluation`` or ``predict`` isn't called while
         # ``train`` is running, half it first and then put on device

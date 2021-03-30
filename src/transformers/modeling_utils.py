@@ -45,9 +45,6 @@ from .integrations import deepspeed_is_zero3_enabled
 from .utils import logging
 
 
-if deepspeed_is_zero3_enabled():
-    import deepspeed
-
 logger = logging.get_logger(__name__)
 
 try:
@@ -1061,6 +1058,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         # Instantiate model.
 
         if deepspeed_is_zero3_enabled():
+            import deepspeed
+
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
             with deepspeed.zero.Init():
@@ -1126,6 +1125,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
                 args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
                 if deepspeed_is_zero3_enabled():
+                    import deepspeed
+
                     # because zero3 puts placeholders in model params, this context
                     # manager gathers (unpartitions) the params of the current layer, then loads from
                     # the state dict and then re-partitions them again
