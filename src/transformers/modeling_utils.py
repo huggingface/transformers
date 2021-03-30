@@ -964,6 +964,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
@@ -983,6 +989,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
                 revision=revision,
+                _from_auto=from_auto_class,
+                _from_pipeline=from_pipeline,
                 **kwargs,
             )
         else:
@@ -1003,19 +1011,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
-                            pretrained_model_name_or_path,
-                        )
+                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index']} found in "
+                        f"directory {pretrained_model_name_or_path} or `from_tf` set to False."
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert (
-                    from_tf
-                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
-                    pretrained_model_name_or_path + ".index"
-                )
+                if not from_tf:
+                    raise ValueError(
+                        f"We found a TensorFlow checkpoint at {pretrained_model_name_or_path + '.index'}, please set "
+                        "from_tf to True to load from this checkpoint."
+                    )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
@@ -1035,6 +1041,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                     use_auth_token=use_auth_token,
+                    user_agent=user_agent,
                 )
             except EnvironmentError as err:
                 logger.error(err)

@@ -1234,6 +1234,9 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += f"; tensorflow/{_tf_version}"
     if is_training_run_on_sagemaker():
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
+    # CI will set this value to True
+    if os.environ.get("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
+        ua += "; is_ci/true"
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
@@ -1243,7 +1246,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
 
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
-    Donwload remote file. Do not gobble up errors.
+    Download remote file. Do not gobble up errors.
     """
     headers = copy.deepcopy(headers)
     if resume_size > 0:

@@ -42,7 +42,7 @@ jobs:
           RUN_SLOW: yes
           HF_HOME: /mnt/cache
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -72,7 +72,7 @@ jobs:
           RUN_PIPELINE_TESTS: yes
           HF_HOME: /mnt/cache
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -117,7 +117,7 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 16
           MKL_NUM_THREADS: 16
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -134,7 +134,7 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 16
           MKL_NUM_THREADS: 16
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -181,7 +181,7 @@ jobs:
           MKL_NUM_THREADS: 16
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -196,7 +196,7 @@ jobs:
           RUN_PIPELINE_TESTS: yes
           HF_HOME: /mnt/cache
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -241,7 +241,7 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 16
           HF_HOME: /mnt/cache
         run: |
-          python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -258,7 +258,7 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 16
           HF_HOME: /mnt/cache
         run: |
-          python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
+          TRANSFORMERS_IS_CI=1 python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}

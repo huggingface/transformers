@@ -221,7 +221,7 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
+            - run: TRANSFORMERS_IS_CI=1 RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test ./tests/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -247,7 +247,7 @@ jobs:
                   key: v0.4-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
+            - run: TRANSFORMERS_IS_CI=1 RUN_PIPELINE_TESTS=1 python -m pytest -n 8 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf ./tests/ -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -272,7 +272,7 @@ jobs:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
+            - run: TRANSFORMERS_IS_CI=1 python -m pytest -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -299,7 +299,7 @@ jobs:
                   key: v0.4-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/ | tee examples_output.txt
+            - run: TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --dist=loadfile -s --make-reports=examples_torch ./examples/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
@@ -319,7 +319,7 @@ jobs:
                 git config --global user.name "ci"
             - run: pip install --upgrade pip
             - run: pip install .[testing]
-            - run: RUN_GIT_LFS_TESTS=1 python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
+            - run: TRANSFORMERS_IS_CI=1 RUN_GIT_LFS_TESTS=1 python -m pytest -sv ./tests/test_hf_api.py -k "HfLargefilesTest"
 
     build_doc:
         working_directory: ~/transformers

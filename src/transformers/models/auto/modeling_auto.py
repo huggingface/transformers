@@ -805,6 +805,7 @@ class AutoModel:
             >>> model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -899,6 +900,7 @@ class AutoModelForPreTraining:
             >>> model = AutoModelForPreTraining.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1010,6 +1012,7 @@ class AutoModelWithLMHead:
             FutureWarning,
         )
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1103,6 +1106,7 @@ class AutoModelForCausalLM:
             >>> model = AutoModelForCausalLM.from_pretrained('./tf_model/gpt2_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1196,6 +1200,7 @@ class AutoModelForMaskedLM:
             >>> model = AutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1292,6 +1297,7 @@ class AutoModelForSeq2SeqLM:
             >>> model = AutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1390,6 +1396,7 @@ class AutoModelForSequenceClassification:
             >>> model = AutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1487,6 +1494,7 @@ class AutoModelForQuestionAnswering:
             >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1587,6 +1595,7 @@ class AutoModelForTableQuestionAnswering:
             >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/tapas_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1685,6 +1694,7 @@ class AutoModelForTokenClassification:
             >>> model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1785,6 +1795,7 @@ class AutoModelForMultipleChoice:
             >>> model = AutoModelForMultipleChoice.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1885,6 +1896,7 @@ class AutoModelForNextSentencePrediction:
             >>> model = AutoModelForNextSentencePrediction.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
