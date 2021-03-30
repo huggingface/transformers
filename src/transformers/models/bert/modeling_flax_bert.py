@@ -445,6 +445,31 @@ class FlaxBertOnlyMLMHead(nn.Module):
         return hidden_states
 
 
+class FlaxBertOnlyNSPHead(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self, config):
+        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
+
+    def __call__(self, pooled_output):
+        return self.seq_relationship(pooled_output)
+
+
+class FlaxBertPreTrainingHeads(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.predictions = FlaxBertLMPredictionHead(self.config, dtype=self.dtype)
+        self.seq_relationship = nn.Dense(2, dtype=self.dtype)
+
+    def __call__(self, hidden_states, pooled_output):
+        prediction_scores = self.predictions(hidden_states)
+        seq_relationship_score = self.seq_relationship(pooled_output)
+        return prediction_scores, seq_relationship_score
+
+
 class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -551,6 +576,70 @@ class FlaxBertModule(nn.Module):
         return hidden_states, pooled
 
 
+class FlaxBertForPreTraining(FlaxBertPreTrainedModel):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = FlaxBertForPreTrainingModule(config, **kwargs)
+
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+
+class FlaxBertForPreTrainingModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+        )
+        self.cls = FlaxBertPreTrainingHeads(
+            config=self.config,
+            dtype=self.dtype,
+        )
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        hidden_states, pooled_output = self.encoder(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
+        prediction_scores, seq_relationship_score = self.cls(hidden_states, pooled_output)
+
+        return (prediction_scores, seq_relationship_score)
+
+
 class FlaxBertForMaskedLM(FlaxBertPreTrainedModel):
     def __init__(
         self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
@@ -597,8 +686,8 @@ class FlaxBertForMaskedLMModule(nn.Module):
         self.bert = FlaxBertModule(
             config=self.config,
             add_pooling_layer=False,
+            dtype=self.dtype,
         )
-        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.cls = FlaxBertOnlyMLMHead(
             config=self.config,
             dtype=self.dtype,
@@ -611,7 +700,323 @@ class FlaxBertForMaskedLMModule(nn.Module):
         hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
 
         # Compute the prediction scores
-        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         logits = self.cls(hidden_states)
 
         return (logits,)
+
+
+class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = FlaxBertForNextSentencePredictionModule(config, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+
+class FlaxBertForNextSentencePredictionModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+        )
+        self.cls = FlaxBertOnlyNSPHead(
+            config=self.config,
+            dtype=self.dtype,
+        )
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        _, pooled_output = self.bert(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
+
+        seq_relationship_scores = self.cls(pooled_output)
+        return (seq_relationship_scores,)
+
+
+class FlaxBertForSequenceClassification(FlaxBertPreTrainedModel):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = FlaxBertForSequenceClassificationModule(config, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+
+class FlaxBertForSequenceClassificationModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(
+            self.config.num_lables,
+            dtype=self.dtype,
+        )
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        _, pooled_output = self.bert(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        return (logits,)
+
+
+class FlaxBertForMultipleChoice(FlaxBertPreTrainedModel):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = FlaxBertForMultipleChoiceModule(config, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+
+class FlaxBertForMultipleChoiceModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(1, dtype=self.dtype)
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        _, pooled_output = self.bert(
+            input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic
+        )
+
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        return (logits,)
+
+
+class FlaxBertForTokenClassification(FlaxBertPreTrainedModel):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = FlaxBertForTokenClassification(config, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+
+class FlaxBertForTokenClassificationModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+            add_pooling_layer=False,
+        )
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
+        self.classifier = nn.Dense(self.config.num_lables, dtype=self.dtype)
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+
+        hidden_states = self.dropout(hidden_states)
+        logits = self.classifier(hidden_states)
+
+        return (logits,)
+
+
+class FlaxBertForQuestionAnswering(FlaxBertPreTrainedModel):
+    def __init__(
+        self, config: BertConfig, input_shape: Tuple = (1, 1), seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs
+    ):
+        module = FlaxBertForQuestionAnswering(config, **kwargs)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+
+    def __call__(
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        params: dict = None,
+        dropout_rng: PRNGKey = None,
+        train: bool = False,
+    ):
+        input_ids, attention_mask, token_type_ids, position_ids = self._check_inputs(
+            input_ids, attention_mask, token_type_ids, position_ids
+        )
+
+        # Handle any PRNG if needed
+        rngs = {}
+        if dropout_rng is not None:
+            rngs["dropout"] = dropout_rng
+
+        return self.module.apply(
+            {"params": params or self.params},
+            jnp.array(input_ids, dtype="i4"),
+            jnp.array(attention_mask, dtype="i4"),
+            jnp.array(token_type_ids, dtype="i4"),
+            jnp.array(position_ids, dtype="i4"),
+            not train,
+            rngs=rngs,
+        )
+
+
+class FlaxBertForQuestionAnsweringModule(nn.Module):
+    config: BertConfig
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.bert = FlaxBertModule(
+            config=self.config,
+            dtype=self.dtype,
+            add_pooling_layer=False,
+        )
+        self.qa_outputs = nn.Dense(self.config.num_lables, dtype=self.dtype)
+
+    def __call__(
+        self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
+    ):
+        # Model
+        hidden_states = self.bert(input_ids, attention_mask, token_type_ids, position_ids, deterministic=deterministic)
+
+        logits = self.qa_outputs(hidden_states)
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1)
+        end_logits = end_logits.squeeze(-1)
+
+        return (start_logits, end_logits)
