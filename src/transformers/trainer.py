@@ -41,6 +41,7 @@ from .integrations import (  # isort: split
     run_hp_search_optuna,
     run_hp_search_ray,
     deepspeed_init,
+    deepspeed_is_zero3_enabled,
 )
 
 import numpy as np
@@ -1254,6 +1255,18 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
         if self.deepspeed:
+            # #die
+            # from collections import OrderedDict
+            # # XXX: don't really need ds_numel - can calculate on the fly
+            # param_shapes = OrderedDict()
+            # for name, param in self.model.named_parameters():
+            #     #param_shapes[name] = dict(ds_shape=param.ds_shape, ds_numel=param.ds_numel)
+            #     param_shapes[name] = param.ds_shape
+            #     #print(f"saving param {name} {param.ds_numel} {param.ds_shape}")
+
+            # self.deepspeed.save_checkpoint(output_dir, client_state=dict(param_shapes=param_shapes))
+
+            # XXX: under zero3 don't save the model file itself, since it's bogus!
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
@@ -1559,8 +1572,31 @@ class Trainer:
 
             if self.is_world_process_zero():
                 self._save(output_dir, state_dict=state_dict)
-        elif self.is_world_process_zero():
-            self._save(output_dir)
+
+        # if 0 and self.deepspeed:
+        if self.deepspeed:
+            pass
+            # if deepspeed_is_zero3_enabled():
+            #     state_dict = self.deepspeed.zero3_consolidated_fp16_state_dict()
+            #     if torch.distributed.get_rank() == 0:
+            #         path = os.path.join(self.args.output_dir, WEIGHTS_NAME)
+            #         torch.save(state_dict, path)
+
+            # fp32 weights
+            # from torch._utils import _flatten_dense_tensors, _unflatten_dense_tensors
+
+            # fp32_params = _unflatten_dense_tensors(self.optimizer.fp32_partitioned_groups_flat[0], self.optimizer.fp16_partitioned_groups[0])
+            # for i,p in enumerate(self.model.parameters()):
+            #     p.data = fp32_params[i].data
+            # state_dict = self.model.state_dict()
+
+            # rank = torch.distributed.get_rank()
+            # torch.save(state_dict, os.path.join(self.args.output_dir, f"{rank}.{WEIGHTS_NAME}"))
+
+        # die
+
+        # elif self.is_world_process_zero():
+        #     self._save(output_dir)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1595,6 +1631,7 @@ class Trainer:
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
         logger.info("Saving model checkpoint to %s", output_dir)
+
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
@@ -1611,6 +1648,16 @@ class Trainer:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
+
+        if 0 and deepspeed_is_zero3_enabled():
+            # it's too complicated to try to override different places where the weights dump gets
+            # saved, so since under zero3 the file is bogus, simply delete it. the user should
+            # either user deepspeed checkpoint to resume or to recover full weights use
+            # zero_to_fp32.py stored in the checkpoint.
+            file = os.path.join(output_dir, WEIGHTS_NAME)
+            if os.path.isfile(file):
+                logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
+                os.remove(file)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))

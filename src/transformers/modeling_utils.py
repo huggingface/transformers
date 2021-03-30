@@ -41,8 +41,9 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .utils import logging
 from .integrations import deepspeed_is_zero3_enabled
+from .utils import logging
+
 
 if deepspeed_is_zero3_enabled():
     import deepspeed

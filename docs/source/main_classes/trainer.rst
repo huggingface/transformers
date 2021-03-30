@@ -771,8 +771,8 @@ on performance unless you are doing activation checkpointing. ``1e9`` would cons
 ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``, so its not additive, its just 2GB total.
 
 ``stage3_max_live_parameters`` is the upper limit on how many full parameters you want to keep on the GPU at any given
-time. ``reuse_distance`` is a metric we are using to figure out when will a parameter be used again in the future, and
-we use the ``stage3_max_reuse_distance`` to decide whether to throw away the parameter or to keep it. If a parameter is
+time. "reuse distance" is a metric we are using to figure out when will a parameter be used again in the future, and we
+use the ``stage3_max_reuse_distance`` to decide whether to throw away the parameter or to keep it. If a parameter is
 going to be used again in near future (less than ``stage3_max_reuse_distance``) then we keep it to reduce communication
 overhead. This is super helpful when you have activation check-pointing enabled, where we do a forward recompute and
 backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
@@ -1037,7 +1037,8 @@ For full details on this method please refer to `Registering External Parameters
 Constructing Massive Models
 """""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 
-DeepSpeed/ZeRO-3 can handle models with Trillions of parameters which may not fit onto the existing RAM. In such cases, but also if you want the initialization to happen much faster, initialize the model using `deepspeed.zero.Init()`
+DeepSpeed/ZeRO-3 can handle models with Trillions of parameters which may not fit onto the existing RAM. In such cases,
+but also if you want the initialization to happen much faster, initialize the model using `deepspeed.zero.Init()`
 context manager (which is also a function decorator), like so:
 
 .. code-block:: python
@@ -1050,7 +1051,8 @@ context manager (which is also a function decorator), like so:
 
 As you can see this gives you a randomly initialized model.
 
-If you want to use a pretrained model, ``model_class.from_pretrained`` will activate this feature as long as ``deepspeed_is_zero3_enabled()`` returns ``True``. Therefore to enable this feature here is the required sequence:
+If you want to use a pretrained model, ``model_class.from_pretrained`` will activate this feature as long as
+``deepspeed_is_zero3_enabled()`` returns ``True``. Therefore to enable this feature here is the required sequence:
 
 .. code-block:: python
 
@@ -1058,7 +1060,9 @@ If you want to use a pretrained model, ``model_class.from_pretrained`` will acti
     deepspeed_is_zero3_enabled(True)
     model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
-If you're using Trainer command line arguments which include ``--deepspeed ds_config.json`` with ZeRO3 config enabled, then you can skip ``deepspeed_is_zero3_enabled(True)`` as it will try to discover whether it'll be run under zero3 and ``from_pretrained`` will automatically activate this feature.
+If you're using Trainer command line arguments which include ``--deepspeed ds_config.json`` with ZeRO3 config enabled,
+then you can skip ``deepspeed_is_zero3_enabled(True)`` as it will try to discover whether it'll be run under zero3 and
+``from_pretrained`` will automatically activate this feature.
 
 Note: If the fp16 weights of the model can't fit onto the memory of a single GPU this feature must be used.
 

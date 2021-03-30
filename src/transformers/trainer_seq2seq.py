@@ -19,6 +19,7 @@ from packaging import version
 from torch import nn
 from torch.utils.data.dataset import Dataset
 
+from .integrations import deepspeed_is_zero3_enabled
 from .trainer import Trainer
 from .trainer_utils import PredictionOutput
 from .utils import logging
@@ -160,15 +161,11 @@ class Seq2SeqTrainer(Trainer):
         gen_kwargs = {
             "max_length": self._max_length if self._max_length is not None else self.model.config.max_length,
             "num_beams": self._num_beams if self._num_beams is not None else self.model.config.num_beams,
-            "synced_gpus": True if self.deepspeed else False,
+            "synced_gpus": True if deepspeed_is_zero3_enabled() else False,
         }
 
-        # print(self.model)
-        # diaea
-        # self.deepspeed.optimizer.param_coordinator.reset_step()
         generated_tokens = self.model.generate(
             inputs["input_ids"],
-            deepspeed=self.deepspeed,
             attention_mask=inputs["attention_mask"],
             **gen_kwargs,
         )
@@ -177,15 +174,11 @@ class Seq2SeqTrainer(Trainer):
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
 
         with torch.no_grad():
-            # self.deepspeed.optimizer.param_coordinator.reset_step()
-            # die
-
             if self.use_amp:
                 with autocast():
                     outputs = model(**inputs)
             else:
                 outputs = model(**inputs)
-                # outputs = self.deepspeed(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
                     loss = self.label_smoother(outputs, inputs["labels"]).mean().detach()

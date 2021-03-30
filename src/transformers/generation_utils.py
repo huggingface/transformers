@@ -659,7 +659,6 @@ class GenerationMixin:
     def generate(
         self,
         input_ids: Optional[torch.LongTensor] = None,
-        deepspeed=None,
         max_length: Optional[int] = None,
         min_length: Optional[int] = None,
         do_sample: Optional[bool] = None,
@@ -793,7 +792,7 @@ class GenerationMixin:
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
                 model is an encoder-decoder model, encoder specific kwargs should not be prefixed and decoder specific
@@ -871,9 +870,6 @@ class GenerationMixin:
             >>> outputs = model.generate(input_ids=input_ids, max_length=20, do_sample=True, bad_words_ids=bad_words_ids)
             >>> print("Generated:", tokenizer.decode(outputs[0], skip_special_tokens=True))
         """
-
-        # print(self.__class__)
-        # diaea
 
         # set init values
         num_beams = num_beams if num_beams is not None else self.config.num_beams
@@ -988,7 +984,6 @@ class GenerationMixin:
             # greedy search
             return self.greedy_search(
                 input_ids,
-                deepspeed=deepspeed,
                 logits_processor=logits_processor,
                 stopping_criteria=stopping_criteria,
                 max_length=max_length,
@@ -1148,7 +1143,6 @@ class GenerationMixin:
     def greedy_search(
         self,
         input_ids: torch.LongTensor,
-        deepspeed=None,
         logits_processor: Optional[LogitsProcessorList] = None,
         stopping_criteria: Optional[StoppingCriteriaList] = None,
         max_length: Optional[int] = None,
@@ -1269,7 +1263,7 @@ class GenerationMixin:
             input_ids, max_length
         )
 
-        this_peer_finished = False
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
 
             if synced_gpus:
@@ -1278,21 +1272,16 @@ class GenerationMixin:
                 this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
                 # send 0.0 if we finished, 1.0 otherwise
                 dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
-                #print(f"{dist.get_rank()} Finished? {this_peer_finished_flag}")
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
-                    #print(f"{dist.get_rank()} All peers finished!")
                     break
             elif this_peer_finished:
                 break
 
-            # if this_peer_finished:
-            #     break
-
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            #print(f"{dist.get_rank()} generate {cur_len}/{max_length}")
+            # forward pass to get next token
             outputs = self(
                 **model_inputs,
                 return_dict=True,
@@ -1302,9 +1291,7 @@ class GenerationMixin:
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1
-
-                # don't waste resources running the code we don't need
-                continue
+                continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
 
@@ -1355,28 +1342,11 @@ class GenerationMixin:
             cur_len = cur_len + 1
 
             # stop when there is a </s> in each sentence, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0:
-                #print(f"{dist.get_rank()} unfinished_sequences {cur_len}/{max_length}")
-                this_peer_finished = True
-
-            if not this_peer_finished and stopping_criteria(input_ids, scores):
-                #print(f"{dist.get_rank()} hit stopping_criteria {cur_len}/{max_length}")
-                this_peer_finished = True
-
-
-        # if synced_gpus:
-        #     # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
-        #     # must continue running forward so that the other gpus who may have not finished their
-        #     # generate yet, can complete as they rely on this gpu to received its slice of params
-        #     for _ in range(max_length - cur_len):
-        #         # _ = deepspeed(
-        #         _ = self(
-        #             **model_inputs,
-        #             return_dict=True,
-        #             output_attentions=output_attentions,
-        #             output_hidden_states=output_hidden_states,
-        #         )
-        # #print(f"{dist.get_rank()} finished {cur_len}/{max_length}")
+            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -1535,8 +1505,22 @@ class GenerationMixin:
             input_ids, max_length
         )
 
+        this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+            elif this_peer_finished:
+                break
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -1547,6 +1531,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
@@ -1582,7 +1571,6 @@ class GenerationMixin:
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            cur_len = cur_len + 1
 
             # update sequence length
             if eos_token_id is not None:
@@ -1590,30 +1578,20 @@ class GenerationMixin:
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0:
-                break
-
-            if stopping_criteria(input_ids, scores):
-                break
-
             # update model kwargs
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-        if synced_gpus:
-            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
-            # must continue running forward so that the other gpus who may have not finished their
-            # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length - cur_len):
-                # _ = deepspeed(
-                _ = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
+            # increase cur_len
+            cur_len = cur_len + 1
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
+            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -1791,7 +1769,21 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+            elif this_peer_finished:
+                break
+
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -1800,6 +1792,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
@@ -1857,32 +1854,20 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
-            cur_len = cur_len + 1
-
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
-            if beam_scorer.is_done:
-                break
+            # increase cur_len
+            cur_len = cur_len + 1
 
-            if stopping_criteria(input_ids, scores):
-                break
-
-        if synced_gpus:
-            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
-            # must continue running forward so that the other gpus who may have not finished their
-            # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length - cur_len):
-                # _ = deepspeed(
-                _ = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
@@ -2074,7 +2059,21 @@ class GenerationMixin:
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+            elif this_peer_finished:
+                break
+
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -2083,6 +2082,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
@@ -2143,7 +2147,6 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-            cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
@@ -2151,24 +2154,14 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
-            if beam_scorer.is_done:
-                break
+            # increase cur_len
+            cur_len = cur_len + 1
 
-            if stopping_criteria(input_ids, scores):
-                break
-
-        if synced_gpus:
-            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
-            # must continue running forward so that the other gpus who may have not finished their
-            # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length - cur_len):
-                # _ = deepspeed(
-                _ = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
@@ -2363,7 +2356,21 @@ class GenerationMixin:
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+            elif this_peer_finished:
+                break
+
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
 
@@ -2378,6 +2385,10 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
 
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
@@ -2469,32 +2480,22 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
 
-            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+            # increase cur_len
             cur_len = cur_len + 1
-            if beam_scorer.is_done:
-                break
 
-            if stopping_criteria(input_ids, scores):
-                break
-
-        if synced_gpus:
-            # under ZeRO3 parallelization if this gpu finished before max_length was reached, it
-            # must continue running forward so that the other gpus who may have not finished their
-            # generate yet, can complete as they rely on this gpu to received its slice of params
-            for _ in range(max_length - cur_len):
-                # _ = deepspeed(
-                _ = self(
-                    **model_inputs,
-                    return_dict=True,
-                    output_attentions=output_attentions,
-                    output_hidden_states=output_hidden_states,
-                )
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
