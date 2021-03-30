@@ -362,7 +362,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_save_checkpoints_zero3(self):
         self.run_save_checkpoints(ZERO3)
 
-    def test_can_resume_training_errors(self):
+    def test_can_resume_training_all_errors(self):
         # failures to find checkpoints are enough to be tested on just one of the stages since these are stage-independent
         with mockenv_context(**self.dist_env_1_gpu):
             ds_config_dict = self.get_config_dict(ZERO2)
@@ -471,8 +471,11 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             do_eval=True,
         )
 
-    def test_do_eval_no_train_zero2(self): self.run_do_eval_no_train(ZERO2)
-    def test_do_eval_no_train_zero3(self): self.run_do_eval_no_train(ZERO3)
+    def test_do_eval_no_train_zero2(self):
+        self.run_do_eval_no_train(ZERO2)
+
+    def test_do_eval_no_train_zero3(self):
+        self.run_do_eval_no_train(ZERO3)
 
     # XXX: need to do better validation beyond just that the run was successful
     def run_quick(
@@ -524,7 +527,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         max_len = 32
         data_dir = self.examples_dir / "test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
-        #output_dir = "/tmp/zero3"
+        # output_dir = "/tmp/zero3"
         args = f"""
             --model_name_or_path {model_name}
             --train_file {data_dir}/train.json

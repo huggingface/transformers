@@ -1202,18 +1202,6 @@ class Trainer:
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
 
-        # if self.deepspeed:
-        #     # free up any memory that might be useful for eval
-        #     # self.deepspeed = None
-        #     # self.optimizer = None
-        #     # self.lr_scheduler = None
-        #     self.model_wrapped = self.model
-        #     gc.collect()  # force memory release
-        #     # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
-        #     self.place_model_on_device = self.args.place_model_on_device
-        #     if self.is_model_parallel:
-        #         self.place_model_on_device = False
-
         self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
@@ -1268,18 +1256,8 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
         if self.deepspeed:
-            # #die
-            # from collections import OrderedDict
-            # # XXX: don't really need ds_numel - can calculate on the fly
-            # param_shapes = OrderedDict()
-            # for name, param in self.model.named_parameters():
-            #     #param_shapes[name] = dict(ds_shape=param.ds_shape, ds_numel=param.ds_numel)
-            #     param_shapes[name] = param.ds_shape
-            #     #print(f"saving param {name} {param.ds_numel} {param.ds_shape}")
-
-            # self.deepspeed.save_checkpoint(output_dir, client_state=dict(param_shapes=param_shapes))
-
-            # XXX: under zero3 don't save the model file itself, since it's bogus!
+            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
+            # config `stage3_gather_fp16_weights_on_model_save` is True
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
@@ -1490,9 +1468,6 @@ class Trainer:
         model.train()
         inputs = self._prepare_inputs(inputs)
 
-        # print(model)
-        # die
-
         if self.use_amp:
             with autocast():
                 loss = self.compute_loss(model, inputs)
@@ -1569,25 +1544,16 @@ class Trainer:
 
         Will only save from the main process.
         """
-
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
         elif (
-            self.deepspeed
-            or ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
-            or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
+            ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
         ):
-            # self.optimizer._partition_all_parameters()
             state_dict = self.model.state_dict()
-            # from pprint import pprint
-            # pprint(state_dict)
-            # die
 
             if self.is_world_process_zero():
                 self._save(output_dir, state_dict=state_dict)
-
-        # if 0 and self.deepspeed:
-        if self.deepspeed:
+        elif self.deepspeed:
             pass
             # if deepspeed_is_zero3_enabled():
             #     state_dict = self.deepspeed.zero3_consolidated_fp16_state_dict()
@@ -1608,8 +1574,8 @@ class Trainer:
 
         # die
 
-        # elif self.is_world_process_zero():
-        #     self._save(output_dir)
+        elif self.is_world_process_zero():
+            self._save(output_dir)
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
@@ -1662,15 +1628,15 @@ class Trainer:
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
-        if 0 and deepspeed_is_zero3_enabled():
-            # it's too complicated to try to override different places where the weights dump gets
-            # saved, so since under zero3 the file is bogus, simply delete it. the user should
-            # either user deepspeed checkpoint to resume or to recover full weights use
-            # zero_to_fp32.py stored in the checkpoint.
-            file = os.path.join(output_dir, WEIGHTS_NAME)
-            if os.path.isfile(file):
-                logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
-                os.remove(file)
+        # if deepspeed_is_zero3_enabled():
+        #     # it's too complicated to try to override different places where the weights dump gets
+        #     # saved, so since under zero3 the file is bogus, simply delete it. the user should
+        #     # either user deepspeed checkpoint to resume or to recover full weights use
+        #     # zero_to_fp32.py stored in the checkpoint.
+        #     file = os.path.join(output_dir, WEIGHTS_NAME)
+        #     if os.path.isfile(file):
+        #         logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
+        #         os.remove(file)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
