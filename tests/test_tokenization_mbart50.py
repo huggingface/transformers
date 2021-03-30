@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBart50Tokenizer, MBart50TokenizerFast, is_torch_available
-from transformers.testing_utils import deep_round, require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -200,7 +200,7 @@ class MBartOneToManyIntegrationTest(unittest.TestCase):
         inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en_XX", tgt_lang="ar_AR")
 
         self.assertEqual(
-            deep_round(inputs),
+            nested_simplify(inputs),
             {
                 # en_XX, A, test, EOS
                 "input_ids": [[250004, 62, 3034, 2]],

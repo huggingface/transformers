@@ -1157,7 +1157,7 @@ def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False
     return result
 
 
-def deep_round(obj, decimals=3):
+def nested_simplify(obj, decimals=3):
     """
     Simplifies an object by rounding float numbers, and downcasting tensors/numpy arrays to get simple equality test
     within tests.
@@ -1165,15 +1165,15 @@ def deep_round(obj, decimals=3):
     from transformers.tokenization_utils import BatchEncoding
 
     if isinstance(obj, list):
-        return [deep_round(item, decimals) for item in obj]
+        return [nested_simplify(item, decimals) for item in obj]
     elif isinstance(obj, (dict, BatchEncoding)):
-        return {deep_round(k, decimals): deep_round(v, decimals) for k, v in obj.items()}
+        return {nested_simplify(k, decimals): nested_simplify(v, decimals) for k, v in obj.items()}
     elif isinstance(obj, (str, int)):
         return obj
     elif is_torch_available() and isinstance(obj, torch.Tensor):
-        return deep_round(obj.tolist())
+        return nested_simplify(obj.tolist())
     elif is_tf_available() and tf.is_tensor(obj):
-        return deep_round(obj.numpy().tolist())
+        return nested_simplify(obj.numpy().tolist())
     elif isinstance(obj, float):
         return round(obj, decimals)
     else:
