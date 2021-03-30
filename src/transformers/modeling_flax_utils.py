@@ -330,6 +330,10 @@ class FlaxPreTrainedModel(ABC):
         for missing_key in missing_keys:
             state[missing_key] = random_state[missing_key]
 
+        # remove unexpected keys to not be saved again
+        for unexpected_key in unexpected_keys:
+            del state[unexpected_key]
+
         if len(unexpected_keys) > 0:
             logger.warning(
                 f"Some weights of the model checkpoint at {pretrained_model_name_or_path} were not used when "

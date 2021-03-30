@@ -35,8 +35,6 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
     """Load pytorch checkpoints in a flax model"""
     try:
         import torch  # noqa: F401
-
-        import flax  # noqa: F401
     except ImportError:
         logger.error(
             "Loading a PyTorch model in Flax, requires both PyTorch and  Flax to be installed. Please see "
