@@ -275,7 +275,7 @@ huggingface_estimator = HuggingFace(
         transformers_version='4.4.2',
         pytorch_version='1.6.0',
         py_version='py36',
-        hyperparameters = hyperparameters
+        hyperparameters = hyperparameters,
         distribution = distribution
 )
 ```
@@ -323,7 +323,7 @@ huggingface_estimator = HuggingFace(
 
 ### Git Repository
 
-When you create a `HuggingFace` Estimator, you can specify a [training script that is stored in a GitHub repository](https://sagemaker.readthedocs.io/en/stable/overview.html#use-scripts-stored-in-a-git-repository) as the entry point for the estimator, so that you don’t have to download the scripts locally. If Git support is enabled, then `entry_point` and `source_dir` should be relative paths in the Git repo if provided. 
+When you create a `HuggingFace` Estimator, you can specify a [training script that is stored in a GitHub repository](https://sagemaker.readthedocs.io/en/stable/overview.html#use-scripts-stored-in-a-git-repository) as the entry point for the estimator, so that you don’t have to download the scripts locally. If Git support is enabled, the `entry_point` and `source_dir` should be relative paths in the Git repo if provided. 
 
 If you are using `git_config` to run the [🤗 Transformers examples scripts](https://github.com/huggingface/transformers/tree/master/examples) keep in mind that you need to configure the right `'branch'` for you `transformers_version`, e.g. if you use `transformers_version='4.4.2` you have to use `'branch':'v4.4.2'`. 
 
