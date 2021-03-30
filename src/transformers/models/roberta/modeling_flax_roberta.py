@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Callable, Dict, Tuple
+from typing import Callable, Tuple
 
 import numpy as np
 
@@ -118,17 +118,15 @@ class FlaxRobertaLayerNorm(nn.Module):
 
     hidden_size: int
     epsilon: float = 1e-6
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    use_bias: bool = True  # If True, bias (beta) is added.
-    scale: bool = True  # If True, multiply by scale (gamma). When the next layer is linear
-    # (also e.g. nn.relu), this can be disabled since the scaling will be
-    # done by the next layer.
+    dtype: jnp.dtype = jnp.float32
+    use_bias: bool = True
+    scale: bool = True
     scale_init: Callable[..., np.ndarray] = jax.nn.initializers.ones
     bias_init: Callable[..., np.ndarray] = jax.nn.initializers.zeros
 
     def setup(self):
-        self.gamma = self.param("weight", self.scale_init, (self.hidden_size,))
-        self.beta = self.param("bias", self.scale_init, (self.hidden_size,))
+        self.weight = self.param("weight", self.scale_init, (self.hidden_size,))
+        self.bias = self.param("bias", self.scale_init, (self.hidden_size,))
 
     def __call__(self, x):
         """
@@ -148,11 +146,11 @@ class FlaxRobertaLayerNorm(nn.Module):
         mul = jax.lax.rsqrt(var + self.epsilon)
 
         if self.scale:
-            mul = mul * jnp.asarray(self.gamma)
+            mul = mul * jnp.asarray(self.weight)
         y = (x - mean) * mul
 
         if self.use_bias:
-            y = y + jnp.asarray(self.beta)
+            y = y + jnp.asarray(self.bias)
         return y
 
 
@@ -188,24 +186,21 @@ class FlaxRobertaEmbeddings(nn.Module):
             self.config.vocab_size,
             self.config.hidden_size,
             initializer_range=self.config.initializer_range,
-            name="word_embeddings",
             dtype=self.dtype,
         )
         self.position_embeddings = FlaxRobertaEmbedding(
             self.config.max_position_embeddings,
             self.config.hidden_size,
             initializer_range=self.config.initializer_range,
-            name="position_embeddings",
             dtype=self.dtype,
         )
         self.token_type_embeddings = FlaxRobertaEmbedding(
             self.config.type_vocab_size,
             self.config.hidden_size,
             initializer_range=self.config.initializer_range,
-            name="token_type_embeddings",
             dtype=self.dtype,
         )
-        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, name="LayerNorm", dtype=self.dtype)
+        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, input_ids, token_type_ids, position_ids, attention_mask, deterministic: bool = True):
@@ -229,22 +224,23 @@ class FlaxRobertaSelfAttention(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        assert self.config.hidden_size % self.config.num_attention_heads == 0, "Error"
+        if self.config.hidden_size % self.config.num_attention_heads != 0:
+            raise ValueError(
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`: {self.config.num_attention_heads}"
+            )
+
         self.query = nn.Dense(
             self.config.hidden_size,
-            name="query",
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
         self.key = nn.Dense(
             self.config.hidden_size,
-            name="key",
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
         self.value = nn.Dense(
             self.config.hidden_size,
-            name="value",
             dtype=self.dtype,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
         )
@@ -304,13 +300,13 @@ class FlaxRobertaSelfOutput(nn.Module):
             self.config.hidden_size,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
             dtype=self.dtype,
-            name="dense",
         )
-        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, name="LayerNorm", dtype=self.dtype)
+        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(self, hidden_states, input_tensor):
         hidden_states = self.dense(hidden_states)
-        # TODO: add Dropout
+        hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -318,17 +314,17 @@ class FlaxRobertaSelfOutput(nn.Module):
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertAttention with Bert->Roberta
 class FlaxRobertaAttention(nn.Module):
     config: RobertaConfig
-    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+    dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.self_attention = FlaxRobertaSelfAttention(self.config, dtype=self.dtype, name="self")
-        self.output = FlaxRobertaSelfOutput(self.config, dtype=self.dtype, name="output")
+        self.self = FlaxRobertaSelfAttention(self.config, dtype=self.dtype)
+        self.output = FlaxRobertaSelfOutput(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_mask, deterministic=True):
         # Attention mask comes in as attention_mask.shape == (*batch_sizes, kv_length)
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
-        attn_output = self.self_attention(hidden_states, attention_mask, deterministic=deterministic)
+        attn_output = self.self(hidden_states, attention_mask, deterministic=deterministic)
         hidden_states = self.output(attn_output, hidden_states)
         return hidden_states
 
@@ -342,7 +338,6 @@ class FlaxRobertaIntermediate(nn.Module):
         self.dense = nn.Dense(
             self.config.intermediate_size,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            name="dense",
             dtype=self.dtype,
         )
         self.activation = ACT2FN[self.config.hidden_act]
@@ -362,11 +357,10 @@ class FlaxRobertaOutput(nn.Module):
         self.dense = nn.Dense(
             self.config.hidden_size,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            name="dense",
             dtype=self.dtype,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
-        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, name="LayerNorm", dtype=self.dtype)
+        self.LayerNorm = FlaxRobertaLayerNorm(hidden_size=self.config.hidden_size, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_output, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
@@ -381,9 +375,9 @@ class FlaxRobertaLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.attention = FlaxRobertaAttention(self.config, name="attention", dtype=self.dtype)
-        self.intermediate = FlaxRobertaIntermediate(self.config, name="intermediate", dtype=self.dtype)
-        self.output = FlaxRobertaOutput(self.config, name="output", dtype=self.dtype)
+        self.attention = FlaxRobertaAttention(self.config, dtype=self.dtype)
+        self.intermediate = FlaxRobertaIntermediate(self.config, dtype=self.dtype)
+        self.output = FlaxRobertaOutput(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
         attention_output = self.attention(hidden_states, attention_mask, deterministic=deterministic)
@@ -414,10 +408,10 @@ class FlaxRobertaEncoder(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        self.layers = FlaxRobertaLayerCollection(self.config, name="layer", dtype=self.dtype)
+        self.layer = FlaxRobertaLayerCollection(self.config, dtype=self.dtype)
 
     def __call__(self, hidden_states, attention_mask, deterministic: bool = True):
-        return self.layers(hidden_states, attention_mask, deterministic=deterministic)
+        return self.layer(hidden_states, attention_mask, deterministic=deterministic)
 
 
 # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPooler with Bert->Roberta
@@ -429,7 +423,6 @@ class FlaxRobertaPooler(nn.Module):
         self.dense = nn.Dense(
             self.config.hidden_size,
             kernel_init=jax.nn.initializers.normal(self.config.initializer_range, self.dtype),
-            name="dense",
             dtype=self.dtype,
         )
 
@@ -532,9 +525,9 @@ class FlaxRobertaModule(nn.Module):
     add_pooling_layer: bool = True
 
     def setup(self):
-        self.embeddings = FlaxRobertaEmbeddings(self.config, name="embeddings", dtype=self.dtype)
-        self.encoder = FlaxRobertaEncoder(self.config, name="encoder", dtype=self.dtype)
-        self.pooler = FlaxRobertaPooler(self.config, name="pooler", dtype=self.dtype)
+        self.embeddings = FlaxRobertaEmbeddings(self.config, dtype=self.dtype)
+        self.encoder = FlaxRobertaEncoder(self.config, dtype=self.dtype)
+        self.pooler = FlaxRobertaPooler(self.config, dtype=self.dtype)
 
     def __call__(self, input_ids, attention_mask, token_type_ids, position_ids, deterministic: bool = True):
 

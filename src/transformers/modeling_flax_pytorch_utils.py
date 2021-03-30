@@ -46,7 +46,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
     logger.info("Loading PyTorch weights from {}".format(pt_path))
 
     pt_state_dict = torch.load(pt_path, map_location="cpu")
-    logger.info("PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values())):,} parameters."
+    logger.info("PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values())} parameters.")
 
     flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
 
@@ -54,9 +54,6 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
 
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
-    def is_sub_tuple(main_tuple, sub_tuple):
-        return ".".join(main_tuple) in ".".join(sub_tuple)
-
     # convert pytorch tensor to numpy
     pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
 
@@ -91,25 +88,13 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         elif pt_tuple_key[-1] == "beta":
             pt_tuple_key = pt_tuple_key[:-1] + ("bias",)
 
-        # THIS AND MORE WOULD BE NEEDED IF ATTENTION FN IS USED
-        #        elif flax_model.attention_layers_names is not None and any(is_sub_tuple(pt_tuple_key, attn_layer_name) for attn_layer_name in flax_model.attention_layers_names):
-        #
-        #            if pt_tuple_key[1:] in flax_model.pt_to_flax_look_up:
-        #                pt_tuple_key = pt_tuple_key[:1] + flax_model.pt_to_flax_look_up[pt_tuple_key[1:]]
-        #            elif pt_tuple_key in flax_model.pt_to_flax_look_up:
-        #                pt_tuple_key = flax_model.pt_to_flax_look_up[pt_tuple_key]
-        #
-        #        if pt_tuple_key[-2] in ["key", "query", "value"]:
-        # do reshape
-        # ...
-        #        elif pt_tuple_key[-2] == "out":
-        # do different reshape
-        # ...
-
         if pt_tuple_key in random_flax_state_dict:
             if random_flax_state_dict[pt_tuple_key].shape != pt_tensor.shape:
-                raise ValueError("TODO (PVP): Fill in...")
+                raise ValueError(
+                    "PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape {random_flax_state_dict[pt_tuple_key].shape}, but is {pt_tensor.shape}."
+                )
 
+        # add unexpected weight so that warning is thrown
         flax_state_dict[pt_tuple_key] = pt_tensor
 
     return unflatten_dict(flax_state_dict)
