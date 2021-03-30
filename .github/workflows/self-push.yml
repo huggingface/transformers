@@ -44,8 +44,9 @@ jobs:
           OMP_NUM_THREADS: 8
           MKL_NUM_THREADS: 8
           HF_HOME: /mnt/cache
+          TRANSFORMERS_IS_CI: yes
         run: |
-          TRANSFORMERS_IS_CI=1 python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_gpu tests
+          python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -88,8 +89,9 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 8
           TF_NUM_INTEROP_THREADS: 1
           HF_HOME: /mnt/cache
+          TRANSFORMERS_IS_CI: yes
         run: |
-          TRANSFORMERS_IS_CI=1 python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_gpu tests
+          python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -135,8 +137,9 @@ jobs:
           MKL_NUM_THREADS: 8
           MKL_SERVICE_FORCE_INTEL: 1
           HF_HOME: /mnt/cache
+          TRANSFORMERS_IS_CI: yes
         run: |
-          TRANSFORMERS_IS_CI=1 python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
+          python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
@@ -179,8 +182,9 @@ jobs:
           TF_NUM_INTRAOP_THREADS: 8
           TF_NUM_INTEROP_THREADS: 1
           HF_HOME: /mnt/cache
+          TRANSFORMERS_IS_CI: yes
         run: |
-          TRANSFORMERS_IS_CI=1 python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
+          python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
 
       - name: Failure short reports
         if: ${{ always() }}
