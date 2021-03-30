@@ -56,8 +56,8 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "`transformers` version": version,
             "Platform": platform.platform(),
             "Python version": platform.python_version(),
-            f"PyTorch version (GPU?)": "{pt_version} ({pt_cuda_available})",
-            f"Tensorflow version (GPU?)": "{tf_version} ({tf_cuda_available})",
+            "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
+            "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Using GPU in script?": "<fill in>",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
