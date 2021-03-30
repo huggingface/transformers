@@ -20,7 +20,6 @@ from pathlib import Path
 
 import torch
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 import requests
 import timm
@@ -38,39 +37,16 @@ def create_rename_keys(config, base_model=False):
     rename_keys = []
     for i in range(config.num_hidden_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append(
-            ("blocks." + str(i) + ".norm1.weight", "vit.encoder.layer." + str(i) + ".layernorm_before.weight")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".norm1.bias", "vit.encoder.layer." + str(i) + ".layernorm_before.bias")
-        )
-        rename_keys.append(
-            (
-                "blocks." + str(i) + ".attn.proj.weight",
-                "vit.encoder.layer." + str(i) + ".attention.output.dense.weight",
-            )
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".attn.proj.bias", "vit.encoder.layer." + str(i) + ".attention.output.dense.bias")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".norm2.weight", "vit.encoder.layer." + str(i) + ".layernorm_after.weight")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".norm2.bias", "vit.encoder.layer." + str(i) + ".layernorm_after.bias")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".mlp.fc1.weight", "vit.encoder.layer." + str(i) + ".intermediate.dense.weight")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".mlp.fc1.bias", "vit.encoder.layer." + str(i) + ".intermediate.dense.bias")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".mlp.fc2.weight", "vit.encoder.layer." + str(i) + ".output.dense.weight")
-        )
-        rename_keys.append(
-            ("blocks." + str(i) + ".mlp.fc2.bias", "vit.encoder.layer." + str(i) + ".output.dense.bias")
-        )
+        rename_keys.append((f"blocks.{i}.norm1.weight", f"vit.encoder.layer.{i}.layernorm_before.weight"))
+        rename_keys.append((f"blocks.{i}.norm1.bias", f"vit.encoder.layer.{i}.layernorm_before.bias"))
+        rename_keys.append((f"blocks.{i}.attn.proj.weight", f"vit.encoder.layer.{i}.attention.output.dense.weight"))
+        rename_keys.append((f"blocks.{i}.attn.proj.bias", f"vit.encoder.layer.{i}.attention.output.dense.bias"))
+        rename_keys.append((f"blocks.{i}.norm2.weight", f"vit.encoder.layer.{i}.layernorm_after.weight"))
+        rename_keys.append((f"blocks.{i}.norm2.bias", f"vit.encoder.layer.{i}.layernorm_after.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.weight", f"vit.encoder.layer.{i}.intermediate.dense.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc1.bias", f"vit.encoder.layer.{i}.intermediate.dense.bias"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.weight", f"vit.encoder.layer.{i}.output.dense.weight"))
+        rename_keys.append((f"blocks.{i}.mlp.fc2.bias", f"vit.encoder.layer.{i}.output.dense.bias"))
 
     # projection layer + position embeddings
     rename_keys.extend(
@@ -116,24 +92,18 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         in_proj_weight = state_dict.pop("blocks." + str(i) + ".attn.qkv.weight")
         in_proj_bias = state_dict.pop("blocks." + str(i) + ".attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.query.weight"] = in_proj_weight[
-            : config.hidden_size, :
-        ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.query.bias"] = in_proj_bias[
-            : config.hidden_size
-        ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.key.weight"] = in_proj_weight[
+        state_dict[f"vit.encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
+        state_dict[f"vit.encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
+        state_dict[f"vit.encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.key.bias"] = in_proj_bias[
+        state_dict[f"vit.encoder.layer.{i}.attention.attention.key.bias"] = in_proj_bias[
             config.hidden_size : config.hidden_size * 2
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.value.weight"] = in_proj_weight[
+        state_dict[f"vit.encoder.layer.{i}.attention.attention.value.weight"] = in_proj_weight[
             -config.hidden_size :, :
         ]
-        state_dict["vit.encoder.layer." + str(i) + ".attention.attention.value.bias"] = in_proj_bias[
-            -config.hidden_size :
-        ]
+        state_dict[f"vit.encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
     # to do: add base model support
     if base_model:
@@ -152,19 +122,10 @@ def rename_key(dct, old, new):
 
 
 # We will verify our results on an image of cute cats
-def prepare_img(image_resolution):
+def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     im = Image.open(requests.get(url, stream=True).raw)
-
-    # standard PyTorch mean-std input image normalization
-    transform = Compose(
-        [Resize((image_resolution, image_resolution)), ToTensor(), Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])]
-    )
-
-    # mean-std normalize the input image (batch-size: 1)
-    img = transform(im).unsqueeze(0)
-
-    return img
+    return im
 
 
 @torch.no_grad()
@@ -223,16 +184,15 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path, base_model=False)
     model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check logits on an image
-    img = prepare_img(config.image_size)
-    logits = timm_model(img)
-    outputs = model(img)
+    # Check logits on an image, prepared by ViTFeatureExtractor
+    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+    encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
+    pixel_values = encoding["pixel_values"]
+    logits = timm_model(pixel_values)
+    outputs = model(pixel_values)
 
     assert logits.shape == outputs.logits.shape
     assert torch.allclose(logits, outputs.logits, atol=1e-3)
-
-    # load feature extractor and set size
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {vit_name} to {pytorch_dump_folder_path}")

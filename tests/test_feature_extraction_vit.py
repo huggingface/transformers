@@ -19,7 +19,7 @@ import unittest
 import numpy as np
 
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_torch, require_vision
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
@@ -100,6 +100,7 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         return image_inputs
 
 
+@require_torch
 @require_vision
 class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
