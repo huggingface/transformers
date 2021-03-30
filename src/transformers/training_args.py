@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from .file_utils import (
     cached_property,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
     is_torch_available,
     is_torch_tpu_available,
     torch_required,
@@ -36,7 +36,7 @@ if is_torch_available():
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as sm_dist
 
 
@@ -646,7 +646,7 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             sm_dist.init_process_group()
             self.local_rank = sm_dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
@@ -730,7 +730,7 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DISTRIBUTED
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
@@ -747,7 +747,7 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.xrt_world_size()
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             return sm_dist.get_world_size()
         elif self.local_rank != -1:
             return torch.distributed.get_world_size()
@@ -761,7 +761,7 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.get_ordinal()
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             return sm_dist.get_rank()
         elif self.local_rank != -1:
             return torch.distributed.get_rank()

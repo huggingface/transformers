@@ -352,7 +352,7 @@ def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
 
 
-def is_sagemaker_distributed_available():
+def is_sagemaker_dp_enabled():
     # Get the sagemaker specific env variable.
     sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
     try:

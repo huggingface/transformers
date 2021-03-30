@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 import torch
 
-from transformers.file_utils import cached_property, is_sagemaker_distributed_available
+from transformers.file_utils import cached_property, is_sagemaker_dp_enabled
 from transformers.training_args import TrainingArguments
 from transformers.utils import logging
 
@@ -76,7 +76,7 @@ class SageMakerTrainingArguments(TrainingArguments):
             local_rank = smp.local_rank()
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             import smdistributed.dataparallel.torch.distributed as dist
 
             dist.init_process_group()

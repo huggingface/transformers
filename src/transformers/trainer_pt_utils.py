@@ -32,11 +32,11 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_distributed_available, is_torch_tpu_available
+from .file_utils import is_sagemaker_dp_enabled, is_torch_tpu_available
 from .utils import logging
 
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
 else:
     import torch.distributed as dist

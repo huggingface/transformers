@@ -59,7 +59,7 @@ from .file_utils import (
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
     is_torch_tpu_available,
     is_training_run_on_sagemaker,
 )
@@ -149,7 +149,7 @@ if is_fairscale_available():
     else:
         FullyShardedDDP = None
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
     from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
 else:
@@ -815,7 +815,7 @@ class Trainer:
                     cpu_offload=cpu_offload,
                 ).to(self.args.device)
 
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
