@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from abc import ABC, abstractmethod
+from abc import ABC
 from functools import partial
 from pickle import UnpicklingError
 from typing import Dict, Set, Tuple, Union
@@ -29,6 +29,7 @@ from jax.random import PRNGKey
 
 from .configuration_utils import PretrainedConfig
 from .file_utils import FLAX_WEIGHTS_NAME, WEIGHTS_NAME, cached_path, hf_bucket_url, is_offline_mode, is_remote_url
+from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_dict
 from .utils import logging
 
 
@@ -120,11 +121,6 @@ class FlaxPreTrainedModel(ABC):
                 f"parameters {self.required_params - param_keys}"
             )
         self._params = freeze(params)
-
-    @staticmethod
-    @abstractmethod
-    def convert_from_pytorch(pt_state: Dict, config: PretrainedConfig) -> Dict:
-        raise NotImplementedError()
 
     @classmethod
     def from_pretrained(
@@ -307,24 +303,17 @@ class FlaxPreTrainedModel(ABC):
         else:
             resolved_archive_file = None
 
-        # Instantiate model.
-        with open(resolved_archive_file, "rb") as state_f:
-            try:
-                if from_pt:
-                    import torch
-
-                    state = torch.load(state_f)
-
-                    state = convert_state_dict_from_pt(cls, state, config)
-                else:
-                    state = from_bytes(cls, state_f.read())
-            except UnpicklingError:
-                raise EnvironmentError(
-                    f"Unable to convert pytorch model {archive_file} to Flax deserializable object. "
-                )
-
         # init random models
         model = cls(config, *model_args, **model_kwargs)
+
+        if from_pt:
+            state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
+        else:
+            with open(resolved_archive_file, "rb") as state_f:
+                try:
+                    state = from_bytes(cls, state_f.read())
+                except UnpicklingError:
+                    raise EnvironmentError(f"Unable to convert {archive_file} to Flax deserializable object. ")
 
         # if model is base model only use model_prefix key
         if cls.base_model_prefix not in dict(model.params) and cls.base_model_prefix in state:
@@ -340,6 +329,10 @@ class FlaxPreTrainedModel(ABC):
         # add missing keys as random parameters
         for missing_key in missing_keys:
             state[missing_key] = random_state[missing_key]
+
+        # remove unexpected keys to not be saved again
+        for unexpected_key in unexpected_keys:
+            del state[unexpected_key]
 
         if len(unexpected_keys) > 0:
             logger.warning(
@@ -393,13 +386,3 @@ class FlaxPreTrainedModel(ABC):
         with open(os.path.join(save_directory, FLAX_WEIGHTS_NAME), "wb") as f:
             model_bytes = to_bytes(self.params)
             f.write(model_bytes)
-
-
-def convert_state_dict_from_pt(model_class: ABC, state: Dict, config: PretrainedConfig):
-    """
-    Converts a PyTorch parameter state dict to an equivalent Flax parameter state dict
-    """
-    state = {k: v.numpy() for k, v in state.items()}
-    state = model_class.convert_from_pytorch(state, config)
-    state = unflatten_dict({tuple(k.split(".")): v for k, v in state.items()})
-    return state
