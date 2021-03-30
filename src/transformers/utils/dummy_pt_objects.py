@@ -1449,6 +1449,36 @@ def load_tf_weights_in_gpt2(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_gpt2)
 
 
+GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPTNeoForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class GPTNeoModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class GPTNeoPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def load_tf_weights_in_gpt_neo(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_gpt_neo)
+
+
 IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
