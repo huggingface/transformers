@@ -296,7 +296,7 @@ class M2M100Tokenizer(PreTrainedTokenizer):
             raise ValueError("Translation requires a `src_lang` and a `tgt_lang` for this model")
         self.src_lang = src_lang
         inputs = self(raw_inputs, add_special_tokens=True, return_tensors="pt", **extra_kwargs)
-        tgt_lang_id = self.convert_tokens_to_ids(tgt_lang)
+        tgt_lang_id = self.get_lang_id(tgt_lang)
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 

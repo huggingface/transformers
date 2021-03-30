@@ -248,12 +248,13 @@ class TranslationPipeline(Text2TextGenerationPipeline):
         if tgt_lang is not None:
             self.tgt_lang = tgt_lang
         if src_lang is None and tgt_lang is None:
+            # Backward compatibility, direct arguments use is preferred.
             task = kwargs.get("task", "")
-            tokens = task.split("_")
-            if task and len(tokens) == 4:
+            items = task.split("_")
+            if task and len(items) == 4:
                 # translation, XX, to YY
-                self.src_lang = tokens[1]
-                self.tgt_lang = tokens[3]
+                self.src_lang = items[1]
+                self.tgt_lang = items[3]
 
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         if input_length > 0.9 * max_length:
@@ -265,7 +266,9 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     def _parse_and_tokenize(self, *args, src_lang, tgt_lang, truncation):
         if getattr(self.tokenizer, "_build_translation_inputs", None):
-            return self.tokenizer._build_translation_inputs(*args, src_lang, tgt_lang, truncation)
+            return self.tokenizer._build_translation_inputs(
+                *args, src_lang=src_lang, tgt_lang=tgt_lang, truncation=truncation
+            )
         else:
             return super()._parse_and_tokenize(*args, truncation=truncation)
 
