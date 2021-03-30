@@ -212,7 +212,7 @@ PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", defau
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 SESSION_ID = uuid4().hex
-DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False)
+DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -367,7 +367,7 @@ def is_sagemaker_distributed_available():
 
 
 def is_training_run_on_sagemaker():
-    return "SAGEMAKER_JOB_NAME" in os.environ and not DISABLE_TELEMETRY
+    return "SAGEMAKER_JOB_NAME" in os.environ
 
 
 def is_soundfile_availble():
@@ -1227,6 +1227,8 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     """
     Formats a user-agent string with basic info about a request.
     """
+    if DISABLE_TELEMETRY:
+        return "telemetry/off"
     ua = f"transformers/{__version__}; python/{sys.version.split()[0]}; session_id/{SESSION_ID}"
     if is_torch_available():
         ua += f"; torch/{_torch_version}"
