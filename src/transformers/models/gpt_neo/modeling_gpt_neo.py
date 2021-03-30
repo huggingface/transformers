@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch GPTNeo model. """
+""" PyTorch GPT Neo model. """
 
 
 import os
@@ -826,7 +826,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The GPTNeo Model transformer with a language modeling head on top (linear layer with weights tied to the input
+    The GPT Neo Model transformer with a language modeling head on top (linear layer with weights tied to the input
     embeddings).
     """,
     GPT_NEO_START_DOCSTRING,
