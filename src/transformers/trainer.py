@@ -1554,25 +1554,26 @@ class Trainer:
             if self.is_world_process_zero():
                 self._save(output_dir, state_dict=state_dict)
         elif self.deepspeed:
-            pass
-            # if deepspeed_is_zero3_enabled():
-            #     state_dict = self.deepspeed.zero3_consolidated_fp16_state_dict()
-            #     if torch.distributed.get_rank() == 0:
-            #         path = os.path.join(self.args.output_dir, WEIGHTS_NAME)
-            #         torch.save(state_dict, path)
 
-            # fp32 weights
-            # from torch._utils import _flatten_dense_tensors, _unflatten_dense_tensors
+            # this takes care of everything as long as we aren't under zero3
+            if self.is_world_process_zero():
+                self._save(output_dir)
 
-            # fp32_params = _unflatten_dense_tensors(self.optimizer.fp32_partitioned_groups_flat[0], self.optimizer.fp16_partitioned_groups[0])
-            # for i,p in enumerate(self.model.parameters()):
-            #     p.data = fp32_params[i].data
-            # state_dict = self.model.state_dict()
+            if deepspeed_is_zero3_enabled():
+                # It's too complicated to try to override different places where the weights dump gets
+                # saved, so since under zero3 the file is bogus, simply delete it. The user should
+                # either user deepspeed checkpoint to resume or to recover full weights use
+                # zero_to_fp32.py stored in the checkpoint.
+                if self.is_world_process_zero():
+                    file = os.path.join(output_dir, WEIGHTS_NAME)
+                    if os.path.isfile(file):
+                        # logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
+                        os.remove(file)
 
-            # rank = torch.distributed.get_rank()
-            # torch.save(state_dict, os.path.join(self.args.output_dir, f"{rank}.{WEIGHTS_NAME}"))
-
-        # die
+                # now save the real model if stage3_gather_fp16_weights_on_model_save=True
+                # if false it will not be saved.
+                # This must be called on all ranks
+                self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
 
         elif self.is_world_process_zero():
             self._save(output_dir)
@@ -1627,16 +1628,6 @@ class Trainer:
             self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
-
-        # if deepspeed_is_zero3_enabled():
-        #     # it's too complicated to try to override different places where the weights dump gets
-        #     # saved, so since under zero3 the file is bogus, simply delete it. the user should
-        #     # either user deepspeed checkpoint to resume or to recover full weights use
-        #     # zero_to_fp32.py stored in the checkpoint.
-        #     file = os.path.join(output_dir, WEIGHTS_NAME)
-        #     if os.path.isfile(file):
-        #         logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
-        #         os.remove(file)
 
         # Good practice: save your training arguments together with the trained model
         torch.save(self.args, os.path.join(output_dir, "training_args.bin"))

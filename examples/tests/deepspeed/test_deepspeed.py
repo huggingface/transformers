@@ -20,6 +20,7 @@ import sys
 import unittest
 from copy import deepcopy
 
+from parameterized import parameterized
 from transformers import TrainingArguments
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.integrations import is_deepspeed_available
@@ -64,7 +65,7 @@ def require_deepspeed(test_case):
 
 ZERO2 = "zero2"
 ZERO3 = "zero3"
-zero_stages = [ZERO2, ZERO3]
+stages = [ZERO2, ZERO3]
 
 
 @require_deepspeed
@@ -113,7 +114,12 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     def get_config_dict(self, stage):
         """ As the tests modify the dict, always make a copy """
-        return deepcopy(self.ds_config_dict[stage])
+        config = deepcopy(self.ds_config_dict[stage])
+        if stage == ZERO3:
+            # This setting slows things down, so don't enable it by default unless needed by a test.
+            # It's in the file as a demo for users since we want everything to work out of the box even if slower.
+            config["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = False
+        return config
 
     # --- These tests are enough to run on one of zero stages --- #
 
@@ -177,8 +183,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
 
     # --- These tests need to run on both zero stages --- #
-
-    def run_fake_notebook_no_launcher(self, stage):
+    @parameterized.expand(stages)
+    def test_fake_notebook_no_launcher(self, stage):
         # this setup emulates a notebook where a launcher needs to be emulated by hand
 
         # note that unittest resets sys.stdout each test, so `CaptureStd` will work here to capture
@@ -193,13 +199,8 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
         assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
 
-    def test_fake_notebook_no_launcher_zero2(self):
-        self.run_fake_notebook_no_launcher(ZERO2)
-
-    def test_fake_notebook_no_launcher_zero3(self):
-        self.run_fake_notebook_no_launcher(ZERO3)
-
-    def run_early_get_last_lr(self, stage):
+    @parameterized.expand(stages)
+    def test_early_get_last_lr(self, stage):
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
         # not run for the first few dozen steps while loss scale is too large, and thus during
         # that time `get_last_lr` will fail if called during that warm up stage,
@@ -222,20 +223,15 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
             # XXX: for some reason the following check fails with zero3 - not a broken but a
             # different qualitative outcome - need to investigate at some point
+            if stage == ZERO3:
+                return
 
             # it's enough that train didn't fail for this test, but we must check that
             # optimizer/scheduler didn't run (since if it did this test isn't testing the right thing)
             self.assertEqual(post_train_a, a)
 
-    def test_early_get_last_lr_zero2(self):
-        self.run_early_get_last_lr(ZERO2)
-
-    def test_early_get_last_lr_zero3(self):
-        # XXX: FIXME
-        # self.run_early_get_last_lr(ZERO3)
-        pass
-
-    def run_gradient_accumulation(self, stage):
+    @parameterized.expand(stages)
+    def test_gradient_accumulation(self, stage):
         # this test measures that we get identical weights and similar loss with:
         # 1. per_device_train_batch_size=8, gradient_accumulation_steps=1
         # 2. per_device_train_batch_size=4, gradient_accumulation_steps=2
@@ -291,12 +287,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
 
-    def test_gradient_accumulation_zero2(self):
-        self.run_gradient_accumulation(ZERO2)
-
-    def test_gradient_accumulation_zero3(self):
-        self.run_gradient_accumulation(ZERO3)
-
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
 
@@ -336,13 +326,16 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 path = os.path.join(ds_path, filename)
                 self.assertTrue(os.path.isfile(path), f"[{stage}] {path} is not found")
 
-    def run_save_checkpoints(self, stage):
+    @parameterized.expand(stages)
+    def test_save_checkpoints(self, stage):
         # adapted from  TrainerIntegrationTest.test_save_checkpoints
 
+        freq = 5
         output_dir = self.get_auto_remove_tmp_dir()
         ds_config_dict = self.get_config_dict(stage)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-        freq = 5
+        if stage == ZERO3:
+            ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
 
         # save checkpoints
         with mockenv_context(**self.dist_env_1_gpu):
@@ -356,16 +349,11 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         total = int(self.n_epochs * 64 / self.batch_size)
         self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage)
 
-    def test_save_checkpoints_zero2(self):
-        self.run_save_checkpoints(ZERO2)
+    @parameterized.expand(stages)
+    def test_can_resume_training_errors(self, stage):
 
-    def test_save_checkpoints_zero3(self):
-        self.run_save_checkpoints(ZERO3)
-
-    def test_can_resume_training_all_errors(self):
-        # failures to find checkpoints are enough to be tested on just one of the stages since these are stage-independent
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_dict = self.get_config_dict(ZERO2)
+            ds_config_dict = self.get_config_dict(stage)
             output_dir = self.get_auto_remove_tmp_dir()
             trainer = get_regression_trainer(output_dir=output_dir, deepspeed=ds_config_dict)
 
@@ -385,12 +373,16 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
             )
 
-    def run_can_resume_training(self, stage):
+    @parameterized.expand(stages)
+    def test_can_resume_training_normal(self, stage):
         # adapted from TrainerIntegrationTest.test_can_resume_training
         # test normal resume for each stage separately, error-handling is tested in a different test
         output_dir = self.get_auto_remove_tmp_dir()
         ds_config_dict = self.get_config_dict(stage)
         ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+        if stage == ZERO3:
+            ds_config_dict["zero_optimization"]["stage3_gather_fp16_weights_on_model_save"] = True
+
         kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
 
         with mockenv_context(**self.dist_env_1_gpu):
@@ -424,12 +416,6 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
 
-    def test_can_resume_training_zero2(self):
-        self.run_can_resume_training(ZERO2)
-
-    def test_can_resume_training_zero3(self):
-        self.run_can_resume_training(ZERO3)
-
 
 @slow
 @require_deepspeed
@@ -454,14 +440,12 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     #
 
     @require_torch_multi_gpu
-    def test_basic_distributed_zero2(self):
-        self.run_quick(stage=ZERO2, distributed=True)
+    @parameterized.expand(stages)
+    def test_basic_distributed(self, stage):
+        self.run_quick(stage=stage, distributed=True)
 
-    @require_torch_multi_gpu
-    def test_basic_distributed_zero3(self):
-        self.run_quick(stage=ZERO3, distributed=True)
-
-    def run_do_eval_no_train(self, stage):
+    @parameterized.expand(stages)
+    def test_do_eval_no_train(self, stage):
         # we should not fail if train is skipped
         self.run_quick(
             stage=stage,
@@ -470,12 +454,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             do_train=False,
             do_eval=True,
         )
-
-    def test_do_eval_no_train_zero2(self):
-        self.run_do_eval_no_train(ZERO2)
-
-    def test_do_eval_no_train_zero3(self):
-        self.run_do_eval_no_train(ZERO3)
 
     # XXX: need to do better validation beyond just that the run was successful
     def run_quick(
@@ -583,7 +561,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             remove_args = remove_args_str.split()
             args = [x for x in args if x not in remove_args]
 
-        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}".split()
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
         num_gpus = get_gpu_count() if distributed else 1
         launcher = f"deepspeed --num_gpus {num_gpus}".split()

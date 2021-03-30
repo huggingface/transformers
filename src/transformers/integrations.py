@@ -317,7 +317,7 @@ def deepspeed_is_zero3_enabled(enable=None):
 
 def deepspeed_parse_config(ds_config):
     """"""
-    require_version("deepspeed>0.3.12")
+    require_version("deepspeed>0.3.13")
 
     if isinstance(ds_config, dict):
         # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
