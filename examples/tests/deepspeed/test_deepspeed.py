@@ -62,7 +62,9 @@ def require_deepspeed(test_case):
         return test_case
 
 
-zero_stages = ["zero2", "zero3"]
+ZERO2 = "zero2"
+ZERO3 = "zero3"
+zero_stages = [ZERO2, ZERO3]
 
 
 @require_deepspeed
@@ -99,34 +101,21 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         )
 
         self.ds_config_file = {}
-        self.ds_config_file["zero2"] = f"{self.test_file_dir_str}/ds_config_zero2.json"
-        self.ds_config_file["zero3"] = f"{self.test_file_dir_str}/ds_config_zero3.json"
+        self.ds_config_file[ZERO2] = f"{self.test_file_dir_str}/ds_config_zero2.json"
+        self.ds_config_file[ZERO3] = f"{self.test_file_dir_str}/ds_config_zero3.json"
 
         # use self.get_config_dict(stage) to use these to ensure the original is not modified
         self.ds_config_dict = {}
-        with io.open(self.ds_config_file["zero2"], "r", encoding="utf-8") as f:
-            self.ds_config_dict["zero2"] = json.load(f)
-        with io.open(self.ds_config_file["zero3"], "r", encoding="utf-8") as f:
-            self.ds_config_dict["zero3"] = json.load(f)
+        with io.open(self.ds_config_file[ZERO2], "r", encoding="utf-8") as f:
+            self.ds_config_dict[ZERO2] = json.load(f)
+        with io.open(self.ds_config_file[ZERO3], "r", encoding="utf-8") as f:
+            self.ds_config_dict[ZERO3] = json.load(f)
 
     def get_config_dict(self, stage):
         """ As the tests modify the dict, always make a copy """
         return deepcopy(self.ds_config_dict[stage])
 
-    def test_fake_notebook_no_launcher(self):
-        # this setup emulates a notebook where a launcher needs to be emulated by hand
-
-        # note that unittest resets sys.stdout each test, so `CaptureStd` will work here to capture
-        # DeepSpeed log if this test happens to run first in this pytest worker. But it will fail if
-        # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
-        # to reset `logger.handlers[0].setStream(sys.stdout)` or directly capture from the logger.
-        from deepspeed.utils import logger
-
-        with CaptureLogger(logger) as cs:
-            with mockenv_context(**self.dist_env_1_gpu):
-                trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file["zero2"])
-                trainer.train()
-        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+    # --- These tests are enough to run on one of zero stages --- #
 
     # Test various combos
     # 1. DS scheduler + DS optimizer: this is already tested by most other tests
@@ -137,7 +126,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_hf_scheduler_hf_optimizer(self):
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = self.get_config_dict("zero2")
+            ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
@@ -150,7 +139,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_ds_scheduler_hf_optimizer(self):
         a = 0
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = self.get_config_dict("zero2")
+            ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
@@ -162,7 +151,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_hf_scheduler_ds_optimizer(self):
         # this combo is not possible at the moment
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = self.get_config_dict("zero2")
+            ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["scheduler"]  # force default HF Trainer scheduler
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = False
             ds_config_zero2_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
@@ -174,7 +163,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def test_hf_optimizer_with_offload(self):
         # must not allow non-DS optimizer when using ZERO-offload
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_zero2_dict = self.get_config_dict("zero2")
+            ds_config_zero2_dict = self.get_config_dict(ZERO2)
             del ds_config_zero2_dict["optimizer"]  # force default HF Trainer optimizer
             ds_config_zero2_dict["zero_optimization"]["cpu_offload"] = True
             # sanity check - should the default config change
@@ -187,7 +176,30 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
         self.assertTrue("ZeRO Offload can only work with DeepSpeed optimizers" in str(context.exception))
 
-    def test_early_get_last_lr(self):
+    # --- These tests need to run on both zero stages --- #
+
+    def run_fake_notebook_no_launcher(self, stage):
+        # this setup emulates a notebook where a launcher needs to be emulated by hand
+
+        # note that unittest resets sys.stdout each test, so `CaptureStd` will work here to capture
+        # DeepSpeed log if this test happens to run first in this pytest worker. But it will fail if
+        # it's run not as a first test as `sys.stdout` will no longer be the same. So we either have
+        # to reset `logger.handlers[0].setStream(sys.stdout)` or directly capture from the logger.
+        from deepspeed.utils import logger
+
+        with CaptureLogger(logger) as cs:
+            with mockenv_context(**self.dist_env_1_gpu):
+                trainer = get_regression_trainer(local_rank=0, deepspeed=self.ds_config_file[stage])
+                trainer.train()
+        assert "DeepSpeed info" in cs.out, "expected DeepSpeed logger output but got none"
+
+    def test_fake_notebook_no_launcher_zero2(self):
+        self.run_fake_notebook_no_launcher(ZERO2)
+
+    def test_fake_notebook_no_launcher_zero3(self):
+        self.run_fake_notebook_no_launcher(ZERO3)
+
+    def run_early_get_last_lr(self, stage):
         # with deepspeed's fp16 and dynamic loss scale enabled the optimizer/scheduler steps may
         # not run for the first few dozen steps while loss scale is too large, and thus during
         # that time `get_last_lr` will fail if called during that warm up stage,
@@ -201,7 +213,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=8,
-                deepspeed=self.ds_config_file["zero2"],
+                deepspeed=self.ds_config_file[stage],
                 per_device_train_batch_size=8,
                 logging_steps=1,
             )
@@ -215,8 +227,15 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             # optimizer/scheduler didn't run (since if it did this test isn't testing the right thing)
             self.assertEqual(post_train_a, a)
 
-    def test_gradient_accumulation(self):
+    def test_early_get_last_lr_zero2(self):
+        self.run_early_get_last_lr(ZERO2)
 
+    def test_early_get_last_lr_zero3(self):
+        # XXX: FIXME
+        # self.run_early_get_last_lr(ZERO3)
+        pass
+
+    def run_gradient_accumulation(self, stage):
         # this test measures that we get identical weights and similar loss with:
         # 1. per_device_train_batch_size=8, gradient_accumulation_steps=1
         # 2. per_device_train_batch_size=4, gradient_accumulation_steps=2
@@ -238,7 +257,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=train_len,
-                deepspeed=self.ds_config_file["zero3"],
+                deepspeed=self.ds_config_file[stage],
                 per_device_train_batch_size=8,
                 gradient_accumulation_steps=1,
             )
@@ -255,7 +274,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 b=b,
                 local_rank=0,
                 train_len=train_len,
-                deepspeed=self.ds_config_file["zero3"],
+                deepspeed=self.ds_config_file[stage],
                 per_device_train_batch_size=4,
                 gradient_accumulation_steps=2,
             )
@@ -272,14 +291,20 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # see the note above how to get identical loss on a small bs
         self.assertAlmostEqual(no_grad_accum_loss, yes_grad_accum_loss, places=5)
 
+    def test_gradient_accumulation_zero2(self):
+        self.run_gradient_accumulation(ZERO2)
+
+    def test_gradient_accumulation_zero3(self):
+        self.run_gradient_accumulation(ZERO3)
+
     def check_saved_checkpoints_deepspeed(self, output_dir, freq, total, stage):
         # adapted from TrainerIntegrationCommon.check_saved_checkpoints
 
         file_list = [WEIGHTS_NAME, "training_args.bin", "trainer_state.json", "config.json"]
 
-        if stage == "zero2":
+        if stage == ZERO2:
             ds_file_list = ["mp_rank_00_model_states.pt"]
-        elif stage == "zero3":
+        elif stage == ZERO3:
             ds_file_list = ["zero_pp_rank_0_mp_rank_00_model_states.pt"]
         else:
             raise ValueError(f"unknown stage {stage}")
@@ -311,33 +336,36 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 path = os.path.join(ds_path, filename)
                 self.assertTrue(os.path.isfile(path), f"[{stage}] {path} is not found")
 
-    def test_save_checkpoints(self):
+    def run_save_checkpoints(self, stage):
         # adapted from  TrainerIntegrationTest.test_save_checkpoints
 
-        for stage in zero_stages:
-            output_dir = self.get_auto_remove_tmp_dir()
-            ds_config_dict = self.get_config_dict(stage)
-            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            freq = 5
+        output_dir = self.get_auto_remove_tmp_dir()
+        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+        freq = 5
 
-            # save checkpoints
-            with mockenv_context(**self.dist_env_1_gpu):
-                trainer = get_regression_trainer(
-                    output_dir=output_dir,
-                    save_steps=freq,
-                    deepspeed=ds_config_dict,
-                )
-                trainer.train()
-
-            total = int(self.n_epochs * 64 / self.batch_size)
-            self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage)
-
-    def test_can_resume_training(self):
-        # adapted from TrainerIntegrationTest.test_can_resume_training
-
-        # failures to find checkpoints are enough to be tested on just one of the stages
+        # save checkpoints
         with mockenv_context(**self.dist_env_1_gpu):
-            ds_config_dict = self.get_config_dict("zero2")
+            trainer = get_regression_trainer(
+                output_dir=output_dir,
+                save_steps=freq,
+                deepspeed=ds_config_dict,
+            )
+            trainer.train()
+
+        total = int(self.n_epochs * 64 / self.batch_size)
+        self.check_saved_checkpoints_deepspeed(output_dir, freq, total, stage)
+
+    def test_save_checkpoints_zero2(self):
+        self.run_save_checkpoints(ZERO2)
+
+    def test_save_checkpoints_zero3(self):
+        self.run_save_checkpoints(ZERO3)
+
+    def test_can_resume_training_errors(self):
+        # failures to find checkpoints are enough to be tested on just one of the stages since these are stage-independent
+        with mockenv_context(**self.dist_env_1_gpu):
+            ds_config_dict = self.get_config_dict(ZERO2)
             output_dir = self.get_auto_remove_tmp_dir()
             trainer = get_regression_trainer(output_dir=output_dir, deepspeed=ds_config_dict)
 
@@ -357,45 +385,50 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 "Can't find a valid checkpoint at" in str(context.exception), f"got exception: {context.exception}"
             )
 
-        # now test normal resume for each stage separately
-        for stage in zero_stages:
-            output_dir = self.get_auto_remove_tmp_dir()
-            ds_config_dict = self.get_config_dict(stage)
-            ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
-            kwargs = dict(
-                output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict
-            )
+    def run_can_resume_training(self, stage):
+        # adapted from TrainerIntegrationTest.test_can_resume_training
+        # test normal resume for each stage separately, error-handling is tested in a different test
+        output_dir = self.get_auto_remove_tmp_dir()
+        ds_config_dict = self.get_config_dict(stage)
+        ds_config_dict["fp16"]["initial_scale_power"] = 1  # force optimizer on the first step
+        kwargs = dict(output_dir=output_dir, train_len=128, save_steps=5, learning_rate=0.1, deepspeed=ds_config_dict)
 
-            with mockenv_context(**self.dist_env_1_gpu):
-                trainer = get_regression_trainer(**kwargs)
-                trainer.train()
-                (a, b) = trainer.model.a.item(), trainer.model.b.item()
-                state = dataclasses.asdict(trainer.state)
+        with mockenv_context(**self.dist_env_1_gpu):
+            trainer = get_regression_trainer(**kwargs)
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
 
-                checkpoint = os.path.join(output_dir, "checkpoint-5")
+            checkpoint = os.path.join(output_dir, "checkpoint-5")
 
-                # Reinitialize trainer
-                trainer = get_regression_trainer(**kwargs)
+            # Reinitialize trainer
+            trainer = get_regression_trainer(**kwargs)
 
-                trainer.train(resume_from_checkpoint=checkpoint)
-                (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-                state1 = dataclasses.asdict(trainer.state)
-                self.assertEqual(a, a1)
-                self.assertEqual(b, b1)
-                self.check_trainer_state_are_the_same(state, state1)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
-                # Now check with a later checkpoint that it also works when we span over one epoch
-                checkpoint = os.path.join(output_dir, "checkpoint-15")
+            # Now check with a later checkpoint that it also works when we span over one epoch
+            checkpoint = os.path.join(output_dir, "checkpoint-15")
 
-                # Reinitialize trainer and load model
-                trainer = get_regression_trainer(**kwargs)
+            # Reinitialize trainer and load model
+            trainer = get_regression_trainer(**kwargs)
 
-                trainer.train(resume_from_checkpoint=checkpoint)
-                (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-                state1 = dataclasses.asdict(trainer.state)
-                self.assertEqual(a, a1)
-                self.assertEqual(b, b1)
-                self.check_trainer_state_are_the_same(state, state1)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
+
+    def test_can_resume_training_zero2(self):
+        self.run_can_resume_training(ZERO2)
+
+    def test_can_resume_training_zero3(self):
+        self.run_can_resume_training(ZERO3)
 
 
 @slow
