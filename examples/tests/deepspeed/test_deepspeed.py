@@ -455,27 +455,31 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     @require_torch_multi_gpu
     def test_basic_distributed_zero2(self):
-        self.run_quick(distributed=True, zero2=True)
+        self.run_quick(stage=ZERO2, distributed=True)
 
     @require_torch_multi_gpu
     def test_basic_distributed_zero3(self):
-        self.run_quick(distributed=True)
+        self.run_quick(stage=ZERO3, distributed=True)
 
-    def test_do_eval_no_train(self):
+    def run_do_eval_no_train(self, stage):
         # we should not fail if train is skipped
         self.run_quick(
+            stage=stage,
             eval_steps=1,
             distributed=False,
             do_train=False,
             do_eval=True,
         )
 
+    def test_do_eval_no_train_zero2(self): self.run_do_eval_no_train(ZERO2)
+    def test_do_eval_no_train_zero3(self): self.run_do_eval_no_train(ZERO3)
+
     # XXX: need to do better validation beyond just that the run was successful
     def run_quick(
         self,
+        stage,
         eval_steps=10,
         distributed=True,
-        zero2=False,
         do_train=True,
         do_eval=True,
         extra_args_str=None,
@@ -484,13 +488,13 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         # we are doing quality testing so using a small real model
         output_dir = self.run_trainer(
+            stage=stage,
             model_name=T5_SMALL,
             eval_steps=eval_steps,
             num_train_epochs=1,
             do_train=do_train,
             do_eval=do_eval,
             distributed=distributed,
-            zero2=zero2,
             extra_args_str=extra_args_str,
             remove_args_str=remove_args_str,
         )
@@ -507,20 +511,20 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
     def run_trainer(
         self,
+        stage: str,
         model_name: str,
         eval_steps: int = 10,
         num_train_epochs: int = 1,
         do_train: bool = False,
         do_eval: bool = True,
         distributed: bool = True,
-        zero2: bool = False,
         extra_args_str: str = None,
         remove_args_str: str = None,
     ):
         max_len = 32
         data_dir = self.examples_dir / "test_data/wmt_en_ro"
-        # output_dir = self.get_auto_remove_tmp_dir()
-        output_dir = "/tmp/zero3"
+        output_dir = self.get_auto_remove_tmp_dir()
+        #output_dir = "/tmp/zero3"
         args = f"""
             --model_name_or_path {model_name}
             --train_file {data_dir}/train.json
@@ -576,8 +580,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             remove_args = remove_args_str.split()
             args = [x for x in args if x not in remove_args]
 
-        ds_config = "ds_config_zero2.json" if zero2 else "ds_config_zero3.json"
-        ds_args = f"--deepspeed {self.test_file_dir_str}/{ds_config}".split()
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}".split()
         script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
         num_gpus = get_gpu_count() if distributed else 1
         launcher = f"deepspeed --num_gpus {num_gpus}".split()
