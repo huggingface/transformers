@@ -528,7 +528,7 @@ class Pipeline(_ScikitCompat):
     ):
 
         if framework is None:
-            framework = infer_framework_from_model(model)
+            framework, model = infer_framework_from_model(model)
 
         self.task = task
         self.model = model
