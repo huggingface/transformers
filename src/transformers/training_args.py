@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 from .file_utils import (
     cached_property,
     is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_tpu_available,
     torch_required,
@@ -38,6 +39,11 @@ if is_torch_tpu_available():
 
 if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as sm_dist
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    smp.init()
 
 
 logger = logging.get_logger(__name__)
@@ -519,6 +525,10 @@ class TrainingArguments:
         default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
+    mp_parameters: str = field(
+        default="",
+        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in SageMakerTrainer"},
+    )
 
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
@@ -646,6 +656,10 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
+        elif is_sagemaker_mp_enabled():
+            local_rank = smp.local_rank()
+            device = torch.device("cuda", local_rank)
+            self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
             sm_dist.init_process_group()
             self.local_rank = sm_dist.get_local_rank()
@@ -730,8 +744,10 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
+        elif is_sagemaker_mp_enabled:
+            return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
-            return ParallelMode.SAGEMAKER_DISTRIBUTED
+            return ParallelMode.SAGEMAKER_DATA_PARALLEL
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -747,6 +763,8 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.xrt_world_size()
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_size()
         elif is_sagemaker_dp_enabled():
             return sm_dist.get_world_size()
         elif self.local_rank != -1:
@@ -761,6 +779,8 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.get_ordinal()
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_rank()
         elif is_sagemaker_dp_enabled():
             return sm_dist.get_rank()
         elif self.local_rank != -1:
@@ -772,14 +792,14 @@ class TrainingArguments:
         """
         Can be subclassed and overridden for some specific integrations.
         """
-        return True
+        return not is_sagemaker_mp_enabled()
 
     @property
     def _no_sync_in_gradient_accumulation(self):
         """
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
-        return not self.deepspeed
+        return not (self.deepspeed or is_sagemaker_mp_enabled())
 
     def to_dict(self):
         """
@@ -817,5 +837,6 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
-    SAGEMAKER_DISTRIBUTED = "sm_distributed"
+    SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
+    SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"
