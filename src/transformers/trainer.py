@@ -1663,6 +1663,9 @@ class Trainer:
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
+        # Good practice: save your training arguments together with the trained model
+        torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
+
     def store_flos(self):
         # Storing the number of floating-point operations that went into the model
         if self._total_flos is not None:
