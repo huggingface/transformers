@@ -1,10 +1,10 @@
 # Select base Image
-FROM rraminen/deepspeed:DeepSpeed_Megatron-LM-GPT2_bingBERT_rocm4.0
+FROM huggingface/transformers-pytorch-gpu
 
 # Install dependencies
 RUN apt update && apt install -y \
     unzip 
-RUN pip3 install regex sacremoses filelock gitpython rouge_score sacrebleu datasets fairscale
+RUN pip3 install regex sacremoses filelock gitpython rouge_score sacrebleu datasets fairscale deepspeed
 
 # copy repo to workspace
 WORKDIR /workspace
