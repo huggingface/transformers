@@ -3,7 +3,7 @@
 This document explains the testing strategy for releasing the new Hugging Face Deep Learning Container. AWS maintains 14 days of currency with framework releases. Besides framework releases, AWS release train is bi-weekly on Monday. Code cutoff date for any changes is the Wednesday before release-Monday. 
 
 
-## Test Case 1: Releasing a New Version of 🤗 Transformers
+## Test Case 1: Releasing a New Version (Minor/Major) of 🤗 Transformers
 
 ### Requirements: Test should run on Release Candidate for new `transformers` release to validate the new release is compatible with the DLCs. To run these tests you need credentials for the HF SageMaker AWS Account. You can ask @philschmid or @n1t0 to get access.
 
@@ -15,7 +15,7 @@ Before we can run the tests we need to adjust the `requirements.txt` for PyTorch
 git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install master or adjust ist with vX.X.X for installing version specific-transforms
 ```
 
-After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with. 
+After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:  
 
 ```bash
 AWS_PROFILE=<enter-your-profile> make sagemaker-test
@@ -95,11 +95,11 @@ These tests take around 10-15 minutes to finish. Preferably make a screenshot of
 
 ### After successful Tests:
 
-After we have successfully running tests for the new framework version we need to create a PR at the [Deep Learning Container Repository](https://github.com/aws/deep-learning-containers).
+After we have successfully run tests for the new framework version we need to create a PR at the [Deep Learning Container Repository](https://github.com/aws/deep-learning-containers).
 
 **Creating the update PR:**
 
-1. Create a new a `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [TensorFlow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`. 
+1. Create a new `buildspec.yaml` config for [PyTorch](https://github.com/aws/deep-learning-containers/tree/master/huggingface/pytorch) and [TensorFlow](https://github.com/aws/deep-learning-containers/tree/master/huggingface/tensorflow) and rename the old `buildspec.yaml` to `buildespec-x.x.x`, where `x.x.x` is the base framework version, e.g. if pytorch 1.6.0 is the latest version in `buildspec.yaml` the file should be renamed to `buildspec-yaml-1-6.yaml`. 
 
 To create the new `buildspec.yaml` we need to adjust  the `version` and the `short_version`. Example for upgrading to `pytorch 1.7.1`. 
 
@@ -136,7 +136,7 @@ images:
     docker_file: !join [ docker/, *SHORT_VERSION, /, *DOCKER_PYTHON_VERSION, /, 
       *CUDA_VERSION, /Dockerfile., *DEVICE_TYPE ]
 ```
-2. In the PR comment describe what test, we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). 
+2. In the PR comment describe what test we ran and with which framework versions. Here you can copy the table from [Current Tests](#current-tests). 
 
 TODO: Add a screenshot of PR + Text template to make it easy to open. 
 

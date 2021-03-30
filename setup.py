@@ -20,7 +20,7 @@ To create the package for pypi.
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
    
-2. Run Tests for Amazon Sagemaker with. Documentation located in `./tests/sagemaker/README.md` or ping @philschmid.
+2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
 3. Unpin specific versions from setup.py that use a git install.
 
