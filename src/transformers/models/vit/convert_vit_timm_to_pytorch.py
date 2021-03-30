@@ -208,7 +208,7 @@ if __name__ == "__main__":
         "--vit_name",
         default="vit_base_patch16_224",
         type=str,
-        help="Name of the ViT timm model you'd like to convert, currently supports ViT base models.",
+        help="Name of the ViT timm model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
