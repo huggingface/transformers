@@ -23,7 +23,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import ViTConfig, ViTFeatureExtractor, ViTModel, ViTForImageClassification
+from transformers import ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 
@@ -70,7 +70,7 @@ def create_rename_keys(config, base_model=False):
         )
 
         # if just the base model, we should remove "vit" from all keys that start with "vit"
-        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith('vit') else pair for pair in rename_keys]
+        rename_keys = [(pair[0], pair[1][4:]) if pair[1].startswith("vit") else pair for pair in rename_keys]
     else:
         # layernorm + classification head
         rename_keys.extend(
@@ -89,14 +89,16 @@ def create_rename_keys(config, base_model=False):
 def read_in_q_k_v(state_dict, config, base_model=False):
     for i in range(config.num_hidden_layers):
         if base_model:
-            prefix=""
+            prefix = ""
         else:
             prefix = "vit."
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
         in_proj_weight = state_dict.pop("blocks." + str(i) + ".attn.qkv.weight")
         in_proj_bias = state_dict.pop("blocks." + str(i) + ".attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
-        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[: config.hidden_size, :]
+        state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
+            : config.hidden_size, :
+        ]
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.bias"] = in_proj_bias[: config.hidden_size]
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.key.weight"] = in_proj_weight[
             config.hidden_size : config.hidden_size * 2, :

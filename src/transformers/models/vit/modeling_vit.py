@@ -538,7 +538,7 @@ class ViTPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of 
+    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
     """,
     VIT_START_DOCSTRING,
@@ -549,7 +549,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         self.num_labels = config.num_labels
         self.vit = ViTModel(config, add_pooling_layer=False)
-        
+
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
@@ -605,7 +605,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits = self.classifier(sequence_output[:,0,:])
+        logits = self.classifier(sequence_output[:, 0, :])
 
         loss = None
         if labels is not None:
