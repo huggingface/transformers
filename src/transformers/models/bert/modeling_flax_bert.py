@@ -283,9 +283,9 @@ class FlaxBertSelfOutput(nn.Module):
         self.LayerNorm = FlaxBertLayerNorm(hidden_size=self.config.hidden_size)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def __call__(self, hidden_states, input_tensor):
+    def __call__(self, hidden_states, input_tensor, deterministic: bool = True):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, deterministic=deterministic)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
@@ -303,7 +303,7 @@ class FlaxBertAttention(nn.Module):
         # FLAX expects: attention_mask.shape == (*batch_sizes, 1, 1, kv_length) such that it is broadcastable
         # with attn_weights.shape == (*batch_sizes, num_heads, q_length, kv_length)
         attn_output = self.self(hidden_states, attention_mask, deterministic=deterministic)
-        hidden_states = self.output(attn_output, hidden_states)
+        hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
         return hidden_states
 
 
