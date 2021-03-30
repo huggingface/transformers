@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "EleutherAI/gpt_neo_xl": "https://huggingface.co/EleutherAI/gpt_neo_xl/resolve/main/config.json",
+    "EleutherAI/gpt-neo-1.3B": "https://huggingface.co/EleutherAI/gpt-neo-1.3B/resolve/main/config.json",
     # See all GPTNeo models at https://huggingface.co/models?filter=gpt_neo
 }
 
@@ -30,8 +30,8 @@ class GPTNeoConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.GPTNeoModel`. It is used to
     instantiate a GPT Neo model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the GPTNeo `gpt_neo_xl
-    <https://huggingface.co/EleutherAI/gpt_neo_xl>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the GPTNeo `gpt-neo-1.3B
+    <https://huggingface.co/EleutherAI/gpt-neo-1.3B>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -81,10 +81,10 @@ class GPTNeoConfig(PretrainedConfig):
 
         >>> from transformers import GPTNeoModel, GPTNeoConfig
 
-        >>> # Initializing a GPTNeo EleutherAI/gpt_neo_xl style configuration
+        >>> # Initializing a GPTNeo EleutherAI/gpt-neo-1.3B style configuration
         >>> configuration = GPTNeoConfig()
 
-        >>> # Initializing a model from the EleutherAI/gpt_neo_xl style configuration
+        >>> # Initializing a model from the EleutherAI/gpt-neo-1.3B style configuration
         >>> model = GPTNeoModel(configuration)
 
         >>> # Accessing the model configuration
