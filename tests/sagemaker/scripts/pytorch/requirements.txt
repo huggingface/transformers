@@ -1,0 +1,1 @@
+git+https://github.com/huggingface/transformers.git@master # install master or adjust ist with vX.X.X for installing version specific transforms
