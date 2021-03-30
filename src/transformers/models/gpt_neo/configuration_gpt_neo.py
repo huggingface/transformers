@@ -117,9 +117,13 @@ class GPTNeoConfig(PretrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        do_sample=True,
+        max_length=50,
         **kwargs
     ):
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(
+            bos_token_id=bos_token_id, eos_token_id=eos_token_id, do_sample=do_sample, max_length=max_length, **kwargs
+        )
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
