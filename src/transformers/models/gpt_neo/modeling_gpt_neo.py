@@ -159,6 +159,10 @@ class GPTNeoSelfAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
     def _attn(self, q, k, v, attention_mask=None, head_mask=None, output_attentions=False):
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        q = q.to(torch.float32)
+        k = k.to(torch.float32)
+
         attn_weights = torch.matmul(q, k)
         nd, ns = attn_weights.size(-2), attn_weights.size(-1)
 
@@ -170,6 +174,7 @@ class GPTNeoSelfAttention(nn.Module):
             attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = attn_weights.to(v.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
@@ -321,10 +326,16 @@ class GPTNeoLocalSelfAttention(nn.Module):
 
     def _attn(self, q, k, v, causal_mask, head_mask=None, output_attentions=False):
         # attn
+
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        q = q.to(torch.float32)
+        k = k.to(torch.float32)
+
         attn_weights = torch.matmul(q, k)
         attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
 
         attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = attn_weights.to(v.dtype)
         attn_weights = self.attn_dropout(attn_weights)
 
         # Mask heads if we want to
@@ -914,12 +925,19 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel):
 
         loss = None
         if labels is not None:
+            # Compute loss in fp32 to match with mesh-tf version
+            # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
+            lm_logits = lm_logits.to(torch.float32)
+
             # Shift so that tokens < n predict n
             shift_logits = lm_logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+            lm_logits = lm_logits.to(hidden_states.dtype)
+            loss = loss.to(hidden_states.dtype)
 
         if not return_dict:
             output = (lm_logits,) + transformer_outputs[1:]
