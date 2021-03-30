@@ -198,7 +198,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
     if base_model:
         timm_pooled_output = timm_model.forward_features(pixel_values)
         assert timm_pooled_output.shape == outputs.pooler_output.shape
-        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-4)
+        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
     else:
         timm_logits = timm_model(pixel_values)
         assert timm_logits.shape == outputs.logits.shape
