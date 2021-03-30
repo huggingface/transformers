@@ -328,7 +328,7 @@ def convert_pt_checkpoint_to_tf(
         np_pt = pto[0].numpy()
         np_tf = tfo[0].numpy()
         diff = np.amax(np.abs(np_pt - np_tf))
-        print(f"Max absolute difference between models outputs {diff}"
+        print(f"Max absolute difference between models outputs {diff}")
         assert diff <= 2e-2, f"Error, model absolute difference is >2e-2: {diff}"
 
     # Save pytorch-model
@@ -357,9 +357,7 @@ def convert_all_pt_checkpoints_to_tf(
         print(f" Converting model type {j}/{len(model_types)}: {model_type}")
         print("=" * 100)
         if model_type not in MODEL_CLASSES:
-            raise ValueError(
-                f"Unrecognized model type {model_type}, should be one of {list(MODEL_CLASSES.keys())}."
-            )
+            raise ValueError(f"Unrecognized model type {model_type}, should be one of {list(MODEL_CLASSES.keys())}.")
 
         config_class, model_class, pt_model_class, aws_model_maps, aws_config_map = MODEL_CLASSES[model_type]
 

@@ -1007,7 +1007,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     raise ValueError(
                         f"We found a TensorFlow checkpoint at {pretrained_model_name_or_path + '.index'}, please set "
                         "from_tf to True to load from this checkpoint"
-                    )   
+                    )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
@@ -1171,9 +1171,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 )
             if len(error_msgs) > 0:
                 error_msg = "\n\t".join(error_msgs)
-                raise RuntimeError(
-                    f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}"
-                )
+                raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 

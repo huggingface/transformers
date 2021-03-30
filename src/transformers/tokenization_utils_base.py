@@ -805,9 +805,7 @@ class SpecialTokensMixin:
                 elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
                 else:
-                    raise TypeError(
-                        f"special token {key} has to be either str or AddedToken but got: {type(value)}"
-                    )
+                    raise TypeError(f"special token {key} has to be either str or AddedToken but got: {type(value)}")
 
     def sanitize_special_tokens(self) -> int:
         """

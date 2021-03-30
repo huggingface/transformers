@@ -100,6 +100,7 @@ class ANSI:
     @classmethod
     def bold(cls, s):
         return f"{cls._bold}{s}{cls._reset}"
+
     @classmethod
     def red(cls, s):
         return f"{cls._bold}{cls._red}{s}{cls._reset}"
@@ -267,8 +268,8 @@ class RepoCreateCommand(BaseUserCommand):
 
         user, _ = self._api.whoami(token)
         namespace = self.args.organization if self.args.organization is not None else user
-
-        print(f"You are about to create {ANSI.bold(namespace + "/" + self.args.name)}")
+        full_name = f"{namespace}/{self.args.name}"
+        print(f"You are about to create {ANSI.bold(full_name)}")
 
         if not self.args.yes:
             choice = input("Proceed? [Y/n] ").lower()
@@ -282,7 +283,7 @@ class RepoCreateCommand(BaseUserCommand):
             print(ANSI.red(e.response.text))
             exit(1)
         print("\nYour repo now lives at:")
-        print(f"  {(ANSI.bold(url)}")
+        print(f"  {ANSI.bold(url)}")
         print("\nYou can clone it locally with the command below," " and commit/push as usual.")
         print(f"\n  git clone {url}")
         print("")

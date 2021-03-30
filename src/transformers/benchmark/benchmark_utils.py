@@ -758,9 +758,7 @@ class Benchmark(ABC):
 
         if self.args.env_print:
             self.print_fn("\n" + 20 * "=" + ("ENVIRONMENT INFORMATION").center(40) + 20 * "=")
-            self.print_fn(
-                "\n".join([f"- {prop}: {val}" for prop, val in self.environment_info.items()]) + "\n"
-            )
+            self.print_fn("\n".join([f"- {prop}: {val}" for prop, val in self.environment_info.items()]) + "\n")
 
         if self.args.save_to_csv:
             with open(self.args.env_info_csv_file, mode="w", newline="") as csv_file:
