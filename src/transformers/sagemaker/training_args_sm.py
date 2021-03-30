@@ -15,6 +15,7 @@
 import importlib.util
 import json
 import os
+import warnings
 from dataclasses import dataclass, field
 
 import torch
@@ -65,6 +66,14 @@ class SageMakerTrainingArguments(TrainingArguments):
         default="",
         metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in SageMakerTrainer"},
     )
+
+    def __post_init__(self):
+        super().__post_init__()
+        warnings.warn(
+            "`SageMakerTrainingArguments` is deprecated and will be removed in v5 of Transformers. You can use "
+            "`TrainingArguments` instead.",
+            FutureWarning,
+        )
 
     @cached_property
     def _setup_devices(self) -> "torch.device":
