@@ -1117,7 +1117,7 @@ class TFAutoModelForSeq2SeqLM:
         kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, _from_auto=True, **kwargs
+                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
