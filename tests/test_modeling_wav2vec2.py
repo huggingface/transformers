@@ -320,13 +320,13 @@ class Wav2Vec2ModelTest(ModelTesterMixin, unittest.TestCase):
                     if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
     @slow
@@ -437,13 +437,13 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                     if "conv.weight" in name or "masked_spec_embed" in name:
                         self.assertTrue(
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
                             [0.0, 1.0],
-                            msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
     @slow

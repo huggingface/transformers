@@ -77,10 +77,10 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
         if (
             hasattr(model, "logits_proj")
             and config.finetuning_task is not None
-            and "model/regression_{}/logit/kernel".format(config.finetuning_task) in tf_weights
+            and f"model/regression_{config.finetuning_task}/logit/kernel" in tf_weights
         ):
-            tf_to_pt_map["model/regression_{}/logit/kernel".format(config.finetuning_task)] = model.logits_proj.weight
-            tf_to_pt_map["model/regression_{}/logit/bias".format(config.finetuning_task)] = model.logits_proj.bias
+            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/kernel"] = model.logits_proj.weight
+            tf_to_pt_map[f"model/regression_{config.finetuning_task}/logit/bias"] = model.logits_proj.bias
 
         # Now load the rest of the transformer
         model = model.transformer
@@ -95,7 +95,7 @@ def build_tf_xlnet_to_pytorch_map(model, config, tf_weights=None):
 
     # Transformer blocks
     for i, b in enumerate(model.layer):
-        layer_str = "model/transformer/layer_%d/" % i
+        layer_str = f"model/transformer/layer_{i}/"
         tf_to_pt_map.update(
             {
                 layer_str + "rel_attn/LayerNorm/gamma": b.rel_attn.layer_norm.weight,
@@ -156,7 +156,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
     init_vars = tf.train.list_variables(tf_path)
     tf_weights = {}
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         tf_weights[name] = array
 
@@ -164,9 +164,9 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
     tf_to_pt_map = build_tf_xlnet_to_pytorch_map(model, config, tf_weights)
 
     for name, pointer in tf_to_pt_map.items():
-        logger.info("Importing {}".format(name))
+        logger.info(f"Importing {name}")
         if name not in tf_weights:
-            logger.info("{} not in tf pre-trained weights, skipping".format(name))
+            logger.info(f"{name} not in tf pre-trained weights, skipping")
             continue
         array = tf_weights[name]
         # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
@@ -188,7 +188,7 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
-                logger.info("Initialize PyTorch weight {} for layer {}".format(name, i))
+                logger.info(f"Initialize PyTorch weight {name} for layer {i}")
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
@@ -198,13 +198,13 @@ def load_tf_weights_in_xlnet(model, config, tf_path):
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
-            logger.info("Initialize PyTorch weight {}".format(name))
+            logger.info(f"Initialize PyTorch weight {name}")
             pointer.data = torch.from_numpy(array)
         tf_weights.pop(name, None)
         tf_weights.pop(name + "/Adam", None)
         tf_weights.pop(name + "/Adam_1", None)
 
-    logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
+    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
     return model
 
 
@@ -214,8 +214,8 @@ class XLNetRelativeAttention(nn.Module):
 
         if config.d_model % config.n_head != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.d_model, config.n_head)
+                f"The hidden size ({config.d_model}) is not a multiple of the number of attention "
+                f"heads ({config.n_head}"
             )
 
         self.n_head = config.n_head
@@ -1041,7 +1041,7 @@ class XLNetModel(XLNetPreTrainedModel):
             # beg, end = klen - 1, -1
             beg, end = klen, -1
         else:
-            raise ValueError("Unknown `attn_type` {}.".format(self.attn_type))
+            raise ValueError(f"Unknown `attn_type` {self.attn_type}.")
 
         if self.bi_data:
             fwd_pos_seq = torch.arange(beg, end, -1.0, dtype=torch.float)
@@ -1145,7 +1145,7 @@ class XLNetModel(XLNetPreTrainedModel):
         elif self.attn_type == "bi":
             attn_mask = None
         else:
-            raise ValueError("Unsupported attention type: {}".format(self.attn_type))
+            raise ValueError(f"Unsupported attention type: {self.attn_type}")
 
         # data mask: input mask & perm mask
         assert input_mask is None or attention_mask is None, "You can only use one of input_mask (uses 1 for padding) "

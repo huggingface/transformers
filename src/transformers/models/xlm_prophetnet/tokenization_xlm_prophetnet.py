@@ -153,7 +153,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
         self.fairseq_tokens_to_ids = {"[PAD]": 0, "[CLS]": 1, "[SEP]": 2, "[UNK]": 3, "[MASK]": 4}
 
         for i in range(10):
-            tok = "[unused{}]".format(i)
+            tok = f"[unused{i}]"
             self.fairseq_tokens_to_ids[tok] = 5 + i
 
         # The first "real" token "," has position 15 in the embedding vocab and position 3 in the spm vocab
@@ -269,7 +269,7 @@ class XLMProphetNetTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         out_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

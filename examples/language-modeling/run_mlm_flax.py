@@ -307,7 +307,7 @@ def create_learning_rate_scheduler(
                 progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
                 ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
             else:
-                raise ValueError("Unknown factor %s." % name)
+                raise ValueError(f"Unknown factor {name}.")
         return jnp.asarray(ret, dtype=jnp.float32)
 
     return step_fn
@@ -332,9 +332,7 @@ def accuracy(logits, targets, weights=None):
       Tuple of scalar loss and batch normalizing factor.
     """
     if logits.ndim != targets.ndim + 1:
-        raise ValueError(
-            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
-        )
+        raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
 
     loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
     loss *= weights
@@ -353,9 +351,7 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
       Tuple of scalar loss and batch normalizing factor.
     """
     if logits.ndim != targets.ndim + 1:
-        raise ValueError(
-            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
-        )
+        raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
 
     vocab_size = logits.shape[-1]
     confidence = 1.0 - label_smoothing
@@ -463,7 +459,7 @@ if __name__ == "__main__":
     )
 
     # Set the verbosity to info of the Transformers logger (on main process only):
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)

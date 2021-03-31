@@ -101,9 +101,7 @@ class Text2TextGenerationPipeline(Pipeline):
             padding = False
         else:
             raise ValueError(
-                " `args[0]`: {} have the wrong format. The should be either of type `str` or type `list`".format(
-                    args[0]
-                )
+                f" `args[0]`: {args[0]} have the wrong format. The should be either of type `str` or type `list`"
             )
 
         with self.device_placement():
@@ -198,16 +196,14 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
         """
         if input_length < min_length // 2:
             logger.warning(
-                "Your min_length is set to {}, but you input_length is only {}. You might consider decreasing min_length manually, e.g. summarizer('...', min_length=10)".format(
-                    min_length, input_length
-                )
+                f"Your min_length is set to {min_length}, but you input_length is only {input_length}. You might "
+                "consider decreasing min_length manually, e.g. summarizer('...', min_length=10)"
             )
 
         if input_length < max_length:
             logger.warning(
-                "Your max_length is set to {}, but you input_length is only {}. You might consider decreasing max_length manually, e.g. summarizer('...', max_length=50)".format(
-                    max_length, input_length
-                )
+                f"Your max_length is set to {max_length}, but you input_length is only {input_length}. You might "
+                "consider decreasing max_length manually, e.g. summarizer('...', max_length=50)"
             )
 
 
@@ -234,9 +230,8 @@ class TranslationPipeline(Text2TextGenerationPipeline):
     def check_inputs(self, input_length: int, min_length: int, max_length: int):
         if input_length > 0.9 * max_length:
             logger.warning(
-                "Your input_length: {} is bigger than 0.9 * max_length: {}. You might consider increasing your max_length manually, e.g. translator('...', max_length=400)".format(
-                    input_length, max_length
-                )
+                f"Your input_length: {input_length} is bigger than 0.9 * max_length: {max_length}. You might consider "
+                "increasing your max_length manually, e.g. translator('...', max_length=400)"
             )
 
     def __call__(self, *args, **kwargs):

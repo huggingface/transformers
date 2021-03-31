@@ -80,13 +80,13 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
@@ -116,7 +116,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
             for n in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
         if name[0] == "generator":
             continue
@@ -143,7 +143,7 @@ def load_tf_weights_in_funnel(model, config, tf_checkpoint_path):
                 try:
                     pointer = getattr(pointer, m_name)
                 except AttributeError:
-                    print("Skipping {}".format("/".join(name)), array.shape)
+                    print(f"Skipping {'/'.join(name)}", array.shape)
                     skipped = True
                     break
         if not skipped:

@@ -109,7 +109,7 @@ def load_tf_weights_in_bert_generation(
 
             array = np.asarray(sess.run(all_variables[key]))
             if not is_embedding:
-                logger.info("Transposing numpy weight of shape {} for {}".format(array.shape, key))
+                logger.info(f"Transposing numpy weight of shape {array.shape} for {key}")
                 array = np.transpose(array)
             else:
                 model_pointer = model_pointer.weight
@@ -126,7 +126,7 @@ def load_tf_weights_in_bert_generation(
             model_pointer.data = torch.from_numpy(array.astype(np.float32))
             keep_track_variables.pop(key, None)
 
-        logger.info("Weights not copied to PyTorch model: {}".format(", ".join(keep_track_variables.keys())))
+        logger.info(f"Weights not copied to PyTorch model: {', '.join(keep_track_variables.keys())}")
         return model
 
 

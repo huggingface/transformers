@@ -122,7 +122,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
             if i >= len(init_vars) - 2:
                 name = name.replace("intermediate", "output")
 
-            logger.info("Loading TF weight {} with shape {}".format(name, var.shape))
+            logger.info(f"Loading TF weight {name} with shape {var.shape}")
             array = var.value().numpy()
             names.append(name)
             tf_weights[name] = array
@@ -141,7 +141,7 @@ def load_tf_weights_in_big_bird(model, tf_checkpoint_path, is_trivia_qa=False):
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
 
     # Load weights from TF model
     init_vars = tf.saved_model.load(tf_path).variables if is_trivia_qa else tf.train.list_variables(tf_path)
@@ -304,8 +304,8 @@ class BigBirdSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -2171,9 +2171,8 @@ class BigBirdModel(BigBirdPreTrainedModel):
         padding_len = (block_size - seq_len % block_size) % block_size
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.block_size`: {}".format(
-                    seq_len, seq_len + padding_len, block_size
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.block_size`: {block_size}"
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)

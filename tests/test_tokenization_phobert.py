@@ -39,7 +39,7 @@ class PhobertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             for token in vocab_tokens:
-                fp.write("{} {}".format(token, vocab_tokens[token]) + "\n")
+                fp.write(f"{token} {vocab_tokens[token]}\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
 

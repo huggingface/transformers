@@ -231,10 +231,10 @@ def check_task(task: str) -> Tuple[Dict, Any]:
         if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
             targeted_task = SUPPORTED_TASKS["translation"]
             return targeted_task, (tokens[1], tokens[3])
-        raise KeyError("Invalid translation task {}, use 'translation_XX_to_YY' format".format(task))
+        raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
     raise KeyError(
-        "Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys()) + ["translation_XX_to_YY"])
+        f"Unknown task {task}, available tasks are {list(SUPPORTED_TASKS.keys()) + ['translation_XX_to_YY']}"
     )
 
 

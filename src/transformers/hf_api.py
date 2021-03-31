@@ -83,7 +83,7 @@ class HfApi:
 
         Throws: requests.exceptions.HTTPError if credentials are invalid
         """
-        path = "{}/api/login".format(self.endpoint)
+        path = f"{self.endpoint}/api/login"
         r = requests.post(path, json={"username": username, "password": password})
         r.raise_for_status()
         d = r.json()
@@ -93,8 +93,8 @@ class HfApi:
         """
         Call HF API to know "whoami"
         """
-        path = "{}/api/whoami".format(self.endpoint)
-        r = requests.get(path, headers={"authorization": "Bearer {}".format(token)})
+        path = f"{self.endpoint}/api/whoami"
+        r = requests.get(path, headers={"authorization": f"Bearer {token}"})
         r.raise_for_status()
         d = r.json()
         return d["user"], d["orgs"]
@@ -103,15 +103,15 @@ class HfApi:
         """
         Call HF API to log out.
         """
-        path = "{}/api/logout".format(self.endpoint)
-        r = requests.post(path, headers={"authorization": "Bearer {}".format(token)})
+        path = f"{self.endpoint}/api/logout"
+        r = requests.post(path, headers={"authorization": f"Bearer {token}"})
         r.raise_for_status()
 
     def model_list(self) -> List[ModelInfo]:
         """
         Get the public list of all the models on huggingface.co
         """
-        path = "{}/api/models".format(self.endpoint)
+        path = f"{self.endpoint}/api/models"
         r = requests.get(path)
         r.raise_for_status()
         d = r.json()
@@ -123,9 +123,9 @@ class HfApi:
 
         Call HF API to list all stored files for user (or one of their organizations).
         """
-        path = "{}/api/repos/ls".format(self.endpoint)
+        path = f"{self.endpoint}/api/repos/ls"
         params = {"organization": organization} if organization is not None else None
-        r = requests.get(path, params=params, headers={"authorization": "Bearer {}".format(token)})
+        r = requests.get(path, params=params, headers={"authorization": f"Bearer {token}"})
         r.raise_for_status()
         d = r.json()
         return [RepoObj(**x) for x in d]
@@ -151,13 +151,13 @@ class HfApi:
 
             lfsmultipartthresh: Optional: internal param for testing purposes.
         """
-        path = "{}/api/repos/create".format(self.endpoint)
+        path = f"{self.endpoint}/api/repos/create"
         json = {"name": name, "organization": organization, "private": private}
         if lfsmultipartthresh is not None:
             json["lfsmultipartthresh"] = lfsmultipartthresh
         r = requests.post(
             path,
-            headers={"authorization": "Bearer {}".format(token)},
+            headers={"authorization": f"Bearer {token}"},
             json=json,
         )
         if exist_ok and r.status_code == 409:
@@ -174,10 +174,10 @@ class HfApi:
 
         CAUTION(this is irreversible).
         """
-        path = "{}/api/repos/delete".format(self.endpoint)
+        path = f"{self.endpoint}/api/repos/delete"
         r = requests.delete(
             path,
-            headers={"authorization": "Bearer {}".format(token)},
+            headers={"authorization": f"Bearer {token}"},
             json={"name": name, "organization": organization},
         )
         r.raise_for_status()

@@ -133,20 +133,20 @@ class LegacyIndex(Index):
             )
             raise EnvironmentError(msg)
         if resolved_archive_file == archive_file:
-            logger.info("loading file {}".format(archive_file))
+            logger.info(f"loading file {archive_file}")
         else:
-            logger.info("loading file {} from cache at {}".format(archive_file, resolved_archive_file))
+            logger.info(f"loading file {archive_file} from cache at {resolved_archive_file}")
         return resolved_archive_file
 
     def _load_passages(self):
-        logger.info("Loading passages from {}".format(self.index_path))
+        logger.info(f"Loading passages from {self.index_path}")
         passages_path = self._resolve_path(self.index_path, self.PASSAGE_FILENAME)
         with open(passages_path, "rb") as passages_file:
             passages = pickle.load(passages_file)
         return passages
 
     def _deserialize_index(self):
-        logger.info("Loading index from {}".format(self.index_path))
+        logger.info(f"Loading index from {self.index_path}")
         resolved_index_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index.dpr")
         self.index = faiss.read_index(resolved_index_path)
         resolved_meta_path = self._resolve_path(self.index_path, self.INDEX_FILENAME + ".index_meta.dpr")
@@ -200,12 +200,12 @@ class HFIndexBase(Index):
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):
-            raise ValueError("Dataset should be a datasets.Dataset object, but got {}".format(type(self.dataset)))
+            raise ValueError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
         if len({"title", "text", "embeddings"} - set(self.dataset.column_names)) > 0:
             raise ValueError(
                 "Dataset should be a dataset with the following columns: "
                 "title (str), text (str) and embeddings (arrays of dimension vector_size), "
-                "but got columns {}".format(self.dataset.column_names)
+                f"but got columns {self.dataset.column_names}"
             )
         if with_index and "embeddings" not in self.dataset.list_indexes():
             raise ValueError(
@@ -269,7 +269,7 @@ class CanonicalHFIndex(HFIndexBase):
         self.index_name = index_name
         self.index_path = index_path
         self.use_dummy_dataset = use_dummy_dataset
-        logger.info("Loading passages from {}".format(self.dataset_name))
+        logger.info(f"Loading passages from {self.dataset_name}")
         dataset = load_dataset(
             self.dataset_name, with_index=False, split=self.dataset_split, dummy=self.use_dummy_dataset
         )
@@ -277,10 +277,10 @@ class CanonicalHFIndex(HFIndexBase):
 
     def init_index(self):
         if self.index_path is not None:
-            logger.info("Loading index from {}".format(self.index_path))
+            logger.info(f"Loading index from {self.index_path}")
             self.dataset.load_faiss_index("embeddings", file=self.index_path)
         else:
-            logger.info("Loading index from {}".format(self.dataset_name + " with index name " + self.index_name))
+            logger.info(f"Loading index from {self.dataset_name} with index name {self.index_name}")
             self.dataset = load_dataset(
                 self.dataset_name,
                 with_embeddings=True,
@@ -313,7 +313,7 @@ class CustomHFIndex(HFIndexBase):
 
     @classmethod
     def load_from_disk(cls, vector_size, dataset_path, index_path):
-        logger.info("Loading passages from {}".format(dataset_path))
+        logger.info(f"Loading passages from {dataset_path}")
         if dataset_path is None or index_path is None:
             raise ValueError(
                 "Please provide ``dataset_path`` and ``index_path`` after calling ``dataset.save_to_disk(dataset_path)`` "
@@ -324,7 +324,7 @@ class CustomHFIndex(HFIndexBase):
 
     def init_index(self):
         if not self.is_initialized():
-            logger.info("Loading index from {}".format(self.index_path))
+            logger.info(f"Loading index from {self.index_path}")
             self.dataset.load_faiss_index("embeddings", file=self.index_path)
             self._index_initialized = True
 
@@ -520,9 +520,7 @@ class RagRetriever:
             start_time = time.time()
             ids, vectors = self.index.get_top_docs(question_hidden_states, n_docs)
             logger.debug(
-                "index search time: {} sec, batch size {}".format(
-                    time.time() - start_time, question_hidden_states.shape
-                )
+                f"index search time: {time.time() - start_time} sec, batch size {question_hidden_states.shape}"
             )
             ids_batched.extend(ids)
             vectors_batched.extend(vectors)

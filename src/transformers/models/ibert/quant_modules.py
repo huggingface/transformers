@@ -151,11 +151,9 @@ class QuantAct(nn.Module):
 
     def __repr__(self):
         return (
-            "{0}(activation_bit={1}, "
-            "quant_mode: {2}, Act_min: {3:.2f}, "
-            "Act_max: {4:.2f})".format(
-                self.__class__.__name__, self.activation_bit, self.quant_mode, self.x_min.item(), self.x_max.item()
-            )
+            f"{self.__class__.__name__}(activation_bit={self.activation_bit}, "
+            f"quant_mode: {self.activation_bit}, Act_min: {self.x_min.item():.2f}, "
+            f"Act_max: {self.x_max.item():.2f})"
         )
 
     def forward(
@@ -261,7 +259,7 @@ class QuantLinear(nn.Module):
 
     def __repr__(self):
         s = super().__repr__()
-        s = "(" + s + " weight_bit={}, quant_mode={})".format(self.weight_bit, self.quant_mode)
+        s = f"({s} weight_bit={self.weight_bit}, quant_mode={self.quant_mode})"
         return s
 
     def forward(self, x, prev_act_scaling_factor=None):
@@ -471,7 +469,7 @@ class IntLayerNorm(nn.Module):
             shift = (torch.log2(torch.sqrt(var_int / 2 ** self.max_bit)).ceil()).max()
             shift_old = self.shift
             self.shift = torch.max(self.shift, shift)
-            logger.info("Dynamic shift adjustment: {} -> {}".format(int(shift_old), int(self.shift)))
+            logger.info(f"Dynamic shift adjustment: {int(shift_old)} -> {int(self.shift)}")
 
     def overflow_fallback(self, y_int):
         """

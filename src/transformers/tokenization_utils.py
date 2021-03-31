@@ -190,7 +190,7 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
             ):
                 tokens_to_add.append(token)
                 if self.verbose:
-                    logger.info("Adding %s to the vocabulary", token)
+                    logger.info(f"Adding {token} to the vocabulary")
 
         added_tok_encoder = dict((tok, len(self) + i) for i, tok in enumerate(tokens_to_add))
         added_tok_decoder = {v: k for k, v in added_tok_encoder.items()}

@@ -211,9 +211,7 @@ class ModuleUtilsMixin:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             raise ValueError(
-                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
-                    self.dtype
-                )
+                f"{self.dtype} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`"
             )
 
         return encoder_extended_attention_mask
@@ -266,9 +264,7 @@ class ModuleUtilsMixin:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
+                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
             )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -439,11 +435,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
-                "To create a model from a pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
-                    self.__class__.__name__, self.__class__.__name__
-                )
+                f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
+                "`PretrainedConfig`. To create a model from a pretrained model use "
+                f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
         self.config = config
@@ -834,7 +828,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
         save_function(state_dict, output_model_file)
 
-        logger.info("Model weights saved in {}".format(output_model_file))
+        logger.info(f"Model weights saved in {output_model_file}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
@@ -1053,9 +1047,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
-                logger.info("loading weights file {}".format(archive_file))
+                logger.info(f"loading weights file {archive_file}")
             else:
-                logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
+                logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
 
@@ -1185,11 +1179,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     f"you can already use {model.__class__.__name__} for predictions without further training."
                 )
             if len(error_msgs) > 0:
-                raise RuntimeError(
-                    "Error(s) in loading state_dict for {}:\n\t{}".format(
-                        model.__class__.__name__, "\n\t".join(error_msgs)
-                    )
-                )
+                error_msg = "\n\t".join(error_msgs)
+                raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -1754,7 +1745,7 @@ def prune_layer(
     elif isinstance(layer, Conv1D):
         return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
     else:
-        raise ValueError("Can't prune layer of class {}".format(layer.__class__))
+        raise ValueError(f"Can't prune layer of class {layer.__class__}")
 
 
 def apply_chunking_to_forward(
@@ -1793,7 +1784,7 @@ def apply_chunking_to_forward(
             return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
     """
 
-    assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
+    assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
     tensor_shape = input_tensors[0].shape[chunk_dim]
     assert all(
         input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
@@ -1801,18 +1792,18 @@ def apply_chunking_to_forward(
 
     # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
-    assert num_args_in_forward_chunk_fn == len(
-        input_tensors
-    ), "forward_chunk_fn expects {} arguments, but only {} input tensors are given".format(
-        num_args_in_forward_chunk_fn, len(input_tensors)
-    )
+    if num_args_in_forward_chunk_fn != len(input_tensors):
+        raise ValueError(
+            f"forward_chunk_fn expects {num_args_in_forward_chunk_fn} arguments, but only {len(input_tensors)} input "
+            "tensors are given"
+        )
 
     if chunk_size > 0:
-        assert (
-            input_tensors[0].shape[chunk_dim] % chunk_size == 0
-        ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
-            input_tensors[0].shape[chunk_dim], chunk_size
-        )
+        if input_tensors[0].shape[chunk_dim] % chunk_size != 0:
+            raise ValueError(
+                f"The dimension to be chunked {input_tensors[0].shape[chunk_dim]} has to be a multiple of the chunk "
+                f"size {chunk_size}"
+            )
 
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
 

@@ -176,7 +176,7 @@ class SageMakerTrainer(Trainer):
             return
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
-        logger.info("Saving model checkpoint to %s", output_dir)
+        logger.info(f"Saving model checkpoint to {output_dir}")
         # Calling the state_dict needs to be done on the wrapped model
         state_dict = self.model_wrapped.state_dict()
 

@@ -338,7 +338,7 @@ class TFAlbertLayerGroup(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.albert_layers = [
-            TFAlbertLayer(config, name="albert_layers_._{}".format(i)) for i in range(config.inner_group_num)
+            TFAlbertLayer(config, name=f"albert_layers_._{i}") for i in range(config.inner_group_num)
         ]
 
     def call(
@@ -390,8 +390,7 @@ class TFAlbertTransformer(tf.keras.layers.Layer):
             name="embedding_hidden_mapping_in",
         )
         self.albert_layer_groups = [
-            TFAlbertLayerGroup(config, name="albert_layer_groups_._{}".format(i))
-            for i in range(config.num_hidden_groups)
+            TFAlbertLayerGroup(config, name=f"albert_layer_groups_._{i}") for i in range(config.num_hidden_groups)
         ]
 
     def call(

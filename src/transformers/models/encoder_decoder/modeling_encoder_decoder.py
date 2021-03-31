@@ -159,9 +159,7 @@ class EncoderDecoderModel(PreTrainedModel):
         if config is None:
             config = EncoderDecoderConfig.from_encoder_decoder_configs(encoder.config, decoder.config)
         else:
-            assert isinstance(config, self.config_class), "config: {} has to be of type {}".format(
-                config, self.config_class
-            )
+            assert isinstance(config, self.config_class), f"config: {config} has to be of type {self.config_class}"
         # initialize with config
         super().__init__(config)
 

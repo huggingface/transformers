@@ -131,12 +131,7 @@ class SquadDataset(Dataset):
         version_tag = "v2" if args.version_2_with_negative else "v1"
         cached_features_file = os.path.join(
             cache_dir if cache_dir is not None else args.data_dir,
-            "cached_{}_{}_{}_{}".format(
-                mode.value,
-                tokenizer.__class__.__name__,
-                str(args.max_seq_length),
-                version_tag,
-            ),
+            f"cached_{mode.value}_{tokenizer.__class__.__name__}_{args.max_seq_length}_{version_tag}",
         )
 
         # Make sure only the first process in distributed training processes the dataset,
@@ -184,7 +179,7 @@ class SquadDataset(Dataset):
                 )
                 # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
                 logger.info(
-                    "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
+                    f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
                 )
 
     def __len__(self):
