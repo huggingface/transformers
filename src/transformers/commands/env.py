@@ -56,8 +56,8 @@ class EnvironmentCommand(BaseTransformersCLICommand):
             "`transformers` version": version,
             "Platform": platform.platform(),
             "Python version": platform.python_version(),
-            "PyTorch version (GPU?)": "{} ({})".format(pt_version, pt_cuda_available),
-            "Tensorflow version (GPU?)": "{} ({})".format(tf_version, tf_cuda_available),
+            "PyTorch version (GPU?)": f"{pt_version} ({pt_cuda_available})",
+            "Tensorflow version (GPU?)": f"{tf_version} ({tf_cuda_available})",
             "Using GPU in script?": "<fill in>",
             "Using distributed or parallel set-up in script?": "<fill in>",
         }
@@ -69,4 +69,4 @@ class EnvironmentCommand(BaseTransformersCLICommand):
 
     @staticmethod
     def format_dict(d):
-        return "\n".join(["- {}: {}".format(prop, val) for prop, val in d.items()]) + "\n"
+        return "\n".join([f"- {prop}: {val}" for prop, val in d.items()]) + "\n"

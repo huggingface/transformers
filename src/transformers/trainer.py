@@ -1567,7 +1567,7 @@ class Trainer:
 
     def _save_tpu(self, output_dir: Optional[str] = None):
         output_dir = output_dir if output_dir is not None else self.args.output_dir
-        logger.info("Saving model checkpoint to %s", output_dir)
+        logger.info(f"Saving model checkpoint to {output_dir}")
 
         if xm.is_master_ordinal():
             os.makedirs(output_dir, exist_ok=True)
@@ -1597,7 +1597,7 @@ class Trainer:
         # If we are executing this function, we are the process zero, so we don't check for that.
         output_dir = output_dir if output_dir is not None else self.args.output_dir
         os.makedirs(output_dir, exist_ok=True)
-        logger.info("Saving model checkpoint to %s", output_dir)
+        logger.info(f"Saving model checkpoint to {output_dir}")
         # Save a trained model and configuration using `save_pretrained()`.
         # They can then be reloaded using `from_pretrained()`
         if not isinstance(self.model, PreTrainedModel):
@@ -1664,7 +1664,7 @@ class Trainer:
         number_of_checkpoints_to_delete = max(0, len(checkpoints_sorted) - self.args.save_total_limit)
         checkpoints_to_be_deleted = checkpoints_sorted[:number_of_checkpoints_to_delete]
         for checkpoint in checkpoints_to_be_deleted:
-            logger.info("Deleting older checkpoint [{}] due to args.save_total_limit".format(checkpoint))
+            logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
             shutil.rmtree(checkpoint)
 
     def evaluate(
@@ -1814,9 +1814,9 @@ class Trainer:
 
         batch_size = dataloader.batch_size
         num_examples = self.num_examples(dataloader)
-        logger.info("***** Running %s *****", description)
-        logger.info("  Num examples = %d", num_examples)
-        logger.info("  Batch size = %d", batch_size)
+        logger.info(f"***** Running {description} *****")
+        logger.info(f"  Num examples = {num_examples}")
+        logger.info(f"  Batch size = {batch_size}")
         losses_host: torch.Tensor = None
         preds_host: Union[torch.Tensor, List[torch.Tensor]] = None
         labels_host: Union[torch.Tensor, List[torch.Tensor]] = None

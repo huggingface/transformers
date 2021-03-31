@@ -267,7 +267,7 @@ class PretrainedConfig(object):
             try:
                 setattr(self, key, value)
             except AttributeError as err:
-                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
     @property
@@ -296,7 +296,7 @@ class PretrainedConfig(object):
     @num_labels.setter
     def num_labels(self, num_labels: int):
         if self.id2label is None or len(self.id2label) != num_labels:
-            self.id2label = {i: "LABEL_{}".format(i) for i in range(num_labels)}
+            self.id2label = {i: f"LABEL_{i}" for i in range(num_labels)}
             self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     def save_pretrained(self, save_directory: Union[str, os.PathLike]):
@@ -309,7 +309,7 @@ class PretrainedConfig(object):
                 Directory where the configuration JSON file will be saved (will be created if it does not exist).
         """
         if os.path.isfile(save_directory):
-            raise AssertionError("Provided path ({}) should be a directory, not a file".format(save_directory))
+            raise AssertionError(f"Provided path ({save_directory}) should be a directory, not a file")
         os.makedirs(save_directory, exist_ok=True)
         # If we save using the predefined names, we can load using `from_pretrained`
         output_config_file = os.path.join(save_directory, CONFIG_NAME)
@@ -467,16 +467,16 @@ class PretrainedConfig(object):
 
         except json.JSONDecodeError:
             msg = (
-                "Couldn't reach server at '{}' to download configuration file or "
+                f"Couldn't reach server at '{config_file}' to download configuration file or "
                 "configuration file is not a valid JSON file. "
-                "Please check network or file content here: {}.".format(config_file, resolved_config_file)
+                f"Please check network or file content here: {resolved_config_file}."
             )
             raise EnvironmentError(msg)
 
         if resolved_config_file == config_file:
-            logger.info("loading configuration file {}".format(config_file))
+            logger.info(f"loading configuration file {config_file}")
         else:
-            logger.info("loading configuration file {} from cache at {}".format(config_file, resolved_config_file))
+            logger.info(f"loading configuration file {config_file} from cache at {resolved_config_file}")
 
         return config_dict, kwargs
 
@@ -512,7 +512,7 @@ class PretrainedConfig(object):
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info("Model config %s", str(config))
+        logger.info(f"Model config {config}")
         if return_unused_kwargs:
             return config, kwargs
         else:
@@ -544,7 +544,7 @@ class PretrainedConfig(object):
         return self.__dict__ == other.__dict__
 
     def __repr__(self):
-        return "{} {}".format(self.__class__.__name__, self.to_json_string())
+        return f"{self.__class__.__name__} {self.to_json_string()}"
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """

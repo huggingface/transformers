@@ -172,8 +172,7 @@ class SqueezeBertSelfAttention(nn.Module):
         super().__init__()
         if cin % config.num_attention_heads != 0:
             raise ValueError(
-                "cin (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (cin, config.num_attention_heads)
+                f"cin ({cin}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
             )
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(cin / config.num_attention_heads)

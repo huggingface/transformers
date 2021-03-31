@@ -310,9 +310,7 @@ class AutoConfig:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
         raise ValueError(
-            "Unrecognized model identifier: {}. Should contain one of {}".format(
-                model_type, ", ".join(CONFIG_MAPPING.keys())
-            )
+            f"Unrecognized model identifier: {model_type}. Should contain one of {', '.join(CONFIG_MAPPING.keys())}"
         )
 
     @classmethod
@@ -404,7 +402,7 @@ class AutoConfig:
                     return config_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
-            "Unrecognized model in {}. "
+            f"Unrecognized model in {pretrained_model_name_or_path}. "
             "Should have a `model_type` key in its config.json, or contain one of the following strings "
-            "in its name: {}".format(pretrained_model_name_or_path, ", ".join(CONFIG_MAPPING.keys()))
+            f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )
