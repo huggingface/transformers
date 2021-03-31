@@ -626,14 +626,8 @@ class FlaxBertForPreTrainingModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            dtype=self.dtype,
-        )
-        self.cls = FlaxBertPreTrainingHeads(
-            config=self.config,
-            dtype=self.dtype,
-        )
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
+        self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
@@ -692,15 +686,8 @@ class FlaxBertForMaskedLMModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            add_pooling_layer=False,
-            dtype=self.dtype,
-        )
-        self.cls = FlaxBertOnlyMLMHead(
-            config=self.config,
-            dtype=self.dtype,
-        )
+        self.bert = FlaxBertModule(config=self.config, add_pooling_layer=False, dtype=self.dtype)
+        self.cls = FlaxBertOnlyMLMHead(config=self.config, dtype=self.dtype)
 
     def __call__(
         self, input_ids, attention_mask=None, token_type_ids=None, position_ids=None, deterministic: bool = True
@@ -761,10 +748,7 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            dtype=self.dtype,
-        )
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
 
     def __call__(
@@ -829,10 +813,7 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            dtype=self.dtype,
-        )
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(
             self.config.num_labels,
@@ -903,10 +884,7 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            dtype=self.dtype,
-        )
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
 
@@ -982,11 +960,7 @@ class FlaxBertForTokenClassificationModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            dtype=self.dtype,
-            add_pooling_layer=False,
-        )
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
@@ -1052,11 +1026,7 @@ class FlaxBertForQuestionAnsweringModule(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        self.bert = FlaxBertModule(
-            config=self.config,
-            dtype=self.dtype,
-            add_pooling_layer=False,
-        )
+        self.bert = FlaxBertModule(config=self.config, dtype=self.dtype, add_pooling_layer=False)
         self.qa_outputs = nn.Dense(self.config.num_labels, dtype=self.dtype)
 
     def __call__(
