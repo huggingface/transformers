@@ -19,7 +19,7 @@ DataCollator
 -----------------------------------------------------------------------------------------------------------------------
 
 DataCollators are objects that will form a batch by using a list of elements as input. These lists of elements are of
-type :obj:`train_dataset` or :obj:`eval_dataset`.
+the same type as the elements of :obj:`train_dataset` or :obj:`eval_dataset`.
 
 The base class :class:`~transformers.data.data_collator` can use the default
 :func:`transformers.data.data_collator.default_data_collator`, which is a function that takes a list of samples from a
@@ -40,7 +40,6 @@ A list of DataCollators can be found here:
     - :class:`~transformers.data.data_collator.DataCollatorForWholeWordMask`
     - :class:`~transformers.data.data_collator.DataCollatorForSOP`
     - :class:`~transformers.data.data_collator.DataCollatorForPermutationLanguageModeling`
-
 
 
 
