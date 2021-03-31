@@ -59,7 +59,8 @@ from .file_utils import (
     is_apex_available,
     is_datasets_available,
     is_in_notebook,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
     is_torch_tpu_available,
     is_training_run_on_sagemaker,
 )
@@ -149,11 +150,16 @@ if is_fairscale_available():
     else:
         FullyShardedDDP = None
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
     from smdistributed.dataparallel.torch.parallel.distributed import DistributedDataParallel as DDP
 else:
     import torch.distributed as dist
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
 
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
@@ -522,7 +528,10 @@ class Trainer:
         else:
             if self.args.world_size <= 1:
                 return RandomSampler(self.train_dataset)
-            elif self.args.parallel_mode == ParallelMode.TPU and not self.args.dataloader_drop_last:
+            elif (
+                self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
+                and not self.args.dataloader_drop_last
+            ):
                 # Use a loop for TPUs when drop_last is False to have all batches have the same size.
                 return DistributedSamplerWithLoop(
                     self.train_dataset,
@@ -561,6 +570,13 @@ class Trainer:
     def _get_eval_sampler(self, eval_dataset: Dataset) -> Optional[torch.utils.data.sampler.Sampler]:
         if is_torch_tpu_available():
             return SequentialDistributedSampler(eval_dataset, num_replicas=xm.xrt_world_size(), rank=xm.get_ordinal())
+        elif is_sagemaker_mp_enabled():
+            return SequentialDistributedSampler(
+                eval_dataset,
+                num_replicas=smp.dp_size(),
+                rank=smp.dp_rank(),
+                batch_size=self.args.per_device_eval_batch_size,
+            )
         elif self.args.local_rank != -1:
             return SequentialDistributedSampler(eval_dataset)
         else:
@@ -674,6 +690,9 @@ class Trainer:
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
+        if is_sagemaker_mp_enabled():
+            self.optimizer = smp.DistributedOptimizer(self.optimizer)
+
     def create_scheduler(self, num_training_steps: int):
         """
         Setup the scheduler. The optimizer of the trainer must have been set up before this method is called.
@@ -775,6 +794,12 @@ class Trainer:
         return model
 
     def _wrap_model(self, model, training=True):
+        if is_sagemaker_mp_enabled():
+            # Wrapping the base model twice in a DistributedModel will raise an error.
+            if isinstance(self.model_wrapped, smp.model.DistributedModel):
+                return self.model_wrapped
+            return smp.DistributedModel(model, backward_passes_per_step=self.args.gradient_accumulation_steps)
+
         # already initialized its own DDP and AMP
         if self.deepspeed:
             return self.deepspeed
@@ -815,7 +840,7 @@ class Trainer:
                     cpu_offload=cpu_offload,
                 ).to(self.args.device)
 
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             model = DDP(model, device_ids=[dist.get_local_rank()], broadcast_buffers=False)
         elif self.args.local_rank != -1:
             if self.args.ddp_find_unused_parameters is not None:
@@ -1280,6 +1305,15 @@ class Trainer:
             with warnings.catch_warnings(record=True) as caught_warnings:
                 xm.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
                 reissue_pt_warnings(caught_warnings)
+        elif is_sagemaker_mp_enabled():
+            # Consolidate the state dict on all processed of dp_rank 0
+            opt_state_dict = self.optimizer.state_dict()
+            # Save it and the scheduler on the main process
+            if self.is_world_process_zero():
+                torch.save(opt_state_dict, os.path.join(output_dir, "optimizer.pt"))
+                with warnings.catch_warnings(record=True) as caught_warnings:
+                    torch.save(self.lr_scheduler.state_dict(), os.path.join(output_dir, "scheduler.pt"))
+                reissue_pt_warnings(caught_warnings)
         elif self.is_world_process_zero() and not self.deepspeed:
             # deepspeed.save_checkpoint above saves model/optim/sched
             torch.save(self.optimizer.state_dict(), os.path.join(output_dir, "optimizer.pt"))
@@ -1337,8 +1371,9 @@ class Trainer:
                 self.optimizer.load_state_dict(optimizer_state)
                 self.lr_scheduler.load_state_dict(lr_scheduler_state)
             else:
+                map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 self.optimizer.load_state_dict(
-                    torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location=self.args.device)
+                    torch.load(os.path.join(checkpoint, "optimizer.pt"), map_location=map_location)
                 )
                 with warnings.catch_warnings(record=True) as caught_warnings:
                     self.lr_scheduler.load_state_dict(torch.load(os.path.join(checkpoint, "scheduler.pt")))
@@ -1478,6 +1513,10 @@ class Trainer:
         model.train()
         inputs = self._prepare_inputs(inputs)
 
+        if is_sagemaker_mp_enabled():
+            loss_mb = smp_forward_backward(model, inputs, self.args.gradient_accumulation_steps)
+            return loss_mb.reduce_mean().detach().to(self.args.device)
+
         if self.use_amp:
             with autocast():
                 loss = self.compute_loss(model, inputs)
@@ -1535,6 +1574,8 @@ class Trainer:
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=True)
+        elif is_sagemaker_mp_enabled():
+            return smp.local_rank() == 0
         else:
             return self.args.local_rank in [-1, 0]
 
@@ -1545,8 +1586,10 @@ class Trainer:
         """
         if is_torch_tpu_available():
             return xm.is_master_ordinal(local=False)
+        elif is_sagemaker_mp_enabled():
+            return smp.rank() == 0
         else:
-            return self.args.local_rank == -1 or dist.get_rank() == 0
+            return self.args.process_index == 0
 
     def save_model(self, output_dir: Optional[str] = None):
         """
@@ -1556,6 +1599,11 @@ class Trainer:
         """
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
+        elif is_sagemaker_mp_enabled():
+            # Calling the state_dict needs to be done on the wrapped model and on all processes.
+            state_dict = self.model_wrapped.state_dict()
+            if self.is_world_process_zero():
+                self._save(output_dir, state_dict=state_dict)
         elif (
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
         ):
@@ -1905,6 +1953,8 @@ class Trainer:
             return
         if is_torch_tpu_available():
             tensors = nested_xla_mesh_reduce(tensors, name)
+        elif is_sagemaker_mp_enabled():
+            tensors = smp_gather(tensors)
         elif self.args.local_rank != -1:
             tensors = distributed_concat(tensors)
 
@@ -1957,27 +2007,47 @@ class Trainer:
             labels = None
 
         with torch.no_grad():
-            if has_labels:
-                loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
-                loss = loss.mean().detach()
-                if isinstance(outputs, dict):
-                    logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
+            if is_sagemaker_mp_enabled():
+                raw_outputs = smp_forward_only(model, inputs)
+                if has_labels:
+                    if isinstance(raw_outputs, dict):
+                        loss_mb = raw_outputs["loss"]
+                        logits_mb = tuple(v for k, v in raw_outputs.items() if k not in ignore_keys + ["loss"])
+                    else:
+                        loss_mb = raw_outputs[0]
+                        logits_mb = raw_outputs[1:]
+
+                    loss = loss_mb.reduce_mean().detach().cpu()
+                    logits = smp_nested_concat(logits_mb)
                 else:
-                    logits = outputs[1:]
+                    loss = None
+                    if isinstance(raw_outputs, dict):
+                        logits_mb = tuple(v for k, v in raw_outputs.items() if k not in ignore_keys)
+                    else:
+                        logits_mb = raw_outputs
+                    logits = smp_nested_concat(logits_mb)
             else:
-                loss = None
-                if self.use_amp:
-                    with autocast():
+                if has_labels:
+                    loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
+                    loss = loss.mean().detach()
+                    if isinstance(outputs, dict):
+                        logits = tuple(v for k, v in outputs.items() if k not in ignore_keys + ["loss"])
+                    else:
+                        logits = outputs[1:]
+                else:
+                    loss = None
+                    if self.use_amp:
+                        with autocast():
+                            outputs = model(**inputs)
+                    else:
                         outputs = model(**inputs)
-                else:
-                    outputs = model(**inputs)
-                if isinstance(outputs, dict):
-                    logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
-                else:
-                    logits = outputs
-                # TODO: this needs to be fixed and made cleaner later.
-                if self.args.past_index >= 0:
-                    self._past = outputs[self.args.past_index - 1]
+                    if isinstance(outputs, dict):
+                        logits = tuple(v for k, v in outputs.items() if k not in ignore_keys)
+                    else:
+                        logits = outputs
+                    # TODO: this needs to be fixed and made cleaner later.
+                    if self.args.past_index >= 0:
+                        self._past = outputs[self.args.past_index - 1]
 
         if prediction_loss_only:
             return (loss, None, None)
