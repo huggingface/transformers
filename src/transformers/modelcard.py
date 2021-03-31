@@ -133,6 +133,11 @@ class ModelCard:
         proxies = kwargs.pop("proxies", None)
         find_from_standard_name = kwargs.pop("find_from_standard_name", True)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+
+        user_agent = {"file_type": "model_card"}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             # For simplicity we use the same pretrained url than the configuration files
@@ -152,7 +157,9 @@ class ModelCard:
 
         try:
             # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, proxies=proxies)
+            resolved_model_card_file = cached_path(
+                model_card_file, cache_dir=cache_dir, proxies=proxies, user_agent=user_agent
+            )
             if resolved_model_card_file == model_card_file:
                 logger.info("loading model card file {}".format(model_card_file))
             else:

@@ -47,7 +47,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def infer_framework_from_model(model, model_classes: Optional[Dict[str, type]] = None, revision: Optional[str] = None):
+def infer_framework_from_model(
+    model, model_classes: Optional[Dict[str, type]] = None, revision: Optional[str] = None, task: Optional[str] = None
+):
     """
     Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
 
@@ -80,17 +82,17 @@ def infer_framework_from_model(model, model_classes: Optional[Dict[str, type]] =
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
             model_class = model_classes.get("pt", AutoModel)
-            model = model_class.from_pretrained(model, revision=revision)
+            model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
         elif is_tf_available() and not is_torch_available():
             model_class = model_classes.get("tf", TFAutoModel)
-            model = model_class.from_pretrained(model, revision=revision)
+            model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
         else:
             try:
                 model_class = model_classes.get("pt", AutoModel)
-                model = model_class.from_pretrained(model, revision=revision)
+                model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
             except OSError:
                 model_class = model_classes.get("tf", TFAutoModel)
-                model = model_class.from_pretrained(model, revision=revision)
+                model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model

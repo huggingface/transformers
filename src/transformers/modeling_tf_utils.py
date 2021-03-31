@@ -1164,6 +1164,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
         load_weight_prefix = kwargs.pop("load_weight_prefix", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "model", "framework": "tensorflow", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
@@ -1183,6 +1189,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
                 revision=revision,
+                _from_auto=from_auto_class,
+                _from_pipeline=from_pipeline,
                 **kwargs,
             )
         else:
@@ -1225,6 +1233,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                     use_auth_token=use_auth_token,
+                    user_agent=user_agent,
                 )
             except EnvironmentError as err:
                 logger.error(err)

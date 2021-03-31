@@ -12,6 +12,12 @@ on:
       - "templates/**"
   repository_dispatch:
 
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+
 jobs:
   run_tests_torch_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
@@ -40,10 +46,6 @@ jobs:
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
       - name: Run all non-slow tests on GPU
-        env:
-          OMP_NUM_THREADS: 8
-          MKL_NUM_THREADS: 8
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_gpu tests
 
@@ -83,11 +85,8 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         env:
-          OMP_NUM_THREADS: 8
-          MKL_NUM_THREADS: 8
           TF_NUM_INTRAOP_THREADS: 8
           TF_NUM_INTEROP_THREADS: 1
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_gpu tests
 
@@ -131,10 +130,7 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         env:
-          OMP_NUM_THREADS: 8
-          MKL_NUM_THREADS: 8
           MKL_SERVICE_FORCE_INTEL: 1
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
 
@@ -174,11 +170,8 @@ jobs:
 
       - name: Run all non-slow tests on GPU
         env:
-          OMP_NUM_THREADS: 8
-          MKL_NUM_THREADS: 8
           TF_NUM_INTRAOP_THREADS: 8
           TF_NUM_INTEROP_THREADS: 1
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 2 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
 
