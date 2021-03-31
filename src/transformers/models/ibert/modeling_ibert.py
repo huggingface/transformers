@@ -180,7 +180,7 @@ class IBertSelfAttention(nn.Module):
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads}"
+                f"heads ({config.num_attention_heads})"
             )
         self.quant_mode = config.quant_mode
         self.weight_bit = 8
