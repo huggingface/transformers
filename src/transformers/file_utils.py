@@ -583,8 +583,8 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-        class_name = ":class:`~transformers.{}`".format(fn.__qualname__.split(".")[0])
-        intro = "   The {} forward method, overrides the :func:`__call__` special method.".format(class_name)
+        class_name = f":class:`~transformers.{fn.__qualname__.split('.')[0]}`"
+        intro = f"   The {class_name} forward method, overrides the :func:`__call__` special method."
         note = r"""
 
     .. note::
@@ -1048,11 +1048,11 @@ def filename_to_url(filename, cache_dir=None):
 
     cache_path = os.path.join(cache_dir, filename)
     if not os.path.exists(cache_path):
-        raise EnvironmentError("file {} not found".format(cache_path))
+        raise EnvironmentError(f"file {cache_path} not found")
 
     meta_path = cache_path + ".json"
     if not os.path.exists(meta_path):
-        raise EnvironmentError("file {} not found".format(meta_path))
+        raise EnvironmentError(f"file {meta_path} not found")
 
     with open(meta_path, encoding="utf-8") as meta_file:
         metadata = json.load(meta_file)
@@ -1158,10 +1158,10 @@ def cached_path(
         output_path = url_or_filename
     elif urlparse(url_or_filename).scheme == "":
         # File, but it doesn't exist.
-        raise EnvironmentError("file {} not found".format(url_or_filename))
+        raise EnvironmentError(f"file {url_or_filename} not found")
     else:
         # Something unknown
-        raise ValueError("unable to parse {} as a URL or as a local path".format(url_or_filename))
+        raise ValueError(f"unable to parse {url_or_filename} as a URL or as a local path")
 
     if extract_compressed_file:
         if not is_zipfile(output_path) and not tarfile.is_tarfile(output_path):
@@ -1190,7 +1190,7 @@ def cached_path(
                 tar_file.extractall(output_path_extracted)
                 tar_file.close()
             else:
-                raise EnvironmentError("Archive format of {} could not be identified".format(output_path))
+                raise EnvironmentError(f"Archive format of {output_path} could not be identified")
 
         return output_path_extracted
 
@@ -1252,7 +1252,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     """
     headers = copy.deepcopy(headers)
     if resume_size > 0:
-        headers["Range"] = "bytes=%d-" % (resume_size,)
+        headers["Range"] = f"bytes={resume_size}-"
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
@@ -1302,12 +1302,12 @@ def get_from_cache(
 
     headers = {"user-agent": http_user_agent(user_agent)}
     if isinstance(use_auth_token, str):
-        headers["authorization"] = "Bearer {}".format(use_auth_token)
+        headers["authorization"] = f"Bearer {use_auth_token}"
     elif use_auth_token:
         token = HfFolder.get_token()
         if token is None:
             raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
-        headers["authorization"] = "Bearer {}".format(token)
+        headers["authorization"] = f"Bearer {token}"
 
     url_to_download = url
     etag = None
@@ -1404,14 +1404,14 @@ def get_from_cache(
         # Download to temporary file, then copy to cache dir once finished.
         # Otherwise you get corrupt cache entries if the download gets interrupted.
         with temp_file_manager() as temp_file:
-            logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
+            logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
 
             http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
 
-        logger.info("storing %s in cache at %s", url, cache_path)
+        logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
 
-        logger.info("creating metadata file for %s", cache_path)
+        logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
         meta_path = cache_path + ".json"
         with open(meta_path, "w") as meta_file:
@@ -1625,8 +1625,7 @@ class ExplicitEnum(Enum):
     @classmethod
     def _missing_(cls, value):
         raise ValueError(
-            "%r is not a valid %s, please select one of %s"
-            % (value, cls.__name__, str(list(cls._value2member_map_.keys())))
+            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
         )
 
 

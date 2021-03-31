@@ -63,7 +63,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
         )
         raise
     tf_path = os.path.abspath(gpt_neo_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
@@ -119,7 +119,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        print("Initialize PyTorch weight {}".format(name))
+        print(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
 
     # init the final linear layer using word embeddings
@@ -431,9 +431,8 @@ class GPTNeoAttention(nn.Module):
             self.attention = GPTNeoLocalSelfAttention(config)
         else:
             raise NotImplementedError(
-                "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: {}. Select attn layer types from ['global', 'local'] only.".format(
-                    self.attention_layers
-                )
+                "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: "
+                f"{config.attention_layers}. Select attn layer types from ['global', 'local'] only."
             )
 
     def forward(

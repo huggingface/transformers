@@ -154,7 +154,7 @@ def ensure_valid_input(model, tokens, input_names):
             print(f"{arg_name} is not present in the generated input list.")
             break
 
-    print("Generated inputs order: {}".format(ordered_input_names))
+    print(f"Generated inputs order: {ordered_input_names}")
     return ordered_input_names, tuple(model_args)
 
 

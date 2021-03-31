@@ -29,7 +29,7 @@ logging.set_verbosity_info()
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path, discriminator_or_generator):
     # Initialise PyTorch model
     config = ElectraConfig.from_json_file(config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    print(f"Building PyTorch model from configuration: {config}")
 
     if discriminator_or_generator == "discriminator":
         model = ElectraForPreTraining(config)
@@ -44,7 +44,7 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
     )
 
     # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    print(f"Save PyTorch model to {pytorch_dump_path}")
     torch.save(model.state_dict(), pytorch_dump_path)
 
 

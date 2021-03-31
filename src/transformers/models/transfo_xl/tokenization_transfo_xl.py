@@ -198,7 +198,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         self.vocab_file = vocab_file
         self.never_split = never_split
         self.punctuation_symbols = '!"#$%&()*+,-./\\:;<=>?@[\\]^_`{|}~'
-        self.punction_without_space_before_pattern = re.compile(r"[^\s][{}]".format(self.punctuation_symbols))
+        self.punction_without_space_before_pattern = re.compile(rf"[^\s][{self.punctuation_symbols}]")
         self.punctuation_with_space_around_pattern = self._compile_space_around_punctuation_pattern()
         self.language = language
         self.moses_punct_normalizer = sm.MosesPunctNormalizer(language)
@@ -235,9 +235,9 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         except Exception as e:
             raise ValueError(
-                "Unable to parse file {}. Unknown format. "
+                f"Unable to parse file {pretrained_vocab_file}. Unknown format. "
                 "If you tried to load a model saved through TransfoXLTokenizerFast,"
-                "please note they are not compatible.".format(pretrained_vocab_file)
+                "please note they are not compatible."
             ) from e
 
         if vocab_file is not None:
@@ -248,20 +248,20 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         return self.lower_case
 
     def _compile_space_around_punctuation_pattern(self):
-        look_ahead_for_special_token = "(?=[{}])".format(self.punctuation_symbols)
+        look_ahead_for_special_token = f"(?=[{self.punctuation_symbols}])"
         look_ahead_to_match_all_except_space = r"(?=[^\s])"
         return re.compile(r"" + look_ahead_for_special_token + look_ahead_to_match_all_except_space)
 
     def count_file(self, path, verbose=False, add_eos=False):
         if verbose:
-            logger.info("counting file {} ...".format(path))
+            logger.info(f"counting file {path} ...")
         assert os.path.exists(path), f"Input file {path} not found"
 
         sents = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
                 if verbose and idx > 0 and idx % 500000 == 0:
-                    logger.info("    line {}".format(idx))
+                    logger.info(f"    line {idx}")
                 symbols = self.tokenize(line, add_eos=add_eos)
                 self.counter.update(symbols)
                 sents.append(symbols)
@@ -273,10 +273,10 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         sents : a list of sentences, each a list of tokenized symbols
         """
         if verbose:
-            logger.info("counting {} sents ...".format(len(sents)))
+            logger.info(f"counting {len(sents)} sents ...")
         for idx, symbols in enumerate(sents):
             if verbose and idx > 0 and idx % 500000 == 0:
-                logger.info("    line {}".format(idx))
+                logger.info(f"    line {idx}")
             self.counter.update(symbols)
 
     def _build_from_file(self, vocab_file):
@@ -308,11 +308,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def build_vocab(self):
         if self.vocab_file:
-            logger.info("building vocab from {}".format(self.vocab_file))
+            logger.info(f"building vocab from {self.vocab_file}")
             self._build_from_file(self.vocab_file)
-            logger.info("final vocab size {}".format(len(self)))
+            logger.info(f"final vocab size {len(self)}")
         else:
-            logger.info("building vocab with min_freq={}, max_size={}".format(self.min_freq, self.max_size))
+            logger.info(f"building vocab with min_freq={self.min_freq}, max_size={self.max_size}")
             self.idx2sym = []
             self.sym2idx = OrderedDict()
 
@@ -324,18 +324,18 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
                     break
                 self.add_symbol(sym)
 
-            logger.info("final vocab size {} from {} unique tokens".format(len(self), len(self.counter)))
+            logger.info(f"final vocab size {len(self)} from {len(self.counter)} unique tokens")
 
     @torch_only_method
     def encode_file(self, path, ordered=False, verbose=False, add_eos=True, add_double_eos=False):
         if verbose:
-            logger.info("encoding file {} ...".format(path))
+            logger.info(f"encoding file {path} ...")
         assert os.path.exists(path), f"Output file {path} not found"
         encoded = []
         with open(path, "r", encoding="utf-8") as f:
             for idx, line in enumerate(f):
                 if verbose and idx > 0 and idx % 500000 == 0:
-                    logger.info("    line {}".format(idx))
+                    logger.info(f"    line {idx}")
                 symbols = self.tokenize(line, add_eos=add_eos, add_double_eos=add_double_eos)
                 encoded.append(self.convert_to_tensor(symbols))
 
@@ -347,11 +347,11 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
     @torch_only_method
     def encode_sents(self, sents, ordered=False, verbose=False):
         if verbose:
-            logger.info("encoding {} sents ...".format(len(sents)))
+            logger.info(f"encoding {len(sents)} sents ...")
         encoded = []
         for idx, symbols in enumerate(sents):
             if verbose and idx > 0 and idx % 500000 == 0:
-                logger.info("    line {}".format(idx))
+                logger.info(f"    line {idx}")
             encoded.append(self.convert_to_tensor(symbols))
 
         if ordered:
@@ -363,7 +363,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if sym not in self.sym2idx:
             self.idx2sym.append(sym)
             self.sym2idx[sym] = len(self.idx2sym) - 1
-            setattr(self, "{}_idx".format(sym.strip("<>")), self.sym2idx[sym])
+            setattr(self, f"{sym.strip('<>')}_idx", self.sym2idx[sym])
 
     def add_symbol(self, sym):
         if sym not in self.sym2idx:
@@ -430,7 +430,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, idx):
         """Converts an id in a token (BPE) using the vocab."""
-        assert 0 <= idx < len(self), "Index {} out of vocabulary range".format(idx)
+        assert 0 <= idx < len(self), f"Index {idx} out of vocabulary range"
         return self.idx2sym[idx]
 
     def _convert_token_to_id(self, sym):
@@ -438,7 +438,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
-            # logger.info('encounter unk {}'.format(sym))
+            # logger.info(f'encounter unk {sym}')
             # assert '<eos>' not in sym
             if hasattr(self, "unk_idx"):
                 return self.sym2idx.get(sym, self.unk_idx)
@@ -675,20 +675,16 @@ class TransfoXLCorpus(object):
             resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
-                "Corpus '{}' was not found in corpus list ({}). "
-                "We assumed '{}' was a path or url but couldn't find files {} "
-                "at this path or url.".format(
-                    pretrained_model_name_or_path,
-                    ", ".join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys()),
-                    pretrained_model_name_or_path,
-                    corpus_file,
-                )
+                f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list "
+                f"({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. "
+                f"We assumed '{pretrained_model_name_or_path}' was a path or url but couldn't find files {corpus_file} "
+                "at this path or url."
             )
             return None
         if resolved_corpus_file == corpus_file:
-            logger.info("loading corpus file {}".format(corpus_file))
+            logger.info(f"loading corpus file {corpus_file}")
         else:
-            logger.info("loading corpus file {} from cache at {}".format(corpus_file, resolved_corpus_file))
+            logger.info(f"loading corpus file {corpus_file} from cache at {resolved_corpus_file}")
 
         # Instantiate tokenizer.
         corpus = cls(*inputs, **kwargs)
@@ -777,7 +773,7 @@ def get_lm_corpus(datadir, dataset):
         with open(fn, "rb") as fp:
             corpus = pickle.load(fp)
     else:
-        logger.info("Producing dataset {}...".format(dataset))
+        logger.info(f"Producing dataset {dataset}...")
         kwargs = {}
         if dataset in ["wt103", "wt2"]:
             kwargs["special"] = ["<eos>"]

@@ -157,7 +157,7 @@ if __name__ == "__main__":
         )
         end_train_time = time.time() - start_train_time
         logger.info("*** Train ***")
-        logger.info("train_runtime = %s", end_train_time)
+        logger.info(f"train_runtime = {end_train_time}")
 
         output_eval_file = os.path.join(args.output_dir, "train_results.txt")
 
@@ -166,8 +166,8 @@ if __name__ == "__main__":
                 logger.info("***** Train results *****")
                 logger.info(train_results)
                 for key, value in train_results.items():
-                    logger.info("  %s = %s", key, value)
-                    writer.write("%s = %s\n" % (key, value))
+                    logger.info(f"  {key} = {value}")
+                    writer.write(f"{key} = {value}\n")
 
     # Evaluation
     if args.do_eval and (not SDP_ENABLED or sdp.rank() == 0):
@@ -181,8 +181,8 @@ if __name__ == "__main__":
             logger.info("***** Eval results *****")
             logger.info(result)
             for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+                logger.info(f"  {key} = {value}")
+                writer.write(f"{key} = {value}\n")
 
     # Save result
     if SDP_ENABLED:

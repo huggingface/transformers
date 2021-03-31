@@ -270,10 +270,8 @@ class FlaxPreTrainedModel(ABC):
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        "Error no file named {} found in directory {} or `from_pt` set to False".format(
-                            [FLAX_WEIGHTS_NAME, WEIGHTS_NAME],
-                            pretrained_model_name_or_path,
-                        )
+                        f"Error no file named {[FLAX_WEIGHTS_NAME, WEIGHTS_NAME]} found in directory "
+                        f"{pretrained_model_name_or_path} or `from_pt` set to False"
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
@@ -382,7 +380,7 @@ class FlaxPreTrainedModel(ABC):
                 Directory to which to save. Will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
 

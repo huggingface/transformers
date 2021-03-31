@@ -195,8 +195,6 @@ class TFAutoModelTest(unittest.TestCase):
             mapping = tuple(mapping.items())
             for index, (child_config, child_model) in enumerate(mapping[1:]):
                 for parent_config, parent_model in mapping[: index + 1]:
-                    with self.subTest(
-                        msg="Testing if {} is child of {}".format(child_config.__name__, parent_config.__name__)
-                    ):
+                    with self.subTest(msg=f"Testing if {child_config.__name__} is child of {parent_config.__name__}"):
                         self.assertFalse(issubclass(child_config, parent_config))
                         self.assertFalse(issubclass(child_model, parent_model))
