@@ -18,7 +18,7 @@ git+https://github.com/huggingface/transformers.git@v4.5.0.rc0 # install master 
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with:  
 
 ```bash
-AWS_PROFILE=<enter-your-profile> make sagemaker-test
+AWS_PROFILE=<enter-your-profile> make test-sagemaker
 ```
 These tests take around 10-15 minutes to finish. Preferably make a screenshot of the successfully ran tests.
 
@@ -88,7 +88,7 @@ tensorflow-gpu==2.5.0 # for tensorflow
 After we adjusted the `requirements.txt` we can run Amazon SageMaker tests with. 
 
 ```bash
-AWS_PROFILE=<enter-your-profile> make sagemaker-test
+AWS_PROFILE=<enter-your-profile> make test-sagemaker
 ```
 These tests take around 10-15 minutes to finish. Preferably make a screenshot of the successfully ran tests.
 

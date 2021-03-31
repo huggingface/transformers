@@ -47,7 +47,9 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def infer_framework_from_model(model, model_classes: Optional[Dict[str, type]] = None, revision: Optional[str] = None):
+def infer_framework_from_model(
+    model, model_classes: Optional[Dict[str, type]] = None, revision: Optional[str] = None, task: Optional[str] = None
+):
     """
     Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
 
@@ -80,17 +82,17 @@ def infer_framework_from_model(model, model_classes: Optional[Dict[str, type]] =
     if isinstance(model, str):
         if is_torch_available() and not is_tf_available():
             model_class = model_classes.get("pt", AutoModel)
-            model = model_class.from_pretrained(model, revision=revision)
+            model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
         elif is_tf_available() and not is_torch_available():
             model_class = model_classes.get("tf", TFAutoModel)
-            model = model_class.from_pretrained(model, revision=revision)
+            model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
         else:
             try:
                 model_class = model_classes.get("pt", AutoModel)
-                model = model_class.from_pretrained(model, revision=revision)
+                model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
             except OSError:
                 model_class = model_classes.get("tf", TFAutoModel)
-                model = model_class.from_pretrained(model, revision=revision)
+                model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model
@@ -157,7 +159,7 @@ def get_default_model(targeted_task: Dict, framework: Optional[str], task_option
     defaults = targeted_task["default"]
     if task_options:
         if task_options not in defaults:
-            raise ValueError("The task does not provide any default models for options {}".format(task_options))
+            raise ValueError(f"The task does not provide any default models for options {task_options}")
         default_models = defaults[task_options]["model"]
     elif "model" in defaults:
         default_models = targeted_task["default"]["model"]
@@ -238,11 +240,11 @@ class PipelineDataFormat:
 
         if output_path is not None and not overwrite:
             if exists(abspath(self.output_path)):
-                raise OSError("{} already exists on disk".format(self.output_path))
+                raise OSError(f"{self.output_path} already exists on disk")
 
         if input_path is not None:
             if not exists(abspath(self.input_path)):
-                raise OSError("{} doesnt exist on disk".format(self.input_path))
+                raise OSError(f"{self.input_path} doesnt exist on disk")
 
     @abstractmethod
     def __iter__(self):
@@ -311,7 +313,7 @@ class PipelineDataFormat:
         elif format == "pipe":
             return PipedPipelineDataFormat(output_path, input_path, column, overwrite=overwrite)
         else:
-            raise KeyError("Unknown reader {} (Available reader are json/csv/pipe)".format(format))
+            raise KeyError(f"Unknown reader {format} (Available reader are json/csv/pipe)")
 
 
 class CsvPipelineDataFormat(PipelineDataFormat):
@@ -528,14 +530,14 @@ class Pipeline(_ScikitCompat):
     ):
 
         if framework is None:
-            framework = infer_framework_from_model(model)
+            framework, model = infer_framework_from_model(model)
 
         self.task = task
         self.model = model
         self.tokenizer = tokenizer
         self.modelcard = modelcard
         self.framework = framework
-        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else "cuda:{}".format(device))
+        self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
         self.binary_output = binary_output
 
         # Special handling
@@ -556,7 +558,7 @@ class Pipeline(_ScikitCompat):
                 A path to the directory where to saved. It will be created if it doesn't exist.
         """
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
 
@@ -594,7 +596,7 @@ class Pipeline(_ScikitCompat):
                 output = pipe(...)
         """
         if self.framework == "tf":
-            with tf.device("/CPU:0" if self.device == -1 else "/device:GPU:{}".format(self.device)):
+            with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):
                 yield
         else:
             if self.device.type == "cuda":

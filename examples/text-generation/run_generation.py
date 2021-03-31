@@ -201,12 +201,7 @@ def main():
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
 
-    logger.warning(
-        "device: %s, n_gpu: %s, 16-bits training: %s",
-        args.device,
-        args.n_gpu,
-        args.fp16,
-    )
+    logger.warning(f"device: {args.device}, n_gpu: {args.n_gpu}, 16-bits training: {args.fp16}")
 
     set_seed(args)
 
@@ -271,7 +266,7 @@ def main():
     generated_sequences = []
 
     for generated_sequence_idx, generated_sequence in enumerate(output_sequences):
-        print("=== GENERATED SEQUENCE {} ===".format(generated_sequence_idx + 1))
+        print(f"=== GENERATED SEQUENCE {generated_sequence_idx + 1} ===")
         generated_sequence = generated_sequence.tolist()
 
         # Decode text

@@ -158,7 +158,9 @@ class FlaxAutoModel(object):
 
         for config_class, model_class in FLAX_MODEL_MAPPING.items():
             if isinstance(config, config_class):
-                return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
+                return model_class.from_pretrained(
+                    pretrained_model_name_or_path, *model_args, config=config, _from_auto=True, **kwargs
+                )
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} "
             f"for this kind of FlaxAutoModel: {cls.__name__}.\n"
