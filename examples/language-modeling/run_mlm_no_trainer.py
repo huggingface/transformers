@@ -481,7 +481,7 @@ def main():
             with torch.no_grad():
                 outputs = model(**batch)
 
-            loss = outputs.loss * args.per_device_eval_batch_size
+            loss = outputs.loss
             losses.append(accelerator.gather(loss.repeat(args.per_device_eval_batch_size)))
 
         losses = torch.cat(losses)
