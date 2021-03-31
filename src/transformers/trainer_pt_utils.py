@@ -32,11 +32,11 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_distributed_available, is_torch_tpu_available
+from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
 from .utils import logging
 
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
 else:
     import torch.distributed as dist
@@ -805,3 +805,40 @@ def get_parameter_names(model, forbidden_layer_types):
     # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
     result += list(model._parameters.keys())
     return result
+
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    @smp.step()
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
+        outputs = model(**inputs)
+        loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        loss /= gradient_accumulation_steps
+        model.backward(loss)
+        return loss
+
+    @smp.step()
+    def smp_forward_only(model, inputs):
+        return model(**inputs)
+
+    def smp_gather(tensor):
+        if isinstance(tensor, (list, tuple)):
+            return type(tensor)(smp_gather(t) for t in tensor)
+        elif isinstance(tensor, dict):
+            return type(tensor)({k: smp_gather(v) for k, v in tensor.items()})
+        elif not isinstance(tensor, torch.Tensor):
+            raise TypeError(
+                f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
+            )
+        all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
+        return torch.cat([t.cpu() for t in all_tensors], dim=0)
+
+    def smp_nested_concat(tensor):
+        if isinstance(tensor, (list, tuple)):
+            return type(tensor)(smp_nested_concat(t) for t in tensor)
+        elif isinstance(tensor, dict):
+            return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
+        # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
+        # which is also the name of the decorator so Python is confused.
+        return tensor.concat().detach().cpu()

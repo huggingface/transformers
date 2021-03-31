@@ -9,10 +9,10 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
-from transformers.file_utils import is_sagemaker_distributed_available
+from transformers.file_utils import is_sagemaker_dp_enabled
 
 
-if os.environ.get("SDP_ENABLED") or is_sagemaker_distributed_available():
+if os.environ.get("SDP_ENABLED") or is_sagemaker_dp_enabled():
     SDP_ENABLED = True
     os.environ["SAGEMAKER_INSTANCE_TYPE"] = "p3dn.24xlarge"
     import smdistributed.dataparallel.tensorflow as sdp
