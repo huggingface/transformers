@@ -700,13 +700,18 @@ AUTO_MODEL_PRETRAINED_DOCSTRING = r"""
                       a PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
             model_args (additional positional arguments, `optional`):
                 Will be passed along to the underlying model ``__init__()`` method.
-            config (:class:`~transformers.PretrainedConfig`, `optional`):
-                Configuration for the model to use instead of an automatically loaded configuration. Configuration can
+            config (:obj:`Union[PretrainedConfig, str, os.PathLike]`, `optional`):
+                Can be either:
+
+                    - an instance of a class derived from :class:`~transformers.PretrainedConfig`,
+                    - a string or path valid as input to :func:`~transformers.PretrainedConfig.from_pretrained`.
+
+                Configuration for the model to use instead of an automatically loaded configuation. Configuration can
                 be automatically loaded when:
 
                     - The model is a model provided by the library (loaded with the `model id` string of a pretrained
                       model).
-                    - The model was saved using :meth:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
+                    - The model was saved using :func:`~transformers.PreTrainedModel.save_pretrained` and is reloaded
                       by supplying the save directory.
                     - The model is loaded by supplying a local directory as ``pretrained_model_name_or_path`` and a
                       configuration JSON file named `config.json` is found in the directory.
