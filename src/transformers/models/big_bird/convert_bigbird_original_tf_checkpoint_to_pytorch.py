@@ -27,7 +27,7 @@ logging.set_verbosity_info()
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, big_bird_config_file, pytorch_dump_path, is_trivia_qa):
     # Initialise PyTorch model
     config = BigBirdConfig.from_json_file(big_bird_config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    print(f"Building PyTorch model from configuration: {config}")
 
     if is_trivia_qa:
         model = BigBirdForQuestionAnswering(config)

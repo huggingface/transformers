@@ -133,7 +133,7 @@ class ServeCommand(BaseTransformersCLICommand):
                 "Or install FastAPI and unicorn separately."
             )
         else:
-            logger.info("Serving model over {}:{}".format(host, port))
+            logger.info(f"Serving model over {host}:{port}")
             self._app = FastAPI(
                 routes=[
                     APIRoute(

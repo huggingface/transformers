@@ -225,12 +225,10 @@ def main():
         level=logging.INFO,
     )
     logger.info(
-        "n_replicas: %s, distributed training: %s, 16-bits training: %s",
-        training_args.n_replicas,
-        bool(training_args.n_replicas > 1),
-        training_args.fp16,
+        f"n_replicas: {training_args.n_replicas}, distributed training: {bool(training_args.n_replicas > 1)}, "
+        f"16-bits training: {training_args.fp16}"
     )
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Load pretrained model and tokenizer
     #
@@ -300,8 +298,8 @@ def main():
             logger.info("***** Eval results *****")
 
             for key, value in result.items():
-                logger.info("  %s = %s", key, value)
-                writer.write("%s = %s\n" % (key, value))
+                logger.info(f"  {key} = {value}")
+                writer.write(f"{key} = {value}\n")
 
             results.update(result)
 

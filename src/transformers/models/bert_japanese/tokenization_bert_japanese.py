@@ -130,8 +130,8 @@ class BertJapaneseTokenizer(BertTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -151,7 +151,7 @@ class BertJapaneseTokenizer(BertTokenizer):
                     do_lower_case=do_lower_case, never_split=never_split, **(mecab_kwargs or {})
                 )
             else:
-                raise ValueError("Invalid word_tokenizer_type '{}' is specified.".format(word_tokenizer_type))
+                raise ValueError(f"Invalid word_tokenizer_type '{word_tokenizer_type}' is specified.")
 
         self.do_subword_tokenize = do_subword_tokenize
         self.subword_tokenizer_type = subword_tokenizer_type
@@ -161,7 +161,7 @@ class BertJapaneseTokenizer(BertTokenizer):
             elif subword_tokenizer_type == "character":
                 self.subword_tokenizer = CharacterTokenizer(vocab=self.vocab, unk_token=self.unk_token)
             else:
-                raise ValueError("Invalid subword_tokenizer_type '{}' is specified.".format(subword_tokenizer_type))
+                raise ValueError(f"Invalid subword_tokenizer_type '{subword_tokenizer_type}' is specified.")
 
     @property
     def do_lower_case(self):
@@ -279,7 +279,7 @@ class MecabTokenizer:
                 raise ValueError("Invalid mecab_dic is specified.")
 
             mecabrc = os.path.join(dic_dir, "mecabrc")
-            mecab_option = '-d "{}" -r "{}" '.format(dic_dir, mecabrc) + mecab_option
+            mecab_option = f'-d "{dic_dir}" -r "{mecabrc}" ' + mecab_option
 
         self.mecab = fugashi.GenericTagger(mecab_option)
 

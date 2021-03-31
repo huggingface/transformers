@@ -86,6 +86,6 @@ if __name__ == "__main__":
     end_train_time = time.time() - start_train_time
 
     logger.info("*** Train ***")
-    logger.info("train_runtime = %s", end_train_time)
+    logger.info(f"train_runtime = {end_train_time}")
     for key, value in train_results.history.items():
-        logger.info("  %s = %s", key, value)
+        logger.info(f"  {key} = {value}")

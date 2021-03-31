@@ -38,14 +38,14 @@ def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_du
         embed_dropout=config_json["embed_dropout"],
         attention_dropout=config_json["attn_dropout"],
     )
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    print(f"Building PyTorch model from configuration: {config}")
     model = GPTNeoForCausalLM(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_gpt_neo(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    print(f"Save PyTorch model to {pytorch_dump_path}")
     model.save_pretrained(pytorch_dump_path)
 
 

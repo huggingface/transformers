@@ -210,7 +210,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.n_embd, initializer_range=config.initializer_range, name="tokens_embed"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
+        self.h = [TFBlock(config.n_ctx, config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
 
     def build(self, input_shape):
         with tf.name_scope("positions_embed"):

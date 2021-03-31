@@ -42,12 +42,12 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 if k not in item:
                     raise KeyError("You need to provide a dictionary with keys {question:..., context:...}")
                 elif item[k] is None:
-                    raise ValueError("`{}` cannot be None".format(k))
+                    raise ValueError(f"`{k}` cannot be None")
                 elif isinstance(item[k], str) and len(item[k]) == 0:
-                    raise ValueError("`{}` cannot be empty".format(k))
+                    raise ValueError(f"`{k}` cannot be empty")
 
             return QuestionAnsweringPipeline.create_sample(**item)
-        raise ValueError("{} argument needs to be of type (SquadExample, dict)".format(item))
+        raise ValueError(f"{item} argument needs to be of type (SquadExample, dict)")
 
     def __call__(self, *args, **kwargs):
         # Detect where the actual inputs are
@@ -77,7 +77,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             else:
                 raise ValueError("Arguments can't be understood")
         else:
-            raise ValueError("Unknown arguments {}".format(kwargs))
+            raise ValueError(f"Unknown arguments {kwargs}")
 
         # Normalize inputs
         if isinstance(inputs, dict):
@@ -86,7 +86,7 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             # Copy to avoid overriding arguments
             inputs = [i for i in inputs]
         else:
-            raise ValueError("Invalid arguments {}".format(inputs))
+            raise ValueError(f"Invalid arguments {kwargs}")
 
         for i, item in enumerate(inputs):
             inputs[i] = self.normalize(item)
@@ -210,10 +210,10 @@ class QuestionAnsweringPipeline(Pipeline):
         kwargs.setdefault("handle_impossible_answer", False)
 
         if kwargs["topk"] < 1:
-            raise ValueError("topk parameter should be >= 1 (got {})".format(kwargs["topk"]))
+            raise ValueError(f"topk parameter should be >= 1 (got {kwargs['topk']})")
 
         if kwargs["max_answer_len"] < 1:
-            raise ValueError("max_answer_len parameter should be >= 1 (got {})".format(kwargs["max_answer_len"]))
+            raise ValueError(f"max_answer_len parameter should be >= 1 (got {(kwargs['max_answer_len'])}")
 
         # Convert inputs to features
         examples = self._args_parser(*args, **kwargs)

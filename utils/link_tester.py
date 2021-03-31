@@ -91,6 +91,6 @@ if __name__ == "__main__":
     if broken_links:
         print("The following links did not respond:")
         for link in broken_links:
-            print("- {}".format(link))
+            print(f"- {link}")
         sys.exit(1)
     print("All links are ok.")

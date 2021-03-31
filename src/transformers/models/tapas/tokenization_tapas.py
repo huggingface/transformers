@@ -324,8 +324,8 @@ class TapasTokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -1208,9 +1208,9 @@ class TapasTokenizer(PreTrainedTokenizer):
         if max_length is None and len(encoded_inputs["input_ids"]) > self.model_max_length and verbose:
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
                 logger.warning(
-                    "Token indices sequence length is longer than the specified maximum sequence length "
-                    "for this model ({} > {}). Running this sequence through the model will result in "
-                    "indexing errors".format(len(encoded_inputs["input_ids"]), self.model_max_length)
+                    f"Token indices sequence length is longer than the specified maximum sequence length "
+                    f"for this model ({len(encoded_inputs['input_ids'])} > {self.model_max_length}). Running this "
+                    "sequence through the model will result in indexing errors."
                 )
             self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
 
@@ -1670,7 +1670,7 @@ class TapasTokenizer(PreTrainedTokenizer):
 
     def _find_tokens(self, text, segment):
         """Return start index of segment in text or None."""
-        logging.info("text: %s %s", text, segment)
+        logging.info(f"text: {text} {segment}")
         for index in range(1 + len(text) - len(segment)):
             for seg_index, seg_token in enumerate(segment):
                 if text[index + seg_index].piece != seg_token.piece:
@@ -1685,7 +1685,7 @@ class TapasTokenizer(PreTrainedTokenizer):
         answer_text,
     ):
         """Returns all occurrences of answer_text in the table."""
-        logging.info("answer text: %s", answer_text)
+        logging.info(f"answer text: {answer_text}")
         for row_index, row in enumerate(tokenized_table.rows):
             if row_index == 0:
                 # We don't search for answers in the header.
@@ -2347,7 +2347,7 @@ _INF = float("INF")
 def _get_numeric_value_from_date(date, mask):
     """Converts date (datetime Python object) to a NumericValue object with a Date object value."""
     if date.year < _MIN_YEAR or date.year > _MAX_YEAR:
-        raise ValueError("Invalid year: %d" % date.year)
+        raise ValueError(f"Invalid year: {date.year}")
 
     new_date = Date()
     if mask.year:
@@ -2523,7 +2523,7 @@ def _get_value_type(numeric_value):
         return NUMBER_TYPE
     elif numeric_value.date is not None:
         return DATE_TYPE
-    raise ValueError("Unknown type: %s" % numeric_value)
+    raise ValueError(f"Unknown type: {numeric_value}")
 
 
 def _get_value_as_primitive_value(numeric_value):
@@ -2541,7 +2541,7 @@ def _get_value_as_primitive_value(numeric_value):
         if date.day is not None:
             value_tuple[2] = float(date.day)
         return tuple(value_tuple)
-    raise ValueError("Unknown type: %s" % numeric_value)
+    raise ValueError(f"Unknown type: {numeric_value}")
 
 
 def _get_all_types(numeric_values):
@@ -2567,7 +2567,7 @@ def get_numeric_sort_key_fn(numeric_values):
     """
     value_types = _get_all_types(numeric_values)
     if len(value_types) != 1:
-        raise ValueError("No common value type in %s" % numeric_values)
+        raise ValueError(f"No common value type in {numeric_values}")
 
     value_type = next(iter(value_types))
     if value_type == NUMBER_TYPE:
@@ -2586,7 +2586,7 @@ def get_numeric_sort_key_fn(numeric_values):
                 valid_indexes.discard(tuple_index)
 
     if not valid_indexes:
-        raise ValueError("No common value in %s" % numeric_values)
+        raise ValueError(f"No common value in {numeric_values}")
 
     def _sort_key_fn(numeric_value):
         value = _get_value_as_primitive_value(numeric_value)
@@ -2618,8 +2618,7 @@ def _consolidate_numeric_values(row_index_to_values, min_consolidation_fraction,
         return {}
     max_count = max(type_counts.values())
     if max_count < len(row_index_to_values) * min_consolidation_fraction:
-        # logging.log_every_n(logging.INFO, 'Can\'t consolidate types: %s %s %d', 100,
-        #                     debug_info, row_index_to_values, max_count)
+        # logging.log_every_n(logging.INFO, f'Can\'t consolidate types: {debug_info} {row_index_to_values} {max_count}', 100)
         return {}
 
     valid_types = set()
@@ -2708,15 +2707,13 @@ def filter_invalid_unicode_from_table(table):
             cell, is_invalid = filter_invalid_unicode(cell)
             if is_invalid:
                 logging.warning(
-                    "Scrub an invalid table body @ table_id: %s, row_index: %d, " "col_index: %d",
-                    table.table_id,
-                    row_index,
-                    col_index,
+                    f"Scrub an invalid table body @ table_id: {table.table_id}, row_index: {row_index}, "
+                    f"col_index: {col_index}",
                 )
     for col_index, column in enumerate(table.columns):
         column, is_invalid = filter_invalid_unicode(column)
         if is_invalid:
-            logging.warning("Scrub an invalid table header @ table_id: %s, col_index: %d", table.table_id, col_index)
+            logging.warning(f"Scrub an invalid table header @ table_id: {table.table_id}, col_index: {col_index}")
 
 
 def add_numeric_table_values(table, min_consolidation_fraction=0.7, debug_info=None):

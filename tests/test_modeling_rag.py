@@ -74,7 +74,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
             return True
         raise
     except Exception:
-        msg = "{} != {}".format(a, b)
+        msg = f"{a} != {b}"
         if prefix:
             msg = prefix + ": " + msg
         raise AssertionError(msg)

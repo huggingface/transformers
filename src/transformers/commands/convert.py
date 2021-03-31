@@ -76,7 +76,7 @@ class ConvertCommand(BaseTransformersCLICommand):
     ):
         self._logger = logging.get_logger("transformers-cli/converting")
 
-        self._logger.info("Loading model {}".format(model_type))
+        self._logger.info(f"Loading model {model_type}")
         self._model_type = model_type
         self._tf_checkpoint = tf_checkpoint
         self._pytorch_dump_output = pytorch_dump_output

@@ -71,7 +71,7 @@ def convert_to_unicode(text):
         elif isinstance(s, six.text_type):
             return s
         else:
-            raise TypeError("not expecting type '%s'" % type(s))
+            raise TypeError(f"not expecting type '{type(s)}'")
 
     return six_ensure_text(text, encoding="utf-8", errors="ignore")
 

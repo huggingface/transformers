@@ -333,7 +333,7 @@ class GradientAccumulator(object):
                 ]
             )
         if len(gradients) != len(self._gradients):
-            raise ValueError("Expected %s gradients, but got %d" % (len(self._gradients), len(gradients)))
+            raise ValueError(f"Expected {len(self._gradients)} gradients, but got {len(gradients)}")
 
         for accum_gradient, gradient in zip(self._gradients, gradients):
             if accum_gradient is not None and gradient is not None:

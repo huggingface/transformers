@@ -67,14 +67,14 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
     if ".ckpt" in openai_checkpoint_folder_path:
         openai_checkpoint_folder_path = os.path.dirname(openai_checkpoint_folder_path)
 
-    logger.info("Loading weights from {}".format(openai_checkpoint_folder_path))
+    logger.info(f"Loading weights from {openai_checkpoint_folder_path}")
 
     with open(openai_checkpoint_folder_path + "/parameters_names.json", "r", encoding="utf-8") as names_handle:
         names = json.load(names_handle)
     with open(openai_checkpoint_folder_path + "/params_shapes.json", "r", encoding="utf-8") as shapes_handle:
         shapes = json.load(shapes_handle)
     offsets = np.cumsum([np.prod(shape) for shape in shapes])
-    init_params = [np.load(openai_checkpoint_folder_path + "/params_{}.npy".format(n)) for n in range(10)]
+    init_params = [np.load(openai_checkpoint_folder_path + f"/params_{n}.npy") for n in range(10)]
     init_params = np.split(np.concatenate(init_params, 0), offsets)[:-1]
     init_params = [param.reshape(shape) for param, shape in zip(init_params, shapes)]
 
@@ -134,7 +134,7 @@ def load_tf_weights_in_openai_gpt(model, config, openai_checkpoint_folder_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        logger.info("Initialize PyTorch weight {}".format(name))
+        logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
 

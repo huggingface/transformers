@@ -107,8 +107,8 @@ class DebertaV2Tokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = DebertaV2Tokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.do_lower_case = do_lower_case
         self.split_by_punct = split_by_punct
@@ -481,11 +481,11 @@ def convert_to_unicode(text):
         elif isinstance(text, bytes):
             return text.decode("utf-8", "ignore")
         else:
-            raise ValueError("Unsupported string type: %s" % (type(text)))
+            raise ValueError(f"Unsupported string type: {type(text)}")
     elif six.PY2:
         if isinstance(text, str):
             return text.decode("utf-8", "ignore")
         else:
-            raise ValueError("Unsupported string type: %s" % (type(text)))
+            raise ValueError(f"Unsupported string type: {type(text)}")
     else:
         raise ValueError("Not running on Python2 or Python 3?")

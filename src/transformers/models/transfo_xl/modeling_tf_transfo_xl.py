@@ -368,7 +368,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                         r_idx - l_idx,
                         d_emb_i,
                         init_std,
-                        name="emb_layers_._{}".format(i),
+                        name=f"emb_layers_._{i}",
                     )
                 )
 
@@ -380,7 +380,7 @@ class TFAdaptiveEmbedding(tf.keras.layers.Layer):
                     shape=(d_emb_i, self.d_proj),
                     initializer=get_initializer(self.init_std),
                     trainable=True,
-                    name="emb_projs_._{}".format(i),
+                    name=f"emb_projs_._{i}",
                 )
             )
 
@@ -467,7 +467,7 @@ class TFTransfoXLMainLayer(tf.keras.layers.Layer):
                         layer_norm_epsilon=config.layer_norm_epsilon,
                         init_std=config.init_std,
                         output_attentions=self.output_attentions,
-                        name="layers_._{}".format(i),
+                        name=f"layers_._{i}",
                     )
                 )
         else:  # learnable embeddings and absolute embeddings

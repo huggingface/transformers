@@ -172,7 +172,7 @@ class ModelTesterMixin:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
-                        msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
     def test_determinism(self):
@@ -928,7 +928,7 @@ class ModelTesterMixin:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
 
-                    with self.subTest(msg="Missing keys for {}".format(model.__class__.__name__)):
+                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
     def test_tie_model_weights(self):

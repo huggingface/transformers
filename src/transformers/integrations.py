@@ -533,12 +533,9 @@ class TensorBoardCallback(TrainerCallback):
                 else:
                     logger.warning(
                         "Trainer is attempting to log a value of "
-                        '"%s" of type %s for key "%s" as a scalar. '
+                        f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                         "This invocation of Tensorboard's writer.add_scalar() "
-                        "is incorrect so we dropped this attribute.",
-                        v,
-                        type(v),
-                        k,
+                        "is incorrect so we dropped this attribute."
                     )
             self.tb_writer.flush()
 

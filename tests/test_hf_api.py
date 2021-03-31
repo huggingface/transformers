@@ -31,8 +31,8 @@ PASS = "__DUMMY_TRANSFORMERS_PASS__"
 ENDPOINT_STAGING = "https://moon-staging.huggingface.co"
 ENDPOINT_STAGING_BASIC_AUTH = f"https://{USER}:{PASS}@moon-staging.huggingface.co"
 
-REPO_NAME = "my-model-{}".format(int(time.time()))
-REPO_NAME_LARGE_FILE = "my-model-largefiles-{}".format(int(time.time()))
+REPO_NAME = f"my-model-{int(time.time())}"
+REPO_NAME_LARGE_FILE = f"my-model-largefiles-{int(time.time())}"
 WORKING_REPO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/working_repo")
 LARGE_FILE_14MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.epub"
 LARGE_FILE_18MB = "https://cdn-media.huggingface.co/lfs-largefiles/progit.pdf"
@@ -95,7 +95,7 @@ class HfFolderTest(unittest.TestCase):
         Test the whole token save/get/delete workflow,
         with the desired behavior with respect to non-existent tokens.
         """
-        token = "token-{}".format(int(time.time()))
+        token = f"token-{int(time.time())}"
         HfFolder.save_token(token)
         self.assertEqual(HfFolder.get_token(), token)
         HfFolder.delete_token()
