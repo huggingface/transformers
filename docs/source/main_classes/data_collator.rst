@@ -21,10 +21,9 @@ DataCollator
 DataCollators are objects that will form a batch by using a list of elements as input. These lists of elements are of
 the same type as the elements of :obj:`train_dataset` or :obj:`eval_dataset`.
 
-The base class :class:`~transformers.data.data_collator` can use the default
-:func:`transformers.data.data_collator.default_data_collator`, which is a function that takes a list of samples from a
-Dataset as input and collates them into a batch of a dict-like object. The default collator performs special handling
-of potential keys:
+A data collator will default to :func:`transformers.data.data_collator.default_data_collator` if no `tokenizer` has been
+provided. This is a function that takes a list of samples from a Dataset as input and collates them into a batch of a
+dict-like object. The default collator performs special handling of potential keys:
 
     - ``label``: handles a single value (int or float) per object
     - ``label_ids``: handles a list of values per object
