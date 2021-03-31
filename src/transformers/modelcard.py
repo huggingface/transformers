@@ -77,7 +77,7 @@ class ModelCard:
             output_model_card_file = save_directory_or_file
 
         self.to_json_file(output_model_card_file)
-        logger.info("Model card saved in {output_model_card_file}")
+        logger.info(f"Model card saved in {output_model_card_file}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):

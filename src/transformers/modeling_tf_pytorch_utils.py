@@ -204,7 +204,7 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             raise e
 
         tf_loaded_numel += array.size
-        # logger.warning("Initialize TF weight {symbolic_weight.name}")
+        # logger.warning(f"Initialize TF weight {symbolic_weight.name}")
 
         weight_value_tuples.append((symbolic_weight, array))
         all_pytorch_weights.discard(name)
