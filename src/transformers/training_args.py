@@ -281,7 +281,7 @@ class TrainingArguments:
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
+            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
         length_column_name (:obj:`str`, `optional`, defaults to :obj:`"length"`):
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
