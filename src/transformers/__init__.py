@@ -150,6 +150,7 @@ _import_structure = {
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
+    "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -176,6 +177,7 @@ _import_structure = {
     "models.fsmt": ["FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FSMTConfig", "FSMTTokenizer"],
     "models.funnel": ["FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP", "FunnelConfig", "FunnelTokenizer"],
     "models.gpt2": ["GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPT2Config", "GPT2Tokenizer"],
+    "models.gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.ibert": ["IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "IBertConfig"],
     "models.layoutlm": ["LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "LayoutLMConfig", "LayoutLMTokenizer"],
@@ -406,6 +408,7 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -482,6 +485,22 @@ if is_torch_available():
             "BertGenerationDecoder",
             "BertGenerationEncoder",
             "load_tf_weights_in_bert_generation",
+        ]
+    )
+    _import_structure["models.big_bird"].extend(
+        [
+            "BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BigBirdForCausalLM",
+            "BigBirdForMaskedLM",
+            "BigBirdForMultipleChoice",
+            "BigBirdForPreTraining",
+            "BigBirdForQuestionAnswering",
+            "BigBirdForSequenceClassification",
+            "BigBirdForTokenClassification",
+            "BigBirdLayer",
+            "BigBirdModel",
+            "BigBirdPreTrainedModel",
+            "load_tf_weights_in_big_bird",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -633,6 +652,15 @@ if is_torch_available():
             "GPT2Model",
             "GPT2PreTrainedModel",
             "load_tf_weights_in_gpt2",
+        ]
+    )
+    _import_structure["models.gpt_neo"].extend(
+        [
+            "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "GPTNeoForCausalLM",
+            "GPTNeoModel",
+            "GPTNeoPreTrainedModel",
+            "load_tf_weights_in_gpt_neo",
         ]
     )
     _import_structure["models.ibert"].extend(
@@ -1262,7 +1290,19 @@ else:
 if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(["FLAX_MODEL_MAPPING", "FlaxAutoModel"])
-    _import_structure["models.bert"].extend(["FlaxBertForMaskedLM", "FlaxBertModel"])
+    _import_structure["models.bert"].extend(
+        [
+            "FlaxBertForMaskedLM",
+            "FlaxBertForMultipleChoice",
+            "FlaxBertForNextSentencePrediction",
+            "FlaxBertForPreTraining",
+            "FlaxBertForQuestionAnswering",
+            "FlaxBertForSequenceClassification",
+            "FlaxBertForTokenClassification",
+            "FlaxBertModel",
+            "FlaxBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].append("FlaxRobertaModel")
 else:
     from .utils import dummy_flax_objects
@@ -1376,6 +1416,7 @@ if TYPE_CHECKING:
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
+    from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1402,6 +1443,7 @@ if TYPE_CHECKING:
     from .models.fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig, FSMTTokenizer
     from .models.funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig, FunnelTokenizer
     from .models.gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config, GPT2Tokenizer
+    from .models.gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
     from .models.herbert import HerbertTokenizer
     from .models.ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
     from .models.layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig, LayoutLMTokenizer
@@ -1678,6 +1720,20 @@ if TYPE_CHECKING:
             BertGenerationEncoder,
             load_tf_weights_in_bert_generation,
         )
+        from .models.big_bird import (
+            BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BigBirdForCausalLM,
+            BigBirdForMaskedLM,
+            BigBirdForMultipleChoice,
+            BigBirdForPreTraining,
+            BigBirdForQuestionAnswering,
+            BigBirdForSequenceClassification,
+            BigBirdForTokenClassification,
+            BigBirdLayer,
+            BigBirdModel,
+            BigBirdPreTrainedModel,
+            load_tf_weights_in_big_bird,
+        )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BlenderbotForCausalLM,
@@ -1802,6 +1858,13 @@ if TYPE_CHECKING:
             GPT2Model,
             GPT2PreTrainedModel,
             load_tf_weights_in_gpt2,
+        )
+        from .models.gpt_neo import (
+            GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
+            GPTNeoForCausalLM,
+            GPTNeoModel,
+            GPTNeoPreTrainedModel,
+            load_tf_weights_in_gpt_neo,
         )
         from .models.ibert import (
             IBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2321,7 +2384,17 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
-        from .models.bert import FlaxBertForMaskedLM, FlaxBertModel
+        from .models.bert import (
+            FlaxBertForMaskedLM,
+            FlaxBertForMultipleChoice,
+            FlaxBertForNextSentencePrediction,
+            FlaxBertForPreTraining,
+            FlaxBertForQuestionAnswering,
+            FlaxBertForSequenceClassification,
+            FlaxBertForTokenClassification,
+            FlaxBertModel,
+            FlaxBertPreTrainedModel,
+        )
         from .models.roberta import FlaxRobertaModel
     else:
         # Import the same objects as dummies to get them in the namespace.

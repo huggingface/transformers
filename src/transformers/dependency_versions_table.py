@@ -53,4 +53,5 @@ deps = {
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
+    "sagemaker": "sagemaker>=2.31.0",
 }

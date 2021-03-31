@@ -22,6 +22,7 @@ from ..albert.configuration_albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, 
 from ..bart.configuration_bart import BART_PRETRAINED_CONFIG_ARCHIVE_MAP, BartConfig
 from ..bert.configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig
 from ..bert_generation.configuration_bert_generation import BertGenerationConfig
+from ..big_bird.configuration_big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig
 from ..blenderbot.configuration_blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig
 from ..blenderbot_small.configuration_blenderbot_small import (
     BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -40,6 +41,7 @@ from ..flaubert.configuration_flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE
 from ..fsmt.configuration_fsmt import FSMT_PRETRAINED_CONFIG_ARCHIVE_MAP, FSMTConfig
 from ..funnel.configuration_funnel import FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP, FunnelConfig
 from ..gpt2.configuration_gpt2 import GPT2_PRETRAINED_CONFIG_ARCHIVE_MAP, GPT2Config
+from ..gpt_neo.configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
 from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBertConfig
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
@@ -80,6 +82,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     (key, value)
     for pretrained_map in [
         # Add archive maps here
+        GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -127,6 +131,8 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
 CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
+        ("gpt_neo", GPTNeoConfig),
+        ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
         ("wav2vec2", Wav2Vec2Config),
         ("m2m_100", M2M100Config),
@@ -180,6 +186,8 @@ CONFIG_MAPPING = OrderedDict(
 MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
+        ("gpt_neo", "GPT Neo"),
+        ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
@@ -302,9 +310,7 @@ class AutoConfig:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
         raise ValueError(
-            "Unrecognized model identifier: {}. Should contain one of {}".format(
-                model_type, ", ".join(CONFIG_MAPPING.keys())
-            )
+            f"Unrecognized model identifier: {model_type}. Should contain one of {', '.join(CONFIG_MAPPING.keys())}"
         )
 
     @classmethod
@@ -384,6 +390,7 @@ class AutoConfig:
             >>> config.unused_kwargs
             {'foo': False}
         """
+        kwargs["_from_auto"] = True
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -395,7 +402,7 @@ class AutoConfig:
                     return config_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
-            "Unrecognized model in {}. "
+            f"Unrecognized model in {pretrained_model_name_or_path}. "
             "Should have a `model_type` key in its config.json, or contain one of the following strings "
-            "in its name: {}".format(pretrained_model_name_or_path, ", ".join(CONFIG_MAPPING.keys()))
+            f"in its name: {', '.join(CONFIG_MAPPING.keys())}"
         )

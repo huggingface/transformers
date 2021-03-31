@@ -613,6 +613,91 @@ def load_tf_weights_in_bert_generation(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_bert_generation)
 
 
+BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BigBirdForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdLayer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def load_tf_weights_in_big_bird(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_big_bird)
+
+
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1362,6 +1447,36 @@ class GPT2PreTrainedModel:
 
 def load_tf_weights_in_gpt2(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_gpt2)
+
+
+GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPTNeoForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class GPTNeoModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class GPTNeoPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def load_tf_weights_in_gpt_neo(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_gpt_neo)
 
 
 IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None

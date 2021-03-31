@@ -57,7 +57,7 @@ def convert_longformer_qa_checkpoint_to_pytorch(
     # save model
     longformer_for_qa.save_pretrained(pytorch_dump_folder_path)
 
-    print("Conversion successful. Model saved under {}".format(pytorch_dump_folder_path))
+    print(f"Conversion successful. Model saved under {pytorch_dump_folder_path}")
 
 
 if __name__ == "__main__":
