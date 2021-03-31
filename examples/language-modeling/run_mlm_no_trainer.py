@@ -27,8 +27,9 @@ import math
 import os
 import random
 
+import torch
 import datasets
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 
@@ -42,7 +43,6 @@ from transformers import (
     AutoModelForMaskedLM,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
-    PretrainedConfig,
     SchedulerType,
     get_scheduler,
     set_seed,
@@ -79,15 +79,6 @@ def parse_args():
         "--validation_split_percentage",
         default=5,
         help="The percentage of the train set used as validation set in case there's no validation split",
-    )
-    parser.add_argument(
-        "--max_length",
-        type=int,
-        default=128,
-        help=(
-            "The maximum total input sequence length after tokenization. Sequences longer than this will be truncated,"
-            " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
-        ),
     )
     parser.add_argument(
         "--pad_to_max_length",
@@ -484,17 +475,18 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-        # model.eval()
-        # for step, batch in enumerate(eval_dataloader):
-        #     outputs = model(**batch)
-        #     predictions = outputs.logits.argmax(dim=-1)
-        #     metric.add_batch(
-        #         predictions=accelerator.gather(predictions),
-        #         references=accelerator.gather(batch["labels"]),
-        #     )
+        model.eval()
+        losses = []
+        for step, batch in enumerate(eval_dataloader):
+            outputs = model(**batch)
+            loss = outputs.loss * args.per_device_eval_batch_size
+            losses.append(accelerator.gather(loss.repeat(args.per_device_eval_batch_size)))
 
-        # eval_metric = metric.compute()
-        # logger.info(f"epoch {epoch}: {eval_metric}")
+        losses = torch.cat(losses)
+        losses = losses[: len(eval_dataset)]
+        perplexity = math.exp(torch.mean(losses))
+
+        logger.info(f"epoch {epoch}: perplexity: {perplexity}")
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
