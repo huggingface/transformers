@@ -143,6 +143,7 @@ class DebertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
                 ]
             }
+            # fmt: on
 
             expected_decoded_sequence = [
                 'ALBERT: A Lite BERT for Self-supervised Learning of Language Representations',
