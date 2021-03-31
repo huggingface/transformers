@@ -1288,8 +1288,6 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-            elif this_peer_finished:
-                break
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1531,8 +1529,6 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-            elif this_peer_finished:
-                break
 
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
@@ -1795,8 +1791,6 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-            elif this_peer_finished:
-                break
 
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2085,8 +2079,6 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-            elif this_peer_finished:
-                break
 
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -2383,8 +2375,6 @@ class GenerationMixin:
                 # did all peers finish? the reduced sum will be 0.0 then
                 if this_peer_finished_flag.item() == 0.0:
                     break
-            elif this_peer_finished:
-                break
 
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
