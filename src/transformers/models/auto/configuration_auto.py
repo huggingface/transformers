@@ -392,6 +392,7 @@ class AutoConfig:
             >>> config.unused_kwargs
             {'foo': False}
         """
+        kwargs["_from_auto"] = True
         config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]

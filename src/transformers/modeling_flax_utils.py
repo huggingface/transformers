@@ -224,6 +224,12 @@ class FlaxPreTrainedModel(ABC):
         local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "model", "framework": "flax", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
@@ -243,6 +249,8 @@ class FlaxPreTrainedModel(ABC):
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
                 revision=revision,
+                _from_auto=from_auto_class,
+                _from_pipeline=from_pipeline,
                 **kwargs,
             )
         else:
@@ -286,6 +294,7 @@ class FlaxPreTrainedModel(ABC):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                     use_auth_token=use_auth_token,
+                    user_agent=user_agent,
                 )
             except EnvironmentError as err:
                 logger.error(err)

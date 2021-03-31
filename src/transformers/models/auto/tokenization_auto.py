@@ -385,6 +385,7 @@ class AutoTokenizer:
 
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
