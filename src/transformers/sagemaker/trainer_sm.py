@@ -79,6 +79,11 @@ if is_sagemaker_model_parallel_available():
 
 class SageMakerTrainer(Trainer):
     def __init__(self, args=None, **kwargs):
+        warnings.warn(
+            "`SageMakerTrainer` is deprecated and will be removed in v5 of Transformers. You can use `Trainer` "
+            "instead.",
+            FutureWarning,
+        )
         self.is_model_parallel_enabled = is_sagemaker_model_parallel_available()
         super().__init__(args=args, **kwargs)
 

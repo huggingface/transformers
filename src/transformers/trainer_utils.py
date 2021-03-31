@@ -31,7 +31,7 @@ import numpy as np
 from .file_utils import (
     ExplicitEnum,
     is_psutil_available,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
     is_tf_available,
     is_torch_available,
     is_torch_cuda_available,
@@ -214,7 +214,7 @@ def total_processes_number(local_rank):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
-    elif is_sagemaker_distributed_available():
+    elif is_sagemaker_dp_enabled():
         import smdistributed.dataparallel.torch.distributed as dist
 
         return dist.get_world_size()
