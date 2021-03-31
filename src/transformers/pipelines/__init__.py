@@ -363,7 +363,7 @@ def pipeline(
 
     # Infer the framework form the model
     if framework is None:
-        framework, model = infer_framework_from_model(model, targeted_task, revision=revision)
+        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
 
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
@@ -373,18 +373,20 @@ def pipeline(
             # For tuple we have (tokenizer name, {kwargs})
             use_fast = tokenizer[1].pop("use_fast", use_fast)
             tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
+                tokenizer[0], use_fast=use_fast, revision=revision, _from_pipeline=task, **tokenizer[1]
             )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task
+            )
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision)
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
+        modelcard = ModelCard.from_pretrained(modelcard, revision=revision, _from_pipeline=task)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -407,7 +409,9 @@ def pipeline(
                 f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
             )
 
-        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
+        model = model_class.from_pretrained(
+            model, config=config, revision=revision, _from_pipeline=task, **model_kwargs
+        )
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

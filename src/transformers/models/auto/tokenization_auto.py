@@ -17,6 +17,7 @@
 
 from collections import OrderedDict
 
+from ... import GPTNeoConfig
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import is_sentencepiece_available, is_tokenizers_available
 from ...utils import logging
@@ -264,6 +265,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (BigBirdConfig, (BigBirdTokenizer, None)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
+        (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
     ]
 )
 
@@ -383,6 +385,7 @@ class AutoTokenizer:
 
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
