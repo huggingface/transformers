@@ -1290,7 +1290,19 @@ else:
 if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
     _import_structure["models.auto"].extend(["FLAX_MODEL_MAPPING", "FlaxAutoModel"])
-    _import_structure["models.bert"].extend(["FlaxBertForMaskedLM", "FlaxBertModel"])
+    _import_structure["models.bert"].extend(
+        [
+            "FlaxBertForMaskedLM",
+            "FlaxBertForMultipleChoice",
+            "FlaxBertForNextSentencePrediction",
+            "FlaxBertForPreTraining",
+            "FlaxBertForQuestionAnswering",
+            "FlaxBertForSequenceClassification",
+            "FlaxBertForTokenClassification",
+            "FlaxBertModel",
+            "FlaxBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.roberta"].append("FlaxRobertaModel")
 else:
     from .utils import dummy_flax_objects
@@ -2372,7 +2384,17 @@ if TYPE_CHECKING:
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
         from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
-        from .models.bert import FlaxBertForMaskedLM, FlaxBertModel
+        from .models.bert import (
+            FlaxBertForMaskedLM,
+            FlaxBertForMultipleChoice,
+            FlaxBertForNextSentencePrediction,
+            FlaxBertForPreTraining,
+            FlaxBertForQuestionAnswering,
+            FlaxBertForSequenceClassification,
+            FlaxBertForTokenClassification,
+            FlaxBertModel,
+            FlaxBertPreTrainedModel,
+        )
         from .models.roberta import FlaxRobertaModel
     else:
         # Import the same objects as dummies to get them in the namespace.
