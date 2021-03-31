@@ -527,7 +527,7 @@ class TrainingArguments:
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
-        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in SageMakerTrainer"},
+        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
     )
 
     def __post_init__(self):
@@ -744,7 +744,7 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
-        elif is_sagemaker_mp_enabled:
+        elif is_sagemaker_mp_enabled():
             return ParallelMode.SAGEMAKER_MODEL_PARALLEL
         elif is_sagemaker_dp_enabled():
             return ParallelMode.SAGEMAKER_DATA_PARALLEL
