@@ -8,6 +8,13 @@ on:
   schedule:
     - cron: "0 0 * * *"
 
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  RUN_SLOW: yes
+  OMP_NUM_THREADS: 16
+  MKL_NUM_THREADS: 16
+
 jobs:
   run_all_tests_torch_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
@@ -36,11 +43,6 @@ jobs:
           python -c "import torch; print('Number of GPUs available:', torch.cuda.device_count())"
 
       - name: Run all tests on GPU
-        env:
-          OMP_NUM_THREADS: 16
-          MKL_NUM_THREADS: 16
-          RUN_SLOW: yes
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_gpu tests
 
@@ -55,6 +57,7 @@ jobs:
           MKL_NUM_THREADS: 16
           RUN_SLOW: yes
           HF_HOME: /mnt/cache
+          TRANSFORMERS_IS_CI: yes
         run: |
           pip install -r examples/_tests_requirements.txt
           python -m pytest -n 1 --dist=loadfile --make-reports=examples_torch_gpu examples
@@ -66,11 +69,7 @@ jobs:
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
-          OMP_NUM_THREADS: 16
-          MKL_NUM_THREADS: 16
-          RUN_SLOW: yes
           RUN_PIPELINE_TESTS: yes
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_gpu tests
 
@@ -110,12 +109,8 @@ jobs:
 
       - name: Run all tests on GPU
         env:
-          RUN_SLOW: yes
-          HF_HOME: /mnt/cache
-          OMP_NUM_THREADS: 16
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
-          MKL_NUM_THREADS: 16
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_gpu tests
 
@@ -126,13 +121,9 @@ jobs:
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
-          RUN_SLOW: yes
-          HF_HOME: /mnt/cache
-          OMP_NUM_THREADS: 16
           RUN_PIPELINE_TESTS: yes
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
-          MKL_NUM_THREADS: 16
         run: |
           python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_gpu tests
 
@@ -175,10 +166,6 @@ jobs:
 
       - name: Run all tests on GPU
         env:
-          RUN_SLOW: yes
-          HF_HOME: /mnt/cache
-          OMP_NUM_THREADS: 16
-          MKL_NUM_THREADS: 16
           MKL_SERVICE_FORCE_INTEL: 1
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_torch_multi_gpu tests
@@ -190,11 +177,7 @@ jobs:
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
-          OMP_NUM_THREADS: 16
-          MKL_NUM_THREADS: 16
-          RUN_SLOW: yes
           RUN_PIPELINE_TESTS: yes
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_torch_pipeline_multi_gpu tests
 
@@ -234,12 +217,8 @@ jobs:
 
       - name: Run all tests on GPU
         env:
-          OMP_NUM_THREADS: 16
-          RUN_SLOW: yes
-          MKL_NUM_THREADS: 16
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 1 --dist=loadfile --make-reports=tests_tf_multi_gpu tests
 
@@ -250,13 +229,9 @@ jobs:
       - name: Run all pipeline tests on GPU
         if: ${{ always() }}
         env:
-          OMP_NUM_THREADS: 16
-          RUN_SLOW: yes
           RUN_PIPELINE_TESTS: yes
-          MKL_NUM_THREADS: 16
           TF_NUM_INTEROP_THREADS: 1
           TF_NUM_INTRAOP_THREADS: 16
-          HF_HOME: /mnt/cache
         run: |
           python -m pytest -n 1 --dist=loadfile -m is_pipeline_test --make-reports=tests_tf_pipeline_multi_gpu tests
 
