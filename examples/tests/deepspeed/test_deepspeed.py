@@ -529,7 +529,6 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         max_len = 32
         data_dir = self.examples_dir / "test_data/wmt_en_ro"
         output_dir = self.get_auto_remove_tmp_dir()
-        # output_dir = "/tmp/zero3"
         args = f"""
             --model_name_or_path {model_name}
             --train_file {data_dir}/train.json

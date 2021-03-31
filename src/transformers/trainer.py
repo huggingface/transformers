@@ -1985,8 +1985,6 @@ class Trainer:
             labels = None
 
         with torch.no_grad():
-            # self.deepspeed.optimizer.param_coordinator.reset_step()
-            # die
             if has_labels:
                 loss, outputs = self.compute_loss(model, inputs, return_outputs=True)
                 loss = loss.mean().detach()
