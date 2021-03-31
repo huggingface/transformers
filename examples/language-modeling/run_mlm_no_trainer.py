@@ -28,8 +28,8 @@ import math
 import os
 import random
 
-import torch
 import datasets
+import torch
 from datasets import load_dataset
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
