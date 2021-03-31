@@ -316,7 +316,6 @@ def main():
         args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path), config=config
     )
 
-    model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
