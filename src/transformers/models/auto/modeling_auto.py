@@ -831,8 +831,9 @@ class AutoModel:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_MAPPING.keys():
@@ -925,8 +926,9 @@ class AutoModelForPreTraining:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_PRETRAINING_MAPPING.keys():
@@ -1036,8 +1038,9 @@ class AutoModelWithLMHead:
         )
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_WITH_LM_HEAD_MAPPING.keys():
@@ -1129,8 +1132,9 @@ class AutoModelForCausalLM:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_CAUSAL_LM_MAPPING.keys():
@@ -1222,8 +1226,9 @@ class AutoModelForMaskedLM:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_MASKED_LM_MAPPING.keys():
@@ -1318,8 +1323,9 @@ class AutoModelForSeq2SeqLM:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
@@ -1416,8 +1422,9 @@ class AutoModelForSequenceClassification:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
@@ -1513,8 +1520,9 @@ class AutoModelForQuestionAnswering:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys():
@@ -1613,8 +1621,9 @@ class AutoModelForTableQuestionAnswering:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys():
@@ -1711,8 +1720,9 @@ class AutoModelForTokenClassification:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys():
@@ -1811,8 +1821,9 @@ class AutoModelForMultipleChoice:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys():
@@ -1911,8 +1922,9 @@ class AutoModelForNextSentencePrediction:
         """
         config = kwargs.pop("config", None)
         if not isinstance(config, PretrainedConfig):
+            config_path = config if config is not None else pretrained_model_name_or_path
             config, kwargs = AutoConfig.from_pretrained(
-                pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
+                config_path, return_unused_kwargs=True, **kwargs
             )
 
         if type(config) in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys():
