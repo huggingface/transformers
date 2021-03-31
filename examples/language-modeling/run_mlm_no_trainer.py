@@ -478,7 +478,9 @@ def main():
         model.eval()
         losses = []
         for step, batch in enumerate(eval_dataloader):
-            outputs = model(**batch)
+            with torch.no_grad():
+                outputs = model(**batch)
+
             loss = outputs.loss * args.per_device_eval_batch_size
             losses.append(accelerator.gather(loss.repeat(args.per_device_eval_batch_size)))
 
