@@ -234,7 +234,7 @@ class TFCTRLMainLayer(tf.keras.layers.Layer):
                 config.resid_pdrop,
                 config.layer_norm_epsilon,
                 self.output_attentions,
-                name="h_._{}".format(i),
+                name=f"h_._{i}",
             )
             for i in range(config.n_layer)
         ]

@@ -352,7 +352,7 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
         self.initializer_range = config.initializer_range
 
-        self.layer = [TFMPNetLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFMPNetLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
         self.relative_attention_num_buckets = config.relative_attention_num_buckets
 
     def build(self, input_shape):

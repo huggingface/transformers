@@ -463,9 +463,7 @@ class TFMobileBertLayer(tf.keras.layers.Layer):
         if self.use_bottleneck:
             self.bottleneck = TFBottleneck(config, name="bottleneck")
         if config.num_feedforward_networks > 1:
-            self.ffn = [
-                TFFFNLayer(config, name="ffn.{}".format(i)) for i in range(config.num_feedforward_networks - 1)
-            ]
+            self.ffn = [TFFFNLayer(config, name=f"ffn.{i}") for i in range(config.num_feedforward_networks - 1)]
 
     def call(self, hidden_states, attention_mask, head_mask, output_attentions, training=False):
         if self.use_bottleneck:
@@ -518,7 +516,7 @@ class TFMobileBertEncoder(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.output_attentions = config.output_attentions
         self.output_hidden_states = config.output_hidden_states
-        self.layer = [TFMobileBertLayer(config, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)]
+        self.layer = [TFMobileBertLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,

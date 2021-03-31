@@ -83,13 +83,13 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
@@ -112,7 +112,7 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
             # which are not required for using pretrained model
             if any(n in ["global_step", "temperature"] for n in name):
-                logger.info("Skipping {}".format(original_name))
+                logger.info(f"Skipping {original_name}")
                 continue
             pointer = model
             for m_name in name:
@@ -144,10 +144,10 @@ def load_tf_weights_in_electra(model, config, tf_checkpoint_path, discriminator_
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
-            print("Initialize PyTorch weight {}".format(name), original_name)
+            print(f"Initialize PyTorch weight {name}", original_name)
             pointer.data = torch.from_numpy(array)
         except AttributeError as e:
-            print("Skipping {}".format(original_name), name, e)
+            print(f"Skipping {original_name}", name, e)
             continue
     return model
 

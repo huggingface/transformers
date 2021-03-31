@@ -208,9 +208,7 @@ class FFN(nn.Module):
         self.seq_len_dim = 1
         self.lin1 = nn.Linear(in_features=config.dim, out_features=config.hidden_dim)
         self.lin2 = nn.Linear(in_features=config.hidden_dim, out_features=config.dim)
-        assert config.activation in ["relu", "gelu"], "activation ({}) must be in ['relu', 'gelu']".format(
-            config.activation
-        )
+        assert config.activation in ["relu", "gelu"], f"activation ({config.activation}) must be in ['relu', 'gelu']"
         self.activation = gelu if config.activation == "gelu" else nn.ReLU()
 
     def forward(self, input):

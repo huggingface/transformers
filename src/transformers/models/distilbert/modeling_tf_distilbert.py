@@ -221,9 +221,7 @@ class TFFFN(tf.keras.layers.Layer):
         self.lin2 = tf.keras.layers.Dense(
             config.dim, kernel_initializer=get_initializer(config.initializer_range), name="lin2"
         )
-        assert config.activation in ["relu", "gelu"], "activation ({}) must be in ['relu', 'gelu']".format(
-            config.activation
-        )
+        assert config.activation in ["relu", "gelu"], f"activation ({config.activation}) must be in ['relu', 'gelu']"
         self.activation = get_tf_activation(config.activation)
 
     def call(self, input, training=False):
@@ -290,7 +288,7 @@ class TFTransformer(tf.keras.layers.Layer):
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
 
-        self.layer = [TFTransformerBlock(config, name="layer_._{}".format(i)) for i in range(config.n_layers)]
+        self.layer = [TFTransformerBlock(config, name=f"layer_._{i}") for i in range(config.n_layers)]
 
     def call(self, x, attn_mask, head_mask, output_attentions, output_hidden_states, return_dict, training=False):
         # docstyle-ignore
