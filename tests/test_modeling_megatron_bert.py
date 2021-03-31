@@ -44,7 +44,6 @@ if is_torch_available():
     )
 
 
-@require_torch
 class MegatronBertModelTester:
     def __init__(
         self,
@@ -258,14 +257,18 @@ class MegatronBertModelTester:
 class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
-        MegatronBertModel,
-        MegatronBertForMaskedLM,
-        MegatronBertForMultipleChoice,
-        MegatronBertForNextSentencePrediction,
-        MegatronBertForPreTraining,
-        MegatronBertForQuestionAnswering,
-        MegatronBertForSequenceClassification,
-        MegatronBertForTokenClassification,
+        (
+            MegatronBertModel,
+            MegatronBertForMaskedLM,
+            MegatronBertForMultipleChoice,
+            MegatronBertForNextSentencePrediction,
+            MegatronBertForPreTraining,
+            MegatronBertForQuestionAnswering,
+            MegatronBertForSequenceClassification,
+            MegatronBertForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
     )
 
     # test_resize_embeddings = False
