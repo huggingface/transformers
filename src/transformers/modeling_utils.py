@@ -41,7 +41,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
-from .integrations import deepspeed_is_zero3_enabled
+from .integrations import is_deepspeed_zero3_enabled
 from .utils import logging
 
 
@@ -1058,7 +1058,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         # Instantiate model.
 
-        if deepspeed_is_zero3_enabled():
+        if is_deepspeed_zero3_enabled():
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
@@ -1125,7 +1125,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             def load(module: nn.Module, prefix=""):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
                 args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
-                if deepspeed_is_zero3_enabled():
+                if is_deepspeed_zero3_enabled():
                     import deepspeed
 
                     # because zero3 puts placeholders in model params, this context

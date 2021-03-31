@@ -269,34 +269,25 @@ def rewrite_logs(d):
     return new_d
 
 
-_deepspeed_is_zero3_enabled = None
+_is_deepspeed_zero3_enabled = None
 
 
-def deepspeed_is_zero3_enabled(enable=None):
+def is_deepspeed_zero3_enabled():
     """
-    A Getter/setter function to know whether deepspeed is going to be run using ZeRO Stage 3
+    This function answers to the question of whether DeepSpeed is going to be used and run using ZeRO Stage 3.
 
-    Other than manual getter this function also includes an auto-discovery method, see comments in the code for
-    details.
+    It includes an auto-discovery method, see comments in the code for details.
 
-    Args:
-        enable: if set to True will make `deepspeed_is_zero3_enabled` return True
-
-    Returns: True if either it was explicitly enabled via ``deepspeed_is_zero3_enabled(True)`` or the auto-detector was
-    able to derive that the trainer will be running via zero 3 stage deepspeed.
-
+    Returns: ``True`` if either it was explicitly enabled via ``deepspeed_zero3_enable(True)`` or the auto-detector was
+    able to derive that the ``Trainer`` will be running via DeepSpeed ZeRO stage 3.
     """
-    global _deepspeed_is_zero3_enabled
-
-    # return False
-
-    if enable is not None:
-        _deepspeed_is_zero3_enabled = enable
-    elif _deepspeed_is_zero3_enabled is None:
+    global _is_deepspeed_zero3_enabled
+    if _is_deepspeed_zero3_enabled is None:
+        _is_deepspeed_zero3_enabled = False
         # Try to auto-discover if we are about to use DeepSpeed with ZeRO3 enabled. This will only
         # work for scripts using cli to pass --deepspeed ds_config.json. If cmd args aren't used,
         # then to get the model efficiently loaded across multiple-gpus one has to explicitly call
-        # deepspeed_is_zero3_enabled(True) **before** instantiating a model object
+        # is_deepspeed_zero3_enabled(True) **before** instantiating a model object
         if "--deepspeed" in sys.argv:
             idx = sys.argv.index("--deepspeed")
             ds_config = sys.argv[idx + 1]
@@ -308,11 +299,23 @@ def deepspeed_is_zero3_enabled(enable=None):
                 and "stage" in config["zero_optimization"]
                 and config["zero_optimization"]["stage"] == 3
             ):
-                _deepspeed_is_zero3_enabled = True
-            else:
-                _deepspeed_is_zero3_enabled = False
+                _is_deepspeed_zero3_enabled = True
 
-    return _deepspeed_is_zero3_enabled is True
+    return _is_deepspeed_zero3_enabled
+
+
+def deepspeed_zero3_enable(enable=True):
+    """
+    ``is_deepspeed_zero3_enabled()`` tries to derive automatically if DeepSpeed ZeRO 3 is going to be used by looking
+    at ``sys.argv`` which may or may contain information about where to find the DeepSpeed config if any.
+
+    This function allows for explicit enabling/disabling of this global flag.
+
+    Args:
+        enable: if set to ``True`` will make ``is_deepspeed_zero3_enabled()`` return ``True``
+    """
+    global _is_deepspeed_zero3_enabled
+    _is_deepspeed_zero3_enabled = enable
 
 
 def deepspeed_parse_config(ds_config):
@@ -483,7 +486,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
                 }
 
     # now we for sure know if zero3 is enabled
-    deepspeed_is_zero3_enabled(
+    deepspeed_zero3_enable(
         "zero_optimization" in config
         and "stage" in config["zero_optimization"]
         and config["zero_optimization"]["stage"] == 3

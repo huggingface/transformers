@@ -41,7 +41,7 @@ from .integrations import (  # isort: split
     run_hp_search_optuna,
     run_hp_search_ray,
     deepspeed_init,
-    deepspeed_is_zero3_enabled,
+    is_deepspeed_zero3_enabled,
 )
 
 import numpy as np
@@ -1611,7 +1611,7 @@ class Trainer:
             if self.is_world_process_zero():
                 self._save(output_dir)
 
-            if deepspeed_is_zero3_enabled():
+            if is_deepspeed_zero3_enabled():
                 # It's too complicated to try to override different places where the weights dump gets
                 # saved, so since under zero3 the file is bogus, simply delete it. The user should
                 # either user deepspeed checkpoint to resume or to recover full weights use
