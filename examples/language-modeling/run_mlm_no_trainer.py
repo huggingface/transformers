@@ -160,35 +160,35 @@ def parse_args():
         choices=MODEL_TYPES,
     )
     parser.add_argument(
-        "max_seq_length",
+        "--max_seq_length",
         type=int,
         default=None,
         help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated.",
     )
     parser.add_argument(
-        "line_by_line",
+        "--line_by_line",
         type=bool,
         default=False,
         help="Whether distinct lines of text in the dataset are to be handled as distinct sequences.",
     )
     parser.add_argument(
-        "preprocessing_num_workers",
+        "--preprocessing_num_workers",
         type=int,
         default=None,
         help="The number of processes to use for the preprocessing.",
     )
     parser.add_argument(
-        "overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
-        "mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
+        "--mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
     )
 
     args = parser.parse_args()
 
     # Sanity checks
-    if args.task_name is None and args.train_file is None and args.validation_file is None:
-        raise ValueError("Need either a task name or a training/validation file.")
+    if args.dataset_name is None and args.train_file is None and args.validation_file is None:
+        raise ValueError("Need either a dataset name or a training/validation file.")
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
@@ -242,7 +242,7 @@ def main():
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
-        if "validation" not in datasets.keys():
+        if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
                 args.dataset_name,
                 args.dataset_config_name,
