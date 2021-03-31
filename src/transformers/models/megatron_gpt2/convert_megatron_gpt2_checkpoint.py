@@ -202,7 +202,7 @@ def main():
     args = parser.parse_args()
 
     # Extract the basename.
-    basename = os.path.splitext(args.path_to_checkpoint)[0]
+    basename = os.path.dirname(args.path_to_checkpoint)
 
     # Load the model.
     print('Extracting PyTorch state dictionary from "{}"'.format(args.path_to_checkpoint))
@@ -219,13 +219,13 @@ def main():
         recursive_print(None, output_state_dict)
 
     # Store the config to file.
-    output_config_file = basename + "_config.json"
+    output_config_file = os.path.join(basename, "config.json")
     print('Saving config to "{}"'.format(output_config_file))
     with open(output_config_file, "w") as f:
         json.dump(output_config, f)
 
     # Store the state_dict to file.
-    output_checkpoint_file = basename + "_checkpoint.pt"
+    output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
     print('Saving checkpoint to "{}"'.format(output_checkpoint_file))
     torch.save(output_state_dict, output_checkpoint_file)
 

@@ -28,11 +28,10 @@ MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class MegatronBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.MegatronBertModel`. 
-    It is used to instantiate a MEGATRON_BERT model according to the
-    specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a
-    similar configuration to that of the MEGATRON_BERT `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__
-    architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.MegatronBertModel`. It is
+    used to instantiate a MEGATRON_BERT model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the MEGATRON_BERT
+    `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.

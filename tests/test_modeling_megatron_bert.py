@@ -17,6 +17,7 @@
 
 
 import math
+import os
 import unittest
 
 from transformers import is_torch_available
@@ -43,6 +44,7 @@ if is_torch_available():
     )
 
 
+@require_torch
 class MegatronBertModelTester:
     def __init__(
         self,
@@ -340,12 +342,12 @@ TOLERANCE = 1e-4
 class MegatronBertModelIntegrationTests(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        basename = "examples/megatron-models/models/megatron_bert_345m_v0_1_uncased"
-        config_file = basename + "_config.json"
-        config = MegatronBertConfig.from_pretrained(config_file)
-        checkpoint_file = basename + "_checkpoint.pt"
-        model = MegatronBertModel.from_pretrained(checkpoint_file, config=config)
+        directory = "nvidia/megatron-bert-uncased-345m"
+        if "MYDIR" in os.environ:
+            directory = os.path.join(os.environ["MYDIR"], directory)
+        model = MegatronBertModel.from_pretrained(directory)
         model.to(torch_device)
+        model.half()
         input_ids = _long_tensor([[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]])
         with torch.no_grad():
             output = model(input_ids)[0]
