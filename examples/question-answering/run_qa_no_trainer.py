@@ -337,7 +337,6 @@ def main():
         logger.info("Training new model from scratch")
         model = AutoModelForQuestionAnswering.from_config(config)
 
-    model.resize_token_embeddings(len(tokenizer))
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
