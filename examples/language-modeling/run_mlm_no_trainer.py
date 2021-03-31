@@ -14,7 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...) on a text file or a dataset without using HuggingFace Trainer.
+Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...)
+on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
 https://huggingface.co/models?filter=masked-lm
@@ -191,10 +192,10 @@ def parse_args():
     else:
         if args.train_file is not None:
             extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+            assert extension in ["csv", "json", "txt"], "`train_file` should be a csv, json or txt file."
         if args.validation_file is not None:
             extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            assert extension in ["csv", "json", "txt"], "`validation_file` should be a csv, json or txt file."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
