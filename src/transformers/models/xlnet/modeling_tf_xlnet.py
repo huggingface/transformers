@@ -69,8 +69,8 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
         if config.d_model % config.n_head != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.d_model, config.n_head)
+                f"The hidden size ({config.d_model}) is not a multiple of the number of attention "
+                f"heads ({config.n_head}"
             )
 
         self.n_head = config.n_head

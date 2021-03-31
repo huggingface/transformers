@@ -337,7 +337,7 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         else:
             klen = shape_list(kv)[1]
 
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         dim_per_head = self.dim // self.n_heads
         mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
 

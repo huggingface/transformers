@@ -67,7 +67,7 @@ def build_tf_to_pytorch_map(model, config):
         for i, (out_l, proj_l, tie_proj) in enumerate(
             zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
-            layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
+            layer_str = f"transformer/adaptive_softmax/cutoff_{i}/"
             if config.tie_word_embeddings:
                 tf_to_pt_map.update({layer_str + "b": out_l.bias})
             else:
@@ -81,12 +81,12 @@ def build_tf_to_pytorch_map(model, config):
 
     # Embeddings
     for i, (embed_l, proj_l) in enumerate(zip(model.word_emb.emb_layers, model.word_emb.emb_projs)):
-        layer_str = "transformer/adaptive_embed/cutoff_%d/" % i
+        layer_str = f"transformer/adaptive_embed/cutoff_{i}/"
         tf_to_pt_map.update({layer_str + "lookup_table": embed_l.weight, layer_str + "proj_W": proj_l})
 
     # Transformer blocks
     for i, b in enumerate(model.layers):
-        layer_str = "transformer/layer_%d/" % i
+        layer_str = f"transformer/layer_{i}/"
         tf_to_pt_map.update(
             {
                 layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,

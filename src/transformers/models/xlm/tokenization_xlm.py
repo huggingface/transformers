@@ -682,7 +682,7 @@ class XLMTokenizer(PreTrainedTokenizer):
                 import Mykytea
 
                 self.ja_word_tokenizer = Mykytea.Mykytea(
-                    "-model %s/local/share/kytea/model.bin" % os.path.expanduser("~")
+                    f"-model {os.path.expanduser('~')}/local/share/kytea/model.bin"
                 )
             except (AttributeError, ImportError):
                 logger.error(

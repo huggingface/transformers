@@ -94,9 +94,8 @@ class Conversation:
         if self.new_user_input:
             if overwrite:
                 logger.warning(
-                    'User input added while unprocessed input was existing: "{}" was overwritten with: "{}".'.format(
-                        self.new_user_input, text
-                    )
+                    f'User input added while unprocessed input was existing: "{self.new_user_input}" was overwritten '
+                    f'with: "{text}".'
                 )
                 self.new_user_input = text
             else:

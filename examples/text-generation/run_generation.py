@@ -201,12 +201,7 @@ def main():
     args.device = torch.device("cuda" if torch.cuda.is_available() and not args.no_cuda else "cpu")
     args.n_gpu = 0 if args.no_cuda else torch.cuda.device_count()
 
-    logger.warning(
-        "device: %s, n_gpu: %s, 16-bits training: %s",
-        args.device,
-        args.n_gpu,
-        args.fp16,
-    )
+    logger.warning(f"device: {args.device}, n_gpu: {args.n_gpu}, 16-bits training: {args.fp16}")
 
     set_seed(args)
 

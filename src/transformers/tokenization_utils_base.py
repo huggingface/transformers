@@ -870,7 +870,7 @@ class SpecialTokensMixin:
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
             if self.verbose:
-                logger.info("Assigning %s to the %s key of the tokenizer", value, key)
+                logger.info(f"Assigning {value} to the {key} key of the tokenizer")
             setattr(self, key, value)
 
             if key == "additional_special_tokens":

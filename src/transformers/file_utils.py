@@ -1247,7 +1247,7 @@ def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers
     """
     headers = copy.deepcopy(headers)
     if resume_size > 0:
-        headers["Range"] = "bytes=%d-" % (resume_size,)
+        headers["Range"] = f"bytes={resume_size}-"
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
@@ -1399,14 +1399,14 @@ def get_from_cache(
         # Download to temporary file, then copy to cache dir once finished.
         # Otherwise you get corrupt cache entries if the download gets interrupted.
         with temp_file_manager() as temp_file:
-            logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
+            logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
 
             http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
 
-        logger.info("storing %s in cache at %s", url, cache_path)
+        logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
 
-        logger.info("creating metadata file for %s", cache_path)
+        logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
         meta_path = cache_path + ".json"
         with open(meta_path, "w") as meta_file:
@@ -1620,8 +1620,7 @@ class ExplicitEnum(Enum):
     @classmethod
     def _missing_(cls, value):
         raise ValueError(
-            "%r is not a valid %s, please select one of %s"
-            % (value, cls.__name__, str(list(cls._value2member_map_.keys())))
+            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
         )
 
 

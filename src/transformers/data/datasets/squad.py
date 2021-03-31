@@ -179,7 +179,7 @@ class SquadDataset(Dataset):
                 )
                 # ^ This seems to take a lot of time so I want to investigate why and how we can improve.
                 logger.info(
-                    "Saving features into cached file %s [took %.3f s]", cached_features_file, time.time() - start
+                    f"Saving features into cached file {cached_features_file} [took {time.time() - start:.3f} s]"
                 )
 
     def __len__(self):

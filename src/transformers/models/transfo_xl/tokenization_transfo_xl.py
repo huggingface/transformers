@@ -438,7 +438,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
         if sym in self.sym2idx:
             return self.sym2idx[sym]
         else:
-            # logger.info('encounter unk {}'.format(sym))
+            # logger.info(f'encounter unk {sym}')
             # assert '<eos>' not in sym
             if hasattr(self, "unk_idx"):
                 return self.sym2idx.get(sym, self.unk_idx)

@@ -279,7 +279,7 @@ class MecabTokenizer:
                 raise ValueError("Invalid mecab_dic is specified.")
 
             mecabrc = os.path.join(dic_dir, "mecabrc")
-            mecab_option = '-d "{}" -r "{}" '.format(dic_dir, mecabrc) + mecab_option
+            mecab_option = f'-d "{dic_dir}" -r "{mecabrc}" ' + mecab_option
 
         self.mecab = fugashi.GenericTagger(mecab_option)
 

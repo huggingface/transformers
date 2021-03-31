@@ -173,7 +173,7 @@ class ModelCard:
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info("Model card: %s", str(modelcard))
+        logger.info(f"Model card: {modelcard}")
         if return_unused_kwargs:
             return modelcard, kwargs
         else:

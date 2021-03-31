@@ -186,7 +186,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             if column_id is not None:
                 ids.append(line[column_id])
             else:
-                guid = "%s-%s" % (split_name, i) if split_name else "%s" % i
+                guid = f"{split_name}-{i}" if split_name else str(i)
                 ids.append(guid)
 
         return self.add_examples(
@@ -265,7 +265,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         all_input_ids = []
         for (ex_index, example) in enumerate(self.examples):
             if ex_index % 10000 == 0:
-                logger.info("Tokenizing example %d", ex_index)
+                logger.info(f"Tokenizing example {ex_index}")
 
             input_ids = tokenizer.encode(
                 example.text_a,
@@ -279,7 +279,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         features = []
         for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, self.examples)):
             if ex_index % 10000 == 0:
-                logger.info("Writing example %d/%d" % (ex_index, len(self.examples)))
+                logger.info(f"Writing example {ex_index}/{len(self.examples)}")
             # The mask has 1 for real tokens and 0 for padding tokens. Only real
             # tokens are attended to.
             attention_mask = [1 if mask_padding_with_zero else 0] * len(input_ids)
@@ -307,10 +307,10 @@ class SingleSentenceClassificationProcessor(DataProcessor):
 
             if ex_index < 5 and self.verbose:
                 logger.info("*** Example ***")
-                logger.info("guid: %s" % (example.guid))
-                logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-                logger.info("attention_mask: %s" % " ".join([str(x) for x in attention_mask]))
-                logger.info("label: %s (id = %d)" % (example.label, label))
+                logger.info(f"guid: {example.guid}")
+                logger.info(f"input_ids: {' '.join([str(x) for x in input_ids])}")
+                logger.info(f"attention_mask: {' '.join([str(x) for x in attention_mask])}")
+                logger.info(f"label: {example.label} (id = {label})")
 
             features.append(InputFeatures(input_ids=input_ids, attention_mask=attention_mask, label=label))
 
