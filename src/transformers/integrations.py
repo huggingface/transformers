@@ -503,13 +503,25 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     )
 
     if resume_from_checkpoint is not None:
-        logger.info(f"Attempting to resume from {resume_from_checkpoint}")
-        # this magically updates self.optimizer and self.lr_scheduler
-        load_path, _ = model.load_checkpoint(
-            resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-        )
-        if load_path is None:
-            raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
+
+        # it's possible that the user is trying to resume from model_path, which doesn't necessarily
+        # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
+        # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
+        # path contains what looks like a deepspeed checkpoint
+        import glob
+
+        deepspeed_checkpoint_dirs = sorted(glob.glob(f"{resume_from_checkpoint}/global_step*"))
+
+        if len(deepspeed_checkpoint_dirs) > 0:
+            logger.info(f"Attempting to resume from {resume_from_checkpoint}")
+            # this magically updates self.optimizer and self.lr_scheduler
+            load_path, _ = model.load_checkpoint(
+                resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+            )
+            if load_path is None:
+                raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
+        else:
+            logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
     return model, optimizer, lr_scheduler
 

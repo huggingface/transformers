@@ -442,12 +442,12 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     @require_torch_multi_gpu
     @parameterized.expand(stages)
     def test_basic_distributed(self, stage):
-        self.run_quick(stage=stage, distributed=True)
+        self.run_and_check(stage=stage, distributed=True)
 
     @parameterized.expand(stages)
     def test_do_eval_no_train(self, stage):
         # we should not fail if train is skipped
-        self.run_quick(
+        self.run_and_check(
             stage=stage,
             eval_steps=1,
             distributed=False,
@@ -455,8 +455,38 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             do_eval=True,
         )
 
+    @parameterized.expand(stages)
+    def test_resume_train_not_from_ds_checkpoint(self, stage):
+        # do normal training and then resume not from the deepspeed checkpoint but explicitly from
+        # the saved model dir
+
+        do_train = True
+        do_eval = False
+        kwargs = dict(stage=stage, eval_steps=1, distributed=True, do_train=do_train, do_eval=do_eval)
+
+        # 1. normal training
+        output_dir = self.run_and_check(**kwargs)
+
+        # 2. now resume explicitly from the saved weights, by passing --model_name_or_path output_dir
+        # - i.e. the same path the model was saved to in step 1
+        output_dir = self.run_trainer(**kwargs, model_name=output_dir)
+
+        self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
+
+    def do_checks(self, output_dir, do_train=True, do_eval=True):
+
+        if do_train:
+            train_metrics = load_json(os.path.join(output_dir, "train_results.json"))
+            self.assertIn("train_samples_per_second", train_metrics)
+            self.assertGreater(train_metrics["train_samples_per_second"], 0.5)
+
+        if do_eval:
+            eval_metrics = load_json(os.path.join(output_dir, "eval_results.json"))
+            self.assertIn("eval_bleu", eval_metrics)
+            self.assertGreater(eval_metrics["eval_bleu"], 0)
+
     # XXX: need to do better validation beyond just that the run was successful
-    def run_quick(
+    def run_and_check(
         self,
         stage,
         eval_steps=10,
@@ -480,15 +510,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             remove_args_str=remove_args_str,
         )
 
-        if do_train:
-            train_metrics = load_json(os.path.join(output_dir, "train_results.json"))
-            self.assertIn("train_samples_per_second", train_metrics)
-            self.assertGreater(train_metrics["train_samples_per_second"], 0.5)
+        self.do_checks(output_dir, do_train=do_train, do_eval=do_eval)
 
-        if do_eval:
-            eval_metrics = load_json(os.path.join(output_dir, "eval_results.json"))
-            self.assertIn("eval_bleu", eval_metrics)
-            self.assertGreater(eval_metrics["eval_bleu"], 0)
+        return output_dir
 
     def run_trainer(
         self,
