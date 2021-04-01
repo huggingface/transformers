@@ -37,7 +37,7 @@ class MegatronBertConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 30522):
+        vocab_size (:obj:`int`, `optional`, defaults to 29056):
             Vocabulary size of the MEGATRON_BERT model. Defines the number of different tokens that can be represented
             by the :obj:`inputs_ids` passed when calling :class:`~transformers.MegatronBertModel`.
         hidden_size (:obj:`int`, `optional`, defaults to 1024):
