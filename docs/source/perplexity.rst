@@ -18,8 +18,8 @@ that the metric applies specifically to classical language models (sometimes cal
 models) and is not well defined for masked language models like BERT (see :doc:`summary of the models
 <model_summary>`).
 
-Perplexity is defined as the exponentiated average log-likelihood of a sequence. If we have a tokenized sequence
-:math:`X = (x_0, x_1, \dots, x_t)`, then the perplexity of :math:`X` is,
+Perplexity is defined as the exponentiated average negative log-likelihood of a sequence. If we have a tokenized
+sequence :math:`X = (x_0, x_1, \dots, x_t)`, then the perplexity of :math:`X` is,
 
 .. math::
 
