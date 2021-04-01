@@ -1182,7 +1182,7 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
             >>> tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
             >>> config = MegatronBertConfig.from_pretrained("nvidia/megatron-bert")
             >>> config.is_decoder = True
-            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert-cased-345m', config=config)
+            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert', config=config)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
