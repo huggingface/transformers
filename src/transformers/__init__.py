@@ -1541,6 +1541,7 @@ if TYPE_CHECKING:
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
+    from .utils import logging
 
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
@@ -1649,6 +1650,12 @@ if TYPE_CHECKING:
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
+        )
+        from .generation_stopping_criteria import (
+            MaxLengthCriteria,
+            MaxTimeCriteria,
+            StoppingCriteria,
+            StoppingCriteriaList,
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
@@ -1874,6 +1881,7 @@ if TYPE_CHECKING:
             IBertForSequenceClassification,
             IBertForTokenClassification,
             IBertModel,
+            IBertPreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
