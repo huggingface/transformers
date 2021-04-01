@@ -400,7 +400,7 @@ class MegatronBertIntermediate(nn.Module):
         return hidden_states
 
 
-# Based transformers.models.bert.modeling_bert.BertOutput. Moved LayerNorm to MegatronBertLayer below.
+# Based on transformers.models.bert.modeling_bert.BertOutput. Moved LayerNorm to MegatronBertLayer below.
 class MegatronBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
