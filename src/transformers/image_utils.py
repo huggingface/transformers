@@ -120,9 +120,9 @@ class ImageFeatureExtractionMixin:
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):
-                mean = np.array(mean)
+                mean = np.array(mean).astype(image.dtype)
             if not isinstance(std, np.ndarray):
-                std = np.array(std)
+                std = np.array(std).astype(image.dtype)
         elif is_torch_tensor(image):
             import torch
 
