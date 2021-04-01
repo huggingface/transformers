@@ -250,7 +250,7 @@ def main():
 
     # Store the config to file.
     output_config_file = os.path.join(basename, "config.json")
-    print('Saving config to "{}"'.format(output_config_file))
+    print(f'Saving config to "{output_config_file}"')
     with open(output_config_file, "w") as f:
         json.dump(output_config, f)
 
