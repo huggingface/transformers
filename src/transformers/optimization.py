@@ -402,19 +402,24 @@ class Adafactor(Optimizer):
 
     This implementation handles low-precision (FP16, bfloat) values, but we have not thoroughly tested.
 
-    Recommended T5 finetuning settings:
+    Recommended T5 finetuning settings (https://discuss.huggingface.co/t/t5-finetuning-tips/684/3):
 
-        - Scheduled LR warm-up to fixed LR
-        - disable relative updates
-        - use clip threshold: https://arxiv.org/abs/2004.14546
+        - Training without LR warmup or clip_threshold is not recommended.
+
+           * use scheduled LR warm-up to fixed LR
+           * use clip_threshold=1.0 (https://arxiv.org/abs/1804.04235)
+        - Disable relative updates
+        - Use scale_parameter=False
+        - Additional optimizer operations like gradient clipping should not be used alongside Adafactor
 
         Example::
 
-            Adafactor(model.parameters(), lr=1e-3, relative_step=False, warmup_init=True)
+            Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=1e-3)
 
-        - Alternatively, relative_step with warmup_init can be used.
-        - Training without LR warmup or clip threshold is not recommended. Additional optimizer operations like
-          gradient clipping should not be used alongside Adafactor.
+        Others reported the following combination to work well::
+
+            Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+
 
     Usage::
 
@@ -447,9 +452,9 @@ class Adafactor(Optimizer):
         warmup_init=False,
     ):
         if lr is not None and relative_step:
-            raise ValueError("Cannot combine manual lr and relative_step options")
+            raise ValueError("Cannot combine manual `lr` and `relative_step=True` options")
         if warmup_init and not relative_step:
-            raise ValueError("warmup_init requires relative_step=True")
+            raise ValueError("`warmup_init=True` requires `relative_step=True`")
 
         defaults = dict(
             lr=lr,
