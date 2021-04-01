@@ -339,9 +339,9 @@ class _BaseAutoModelClass:
             f"`{self.__class__.__name__}.from_config(config)` methods."
         )
 
-    def from_config(cls, config):
+    def from_config(cls, config, **kwargs):
         if type(config) in cls._model_mapping.keys():
-            return cls._model_mapping[type(config)](config)
+            return cls._model_mapping[type(config)](config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
