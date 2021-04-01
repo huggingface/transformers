@@ -1405,7 +1405,7 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
-            >>> model = MegatronBertForNextSentencePrediction.from_pretrained('nvidia/megatron-bert-uncased-345m')
+            >>> model = MegatronBertForNextSentencePrediction.from_pretrained('nvidia/megatron-bert')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
