@@ -24,6 +24,7 @@ deps = {
     "onnxruntime": "onnxruntime>=1.4.0",
     "packaging": "packaging",
     "parameterized": "parameterized",
+    "Pillow": "Pillow",
     "protobuf": "protobuf",
     "psutil": "psutil",
     "pydantic": "pydantic",

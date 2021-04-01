@@ -213,6 +213,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -299,7 +300,7 @@ else:
         name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
     ]
 
-# tokenziers-backed objects
+# tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -348,6 +349,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -426,6 +428,7 @@ if is_torch_available():
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
+            "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -865,6 +868,14 @@ if is_torch_available():
             "TransfoXLModel",
             "TransfoXLPreTrainedModel",
             "load_tf_weights_in_transfo_xl",
+        ]
+    )
+    _import_structure["models.vit"].extend(
+        [
+            "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ViTForImageClassification",
+            "ViTModel",
+            "ViTPreTrainedModel",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -1311,7 +1322,6 @@ else:
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
 
-
 # Direct imports for type-checking
 if TYPE_CHECKING:
     # Configuration
@@ -1479,6 +1489,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -1601,6 +1612,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
@@ -1666,6 +1678,7 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING,
+            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -2024,6 +2037,12 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.vit import (
+            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTForImageClassification,
+            ViTModel,
+            ViTPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2400,6 +2419,7 @@ if TYPE_CHECKING:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
+
 else:
     import importlib
     import os

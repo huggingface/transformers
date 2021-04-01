@@ -302,6 +302,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
 MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
+MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
+
+
 MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -2510,6 +2513,32 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_transfo_xl)
+
+
+VIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ViTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None

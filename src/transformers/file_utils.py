@@ -175,10 +175,11 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
-_torchaudio_available = importlib.util.find_spec("torchaudio")
+
+_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
-    logger.debug(f"Successfully imported soundfile version {_torchaudio_version}")
+    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
 except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
