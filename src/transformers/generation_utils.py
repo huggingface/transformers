@@ -1201,7 +1201,7 @@ class GenerationMixin:
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the :obj:`forward` function of the
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1432,7 +1432,7 @@ class GenerationMixin:
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1676,7 +1676,7 @@ class GenerationMixin:
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1963,7 +1963,7 @@ class GenerationMixin:
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -2251,7 +2251,7 @@ class GenerationMixin:
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
             synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether to continue running the the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
 
             model_kwargs:
                 Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
