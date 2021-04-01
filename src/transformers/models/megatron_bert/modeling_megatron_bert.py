@@ -101,7 +101,7 @@ def load_tf_weights_in_megatron_bert(model, config, tf_checkpoint_path):
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
             for n in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
         pointer = model
         for m_name in name:
