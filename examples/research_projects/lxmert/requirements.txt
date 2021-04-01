@@ -64,7 +64,7 @@ ptyprocess==0.6.0
 pyaml==20.4.0
 pyarrow==1.0.1
 pycparser==2.20
-Pygments==2.6.1
+Pygments>=2.7.4
 pyparsing==2.4.6
 pyrsistent==0.16.0
 python-dateutil==2.8.1

@@ -21,8 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -51,6 +49,16 @@ from ..bert.modeling_bert import (
     BertModel,
 )
 from ..bert_generation.modeling_bert_generation import BertGenerationDecoder, BertGenerationEncoder
+from ..big_bird.modeling_big_bird import (
+    BigBirdForCausalLM,
+    BigBirdForMaskedLM,
+    BigBirdForMultipleChoice,
+    BigBirdForPreTraining,
+    BigBirdForQuestionAnswering,
+    BigBirdForSequenceClassification,
+    BigBirdForTokenClassification,
+    BigBirdModel,
+)
 from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
 from ..blenderbot_small.modeling_blenderbot_small import (
     BlenderbotSmallForCausalLM,
@@ -127,6 +135,9 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
+
+# Add modeling imports here
+from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoModel
 from ..ibert.modeling_ibert import (
     IBertForMaskedLM,
     IBertForMultipleChoice,
@@ -264,6 +275,7 @@ from .configuration_auto import (
     BartConfig,
     BertConfig,
     BertGenerationConfig,
+    BigBirdConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -279,6 +291,7 @@ from .configuration_auto import (
     FSMTConfig,
     FunnelConfig,
     GPT2Config,
+    GPTNeoConfig,
     IBertConfig,
     LayoutLMConfig,
     LEDConfig,
@@ -317,6 +330,8 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (GPTNeoConfig, GPTNeoModel),
+        (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
         (ViTConfig, ViTModel),
         (Wav2Vec2Config, Wav2Vec2Model),
@@ -383,6 +398,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForMaskedLM),
         (SqueezeBertConfig, SqueezeBertForMaskedLM),
         (BertConfig, BertForPreTraining),
+        (BigBirdConfig, BigBirdForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
         (MobileBertConfig, MobileBertForPreTraining),
@@ -405,6 +421,8 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+        (GPTNeoConfig, GPTNeoForCausalLM),
+        (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (M2M100Config, M2M100ForConditionalGeneration),
@@ -447,6 +465,8 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (GPTNeoConfig, GPTNeoForCausalLM),
+        (BigBirdConfig, BigBirdForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
@@ -483,6 +503,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+        (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
         (LayoutLMConfig, LayoutLMForMaskedLM),
@@ -533,6 +554,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (BigBirdConfig, BigBirdForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
         (DistilBertConfig, DistilBertForSequenceClassification),
@@ -568,6 +590,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (BigBirdConfig, BigBirdForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
         (DistilBertConfig, DistilBertForQuestionAnswering),
@@ -605,6 +628,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+        (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
         (DistilBertConfig, DistilBertForTokenClassification),
@@ -632,6 +656,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+        (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
         (ElectraConfig, ElectraForMultipleChoice),
@@ -783,10 +808,8 @@ class AutoModel:
         if type(config) in MODEL_MAPPING.keys():
             return MODEL_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
         )
 
     @classmethod
@@ -815,6 +838,7 @@ class AutoModel:
             >>> model = AutoModel.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -825,10 +849,8 @@ class AutoModel:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_MAPPING.keys())}."
         )
 
 
@@ -877,10 +899,8 @@ class AutoModelForPreTraining:
         if type(config) in MODEL_FOR_PRETRAINING_MAPPING.keys():
             return MODEL_FOR_PRETRAINING_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -909,6 +929,7 @@ class AutoModelForPreTraining:
             >>> model = AutoModelForPreTraining.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -919,10 +940,8 @@ class AutoModelForPreTraining:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_PRETRAINING_MAPPING.keys())}."
         )
 
 
@@ -982,10 +1001,8 @@ class AutoModelWithLMHead:
         if type(config) in MODEL_WITH_LM_HEAD_MAPPING.keys():
             return MODEL_WITH_LM_HEAD_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1020,6 +1037,7 @@ class AutoModelWithLMHead:
             FutureWarning,
         )
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1030,10 +1048,8 @@ class AutoModelWithLMHead:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_WITH_LM_HEAD_MAPPING.keys())}."
         )
 
 
@@ -1081,10 +1097,8 @@ class AutoModelForCausalLM:
         if type(config) in MODEL_FOR_CAUSAL_LM_MAPPING.keys():
             return MODEL_FOR_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1113,6 +1127,7 @@ class AutoModelForCausalLM:
             >>> model = AutoModelForCausalLM.from_pretrained('./tf_model/gpt2_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1123,10 +1138,8 @@ class AutoModelForCausalLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_CAUSAL_LM_MAPPING.keys())}."
         )
 
 
@@ -1174,10 +1187,8 @@ class AutoModelForMaskedLM:
         if type(config) in MODEL_FOR_MASKED_LM_MAPPING.keys():
             return MODEL_FOR_MASKED_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1206,6 +1217,7 @@ class AutoModelForMaskedLM:
             >>> model = AutoModelForMaskedLM.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1216,10 +1228,8 @@ class AutoModelForMaskedLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, cls.__name__, ", ".join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MASKED_LM_MAPPING.keys())}."
         )
 
 
@@ -1268,12 +1278,8 @@ class AutoModelForSeq2SeqLM:
         if type(config) in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys():
             return MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1302,6 +1308,7 @@ class AutoModelForSeq2SeqLM:
             >>> model = AutoModelForSeq2SeqLM.from_pretrained('./tf_model/t5_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1312,12 +1319,8 @@ class AutoModelForSeq2SeqLM:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING.keys())}."
         )
 
 
@@ -1366,12 +1369,8 @@ class AutoModelForSequenceClassification:
         if type(config) in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys():
             return MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING[type(config)](config)
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1400,6 +1399,7 @@ class AutoModelForSequenceClassification:
             >>> model = AutoModelForSequenceClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1410,12 +1410,8 @@ class AutoModelForSequenceClassification:
                 pretrained_model_name_or_path, *model_args, config=config, **kwargs
             )
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.keys())}."
         )
 
 
@@ -1463,12 +1459,8 @@ class AutoModelForQuestionAnswering:
             return MODEL_FOR_QUESTION_ANSWERING_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1497,6 +1489,7 @@ class AutoModelForQuestionAnswering:
             >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1508,12 +1501,8 @@ class AutoModelForQuestionAnswering:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
 
@@ -1563,12 +1552,8 @@ class AutoModelForTableQuestionAnswering:
             return MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1597,6 +1582,7 @@ class AutoModelForTableQuestionAnswering:
             >>> model = AutoModelForQuestionAnswering.from_pretrained('./tf_model/tapas_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1608,12 +1594,8 @@ class AutoModelForTableQuestionAnswering:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING.keys())}."
         )
 
 
@@ -1661,12 +1643,8 @@ class AutoModelForTokenClassification:
             return MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1695,6 +1673,7 @@ class AutoModelForTokenClassification:
             >>> model = AutoModelForTokenClassification.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1706,12 +1685,8 @@ class AutoModelForTokenClassification:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING.keys())}."
         )
 
 
@@ -1761,12 +1736,8 @@ class AutoModelForMultipleChoice:
             return MODEL_FOR_MULTIPLE_CHOICE_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1795,6 +1766,7 @@ class AutoModelForMultipleChoice:
             >>> model = AutoModelForMultipleChoice.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1806,12 +1778,8 @@ class AutoModelForMultipleChoice:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_MULTIPLE_CHOICE_MAPPING.keys())}."
         )
 
 
@@ -1861,12 +1829,8 @@ class AutoModelForNextSentencePrediction:
             return MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING[type(config)](config)
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
         )
 
     @classmethod
@@ -1895,6 +1859,7 @@ class AutoModelForNextSentencePrediction:
             >>> model = AutoModelForNextSentencePrediction.from_pretrained('./tf_model/bert_tf_checkpoint.ckpt.index', from_tf=True, config=config)
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, **kwargs
@@ -1906,12 +1871,8 @@ class AutoModelForNextSentencePrediction:
             )
 
         raise ValueError(
-            "Unrecognized configuration class {} for this kind of AutoModel: {}.\n"
-            "Model type should be one of {}.".format(
-                config.__class__,
-                cls.__name__,
-                ", ".join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys()),
-            )
+            f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.keys())}."
         )
 
 

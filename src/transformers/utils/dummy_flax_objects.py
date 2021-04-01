@@ -32,7 +32,62 @@ class FlaxBertForMaskedLM:
         requires_flax(self)
 
 
+class FlaxBertForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
 class FlaxBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_flax(self)
 

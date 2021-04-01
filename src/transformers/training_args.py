@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional
 
 from .file_utils import (
     cached_property,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_tpu_available,
     torch_required,
@@ -36,8 +37,13 @@ if is_torch_available():
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as sm_dist
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    smp.init()
 
 
 logger = logging.get_logger(__name__)
@@ -275,8 +281,12 @@ class TrainingArguments:
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
+            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        length_column_name (:obj:`str`, `optional`, defaults to :obj:`"length"`):
+            Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
+            than computing them on train startup. Ignored unless :obj:`group_by_length` is :obj:`True` and the dataset
+            is an instance of :obj:`Dataset`.
         report_to (:obj:`str` or :obj:`List[str]`, `optional`, defaults to :obj:`"all"`):
             The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
             :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`. Use :obj:`"all"` to report to
@@ -494,6 +504,10 @@ class TrainingArguments:
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
     )
+    length_column_name: Optional[str] = field(
+        default="length",
+        metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
+    )
     report_to: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
     )
@@ -511,6 +525,10 @@ class TrainingArguments:
         default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
+    mp_parameters: str = field(
+        default="",
+        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
+    )
 
     def __post_init__(self):
         # expand paths, if not os.makedirs("~/bar") will make directory
@@ -638,7 +656,11 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_mp_enabled():
+            local_rank = smp.local_rank()
+            device = torch.device("cuda", local_rank)
+            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled():
             sm_dist.init_process_group()
             self.local_rank = sm_dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
@@ -722,8 +744,10 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
-        elif is_sagemaker_distributed_available():
-            return ParallelMode.SAGEMAKER_DISTRIBUTED
+        elif is_sagemaker_mp_enabled():
+            return ParallelMode.SAGEMAKER_MODEL_PARALLEL
+        elif is_sagemaker_dp_enabled():
+            return ParallelMode.SAGEMAKER_DATA_PARALLEL
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -739,7 +763,9 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.xrt_world_size()
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_size()
+        elif is_sagemaker_dp_enabled():
             return sm_dist.get_world_size()
         elif self.local_rank != -1:
             return torch.distributed.get_world_size()
@@ -753,7 +779,9 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return xm.get_ordinal()
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_rank()
+        elif is_sagemaker_dp_enabled():
             return sm_dist.get_rank()
         elif self.local_rank != -1:
             return torch.distributed.get_rank()
@@ -764,14 +792,14 @@ class TrainingArguments:
         """
         Can be subclassed and overridden for some specific integrations.
         """
-        return True
+        return not is_sagemaker_mp_enabled()
 
     @property
     def _no_sync_in_gradient_accumulation(self):
         """
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
-        return not self.deepspeed
+        return not (self.deepspeed or is_sagemaker_mp_enabled())
 
     def to_dict(self):
         """
@@ -809,5 +837,6 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
-    SAGEMAKER_DISTRIBUTED = "sm_distributed"
+    SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
+    SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"

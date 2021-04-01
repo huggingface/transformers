@@ -349,7 +349,7 @@ def speech_file_to_array_fn(batch):
 	return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
-inputs = processor(test_dataset["speech"][:2], sampling_rate=16_000, return_tensors="pt", padding=True)
+inputs = processor(test_dataset[:2]["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
 
 with torch.no_grad():
 	logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
@@ -357,7 +357,7 @@ with torch.no_grad():
 predicted_ids = torch.argmax(logits, dim=-1)
 
 print("Prediction:", processor.batch_decode(predicted_ids))
-print("Reference:", test_dataset["sentence"][:2])
+print("Reference:", test_dataset[:2]["sentence"])
 ```
 
 
