@@ -1180,7 +1180,7 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
-            >>> config = MegatronBertConfig.from_pretrained("nvidia/megatron-bert-cased-345m")
+            >>> config = MegatronBertConfig.from_pretrained("nvidia/megatron-bert")
             >>> config.is_decoder = True
             >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert-cased-345m', config=config)
 
