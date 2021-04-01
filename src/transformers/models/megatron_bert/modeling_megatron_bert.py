@@ -413,7 +413,7 @@ class MegatronBertOutput(nn.Module):
         return input_tensor + hidden_states
 
 
-# Based transformers.models.bert.modeling_bert.BertLayer. Added LayerNorm.
+# Based on transformers.models.bert.modeling_bert.BertLayer. Added LayerNorm.
 class MegatronBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
