@@ -113,7 +113,7 @@ def convert_megatron_checkpoint(args, input_state_dict):
         weight_or_bias = m.group(3)
 
         # The name of the layer.
-        layer_name = "transformer.h.{}".format(layer_idx)
+        layer_name = f"transformer.h.{layer_idx}"
 
         # For layernorm(s), simply store the layer norm.
         if op_name.endswith("layernorm"):
