@@ -235,7 +235,7 @@ def main():
     basename = os.path.dirname(args.path_to_checkpoint)
 
     # Load the model.
-    print('Extracting PyTorch state dictionary from "{}"'.format(args.path_to_checkpoint))
+    print(f'Extracting PyTorch state dictionary from "{args.path_to_checkpoint}"')
     with zipfile.ZipFile(args.path_to_checkpoint, "r") as checkpoint:
         with checkpoint.open("release/mp_rank_00/model_optim_rng.pt") as pytorch_dict:
             input_state_dict = torch.load(pytorch_dict, map_location="cpu")
