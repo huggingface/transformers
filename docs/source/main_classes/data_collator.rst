@@ -21,6 +21,7 @@ A data collator will default to :func:`transformers.data.data_collator.default_d
 been provided. This is a function that takes a list of samples from a Dataset as input and collates them into a batch
 of a dict-like object. The default collator performs special handling of potential keys:
 
+
     - ``label``: handles a single value (int or float) per object
     - ``label_ids``: handles a list of values per object
 
@@ -35,9 +36,7 @@ Default data collator
 
 DataCollatorWithPadding
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-.. autoclass:: transformers.data.data_collator.DataCollatorWithPadding
-    :members: _call_
+.. autoclass:: transformers.data.data_collator.DataCollatorWithPadding :members: _call_
 
 DataCollatorForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -52,7 +51,7 @@ DataCollatorForSeq2Seq
     :members: _call_
 
 DataCollatorForLanguageModeling
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForLanguageModeling
     :members: _call_, mask_tokens
@@ -69,7 +68,8 @@ DataCollatorForSOP
 .. autoclass:: transformers.data.data_collator.DataCollatorForSOP
     :members: _call_, mask_tokens
 
-DataCollatorForPermutationLanguageModeling ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+DataCollatorForPermutationLanguageModeling
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForPermutationLanguageModeling
     :members: _call_, mask_tokens
