@@ -1058,7 +1058,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
-            >>> model = MegatronBertForPreTraining.from_pretrained('nvidia/megatron-bert-uncased-345m')
+            >>> model = MegatronBertForPreTraining.from_pretrained('nvidia/megatron-bert')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
