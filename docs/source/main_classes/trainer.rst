@@ -455,6 +455,8 @@ as ``pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` locally o
 
 Again, remember to ensure to adjust ``TORCH_CUDA_ARCH_LIST`` to the target architectures.
 
+You can find the complete list of NVIDIA GPUs and their corresponding **Compute Capabilities** (same as arch in this context) `here <https://developer.nvidia.com/cuda-gpus>`__.
+
 You can check the archs pytorch was built with using:
 
 .. code-block:: bash
