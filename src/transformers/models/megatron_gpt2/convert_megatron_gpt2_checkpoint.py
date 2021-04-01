@@ -226,7 +226,7 @@ def main():
 
     # Store the state_dict to file.
     output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
-    print('Saving checkpoint to "{}"'.format(output_checkpoint_file))
+    print(f'Saving checkpoint to "{output_checkpoint_file}"')
     torch.save(output_state_dict, output_checkpoint_file)
 
 
