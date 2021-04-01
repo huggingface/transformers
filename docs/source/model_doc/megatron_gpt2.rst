@@ -1,7 +1,5 @@
 .. 
-    Copyright 2020 The HuggingFace Team. All rights reserved.
-
-    Copyright 2021 NVIDIA Corporation
+    Copyright 2021 NVIDIA Corporation and The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
     the License. You may obtain a copy of the License at
@@ -65,5 +63,4 @@ The following command allows you to do the conversion. We assume that the folder
 The original code can be found `here <https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU
 and multi-node implementation of the Megatron Language models. In particular, it contains a hybrid model parallel
 approach using "tensor parallel" and "pipeline parallel" techniques.
-
 
