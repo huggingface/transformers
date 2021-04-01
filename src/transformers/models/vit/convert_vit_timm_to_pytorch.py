@@ -93,8 +93,8 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         else:
             prefix = "vit."
         # read in weights + bias of input projection layer (in timm, this is a single matrix + bias)
-        in_proj_weight = state_dict.pop("blocks." + str(i) + ".attn.qkv.weight")
-        in_proj_bias = state_dict.pop("blocks." + str(i) + ".attn.qkv.bias")
+        in_proj_weight = state_dict.pop(f"blocks.{i}.attn.qkv.weight")
+        in_proj_bias = state_dict.pop(f"blocks.{i}.attn.qkv.bias")
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.query.weight"] = in_proj_weight[
             : config.hidden_size, :
