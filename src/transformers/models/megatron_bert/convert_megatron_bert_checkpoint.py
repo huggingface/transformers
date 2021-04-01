@@ -145,16 +145,13 @@ def convert_megatron_checkpoint(args, input_state_dict):
             k_bias = val[1 * 1024 : 2 * 1024]
             v_bias = val[2 * 1024 : 3 * 1024]
 
-            # The name of the self attention block.
-            self_attn_name = layer_name + ".attention.self"
-
             # Store.
-            output_state_dict[f"self_attn_name.{query.weight}"] = q
-            output_state_dict[f"self_attn_name.{query.bias}"] = q_bias
-            output_state_dict[f"self_attn_name.{key.weight}"] = k
-            output_state_dict[f"self_attn_name.{key.bias}"] = k_bias
-            output_state_dict[f"self_attn_name.{value.weight}"] = v
-            output_state_dict[f"self_attn_name.{value.bias}"] = v_bias
+            output_state_dict[f"{layer_name}.attention.self.query.weight"] = q
+            output_state_dict[f"{layer_name}.attention.self.query.bias"] = q_bias
+            output_state_dict[f"{layer_name}.attention.self.key.weight"] = k
+            output_state_dict[f"{layer_name}.attention.self.key.bias"] = k_bias
+            output_state_dict[f"{layer_name}.attention.self.value.weight"] = v
+            output_state_dict[f"{layer_name}.attention.self.value.bias"] = v_bias
 
             # Clear the stored tensor.
             attention_qkv_weight = None

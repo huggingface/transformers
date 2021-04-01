@@ -1869,11 +1869,6 @@ class MegatronBertForTokenClassification:
         requires_pytorch(self)
 
 
-class MegatronBertLayer:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class MegatronBertModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
