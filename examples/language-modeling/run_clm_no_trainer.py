@@ -43,8 +43,8 @@ from transformers import (
     AutoConfig,
     AutoModelForCausalLM,
     AutoTokenizer,
-    default_data_collator,
     SchedulerType,
+    default_data_collator,
     get_scheduler,
     set_seed,
 )
@@ -294,7 +294,7 @@ def main():
     def tokenize_function(examples):
         return tokenizer(examples[text_column_name])
 
-    tokenized_datasets = datasets.map(
+    tokenized_datasets = raw_datasets.map(
         tokenize_function,
         batched=True,
         num_proc=args.preprocessing_num_workers,
