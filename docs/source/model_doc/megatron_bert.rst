@@ -51,10 +51,14 @@ Alternatively, you can directly download the checkpoints using:
 
 BERT-345M-uncased::
 
+.. code-block:: bash
+
   wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_uncased/zip
   -O megatron_bert_345m_v0_1_uncased.zip
 
 BERT-345M-cased::
+
+.. code-block:: bash
 
   wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_bert_345m/versions/v0.1_cased/zip -O
   megatron_bert_345m_v0_1_cased.zip
@@ -65,9 +69,13 @@ easily be loaded by Hugging Face Transformers and our port of the BERT code.
 The following commands allow you to do the conversion. We assume that the folder ``models/megatron_bert`` contains
 ``megatron_bert_345m_v0_1_{cased, uncased}.zip`` and that the commands are run from inside that folder::
 
-  python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py
-  megatron_bert_345m_v0_1_uncased.zip python3
-  $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py megatron_bert_345m_v0_1_cased.zip
+.. code-block:: bash
+
+  python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py megatron_bert_345m_v0_1_uncased.zip 
+
+.. code-block:: bash
+
+  python3 $PATH_TO_TRANSFORMERS/models/megatron_bert/convert_megatron_bert_checkpoint.py megatron_bert_345m_v0_1_cased.zip
 
 The original code can be found `here <https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU
 and multi-node implementation of the Megatron Language models. In particular, it contains a hybrid model parallel

@@ -112,7 +112,7 @@ def convert_megatron_checkpoint(args, input_state_dict):
         weight_or_bias = m.group(3)
 
         # The name of the layer.
-        layer_name = "bert.encoder.layer.{}".format(layer_idx)
+        layer_name = f"bert.encoder.layer.{layer_idx}"
 
         # For layernorm(s), simply store the layer norm.
         if op_name.endswith("layernorm"):
@@ -149,12 +149,12 @@ def convert_megatron_checkpoint(args, input_state_dict):
             self_attn_name = layer_name + ".attention.self"
 
             # Store.
-            output_state_dict[self_attn_name + ".query.weight"] = q
-            output_state_dict[self_attn_name + ".query.bias"] = q_bias
-            output_state_dict[self_attn_name + ".key.weight"] = k
-            output_state_dict[self_attn_name + ".key.bias"] = k_bias
-            output_state_dict[self_attn_name + ".value.weight"] = v
-            output_state_dict[self_attn_name + ".value.bias"] = v_bias
+            output_state_dict[f"self_attn_name.{query.weight}"] = q
+            output_state_dict[f"self_attn_name.{query.bias}"] = q_bias
+            output_state_dict[f"self_attn_name.{key.weight}"] = k
+            output_state_dict[f"self_attn_name.{key.bias}"] = k_bias
+            output_state_dict[f"self_attn_name.{value.weight}"] = v
+            output_state_dict[f"self_attn_name.{value.bias}"] = v_bias
 
             # Clear the stored tensor.
             attention_qkv_weight = None
@@ -256,7 +256,7 @@ def main():
 
     # Store the state_dict to file.
     output_checkpoint_file = os.path.join(basename, "pytorch_model.bin")
-    print('Saving checkpoint to "{output_checkpoint_file}"')
+    print(f'Saving checkpoint to "{output_checkpoint_file}"')
     torch.save(output_state_dict, output_checkpoint_file)
 
 

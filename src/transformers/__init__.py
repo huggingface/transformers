@@ -1954,7 +1954,6 @@ if TYPE_CHECKING:
             MegatronBertForQuestionAnswering,
             MegatronBertForSequenceClassification,
             MegatronBertForTokenClassification,
-            MegatronBertLayer,
             MegatronBertModel,
         )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings

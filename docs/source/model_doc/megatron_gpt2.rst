@@ -49,6 +49,8 @@ Registry CLI. Further documentation for downloading models can be found in the `
 
 Alternatively, you can directly download the checkpoints using::
 
+.. code-block:: bash
+
   wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_lm_345m/versions/v0.0/zip -O
   megatron_gpt2_345m_v0_0.zip
 
@@ -57,6 +59,8 @@ be loaded by Hugging Face Transformers GPT2 implementation.
 
 The following command allows you to do the conversion. We assume that the folder ``models/megatron_gpt2`` contains
 ``megatron_gpt2_345m_v0_0.zip`` and that the command is run from that folder::
+
+.. code-block:: bash
 
   python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py megatron_gpt2_345m_v0_0.zip
 
