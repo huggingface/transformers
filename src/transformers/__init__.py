@@ -130,6 +130,7 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
+    "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig", "DeiTTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -307,6 +308,7 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
+    _import_structure["models.deit"].append("DeiTTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -441,6 +443,22 @@ if is_torch_available():
     _import_structure["generation_utils"] = ["top_k_top_p_filtering"]
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
+
+    _import_structure["models.deit"].extend(
+        [
+            "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DeiTForMaskedLM",
+            "DeiTForCausalLM",
+            "DeiTForMultipleChoice",
+            "DeiTForQuestionAnswering",
+            "DeiTForSequenceClassification",
+            "DeiTForTokenClassification",
+            "DeiTLayer",
+            "DeiTModel",
+            "DeiTPreTrainedModel",
+            "load_tf_weights_in_deit",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
@@ -1472,6 +1490,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
+    from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig, DeiTTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1640,6 +1659,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
+        from .models.deit import DeiTTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1698,6 +1718,20 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
+
+        from .models.deit import (
+            DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DeiTForMaskedLM,
+            DeiTForCausalLM,
+            DeiTForMultipleChoice,
+            DeiTForQuestionAnswering,
+            DeiTForSequenceClassification,
+            DeiTForTokenClassification,
+            DeiTLayer,
+            DeiTModel,
+            DeiTPreTrainedModel,
+            load_tf_weights_in_deit,
+        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark

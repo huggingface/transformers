@@ -136,6 +136,15 @@ from ..funnel.modeling_funnel import (
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
 
 # Add modeling imports here
+from ..deit.modeling_deit import (
+    DeiTForMaskedLM,
+    DeiTForCausalLM,
+    DeiTForMultipleChoice,
+    DeiTForQuestionAnswering,
+    DeiTForSequenceClassification,
+    DeiTForTokenClassification,
+    DeiTModel,
+)
 from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoModel
 from ..ibert.modeling_ibert import (
     IBertForMaskedLM,
@@ -281,6 +290,7 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
+    DeiTConfig,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -340,6 +350,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (DeiTConfig, DeiTModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
@@ -433,6 +444,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
+(DeiTConfig, DeiTForMaskedLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
@@ -479,6 +491,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
 MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Causal LM mapping
+        (DeiTConfig, DeiTForCausalLM),
         (GPTNeoConfig, GPTNeoForCausalLM),
         (BigBirdConfig, BigBirdForCausalLM),
         (CamembertConfig, CamembertForCausalLM),
@@ -518,6 +531,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
     [
         # Model for Masked LM mapping
+(DeiTConfig, DeiTForMaskedLM),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Wav2Vec2Config, Wav2Vec2ForMaskedLM),
         (ConvBertConfig, ConvBertForMaskedLM),
@@ -570,6 +584,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Sequence Classification mapping
+        (DeiTConfig, DeiTForSequenceClassification),
         (BigBirdConfig, BigBirdForSequenceClassification),
         (ConvBertConfig, ConvBertForSequenceClassification),
         (LEDConfig, LEDForSequenceClassification),
@@ -607,6 +622,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
     [
         # Model for Question Answering mapping
+        (DeiTConfig, DeiTForQuestionAnswering),
         (BigBirdConfig, BigBirdForQuestionAnswering),
         (ConvBertConfig, ConvBertForQuestionAnswering),
         (LEDConfig, LEDForQuestionAnswering),
@@ -646,6 +662,7 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = OrderedDict(
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Token Classification mapping
+(DeiTConfig, DeiTForTokenClassification),
         (BigBirdConfig, BigBirdForTokenClassification),
         (ConvBertConfig, ConvBertForTokenClassification),
         (LayoutLMConfig, LayoutLMForTokenClassification),
@@ -675,6 +692,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
     [
         # Model for Multiple Choice mapping
+(DeiTConfig, DeiTForMultipleChoice),
         (BigBirdConfig, BigBirdForMultipleChoice),
         (ConvBertConfig, ConvBertForMultipleChoice),
         (CamembertConfig, CamembertForMultipleChoice),
