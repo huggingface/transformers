@@ -232,7 +232,7 @@ huggingface_estimator = HuggingFace(
 
 ### Distributed Training: Model-Parallel
 
-You can use [SageMaker Model Parallelism Library](https://aws.amazon.com/blogs/aws/amazon-sagemaker-simplifies-training-deep-learning-models-with-billions-of-parameters/) out of the box for distributed training.We added the functionality of Model Parallelism directly into the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html). If your `train.py` uses the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.  
+You can use [SageMaker Model Parallelism Library](https://aws.amazon.com/blogs/aws/amazon-sagemaker-simplifies-training-deep-learning-models-with-billions-of-parameters/) out of the box for distributed training. We added the functionality of Model Parallelism directly into the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html). If your `train.py` uses the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.  
 For detailed information about the adjustments take a look [here](https://sagemaker.readthedocs.io/en/stable/api/training/smd_model_parallel_general.html?highlight=modelparallel#required-sagemaker-python-sdk-parameters).
 
 
