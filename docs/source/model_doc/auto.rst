@@ -231,3 +231,10 @@ FlaxAutoModelForMultipleChoice
 
 .. autoclass:: transformers.FlaxAutoModelForMultipleChoice
     :members:
+
+
+FlaxAutoModelForNextSentencePrediction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: transformers.FlaxAutoModelForNextSentencePrediction
+    :members:
