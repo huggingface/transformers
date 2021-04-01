@@ -68,6 +68,7 @@ from ..squeezebert.configuration_squeezebert import SQUEEZEBERT_PRETRAINED_CONFI
 from ..t5.configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
 from ..tapas.configuration_tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig
 from ..transfo_xl.configuration_transfo_xl import TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP, TransfoXLConfig
+from ..vit.configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
 from ..wav2vec2.configuration_wav2vec2 import WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP, Wav2Vec2Config
 from ..xlm.configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
 from ..xlm_prophetnet.configuration_xlm_prophetnet import (
@@ -85,6 +86,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        VIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -134,6 +136,7 @@ CONFIG_MAPPING = OrderedDict(
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
+        ("vit", ViTConfig),
         ("wav2vec2", Wav2Vec2Config),
         ("m2m_100", M2M100Config),
         ("convbert", ConvBertConfig),
@@ -189,6 +192,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
+        ("vit", "ViT"),
         ("wav2vec2", "Wav2Vec2"),
         ("m2m_100", "M2M100"),
         ("convbert", "ConvBERT"),

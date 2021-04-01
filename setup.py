@@ -107,6 +107,7 @@ _deps = [
     "onnxruntime>=1.4.0",
     "packaging",
     "parameterized",
+    "Pillow",
     "protobuf",
     "psutil",
     "pydantic",
@@ -230,6 +231,7 @@ extras["sagemaker"] = deps_list("sagemaker")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["vision"] = deps_list("Pillow")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -242,7 +244,7 @@ extras["testing"] = (
 extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
 extras["quality"] = deps_list("black", "isort", "flake8")
 
-extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
+extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"] + extras["speech"] + extras["vision"]
 
 extras["dev"] = (
     extras["all"]
