@@ -52,8 +52,8 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def __init__(self, image_mean=None, image_std=None, do_normalize=True, do_resize=True, size=224, **kwargs):
         super().__init__(**kwargs)
-        self.image_mean = [0.5, 0.5, 0.5]
-        self.image_std = [0.5, 0.5, 0.5]
+        self.image_mean = (0.5, 0.5, 0.5)
+        self.image_std = (0.5, 0.5, 0.5)
         self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
