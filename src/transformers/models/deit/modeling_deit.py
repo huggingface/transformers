@@ -540,12 +540,106 @@ class DeiTPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
-    the [CLS] and distillation tokens) e.g. for ImageNet.
+    DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
     """,
     DEIT_START_DOCSTRING,
 )
 class DeiTForImageClassification(DeiTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.deit = DeiTModel(config, add_pooling_layer=False)
+
+        # Classifier head
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
+            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
+            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
+            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('google/deit-base-patch16-224')
+            >>> model = DeiTForImageClassification.from_pretrained('google/deit-base-patch16-224')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.deit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.classifier(sequence_output[:, 0, :])
+        # we don't use the distillation token 
+
+        loss = None
+        if labels is not None:
+            if self.num_labels == 1:
+                #  We are doing regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    
+@add_start_docstrings(
+    """
+    DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
+    the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
+    """,
+    DEIT_START_DOCSTRING,
+)
+class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -608,20 +702,17 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
 
         sequence_output = outputs[0]
 
-        logits_cls = self.cls_classifier(sequence_output[:, 0, :])
-        logits_dist = self.dist_classifier(sequence_output[:, 1, :])
+        cls_logits = self.cls_classifier(sequence_output[:, 0, :])
+        dist_logits = self.dist_classifier(sequence_output[:, 1, :])
 
-        logits = (logits_cls + logits_dist) / 2
+        # during inference, return the average of both classifier predictions
+        logits = (cls_logits + dist_logits) / 2
 
         loss = None
         if labels is not None:
-            if self.num_labels == 1:
-                #  We are doing regression
-                loss_fct = MSELoss()
-                loss = loss_fct(logits_cls.view(-1), labels.view(-1))
-            else:
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits_cls.view(-1, self.num_labels), labels.view(-1))
+            # TODO add support for fine-tuning with distillation 
+            # however this relies on a teacher
+            raise NotImplementedError("Fine-tuning with distillation is not yet implemented.")
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -632,4 +723,4 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )
+        )  

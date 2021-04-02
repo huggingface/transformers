@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import DeiTFeatureExtractor
 
 
-class ViTFeatureExtractionTester(unittest.TestCase):
+class DeiTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -102,12 +102,12 @@ class ViTFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ViTFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = DeiTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ViTFeatureExtractionTester(self)
+        self.feature_extract_tester = DeiTFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
