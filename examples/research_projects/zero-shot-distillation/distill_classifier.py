@@ -152,7 +152,7 @@ def get_entailment_id(config):
     for label, ind in config.label2id.items():
         if label.lower().startswith("entail"):
             return ind
-    logging.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
+    logger.warning("Could not identify entailment dimension from teacher config label2id. Setting to -1.")
     return -1
 
 
