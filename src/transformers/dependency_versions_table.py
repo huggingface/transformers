@@ -24,6 +24,7 @@ deps = {
     "onnxruntime": "onnxruntime>=1.4.0",
     "packaging": "packaging",
     "parameterized": "parameterized",
+    "Pillow": "Pillow",
     "protobuf": "protobuf",
     "psutil": "psutil",
     "pydantic": "pydantic",
@@ -53,4 +54,5 @@ deps = {
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
+    "sagemaker": "sagemaker>=2.31.0",
 }

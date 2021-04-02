@@ -222,7 +222,7 @@ def postprocess_qa_predictions(
         )
         if version_2_with_negative:
             null_odds_file = os.path.join(
-                output_dir, "null_odds.json" if prefix is None else f"{prefix}_null_odds_{prefix}.json"
+                output_dir, "null_odds.json" if prefix is None else f"{prefix}_null_odds.json"
             )
 
         logger.info(f"Saving predictions to {prediction_file}.")

@@ -16,6 +16,7 @@
 Torch utilities for the Trainer class.
 """
 
+import datetime
 import json
 import math
 import os
@@ -31,11 +32,11 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_distributed_available, is_torch_tpu_available
+from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
 from .utils import logging
 
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
 else:
     import torch.distributed as dist
@@ -433,7 +434,8 @@ class LabelSmoother:
         # will ignore them in any case.
         labels.clamp_min_(0)
         nll_loss = log_probs.gather(dim=-1, index=labels)
-        smoothed_loss = log_probs.sum(dim=-1, keepdim=True)
+        # works for fp16 input tensor too, by internally upcasting it to fp32
+        smoothed_loss = log_probs.sum(dim=-1, keepdim=True, dtype=torch.float32)
 
         nll_loss.masked_fill_(padding_mask, 0.0)
         smoothed_loss.masked_fill_(padding_mask, 0.0)
@@ -614,6 +616,15 @@ def _get_learning_rate(self):
     return last_lr
 
 
+def _secs2timedelta(secs):
+    """
+    convert seconds to hh:mm:ss.msec, msecs rounded to 2 decimals
+    """
+
+    msec = int(abs(secs - int(secs)) * 100)
+    return f"{datetime.timedelta(seconds=int(secs))}.{msec:02d}"
+
+
 def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     """
     Reformat Trainer metrics values to a human-readable format
@@ -630,6 +641,8 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     for k, v in metrics_copy.items():
         if "_mem_" in k:
             metrics_copy[k] = f"{ v >> 20 }MB"
+        elif "_runtime" in k:
+            metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
             metrics_copy[k] = f"{ int(v) >> 30 }GF"
         elif type(metrics_copy[k]) == float:
@@ -649,6 +662,72 @@ def log_metrics(self, split, metrics):
             Mode/split name: one of ``train``, ``eval``, ``test``
         metrics (:obj:`Dict[str, float]`):
             The metrics returned from train/evaluate/predictmetrics: metrics dict
+
+    Notes on memory reports:
+
+    In order to get memory usage report you need to install ``psutil``. You can do that with ``pip install psutil``.
+
+    Now when this method is run, you will see a report that will include: ::
+
+        init_mem_cpu_alloc_delta   =     1301MB
+        init_mem_cpu_peaked_delta  =      154MB
+        init_mem_gpu_alloc_delta   =      230MB
+        init_mem_gpu_peaked_delta  =        0MB
+        train_mem_cpu_alloc_delta  =     1345MB
+        train_mem_cpu_peaked_delta =        0MB
+        train_mem_gpu_alloc_delta  =      693MB
+        train_mem_gpu_peaked_delta =        7MB
+
+    **Understanding the reports:**
+
+    - the first segment, e.g., ``train__``, tells you which stage the metrics are for. Reports starting with ``init_``
+      will be added to the first stage that gets run. So that if only evaluation is run, the memory usage for the
+      ``__init__`` will be reported along with the ``eval_`` metrics.
+    - the third segment, is either ``cpu`` or ``gpu``, tells you whether it's the general RAM or the gpu0 memory
+      metric.
+    - ``*_alloc_delta`` - is the difference in the used/allocated memory counter between the end and the start of the
+      stage - it can be negative if a function released more memory than it allocated.
+    - ``*_peaked_delta`` - is any extra memory that was consumed and then freed - relative to the current allocated
+      memory counter - it is never negative. When you look at the metrics of any stage you add up ``alloc_delta`` +
+      ``peaked_delta`` and you know how much memory was needed to complete that stage.
+
+    The reporting happens only for process of rank 0 and gpu 0 (if there is a gpu). Typically this is enough since the
+    main process does the bulk of work, but it could be not quite so if model parallel is used and then other GPUs may
+    use a different amount of gpu memory. This is also not the same under DataParallel where gpu0 may require much more
+    memory than the rest since it stores the gradient and optimizer states for all participating GPUS. Perhaps in the
+    future these reports will evolve to measure those too.
+
+    The CPU RAM metric measures RSS (Resident Set Size) includes both the memory which is unique to the process and the
+    memory shared with other processes. It is important to note that it does not include swapped out memory, so the
+    reports could be imprecise.
+
+    The CPU peak memory is measured using a sampling thread. Due to python's GIL it may miss some of the peak memory if
+    that thread didn't get a chance to run when the highest memory was used. Therefore this report can be less than
+    reality. Using ``tracemalloc`` would have reported the exact peak memory, but it doesn't report memory allocations
+    outside of python. So if some C++ CUDA extension allocated its own memory it won't be reported. And therefore it
+    was dropped in favor of the memory sampling approach, which reads the current process memory usage.
+
+    The GPU allocated and peak memory reporting is done with ``torch.cuda.memory_allocated()`` and
+    ``torch.cuda.max_memory_allocated()``. This metric reports only "deltas" for pytorch-specific allocations, as
+    ``torch.cuda`` memory management system doesn't track any memory allocated outside of pytorch. For example, the
+    very first cuda call typically loads CUDA kernels, which may take from 0.5 to 2GB of GPU memory.
+
+    Note that this tracker doesn't account for memory allocations outside of :class:`~transformers.Trainer`'s
+    ``__init__``, ``train``, ``evaluate`` and ``predict`` calls.
+
+    Because ``evaluation`` calls may happen during ``train``, we can't handle nested invocations because
+    ``torch.cuda.max_memory_allocated`` is a single counter, so if it gets reset by a nested eval call, ``train``'s
+    tracker will report incorrect info. If this `pytorch issue <https://github.com/pytorch/pytorch/issues/16266>`__
+    gets resolved it will be possible to change this class to be re-entrant. Until then we will only track the outer
+    level of ``train``, ``evaluate`` and ``predict`` methods. Which means that if ``eval`` is called during ``train``,
+    it's the latter that will account for its memory usage and that of the former.
+
+    This also means that if any other tool that is used along the :class:`~transformers.Trainer` calls
+    ``torch.cuda.reset_peak_memory_stats``, the gpu peak memory stats could be invalid. And the
+    :class:`~transformers.Trainer` will disrupt the normal behavior of any such tools that rely on calling
+    ``torch.cuda.reset_peak_memory_stats`` themselves.
+
+    For best performance you may want to consider turning the memory profiling off for production runs.
     """
     if not self.is_world_process_zero():
         return
@@ -674,6 +753,10 @@ def save_metrics(self, split, metrics, combined=True):
             The metrics returned from train/evaluate/predict
         combined (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Creates combined metrics by updating ``all_results.json`` with metrics of this call
+
+    To understand the metrics please read the docstring of :meth:`~transformers.Trainer.log_metrics`. The only
+    difference is that raw unformatted numbers are saved in the current method.
+
     """
     if not self.is_world_process_zero():
         return
@@ -722,3 +805,40 @@ def get_parameter_names(model, forbidden_layer_types):
     # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
     result += list(model._parameters.keys())
     return result
+
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    @smp.step()
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
+        outputs = model(**inputs)
+        loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        loss /= gradient_accumulation_steps
+        model.backward(loss)
+        return loss
+
+    @smp.step()
+    def smp_forward_only(model, inputs):
+        return model(**inputs)
+
+    def smp_gather(tensor):
+        if isinstance(tensor, (list, tuple)):
+            return type(tensor)(smp_gather(t) for t in tensor)
+        elif isinstance(tensor, dict):
+            return type(tensor)({k: smp_gather(v) for k, v in tensor.items()})
+        elif not isinstance(tensor, torch.Tensor):
+            raise TypeError(
+                f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
+            )
+        all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
+        return torch.cat([t.cpu() for t in all_tensors], dim=0)
+
+    def smp_nested_concat(tensor):
+        if isinstance(tensor, (list, tuple)):
+            return type(tensor)(smp_nested_concat(t) for t in tensor)
+        elif isinstance(tensor, dict):
+            return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
+        # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
+        # which is also the name of the decorator so Python is confused.
+        return tensor.concat().detach().cpu()

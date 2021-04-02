@@ -145,14 +145,14 @@ $ git clone https://github.com/huggingface/transformers.git
 Second, head over to the `examples/research_projects/wav2vec2` directory, where the `run_common_voice.py` script is located.
 
 ```
-$ cd transformers/examplesh/research_projects/wav2vec2
+$ cd transformers/examples/research_projects/wav2vec2
 ```
 
 Third, install the required packages. The
 packages are listed in the `requirements.txt` file and can be installed with
 
 ```
-$ pip install -r requirements.txt`. 
+$ pip install -r requirements.txt
 ```
 
 	**Note**: Installing the latest version of `torchaudio` will also upgrade `torch` to it's latest stable version. If you are using specific version of `torch` then make sure
@@ -349,7 +349,7 @@ def speech_file_to_array_fn(batch):
 	return batch
 
 test_dataset = test_dataset.map(speech_file_to_array_fn)
-inputs = processor(test_dataset["speech"][:2], sampling_rate=16_000, return_tensors="pt", padding=True)
+inputs = processor(test_dataset[:2]["speech"], sampling_rate=16_000, return_tensors="pt", padding=True)
 
 with torch.no_grad():
 	logits = model(inputs.input_values, attention_mask=inputs.attention_mask).logits
@@ -357,7 +357,7 @@ with torch.no_grad():
 predicted_ids = torch.argmax(logits, dim=-1)
 
 print("Prediction:", processor.batch_decode(predicted_ids))
-print("Reference:", test_dataset["sentence"][:2])
+print("Reference:", test_dataset[:2]["sentence"])
 ```
 
 
@@ -401,7 +401,7 @@ def evaluate(batch):
 	with torch.no_grad():
 		logits = model(inputs.input_values.to("cuda"), attention_mask=inputs.attention_mask.to("cuda")).logits
 
-  pred_ids = torch.argmax(logits, dim=-1)
+	pred_ids = torch.argmax(logits, dim=-1)
 	batch["pred_strings"] = processor.batch_decode(pred_ids)
 	return batch
 

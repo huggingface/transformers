@@ -65,7 +65,7 @@ class ModelCard:
             try:
                 setattr(self, key, value)
             except AttributeError as err:
-                logger.error("Can't set {} with value {} for {}".format(key, value, self))
+                logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
     def save_pretrained(self, save_directory_or_file):
@@ -77,7 +77,7 @@ class ModelCard:
             output_model_card_file = save_directory_or_file
 
         self.to_json_file(output_model_card_file)
-        logger.info("Model card saved in {}".format(output_model_card_file))
+        logger.info(f"Model card saved in {output_model_card_file}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
@@ -133,6 +133,11 @@ class ModelCard:
         proxies = kwargs.pop("proxies", None)
         find_from_standard_name = kwargs.pop("find_from_standard_name", True)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+
+        user_agent = {"file_type": "model_card"}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
             # For simplicity we use the same pretrained url than the configuration files
@@ -152,13 +157,13 @@ class ModelCard:
 
         try:
             # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(model_card_file, cache_dir=cache_dir, proxies=proxies)
+            resolved_model_card_file = cached_path(
+                model_card_file, cache_dir=cache_dir, proxies=proxies, user_agent=user_agent
+            )
             if resolved_model_card_file == model_card_file:
-                logger.info("loading model card file {}".format(model_card_file))
+                logger.info(f"loading model card file {model_card_file}")
             else:
-                logger.info(
-                    "loading model card file {} from cache at {}".format(model_card_file, resolved_model_card_file)
-                )
+                logger.info(f"loading model card file {model_card_file} from cache at {resolved_model_card_file}")
             # Load model card
             modelcard = cls.from_json_file(resolved_model_card_file)
 
@@ -175,7 +180,7 @@ class ModelCard:
         for key in to_remove:
             kwargs.pop(key, None)
 
-        logger.info("Model card: %s", str(modelcard))
+        logger.info(f"Model card: {modelcard}")
         if return_unused_kwargs:
             return modelcard, kwargs
         else:

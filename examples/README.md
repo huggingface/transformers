@@ -90,14 +90,14 @@ Coming soon!
 
 | Task | Example datasets | Trainer support | TFTrainer support | 🤗 Datasets | Colab
 |---|---|:---:|:---:|:---:|:---:|
-| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/language-modeling)       | Raw text        | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/01_how_to_train.ipynb)
-| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG, RACE, ARC | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/ViktorAlm/notebooks/blob/master/MPC_GPU_Demo_for_TF_and_PT.ipynb)
+| [**`language-modeling`**](https://github.com/huggingface/transformers/tree/master/examples/language-modeling)       | WikiText-2      | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/language_modeling.ipynb)
+| [**`multiple-choice`**](https://github.com/huggingface/transformers/tree/master/examples/multiple-choice)           | SWAG            | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/multiple_choice.ipynb)
 | [**`question-answering`**](https://github.com/huggingface/transformers/tree/master/examples/question-answering)     | SQuAD           | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/question_answering.ipynb)
-| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     | CNN/Daily Mail  | ✅  | - | - | -
-| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE, XNLI      | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
+| [**`summarization`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                     |  XSum           | ✅ | -  | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/summarization.ipynb)
+| [**`text-classification`**](https://github.com/huggingface/transformers/tree/master/examples/text-classification)   | GLUE            | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/text_classification.ipynb)
 | [**`text-generation`**](https://github.com/huggingface/transformers/tree/master/examples/text-generation)           | -               | n/a | n/a | - | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/blog/blob/master/notebooks/02_how_to_generate.ipynb)
 | [**`token-classification`**](https://github.com/huggingface/transformers/tree/master/examples/token-classification) | CoNLL NER       | ✅ | ✅ | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/token_classification.ipynb)
-| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | - | -
+| [**`translation`**](https://github.com/huggingface/transformers/tree/master/examples/seq2seq)                       | WMT             | ✅  | - | ✅ | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/huggingface/notebooks/blob/master/examples/translation.ipynb)
 
 
 ## Running quick tests
@@ -240,34 +240,11 @@ Whenever you use `Trainer` or `TFTrainer` classes, your losses, evaluation metri
 
 Advanced configuration is possible by setting environment variables:
 
-<table>
-  <thead>
-    <tr>
-      <th style="text-align:left">Environment Variables</th>
-      <th style="text-align:left">Options</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td style="text-align:left">WANDB_LOG_MODEL</td>
-      <td style="text-align:left">Log the model as artifact at the end of training (<b>false</b> by default)</td>
-    </tr>
-    <tr>
-      <td style="text-align:left">WANDB_WATCH</td>
-      <td style="text-align:left">
-        <ul>
-          <li><b>gradients</b> (default): Log histograms of the gradients</li>
-          <li><b>all</b>: Log histograms of gradients and parameters</li>
-          <li><b>false</b>: No gradient or parameter logging</li>
-        </ul>
-      </td>
-    </tr>
-    <tr>
-      <td style="text-align:left">WANDB_PROJECT</td>
-      <td style="text-align:left">Organize runs by project</td>
-    </tr>
-  </tbody>
-</table>
+| Environment Variable | Value |
+|---|---|
+| WANDB_LOG_MODEL | Log the model as artifact (log the model as artifact at the end of training (`false` by default) |
+| WANDB_WATCH | one of `gradients` (default) to log histograms of gradients, `all` to log histograms of both gradients and parameters, or `false` for no histogram logging |
+| WANDB_PROJECT | Organize runs by project |
 
 Set run names with `run_name` argument present in scripts or as part of `TrainingArguments`.
 

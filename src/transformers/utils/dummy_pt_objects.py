@@ -123,7 +123,22 @@ class BeamSearchScorer:
         requires_pytorch(self)
 
 
+class ForcedBOSTokenLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ForcedEOSTokenLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 class HammingDiversityLogitsProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class InfNanRemoveLogitsProcessor:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 
@@ -285,6 +300,9 @@ def load_tf_weights_in_albert(*args, **kwargs):
 
 
 MODEL_FOR_CAUSAL_LM_MAPPING = None
+
+
+MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
 MODEL_FOR_MASKED_LM_MAPPING = None
@@ -596,6 +614,91 @@ class BertGenerationEncoder:
 
 def load_tf_weights_in_bert_generation(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_bert_generation)
+
+
+BIG_BIRD_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BigBirdForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdForTokenClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdLayer:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def load_tf_weights_in_big_bird(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_big_bird)
 
 
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -1347,6 +1450,36 @@ class GPT2PreTrainedModel:
 
 def load_tf_weights_in_gpt2(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_gpt2)
+
+
+GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class GPTNeoForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class GPTNeoModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class GPTNeoPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+def load_tf_weights_in_gpt_neo(*args, **kwargs):
+    requires_pytorch(load_tf_weights_in_gpt_neo)
 
 
 IBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
@@ -2380,6 +2513,32 @@ class TransfoXLPreTrainedModel:
 
 def load_tf_weights_in_transfo_xl(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_transfo_xl)
+
+
+VIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class ViTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ViTModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class ViTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None

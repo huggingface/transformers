@@ -82,11 +82,8 @@ if __name__ == "__main__":
     training_args = parser.parse_args_into_dataclasses()[0]
 
     logger.warning(
-        "Process rank: %s, device: %s, n_gpu: %s, distributed training: %s",
-        training_args.local_rank,
-        training_args.device,
-        training_args.n_gpu,
-        training_args.local_rank != -1,
+        f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}, "
+        f"distributed training: {training_args.local_rank != -1}"
     )
 
     # Essentially, what we want to verify in the distributed case is that we get all samples back,
@@ -119,7 +116,7 @@ if __name__ == "__main__":
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["eval_success"] is not True:
+        if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
@@ -133,7 +130,7 @@ if __name__ == "__main__":
 
         p = trainer.predict(dataset)
         logger.info(p.metrics)
-        if p.metrics["eval_success"] is not True:
+        if p.metrics["test_success"] is not True:
             logger.error(p.metrics)
             exit(1)
 
