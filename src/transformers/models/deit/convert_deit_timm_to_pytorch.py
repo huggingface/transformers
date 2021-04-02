@@ -52,6 +52,7 @@ def create_rename_keys(config, base_model=False):
     rename_keys.extend(
         [
             ("cls_token", "deit.embeddings.cls_token"),
+            ("dist_token", "deit.embeddings.dist_token"),
             ("patch_embed.proj.weight", "deit.embeddings.patch_embeddings.projection.weight"),
             ("patch_embed.proj.bias", "deit.embeddings.patch_embeddings.projection.bias"),
             ("pos_embed", "deit.embeddings.position_embeddings"),
@@ -77,8 +78,10 @@ def create_rename_keys(config, base_model=False):
             [
                 ("norm.weight", "deit.layernorm.weight"),
                 ("norm.bias", "deit.layernorm.bias"),
-                ("head.weight", "classifier.weight"),
-                ("head.bias", "classifier.bias"),
+                ("head.weight", "cls_classifier.weight"),
+                ("head.bias", "cls_classifier.bias"),
+                ("head_dist.weight", "dist_classifier.weight"),
+                ("head_dist.bias", "dist_classifier.bias"),
             ]
         )
 
@@ -112,12 +115,6 @@ def read_in_q_k_v(state_dict, config, base_model=False):
         state_dict[f"{prefix}encoder.layer.{i}.attention.attention.value.bias"] = in_proj_bias[-config.hidden_size :]
 
 
-def remove_classification_head_(state_dict):
-    ignore_keys = ["head.weight", "head.bias"]
-    for k in ignore_keys:
-        state_dict.pop(k, None)
-
-
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
@@ -138,35 +135,31 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
 
     # define default DeiT configuration
     config = DeiTConfig()
+    # all deit models have fine-tuned heads
     base_model = False
-    # dataset (ImageNet-21k only or also fine-tuned on ImageNet 2012), patch_size and image_size
-    if deit_name[-5:] == "in21k":
-        base_model = True
-        config.patch_size = int(deit_name[-12:-10])
-        config.image_size = int(deit_name[-9:-6])
-    else:
-        config.num_labels = 1000
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
-        config.patch_size = int(deit_name[-6:-4])
-        config.image_size = int(deit_name[-3:])
+    # dataset (fine-tuned on ImageNet 2012), patch_size and image_size
+    config.num_labels = 1000
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
+    config.patch_size = int(deit_name[-6:-4])
+    config.image_size = int(deit_name[-3:])
     # size of the architecture
-    if deit_name[4:].startswith("small"):
-        config.hidden_size = 768
-        config.intermediate_size = 2304
-        config.num_hidden_layers = 8
-        config.num_attention_heads = 8
-    if deit_name[4:].startswith("base"):
+    if deit_name[9:].startswith("tiny"):
+        config.hidden_size = 192
+        config.intermediate_size = 768
+        config.num_hidden_layers = 12
+        config.num_attention_heads = 3
+    elif deit_name[9:].startswith("small"):
+        config.hidden_size = 384
+        config.intermediate_size = 1536
+        config.num_hidden_layers = 12
+        config.num_attention_heads = 6
+    if deit_name[9:].startswith("base"):
         pass
     elif deit_name[4:].startswith("large"):
         config.hidden_size = 1024
         config.intermediate_size = 4096
         config.num_hidden_layers = 24
-        config.num_attention_heads = 16
-    elif deit_name[4:].startswith("huge"):
-        config.hidden_size = 1280
-        config.intermediate_size = 5120
-        config.num_hidden_layers = 32
         config.num_attention_heads = 16
 
     # load original model from timm
@@ -175,18 +168,13 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
 
     # load state_dict of original model, remove and rename some keys
     state_dict = timm_model.state_dict()
-    if base_model:
-        remove_classification_head_(state_dict)
     rename_keys = create_rename_keys(config, base_model)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
     read_in_q_k_v(state_dict, config, base_model)
 
     # load HuggingFace model
-    if deit_name[-5:] == "in21k":
-        model = DeiTModel(config).eval()
-    else:
-        model = DeiTForImageClassification(config).eval()
+    model = DeiTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by DeiTFeatureExtractor
@@ -195,14 +183,9 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)
 
-    if base_model:
-        timm_pooled_output = timm_model.forward_features(pixel_values)
-        assert timm_pooled_output.shape == outputs.pooler_output.shape
-        assert torch.allclose(timm_pooled_output, outputs.pooler_output, atol=1e-3)
-    else:
-        timm_logits = timm_model(pixel_values)
-        assert timm_logits.shape == outputs.logits.shape
-        assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
+    timm_logits = timm_model(pixel_values)
+    assert timm_logits.shape == outputs.logits.shape
+    assert torch.allclose(timm_logits, outputs.logits, atol=1e-3)
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
     print(f"Saving model {deit_name} to {pytorch_dump_folder_path}")

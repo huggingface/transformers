@@ -553,8 +553,8 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         self.deit = DeiTModel(config, add_pooling_layer=False)
 
         # Classifier heads
-        self.cls_classifier = nn.Linear(config.hidden_size, config.hidden_size) if config.num_labels > 0 else nn.Identity()
-        self.dist_classifier = nn.Linear(config.hidden_size, config.hidden_size) if config.num_labels > 0 else nn.Identity()
+        self.cls_classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.dist_classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         self.init_weights()
 
