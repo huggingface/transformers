@@ -313,7 +313,7 @@ or:
    pip install -v --disable-pip-version-check . \
    -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html --pre
 
-Of course, adjust the urls to match the the cuda version you use.
+Of course, adjust the urls to match the cuda version you use.
 
 If after trying everything suggested you still encounter build issues, please, proceed with the GitHub Issue of
 `FairScale <https://github.com/facebookresearch/fairscale/issues>`__.
@@ -942,7 +942,7 @@ on performance unless you are doing activation checkpointing. ``1e9`` would cons
 time. "reuse distance" is a metric we are using to figure out when will a parameter be used again in the future, and we
 use the ``stage3_max_reuse_distance`` to decide whether to throw away the parameter or to keep it. If a parameter is
 going to be used again in near future (less than ``stage3_max_reuse_distance``) then we keep it to reduce communication
-overhead. This is super helpful when you have activation check-pointing enabled, where we do a forward recompute and
+overhead. This is super helpful when you have activation checkpointing enabled, where we do a forward recompute and
 backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
 
 If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persistence_threshold`` as
