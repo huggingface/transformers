@@ -609,7 +609,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         sequence_output = outputs[0]
 
         logits_cls = self.cls_classifier(sequence_output[:, 0, :])
-        logits_dist = self.dist_classifier(sequence_output([:, 1, :]))
+        logits_dist = self.dist_classifier(sequence_output[:, 1, :])
 
         logits = (logits_cls + logits_dist) / 2
 
@@ -618,10 +618,10 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
             if self.num_labels == 1:
                 #  We are doing regression
                 loss_fct = MSELoss()
-                loss = loss_fct(logits.view(-1), labels.view(-1))
+                loss = loss_fct(logits_cls.view(-1), labels.view(-1))
             else:
                 loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss = loss_fct(logits_cls.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[2:]
