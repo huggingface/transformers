@@ -36,7 +36,7 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DeiTConfig"
 
 DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/deit-base-patch16-224",
+    "facebook/deit-base-distilled-patch16-224",
     # See all DeiT models at https://huggingface.co/models?filter=deit
 ]
 
@@ -476,8 +476,8 @@ class DeiTModel(DeiTPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('google/deit-base-patch16-224-in21k')
-            >>> model = DeiTModel.from_pretrained('google/deit-base-patch16-224')
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224-in21k')
+            >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -585,8 +585,8 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('google/deit-base-patch16-224')
-            >>> model = DeiTForImageClassification.from_pretrained('google/deit-base-patch16-224')
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -680,8 +680,8 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('google/deit-base-patch16-224')
-            >>> model = DeiTForImageClassification.from_pretrained('google/deit-base-patch16-224')
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
