@@ -308,7 +308,6 @@ else:
 # tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
-    _import_structure["models.deit"].append("DeiTTokenizerFast")
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
     _import_structure["models.albert"].append("AlbertTokenizerFast")
     _import_structure["models.bart"].append("BartTokenizerFast")
@@ -383,6 +382,7 @@ else:
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.deit"].append("DeiTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -447,16 +447,8 @@ if is_torch_available():
     _import_structure["models.deit"].extend(
         [
             "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DeiTForMaskedLM",
-            "DeiTForCausalLM",
-            "DeiTForMultipleChoice",
-            "DeiTForQuestionAnswering",
-            "DeiTForSequenceClassification",
-            "DeiTForTokenClassification",
-            "DeiTLayer",
+            "DeiTForImageClassification",
             "DeiTModel",
-            "DeiTPreTrainedModel",
-            "load_tf_weights_in_deit",
         ]
     )
 
@@ -1490,7 +1482,7 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig, DeiTTokenizer
+    from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1659,7 +1651,6 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.deit import DeiTTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
@@ -1713,6 +1704,7 @@ if TYPE_CHECKING:
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
         from .models.vit import ViTFeatureExtractor
+        from .models.deit import DeiTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
@@ -1721,16 +1713,9 @@ if TYPE_CHECKING:
 
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DeiTForMaskedLM,
-            DeiTForCausalLM,
-            DeiTForMultipleChoice,
-            DeiTForQuestionAnswering,
-            DeiTForSequenceClassification,
-            DeiTForTokenClassification,
-            DeiTLayer,
+            DeiTForImageClassification,
             DeiTModel,
             DeiTPreTrainedModel,
-            load_tf_weights_in_deit,
         )
 
         # Benchmarks
