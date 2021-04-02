@@ -1518,30 +1518,29 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.problem_type is not None:
-                if self.problem_type == "single_column_regression":
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1), labels.view(-1))
-                elif self.problem_type == "multi_column_regression":
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1, self.num_labels), labels)
-                elif self.problem_type in ("binary_classification", "multi_class_classification"):
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-                elif self.problem_type in ("multi_label_classification"):
-                    loss_fct = BCEWithLogitsLoss()
-                    loss = loss_fct(logits, labels)
-                else:
-                    raise Exception("Problem type not understood")
-            else:
+            if self.problem_type is None:
                 if self.num_labels == 1:
-                    #  We are doing regression
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1), labels.view(-1))
+                    self.problem_type = "regression"
+                elif self.num_labels > 1 and type(labels) == torch.long:
+                    self.problem_type = "single_label_classification"
                 else:
-                    loss_fct = CrossEntropyLoss()
-                    loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                    self.problem_type = "multi_label_classification"
 
+            if self.problem_type == "regression":
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels)
+            elif self.problem_type in ("single_label_classification"):
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.problem_type in ("multi_label_classification"):
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+            else:
+                raise ValueError(
+                    f"""The config parameter `problem_type` not understood:
+                    received {self.problem_type} but only [regression, single_label_classification
+                    and multi_label_classification] are valid."""
+                )
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
