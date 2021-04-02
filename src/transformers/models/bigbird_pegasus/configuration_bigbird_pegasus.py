@@ -98,19 +98,19 @@ class BigBirdPegasusConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     def __init__(
         self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
+        vocab_size=96103,
+        max_position_embeddings=4096,
+        encoder_layers=16,
         encoder_ffn_dim=4096,
         encoder_attention_heads=16,
-        decoder_layers=12,
+        decoder_layers=16,
         decoder_ffn_dim=4096,
         decoder_attention_heads=16,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         use_cache=True,
         is_encoder_decoder=True,
-        activation_function="gelu",
+        activation_function="gelu_fast",
         d_model=1024,
         dropout=0.1,
         attention_dropout=0.0,
@@ -123,6 +123,10 @@ class BigBirdPegasusConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        attention_type='block_sparse', # only for encoder
+        block_size=64,
+        num_random_blocks=3,
+        use_bias=True,
         **kwargs
     ):
         super().__init__(
@@ -156,7 +160,12 @@ class BigBirdPegasusConfig(PretrainedConfig):
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
-        
+        # extra config
+        self.attention_type = attention_type
+        self.block_size = block_size
+        self.num_random_blocks = num_random_blocks
+        self.use_bias = use_bias
+
     @property
     def num_attention_heads(self) -> int:
         return self.encoder_attention_heads
