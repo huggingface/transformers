@@ -13,7 +13,7 @@
 Utilities for Generation
 -----------------------------------------------------------------------------------------------------------------------
 
-This page lists all the utility functions used by :meth:`~transformers.PreTrainedModel.generate`,
+This page lists all the utility functions used by :meth:`~transformers.generation_utils.GenerationMixin.generate`,
 :meth:`~transformers.PreTrainedModel.greedy_search`, :meth:`~transformers.PreTrainedModel.sample`,
 :meth:`~transformers.PreTrainedModel.beam_search`, :meth:`~transformers.PreTrainedModel.beam_sample`, and
 :meth:`~transformers.PreTrainedModel.group_beam_search`.
@@ -23,9 +23,9 @@ Most of those are only useful if you are studying the code of the generate metho
 Generate Outputs
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The output of :meth:`~transformers.PreTrainedModel.generate` is an instance of a subclass of
+The output of :meth:`~transformers.generation_utils.GenerationMixin.generate` is an instance of a subclass of
 :class:`~transformers.file_utils.ModelOutput`. This output is a data structure containing all the information returned
-by :meth:`~transformers.PreTrainedModel.generate`, but that can also be used as tuple or dictionary.
+by :meth:`~transformers.generation_utils.GenerationMixin.generate`, but that can also be used as tuple or dictionary.
 
 Here's an example:
 
