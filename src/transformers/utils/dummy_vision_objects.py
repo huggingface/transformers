@@ -10,3 +10,8 @@ class ImageFeatureExtractionMixin:
 class ViTFeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
+
+
+class DeiTFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
