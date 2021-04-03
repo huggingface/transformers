@@ -36,9 +36,9 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_mean (:obj:`int`, defaults to :obj:`(0.485, 0.456, 0.406)`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_std (:obj:`int`, defaults to :obj:`(0.229, 0.224, 0.225)`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
@@ -119,7 +119,7 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size) for image in images]
+            images = [self.resize(image=image, size=self.size, resample=Image.BICUBIC) for image in images]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 

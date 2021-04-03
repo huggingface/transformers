@@ -36,9 +36,9 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_mean (:obj:`int`, defaults to :obj:`(0.5, 0.5, 0.5)`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_std (:obj:`int`, defaults to :obj:`(0.5, 0.5, 0.5)`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
