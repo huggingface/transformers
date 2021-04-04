@@ -25,6 +25,7 @@ import os
 import random
 
 import datasets
+import numpy as np
 import torch
 from datasets import load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
@@ -33,7 +34,6 @@ from tqdm.auto import tqdm
 import transformers
 from accelerate import Accelerator
 from transformers import (
-    MODEL_MAPPING,
     AdamW,
     DataCollatorWithPadding,
     EvalPrediction,
@@ -54,9 +54,6 @@ check_min_version("4.5.0.dev0")
 
 
 logger = logging.getLogger(__name__)
-# You should update this to your particular problem to have better documentation of `model_type`
-MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
@@ -108,23 +105,6 @@ def parse_args():
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
         required=True,
-    )
-    parser.add_argument(
-        "--config_name",
-        type=str,
-        default=None,
-        help="Pretrained config name or path if not the same as model_name",
-    )
-    parser.add_argument(
-        "--tokenizer_name",
-        type=str,
-        default=None,
-        help="Pretrained tokenizer name or path if not the same as model_name",
-    )
-    parser.add_argument(
-        "--use_slow_tokenizer",
-        action="store_true",
-        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -226,13 +206,6 @@ def parse_args():
         default=None,
         help="For debugging purposes or quicker training, truncate the number of test examples to this",
     )
-    parser.add_argument(
-        "--model_type",
-        type=str,
-        default=None,
-        help="Model type to use if training from scratch.",
-        choices=MODEL_TYPES,
-    )
 
     args = parser.parse_args()
 
@@ -308,14 +281,11 @@ def main():
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
 
-    config = XLNetConfig.from_pretrained(args.config_name if args.config_name else args.model_name_or_path)
-    tokenizer = XLNetTokenizerFast.from_pretrained(
-        args.tokenizer_name if args.tokenizer_name else args.model_name_or_path
-    )
+    config = XLNetConfig.from_pretrained(args.model_name_or_path)
+    tokenizer = XLNetTokenizerFast.from_pretrained(args.model_name_or_path)
     model = XLNetForQuestionAnswering.from_pretrained(
         args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path), config=config
     )
-
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
@@ -582,11 +552,15 @@ def main():
 
     if args.do_eval:
         eval_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
-        eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=len(eval_dataset))
+        eval_dataloader = DataLoader(
+            eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+        )
 
     if args.do_predict:
         test_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
-        test_dataloader = DataLoader(test_dataset, collate_fn=data_collator, batch_size=len(test_dataset))
+        test_dataloader = DataLoader(
+            test_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+        )
 
     # Post-processing:
     def post_processing_function(examples, features, predictions, stage="eval"):
@@ -619,6 +593,33 @@ def main():
 
     def compute_metrics(p: EvalPrediction):
         return metric.compute(predictions=p.predictions, references=p.label_ids)
+
+    def create_and_fill_np_array(start_or_end_logits, dataset, max_len):
+        """
+        Create and fill numpy array of size len_of_validation_data * max_length_of_output_tensor
+
+        Args:
+            start_or_end_logits(:obj:`tensor`):
+                This is the output predictions of the model. We can only enter either start or end logits.
+            eval_dataset: Evaluation dataset
+            max_len(:obj:`int`):
+                The maximum length of the output tensor. ( See the model.eval() part for more details )
+        """
+
+        step_size = 0
+        # create a numpy array and fill it with -100.
+        logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float32)
+        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
+        for i, output_logit in enumerate(start_or_end_logits):  # populate columns
+            # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
+            # And after every iteration we have to change the step_size
+
+            batch_size = output_logit.shape[0]
+            cols = output_logit.shape[1]
+            logits_concat[step_size : step_size + batch_size, :cols] = output_logit
+            step_size = batch_size
+
+        return logits_concat
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
@@ -690,34 +691,112 @@ def main():
                 break
 
     if args.do_eval:
-        with torch.no_grad():
-            for step, batch in enumerate(eval_dataloader):
+        # intialize all lists to collect the batches
+
+        all_start_top_log_probs = []
+        all_start_top_index = []
+        all_end_top_log_probs = []
+        all_end_top_index = []
+        all_cls_logits = []
+        for step, batch in enumerate(eval_dataloader):
+            with torch.no_grad():
                 outputs = model(**batch)
-                eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
-                start_top_log_probs = outputs.start_top_log_probs.cpu().numpy()
-                start_top_index = outputs.start_top_index.cpu().numpy()
-                end_top_log_probs = outputs.end_top_log_probs.cpu().numpy()
-                end_top_index = outputs.end_top_index.cpu().numpy()
-                cls_logits = outputs.cls_logits.cpu().numpy()
-                outputs_numpy = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
-                predictions = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
-                eval_metric = compute_metrics(predictions)
-                logger.info(f"Evaluation metrics: {eval_metric}")
+                start_top_log_probs = outputs.start_top_log_probs
+                start_top_index = outputs.start_top_index
+                end_top_log_probs = outputs.end_top_log_probs
+                end_top_index = outputs.end_top_index
+                cls_logits = outputs.cls_logits
+
+                if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                    start_top_log_probs = accelerator.pad_across_processes(start_top_log_probs, dim=1, pad_index=-100)
+                    start_top_index = accelerator.pad_across_processes(start_top_index, dim=1, pad_index=-100)
+                    end_top_log_probs = accelerator.pad_across_processes(end_top_log_probs, dim=1, pad_index=-100)
+                    end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
+
+                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs.cpu().numpy()))
+                all_start_top_index.append(accelerator.gather(start_top_index.cpu().numpy()))
+                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs.cpu().numpy()))
+                all_end_top_index.append(accelerator.gather(end_top_index.cpu().numpy()))
+                all_cls_logits.append(accelerator.gather(cls_logits.cpu().numpy()))
+
+        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+
+        # concatenate all numpy arrays collected above
+        start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
+        start_top_index_concat = create_and_fill_np_array(all_start_top_index, eval_dataset, max_len)
+        end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, eval_dataset, max_len)
+        end_top_index_concat = create_and_fill_np_array(all_end_top_index, eval_dataset, max_len)
+
+        del start_top_log_probs
+        del start_top_index
+        del end_top_log_probs
+        del end_top_index
+
+        eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
+        outputs_numpy = (
+            start_top_log_probs_concat,
+            start_top_index_concat,
+            end_top_log_probs_concat,
+            end_top_index_concat,
+            cls_logits,
+        )
+        predictions = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+        eval_metric = compute_metrics(predictions)
+        logger.info(f"Test metrics: {eval_metric}")
 
     if args.do_predict:
-        with torch.no_grad():
-            for step, batch in enumerate(test_dataloader):
+        # intialize all lists to collect the batches
+
+        all_start_top_log_probs = []
+        all_start_top_index = []
+        all_end_top_log_probs = []
+        all_end_top_index = []
+        all_cls_logits = []
+        for step, batch in enumerate(test_dataloader):
+            with torch.no_grad():
                 outputs = model(**batch)
-                test_dataset.set_format(type=None, columns=list(test_dataset.features.keys()))
-                start_top_log_probs = outputs.start_top_log_probs.cpu().numpy()
-                start_top_index = outputs.start_top_index.cpu().numpy()
-                end_top_log_probs = outputs.end_top_log_probs.cpu().numpy()
-                end_top_index = outputs.end_top_index.cpu().numpy()
-                cls_logits = outputs.cls_logits.cpu().numpy()
-                outputs_numpy = (start_top_log_probs, start_top_index, end_top_log_probs, end_top_index, cls_logits)
-                predictions = post_processing_function(test_examples, test_dataset, outputs_numpy)
-                eval_metric = compute_metrics(predictions)
-                logger.info(f"Test Evaluation Metrics: {eval_metric}")
+                start_top_log_probs = outputs.start_top_log_probs
+                start_top_index = outputs.start_top_index
+                end_top_log_probs = outputs.end_top_log_probs
+                end_top_index = outputs.end_top_index
+                cls_logits = outputs.cls_logits
+
+                if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                    start_top_log_probs = accelerator.pad_across_processes(start_top_log_probs, dim=1, pad_index=-100)
+                    start_top_index = accelerator.pad_across_processes(start_top_index, dim=1, pad_index=-100)
+                    end_top_log_probs = accelerator.pad_across_processes(end_top_log_probs, dim=1, pad_index=-100)
+                    end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
+
+                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs.cpu().numpy()))
+                all_start_top_index.append(accelerator.gather(start_top_index.cpu().numpy()))
+                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs.cpu().numpy()))
+                all_end_top_index.append(accelerator.gather(end_top_index.cpu().numpy()))
+                all_cls_logits.append(accelerator.gather(cls_logits.cpu().numpy()))
+
+        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+
+        # concatenate all numpy arrays collected above
+        start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, test_dataset, max_len)
+        start_top_index_concat = create_and_fill_np_array(all_start_top_index, test_dataset, max_len)
+        end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, test_dataset, max_len)
+        end_top_index_concat = create_and_fill_np_array(all_end_top_index, test_dataset, max_len)
+
+        del start_top_log_probs
+        del start_top_index
+        del end_top_log_probs
+        del end_top_index
+
+        test_dataset.set_format(type=None, columns=list(test_dataset.features.keys()))
+        outputs_numpy = (
+            start_top_log_probs_concat,
+            start_top_index_concat,
+            end_top_log_probs_concat,
+            end_top_index_concat,
+            cls_logits,
+        )
+        predictions = post_processing_function(test_examples, test_dataset, outputs_numpy)
+        test_metric = compute_metrics(predictions)
+        logger.info(f"Test metrics: {test_metric}")
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
