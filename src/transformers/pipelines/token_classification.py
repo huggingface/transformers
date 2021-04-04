@@ -214,7 +214,7 @@ class TokenClassificationPipeline(Pipeline):
                 entities += [entity]
 
             if self.subword_label_re_alignment:
-                self.set_subwords_label(entities)
+                entities = self.set_subwords_label(entities)
             else:
                 for entity in entities:
                     label_idx = entity["score"].argmax()
@@ -265,10 +265,6 @@ class TokenClassificationPipeline(Pipeline):
                     sub["entity"] = label
                     sub["score"] = score[idx][max_label_idx].item()
 
-            if self.ignore_subwords:
-                sub_words[0]["word"] += "".join([sub["word"].split("##")[1] for sub in sub_words[1:]])
-                return [sub_words[0]]
-
             return sub_words
 
         subword_indices = np.where([entity["is_subword"] for entity in entities])[0]
@@ -294,7 +290,11 @@ class TokenClassificationPipeline(Pipeline):
         entities_with_label = []
         for word_idx in word_indices:
             subwords = [entities[idx] for idx in word_idx]
-            entities_with_label += set_labels(subwords)
+            subwords = set_labels(subwords)
+            if self.ignore_subwords and len(subwords) > 1:
+                subwords[0]["word"] += "".join([sub["word"].split("##")[1] for sub in subwords[1:]])
+                subwords = [subwords[0]]
+            entities_with_label += subwords
 
         return entities_with_label
 
