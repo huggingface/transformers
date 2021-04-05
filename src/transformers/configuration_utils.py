@@ -152,8 +152,8 @@ class PretrainedConfig(object):
           typically for a classification task.
         - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for the
           current task.
-        - **problem_type** (:obj:`str`, `optional`) -- Problem type for ForSequenceClassification tasks. It can be one
-          of (None, "regression", "single_label_classification", "multi_label_classification"). Default is None.
+        - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can be one
+          of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
 
     Parameters linked to the tokenizer
 
