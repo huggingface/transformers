@@ -16,15 +16,13 @@ import sys
 
 import numpy
 
-
-# The package importlib_metadata is in a different place, depending on the python version.
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
-
 from transformers.testing_utils import TestCasePlus
-from transformers.utils.versions import require_version, require_version_core, require_version_examples
+from transformers.utils.versions import (
+    importlib_metadata,
+    require_version,
+    require_version_core,
+    require_version_examples,
+)
 
 
 numpy_ver = numpy.__version__
