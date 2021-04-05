@@ -41,6 +41,12 @@ _import_structure = {
     "configuration_mt5": ["MT5Config"],
 }
 
+if is_sentencepiece_available():
+    _import_structure["."] = ["T5Tokenizer"]  # Fake to get the same objects in both side.
+
+if is_tokenizers_available():
+    _import_structure["."] = ["T5TokenizerFast"]  # Fake to get the same objects in both side.
+
 if is_torch_available():
     _import_structure["modeling_mt5"] = ["MT5EncoderModel", "MT5ForConditionalGeneration", "MT5Model"]
 

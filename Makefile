@@ -31,6 +31,7 @@ extra_quality_checks:
 	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
+	python utils/check_inits.py
 
 # this target runs checks on all files
 quality:
