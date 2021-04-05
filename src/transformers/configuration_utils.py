@@ -34,18 +34,29 @@ class PretrainedConfig(object):
     Base class for all configuration classes. Handles a few parameters common to all models' configurations as well as
     methods for loading/downloading/saving configurations.
 
-    Note: A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
-    initialize a model does **not** load the model weights. It only affects the model's configuration.
+    Note:
+        A configuration file can be loaded and saved to disk. Loading the configuration file and using this file to
+        initialize a model does **not** load the model weights. It only affects the model's configuration.
 
     Class attributes (overridden by derived classes)
 
-        - **model_type** (:obj:`str`): An identifier for the model type, serialized into the JSON file, and used to
+        - **model_type** (:obj:`str`) -- An identifier for the model type, serialized into the JSON file, and used to
           recreate the correct object in :class:`~transformers.AutoConfig`.
-        - **is_composition** (:obj:`bool`): Whether the config class is composed of multiple sub-configs. In this case
-          the config has to be initialized from two or more configs of type :class:`~transformers.PretrainedConfig`
-          like: :class:`~transformers.EncoderDecoderConfig` or :class:`~RagConfig`.
-        - **keys_to_ignore_at_inference** (:obj:`List[str]`): A list of keys to ignore by default when looking at
+        - **is_composition** (:obj:`bool`) -- Whether the config class is composed of multiple sub-configs. In this
+          case the config has to be initialized from two or more configs of type
+          :class:`~transformers.PretrainedConfig` like: :class:`~transformers.EncoderDecoderConfig` or
+          :class:`~RagConfig`.
+        - **keys_to_ignore_at_inference** (:obj:`List[str]`) -- A list of keys to ignore by default when looking at
           dictionary outputs of the model during inference.
+
+    Common attributes (present in all subclasses)
+
+        - **vocab_size** (:obj:`int`) -- The number of tokens in the vocabulary, which is also the first dimension of
+          the embeddings matrix (this attribute may be missing for models that don't have a text modality like ViT).
+        - **hidden_size** (:obj:`int`) -- The hidden size of the model.
+        - **num_attention_heads** (:obj:`int`) -- The number of attention heads used in the multi-head attention layers
+          of the model.
+        - **num_hidden_layers** (:obj:`int`) -- The number of blocks in the model.
 
     Args:
         name_or_path (:obj:`str`, `optional`, defaults to :obj:`""`):
