@@ -1,9 +1,9 @@
-Using tokenizers from 🤗 tokenizers
+Using tokenizers from 🤗 Tokenizers
 =======================================================================================================================
 
 The :class:`~transformers.PreTrainedTokenizerFast` depends on the `tokenizers
-<https://huggingface.co/docs/tokenizers>`__ library. The tokenizers obtained from the 🤗 tokenizers library can be
-loaded very simply into 🤗 transformers.
+<https://huggingface.co/docs/tokenizers>`__ library. The tokenizers obtained from the 🤗 Tokenizers library can be
+loaded very simply into 🤗 Transformers.
 
 Before getting in the specifics, let's first start by creating a dummy tokenizer in a few lines:
 
@@ -27,7 +27,7 @@ a JSON file for future re-use.
 Loading directly from the tokenizer object
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Let's see how to leverage this tokenizer object in the 🤗 transformers library. The
+Let's see how to leverage this tokenizer object in the 🤗 Transformers library. The
 :class:`~transformers.PreTrainedTokenizerFast` class allows for easy instantiation, by accepting the instantiated
 `tokenizer` object as an argument:
 
@@ -37,8 +37,8 @@ Let's see how to leverage this tokenizer object in the 🤗 transformers library
 
     >>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
 
-This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to `the tokenizer page
-<main_classes/tokenizer.html>`__ for more information.
+This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to :doc:`the tokenizer page
+<main_classes/tokenizer>` for more information.
 
 Loading from a JSON file
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -58,5 +58,5 @@ method using the :obj:`tokenizer_file` parameter:
 
     >>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
 
-This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to `the tokenizer page
-<main_classes/tokenizer.html>`__ for more information.
+This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to :doc:`the tokenizer page
+<main_classes/tokenizer>` for more information.

@@ -56,8 +56,8 @@ ADDED_TOKENS_FILE = "added_tokens.json"
 
 INIT_TOKENIZER_DOCSTRING += """
         tokenizer_object (:class:`tokenizers.Tokenizer`):
-            A :class:`tokenizers.Tokenizer` object from 🤗 tokenizers to instantiate from. See `Using tokenizers from 🤗
-            tokenizers <../fast_tokenizers.html>`__ for more information.
+            A :class:`tokenizers.Tokenizer` object from 🤗 tokenizers to instantiate from. See :doc:`Using tokenizers from 🤗
+            tokenizers <../fast_tokenizers>` for more information.
 """
 
 
