@@ -198,6 +198,26 @@ class TopPLogitsWarper:
         requires_pytorch(self)
 
 
+class MaxLengthCriteria:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class MaxTimeCriteria:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class StoppingCriteria:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class StoppingCriteriaList:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 def top_k_top_p_filtering(*args, **kwargs):
     requires_pytorch(top_k_top_p_filtering)
 
@@ -1531,6 +1551,15 @@ class IBertForTokenClassification:
 
 
 class IBertModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class IBertPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
 

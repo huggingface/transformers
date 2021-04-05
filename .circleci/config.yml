@@ -405,6 +405,7 @@ jobs:
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
+            - run: python utils/check_inits.py
 
     check_repository_consistency:
         working_directory: ~/transformers
