@@ -48,5 +48,5 @@ class CpmTokenizer(XLNetTokenizer):
 
     def _decode(self, *args, **kwargs):
         text = super()._decode(*args, **kwargs)
-        text = text.replace(' ', '').replace('\u2582', ' ').replace('\u2583', '\n')
+        text = text.replace(" ", "").replace("\u2582", " ").replace("\u2583", "\n")
         return text
