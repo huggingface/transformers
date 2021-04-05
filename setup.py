@@ -89,6 +89,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
+    "docutils==0.16.0",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -241,7 +242,9 @@ extras["testing"] = (
     + extras["retrieval"]
     + extras["modelcreation"]
 )
-extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
+extras["docs"] = deps_list(
+    "docutils", "recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton"
+)
 extras["quality"] = deps_list("black", "isort", "flake8")
 
 extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"] + extras["speech"] + extras["vision"]
