@@ -276,11 +276,8 @@ def nested_new_like(arrays, num_samples, padding_index=-100):
     return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
 
 
-def nested_expand_like(arrays, new_seq_length, padding_index=-100):
+def expand_like(arrays, new_seq_length, padding_index=-100):
     """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
-    if isinstance(arrays, (list, tuple)):
-        return type(arrays)(nested_expand_like(x, new_seq_length, padding_index=padding_index) for x in arrays)
-
     result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result
@@ -291,13 +288,6 @@ def nested_truncate(tensors, limit):
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_truncate(t, limit) for t in tensors)
     return tensors[:limit]
-
-
-def _get_first_shape(arrays):
-    """Return the shape of the first array found in the nested struct `arrays`."""
-    if isinstance(arrays, (list, tuple)):
-        return _get_first_shape(arrays[0])
-    return arrays.shape
 
 
 class DistributedTensorGatherer:
@@ -367,21 +357,15 @@ class DistributedTensorGatherer:
         if self._storage is None:
             self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
             self._offsets = list(range(0, self.total_samples, self.process_length))
-        else:
-            storage_shape = _get_first_shape(self._storage)
-            arrays_shape = _get_first_shape(arrays)
-            if len(storage_shape) > 1 and storage_shape[1] < arrays_shape[1]:
-                # If we get new arrays that are too big too fit, we expand the shape fo the storage
-                self._storage = nested_expand_like(self._storage, arrays_shape[1], padding_index=self.padding_index)
-        slice_len = self._nested_set_tensors(self._storage, arrays)
+
+        slice_len, self._storage = self._nested_set_tensors(self._storage, arrays)
         for i in range(self.world_size):
             self._offsets[i] += slice_len
 
     def _nested_set_tensors(self, storage, arrays):
         if isinstance(arrays, (list, tuple)):
-            for x, y in zip(storage, arrays):
-                slice_len = self._nested_set_tensors(x, y)
-            return slice_len
+            result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
+            return result[0][0], type(arrays)(r[1] for r in result)
         assert (
             arrays.shape[0] % self.world_size == 0
         ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
@@ -391,10 +375,13 @@ class DistributedTensorGatherer:
             if len(arrays.shape) == 1:
                 storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
             else:
+                # Expand the array on the fly if needed.
+                if len(storage.shape) > 1 and storage.shape[1] < arrays.shape[1]:
+                    storage = expand_like(storage, arrays.shape[1], padding_index=self.padding_index)
                 storage[self._offsets[i] : self._offsets[i] + slice_len, : arrays.shape[1]] = arrays[
                     i * slice_len : (i + 1) * slice_len
                 ]
-        return slice_len
+        return slice_len, storage
 
     def finalize(self):
         """
