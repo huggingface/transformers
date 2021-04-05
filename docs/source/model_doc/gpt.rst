@@ -50,7 +50,7 @@ The original code can be found `here <https://github.com/openai/finetune-transfo
 Note:
 
 If you want to reproduce the original tokenization process of the `OpenAI GPT` paper, you will need to install ``ftfy``
-and ``SpaCy``::
+and ``SpaCy``:
 
 .. code-block:: bash
 
