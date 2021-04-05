@@ -474,7 +474,7 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     :class:`transformers.LogitsProcessor` that enforces diverse beam search. Note that this logits processor is only
-    effective for :meth:`transformers.PretrainedModel.group_beam_search`. See `Diverse Beam Search: Decoding Diverse
+    effective for :meth:`transformers.PreTrainedModel.group_beam_search`. See `Diverse Beam Search: Decoding Diverse
     Solutions from Neural Sequence Models <https://arxiv.org/pdf/1610.02424.pdf>`__ for more details.
 
     Args:

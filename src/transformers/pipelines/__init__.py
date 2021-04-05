@@ -351,7 +351,7 @@ def pipeline(
             # Impossible to guest what is the right tokenizer here
             raise Exception(
                 "Impossible to guess which tokenizer to use. "
-                "Please provided a PretrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
             )
 
     modelcard = None

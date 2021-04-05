@@ -1141,8 +1141,8 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     @staticmethod
     def _reorder_cache(mems: List[torch.Tensor], beam_idx: torch.Tensor) -> List[torch.Tensor]:
         """
-        This function is used to re-order the :obj:`mems` cache if :meth:`~transformers.PretrainedModel.beam_search` or
-        :meth:`~transformers.PretrainedModel.beam_sample` is called. This is required to match :obj:`mems` with the
+        This function is used to re-order the :obj:`mems` cache if :meth:`~transformers.PreTrainedModel.beam_search` or
+        :meth:`~transformers.PreTrainedModel.beam_sample` is called. This is required to match :obj:`mems` with the
         correct beam_idx at every generation step.
         """
         return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]

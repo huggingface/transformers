@@ -951,7 +951,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel):
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the :obj:`past_key_values` cache if
-        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
+        :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
         called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
         """
         return tuple(
@@ -1157,7 +1157,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
     def _reorder_cache(past: Tuple[Tuple[torch.Tensor]], beam_idx: torch.Tensor) -> Tuple[Tuple[torch.Tensor]]:
         """
         This function is used to re-order the :obj:`past_key_values` cache if
-        :meth:`~transformers.PretrainedModel.beam_search` or :meth:`~transformers.PretrainedModel.beam_sample` is
+        :meth:`~transformers.PreTrainedModel.beam_search` or :meth:`~transformers.PreTrainedModel.beam_sample` is
         called. This is required to match :obj:`past_key_values` with the correct beam_idx at every generation step.
         """
         return tuple(
