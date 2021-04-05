@@ -160,7 +160,7 @@ class LukeTokenizer(RobertaTokenizer):
 
         self.max_mention_length = max_mention_length
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, List[TextInput]],
@@ -198,21 +198,21 @@ class LukeTokenizer(RobertaTokenizer):
             text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized string.
-            entities (:obj:`List[str]`, obj:`List[List[str]]`, `optional`):
+            entities (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
                 York). This argument is ignored if you specify the `task` argument in the constructor.
-            entities_pair (:obj:`List[str]`, obj:`List[List[str]]`, `optional`):
+            entities_pair (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
                 York). This argument is ignored if you specify the `task` argument in the constructor.
-            entity_spans (:obj:`List[Tuple]`, obj:`List[List[Tuple]]`, `optional`):
+            entity_spans (:obj:`List[Tuple]`, :obj:`List[List[Tuple]]`, `optional`):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting start and end positions of entities. If you specify `entity_classification`
                 or `entity_pair_classification` as the `task` argument in the constructor, the length of each sequence
                 must be 1 or 2, respectively. If you specify `entities`, the length of each sequence must be equal to
                 each sequence of `entities`.
-            entity_spans_pair (:obj:`List[Tuple]`, obj:`List[List[Tuple]]`, `optional`):
+            entity_spans_pair (:obj:`List[Tuple]`, :obj:`List[List[Tuple]]`, `optional`):
                 The sequence or batch of sequences of entity spans to be encoded. Each sequence consists of tuples each
                 with two integers denoting start and end positions of entities. If you specify the `task` argument in
                 the constructor, this argument is ignored. If you specify `entities_pair`, the length of each sequence
