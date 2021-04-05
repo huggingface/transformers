@@ -173,3 +173,14 @@ class BigBirdPegasusConfig(PretrainedConfig):
     @property
     def hidden_size(self) -> int:
         return self.d_model
+
+    def attention__probs_dropout_prob(self) -> float:
+        return self.attention_dropout
+
+# tie_word_embeddings = True
+# tie_encoder_decoder = True
+
+
+# num_attention_heads
+# hidden_size
+# 
