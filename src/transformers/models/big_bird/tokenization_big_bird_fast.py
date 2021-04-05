@@ -67,12 +67,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
         vocab_file (:obj:`str`):
             `SentencePiece <https://github.com/google/sentencepiece>`__ file (generally has a `.spm` extension) that
             contains the vocabulary necessary to instantiate a tokenizer.
-        do_lower_case (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to lowercase the input when tokenizing.
-        remove_space (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to strip the text when tokenizing (removing excess spaces before and after the string).
-        keep_accents (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to keep accents when tokenizing.
         bos_token (:obj:`str`, `optional`, defaults to :obj:`"[CLS]"`):
             The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
 
@@ -141,9 +135,6 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
-        self.do_lower_case = do_lower_case
-        self.remove_space = remove_space
-        self.keep_accents = keep_accents
         self.vocab_file = vocab_file
 
     def build_inputs_with_special_tokens(
