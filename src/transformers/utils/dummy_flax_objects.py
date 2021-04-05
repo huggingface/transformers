@@ -11,9 +11,6 @@ class FlaxPreTrainedModel:
         requires_flax(self)
 
 
-FLAX_MODEL_FOR_CAUSAL_LM_MAPPING = None
-
-
 FLAX_MODEL_FOR_MASKED_LM_MAPPING = None
 
 
@@ -39,15 +36,6 @@ FLAX_MODEL_MAPPING = None
 
 
 class FlaxAutoModel:
-    def __init__(self, *args, **kwargs):
-        requires_flax(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_flax(self)
-
-
-class FlaxAutoModelForCausalLM:
     def __init__(self, *args, **kwargs):
         requires_flax(self)
 
