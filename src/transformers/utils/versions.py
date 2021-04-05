@@ -22,7 +22,12 @@ from typing import Optional
 
 from packaging import version
 
-import pkg_resources
+
+# The package importlib_metadata is in a different place, depending on the python version.
+if sys.version_info < (3, 8):
+    import importlib_metadata
+else:
+    import importlib.metadata as importlib_metadata
 
 
 ops = {
@@ -39,7 +44,7 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
     """
     Perform a runtime check of the dependency versions, using the exact same syntax used by pip.
 
-    The installed module version comes from the `site-packages` dir via `pkg_resources`.
+    The installed module version comes from the `site-packages` dir via `importlib_metadata`.
 
     Args:
         requirement (:obj:`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
@@ -70,20 +75,22 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
     if pkg == "python":
         got_ver = ".".join([str(x) for x in sys.version_info[:3]])
         if not ops[op](version.parse(got_ver), version.parse(want_ver)):
-            raise pkg_resources.VersionConflict(
+            raise ImportError(
                 f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}."
             )
         return
 
     # check if any version is installed
     try:
-        got_ver = pkg_resources.get_distribution(pkg).version
-    except pkg_resources.DistributionNotFound:
-        raise pkg_resources.DistributionNotFound(requirement, ["this application", hint])
+        got_ver = importlib_metadata.version(pkg)
+    except importlib_metadata.PackageNotFoundError:
+        raise importlib_metadata.PackageNotFoundError(
+            f"The '{requirement}' distribution was not found and is required by this application. {hint}"
+        )
 
     # check that the right version is installed if version number was provided
     if want_ver is not None and not ops[op](version.parse(got_ver), version.parse(want_ver)):
-        raise pkg_resources.VersionConflict(
+        raise ImportError(
             f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}.{hint}"
         )
 
