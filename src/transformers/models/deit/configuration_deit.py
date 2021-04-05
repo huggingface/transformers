@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/deit-base-patch16-224": "https://huggingface.co/facebook/deit-base-patch16-224/resolve/main/config.json",
+    "facebook/deit-base-distilled-patch16-224": "https://huggingface.co/facebook/deit-base-patch16-224/resolve/main/config.json",
     # See all DeiT models at https://huggingface.co/models?filter=deit
 }
 
@@ -30,8 +30,9 @@ class DeiTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a :class:`~transformers.DeiTModel`. It is used to
     instantiate an DeiT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the DeiT `google/deit-base-patch16-224
-    <https://huggingface.co/google/deit-base-patch16-224>`__ architecture.
+    configuration with the defaults will yield a similar configuration to that of the DeiT
+    `facebook/deit-base-distilled-patch16-224 <https://huggingface.co/facebook/deit-base-distilled-patch16-2244>`__
+    architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
@@ -71,10 +72,10 @@ class DeiTConfig(PretrainedConfig):
 
         >>> from transformers import DeiTModel, DeiTConfig
 
-        >>> # Initializing a DeiT deit-base-patch16-224 style configuration
+        >>> # Initializing a DeiT deit-base-distilled-patch16-224 style configuration
         >>> configuration = DeiTConfig()
 
-        >>> # Initializing a model from the deit-base-patch16-224 style configuration
+        >>> # Initializing a model from the deit-base-distilled-patch16-224 style configuration
         >>> model = DeiTModel(configuration)
 
         >>> # Accessing the model configuration

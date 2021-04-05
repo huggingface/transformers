@@ -17,7 +17,6 @@
 # limitations under the License.
 
 from . import (
-    deit,
     albert,
     auto,
     bart,
@@ -34,6 +33,7 @@ from . import (
     cpm,
     ctrl,
     deberta,
+    deit,
     dialogpt,
     distilbert,
     dpr,

@@ -95,6 +95,9 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2ForTokenClassification,
     DebertaV2Model,
 )
+
+# Add modeling imports here
+from ..deit.modeling_deit import DeiTForImageClassification, DeiTModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -134,9 +137,6 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
-
-# Add modeling imports here
-from ..deit.modeling_deit import DeiTForImageClassification, DeiTModel
 from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoModel
 from ..ibert.modeling_ibert import (
     IBertForMaskedLM,
@@ -282,7 +282,6 @@ from ..xlnet.modeling_xlnet import (
 )
 from .auto_factory import auto_class_factory
 from .configuration_auto import (
-    DeiTConfig,
     AlbertConfig,
     BartConfig,
     BertConfig,
@@ -295,6 +294,7 @@ from .configuration_auto import (
     CTRLConfig,
     DebertaConfig,
     DebertaV2Config,
+    DeiTConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,

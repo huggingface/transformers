@@ -23,7 +23,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import DeiTConfig, DeiTFeatureExtractor, DeiTForImageClassification, DeiTModel
+from transformers import DeiTConfig, DeiTFeatureExtractor, DeiTForImageClassification
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 

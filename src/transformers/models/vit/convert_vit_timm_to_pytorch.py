@@ -23,8 +23,7 @@ from PIL import Image
 
 import requests
 import timm
-from timm.data.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
-from transformers import ViTConfig, ViTFeatureExtractor, DeiTFeatureExtractor, ViTForImageClassification, ViTModel
+from transformers import DeiTFeatureExtractor, ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 
@@ -163,7 +162,7 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
             config.intermediate_size = 1536
             config.num_hidden_layers = 12
             config.num_attention_heads = 6
-        else: 
+        else:
             pass
     else:
         if vit_name[4:].startswith("small"):

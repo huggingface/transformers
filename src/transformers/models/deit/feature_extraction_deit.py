@@ -21,7 +21,7 @@ from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType
-from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor, IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
 

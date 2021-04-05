@@ -340,7 +340,11 @@ def prepare_img():
 class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224") if is_vision_available() else None
+        return (
+            DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):

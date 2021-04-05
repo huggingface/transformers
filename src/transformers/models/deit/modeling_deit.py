@@ -476,7 +476,7 @@ class DeiTModel(DeiTPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224-in21k')
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
             >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -608,7 +608,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         sequence_output = outputs[0]
 
         logits = self.classifier(sequence_output[:, 0, :])
-        # we don't use the distillation token 
+        # we don't use the distillation token
 
         loss = None
         if labels is not None:
@@ -631,7 +631,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    
+
 @add_start_docstrings(
     """
     DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
@@ -647,8 +647,12 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         self.deit = DeiTModel(config, add_pooling_layer=False)
 
         # Classifier heads
-        self.cls_classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-        self.dist_classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        self.cls_classifier = (
+            nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+        self.dist_classifier = (
+            nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
 
         self.init_weights()
 
@@ -710,7 +714,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
 
         loss = None
         if labels is not None:
-            # TODO add support for fine-tuning with distillation 
+            # TODO add support for fine-tuning with distillation
             # however this relies on a teacher
             raise NotImplementedError("Fine-tuning with distillation is not yet implemented.")
 
@@ -723,4 +727,4 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-        )  
+        )
