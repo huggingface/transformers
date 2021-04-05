@@ -160,7 +160,7 @@ class LukeTokenizer(RobertaTokenizer):
 
         self.max_mention_length = max_mention_length
 
-    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING)
+    @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
         text: Union[TextInput, List[TextInput]],
