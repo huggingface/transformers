@@ -37,8 +37,8 @@ Let's see how to leverage this tokenizer object in the 🤗 Transformers library
 
     >>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
 
-This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to :doc:`the tokenizer page
-<main_classes/tokenizer>` for more information.
+This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to :doc:`the tokenizer
+page <main_classes/tokenizer>` for more information.
 
 Loading from a JSON file
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -58,5 +58,5 @@ method using the :obj:`tokenizer_file` parameter:
 
     >>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
 
-This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to :doc:`the tokenizer page
-<main_classes/tokenizer>` for more information.
+This object can now be used with all the methods shared by the 🤗 Transformers tokenizers! Head to :doc:`the tokenizer
+page <main_classes/tokenizer>` for more information.
