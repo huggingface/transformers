@@ -911,13 +911,12 @@ The following is an example configuration for ZeRO stage 3:
             "cpu_offload_use_pin_memory" : true,
             "overlap_comm": true,
             "contiguous_gradients": true,
+            "reduce_bucket_size": 1e6,
+            "sub_group_size": 1e14,
             "stage3_max_live_parameters": 1e9,
             "stage3_max_reuse_distance": 1e9,
             "stage3_prefetch_bucket_size": 0.94e6,
             "stage3_param_persistence_threshold": 1e4,
-            "reduce_bucket_size": 1e6,
-            "prefetch_bucket_size": 3e6,
-            "sub_group_size": 1e14,
             "stage3_gather_fp16_weights_on_model_save": true
         }
     }
@@ -1053,13 +1052,12 @@ Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
            "cpu_offload_use_pin_memory" : true,
            "overlap_comm": true,
            "contiguous_gradients": true,
+           "reduce_bucket_size": 1e6,
+           "sub_group_size": 1e14,
            "stage3_max_live_parameters": 1e9,
            "stage3_max_reuse_distance": 1e9,
            "stage3_prefetch_bucket_size": 0.94e6,
            "stage3_param_persistence_threshold": 1e4,
-           "reduce_bucket_size": 1e6,
-           "prefetch_bucket_size": 3e6,
-           "sub_group_size": 1e14,
            "stage3_gather_fp16_weights_on_model_save": true
        },
 
