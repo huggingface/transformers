@@ -454,7 +454,7 @@ of tokens.
     >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
     >>> model = AutoModelWithLMHead.from_pretrained("gpt2")
 
-    >>> sequence = f"Hugging Face is based in DUMBO, New York City, and "
+    >>> sequence = f"Hugging Face is based in DUMBO, New York City, and"
 
     >>> input_ids = tokenizer.encode(sequence, return_tensors="pt")
 
