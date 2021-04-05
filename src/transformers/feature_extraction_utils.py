@@ -197,6 +197,16 @@ class FeatureExtractionMixin:
     extractors.
     """
 
+    def __init__(self, **kwargs):
+        """Set elements of `kwargs` as attributes."""
+        # Additional attributes without default values
+        for key, value in kwargs.items():
+            try:
+                setattr(self, key, value)
+            except AttributeError as err:
+                logger.error(f"Can't set {key} with value {value} for {self}")
+                raise err
+
     @classmethod
     def from_pretrained(
         cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
