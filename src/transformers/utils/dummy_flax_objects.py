@@ -11,10 +11,94 @@ class FlaxPreTrainedModel:
         requires_flax(self)
 
 
+FLAX_MODEL_FOR_MASKED_LM_MAPPING = None
+
+
+FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING = None
+
+
+FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = None
+
+
+FLAX_MODEL_FOR_PRETRAINING_MAPPING = None
+
+
+FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING = None
+
+
+FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = None
+
+
+FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
+
+
 FLAX_MODEL_MAPPING = None
 
 
 class FlaxAutoModel:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForMaskedLM:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForMultipleChoice:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForNextSentencePrediction:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForPreTraining:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_flax(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_flax(self)
+
+
+class FlaxAutoModelForTokenClassification:
     def __init__(self, *args, **kwargs):
         requires_flax(self)
 
