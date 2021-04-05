@@ -31,6 +31,7 @@ if is_torch_available():
     _import_structure["modeling_deit"] = [
         "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DeiTForImageClassification",
+        "DeiTForImageClassificationWithTeacher",
         "DeiTModel",
         "DeiTPreTrainedModel",
     ]
@@ -46,6 +47,7 @@ if TYPE_CHECKING:
         from .modeling_deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
+            DeiTForImageClassificationWithTeacher,
             DeiTModel,
             DeiTPreTrainedModel,
         )

@@ -617,6 +617,7 @@ if is_torch_available():
         [
             "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "DeiTForImageClassification",
+            "DeiTForImageClassificationWithTeacher",
             "DeiTModel",
         ]
     )
@@ -1907,6 +1908,7 @@ if TYPE_CHECKING:
         from .models.deit import (
             DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeiTForImageClassification,
+            DeiTForImageClassificationWithTeacher,
             DeiTModel,
             DeiTPreTrainedModel,
         )

@@ -23,7 +23,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import DeiTConfig, DeiTFeatureExtractor, DeiTForImageClassification
+from transformers import DeiTConfig, DeiTFeatureExtractor, DeiTForImageClassificationWithTeacher
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 
@@ -174,7 +174,7 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     read_in_q_k_v(state_dict, config, base_model)
 
     # load HuggingFace model
-    model = DeiTForImageClassification(config).eval()
+    model = DeiTForImageClassificationWithTeacher(config).eval()
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by DeiTFeatureExtractor
