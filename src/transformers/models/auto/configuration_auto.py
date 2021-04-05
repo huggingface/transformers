@@ -256,8 +256,8 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
                 if config in config_to_class
             }
         lines = [
-            f"{indent}- **{model_type}** -- :class:`~transformers.{cls_name}` ({MODEL_NAMES_MAPPING[model_type]} model)"
-            for model_type, cls_name in model_type_to_name.items()
+            f"{indent}- **{model_type}** -- :class:`~transformers.{model_type_to_name[model_type]}` ({MODEL_NAMES_MAPPING[model_type]} model)"
+            for model_type in sorted(model_type_to_name.keys())
         ]
     else:
         config_to_name = {config.__name__: clas.__name__ for config, clas in config_to_class.items()}
@@ -265,8 +265,8 @@ def _list_model_options(indent, config_to_class=None, use_model_types=True):
             config.__name__: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING.items()
         }
         lines = [
-            f"{indent}- :class:`~transformers.{config_name}` configuration class: :class:`~transformers.{cls_name}` ({config_to_model_name[config_name]} model)"
-            for config_name, cls_name in config_to_name.items()
+            f"{indent}- :class:`~transformers.{config_name}` configuration class: :class:`~transformers.{config_to_name[config_name]}` ({config_to_model_name[config_name]} model)"
+            for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)
 
