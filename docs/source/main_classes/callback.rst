@@ -89,7 +89,7 @@ Here is an example of how to register a custom callback with the PyTorch :class:
         args,
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        callbacks=[MyCallback]
+        callbacks=[MyCallback]  # We can either pass the callback class this way or an instance of it (MyCallback())
     )
 
 Another way to register a callback is to call ``trainer.add_callback()`` as follows:
@@ -98,7 +98,8 @@ Another way to register a callback is to call ``trainer.add_callback()`` as foll
 
     trainer = Trainer(...)
     trainer.add_callback(MyCallback)
-
+    # Alternatively, we can pass an instance of the callback class
+    trainer.add_callback(MyCallback())
 
 TrainerState
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
