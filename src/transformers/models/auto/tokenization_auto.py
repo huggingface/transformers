@@ -28,6 +28,7 @@ from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
+from ..cpm.tokenization_cpm import CpmTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
 from ..distilbert.tokenization_distilbert import DistilBertTokenizer
@@ -273,6 +274,7 @@ TOKENIZER_MAPPING = OrderedDict(
 NO_CONFIG_TOKENIZER = [
     BertJapaneseTokenizer,
     BertweetTokenizer,
+    CpmTokenizer,
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
