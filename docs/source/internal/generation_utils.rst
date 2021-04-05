@@ -14,8 +14,10 @@ Utilities for Generation
 -----------------------------------------------------------------------------------------------------------------------
 
 This page lists all the utility functions used by :meth:`~transformers.generation_utils.GenerationMixin.generate`,
-:meth:`~transformers.generation_utils.GenerationMixin.greedy_search`, :meth:`~transformers.generation_utils.GenerationMixin.sample`,
-:meth:`~transformers.generation_utils.GenerationMixin.beam_search`, :meth:`~transformers.generation_utils.GenerationMixin.beam_sample`, and
+:meth:`~transformers.generation_utils.GenerationMixin.greedy_search`,
+:meth:`~transformers.generation_utils.GenerationMixin.sample`,
+:meth:`~transformers.generation_utils.GenerationMixin.beam_search`,
+:meth:`~transformers.generation_utils.GenerationMixin.beam_sample`, and
 :meth:`~transformers.generation_utils.GenerationMixin.group_beam_search`.
 
 Most of those are only useful if you are studying the code of the generate methods in the library.
