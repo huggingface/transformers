@@ -50,10 +50,10 @@ class RagRayDistributedRetriever(RagRetriever):
     Args:
         config (:class:`~transformers.RagConfig`):
             The configuration of the RAG model this Retriever is used with. Contains parameters indicating which ``Index`` to build.
-        question_encoder_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+        question_encoder_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer that was used to tokenize the question.
             It is used to decode the question and then use the generator_tokenizer.
-        generator_tokenizer (:class:`~transformers.PretrainedTokenizer`):
+        generator_tokenizer (:class:`~transformers.PreTrainedTokenizer`):
             The tokenizer used for the generator part of the RagModel.
         retrieval_workers (:obj:`List[ray.ActorClass(RayRetriever)]`): A list of already initialized `RayRetriever` actors.
             These actor classes run on remote processes and are responsible for performing the index lookup.

@@ -1930,7 +1930,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         """
         if not legacy_format:
             raise ValueError(
-                "Only fast tokenizers (instances of PretrainedTokenizerFast) can be saved in non legacy format."
+                "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
             )
 
         save_directory = str(save_directory)
