@@ -62,6 +62,11 @@ PreTrainedTokenizer
 PreTrainedTokenizerFast
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+The :class:`~transformers.PreTrainedTokenizerFast` depend on the `tokenizers
+<https://huggingface.co/docs/tokenizers>`__ library. The tokenizers obtained from the 🤗 tokenizers library can be
+loaded very simply into 🤗 transformers. Take a look at the :doc:`Using tokenizers from 🤗 tokenizers
+<../fast_tokenizers>` page to understand how this is done.
+
 .. autoclass:: transformers.PreTrainedTokenizerFast
     :special-members: __call__
     :members: batch_decode, convert_ids_to_tokens, convert_tokens_to_ids, convert_tokens_to_string, decode, encode, 
