@@ -304,10 +304,3 @@ SLOW_TO_FAST_CONVERTERS = None
 
 def convert_slow_tokenizer(*args, **kwargs):
     requires_tokenizers(convert_slow_tokenizer)
-
-
-SLOW_TO_FAST_CONVERTERS = None
-
-
-def convert_slow_tokenizer(*args, **kwargs):
-    requires_tokenizers(convert_slow_tokenizer)

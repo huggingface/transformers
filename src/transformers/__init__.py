@@ -341,8 +341,6 @@ if is_tokenizers_available():
 
     if is_sentencepiece_available():
         _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
-    else:
-        _import_structure["utils.dummy_tokenizers_objects"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
 
 else:
     from .utils import dummy_tokenizers_objects
@@ -357,8 +355,6 @@ if is_speech_available():
 
     if is_sentencepiece_available():
         _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
-    else:
-        _import_structure["utils.dummy_speech_objects"] = ["Speech2TextProcessor"]
 
 else:
     from .utils import dummy_speech_objects
@@ -1647,8 +1643,7 @@ if TYPE_CHECKING:
 
         if is_sentencepiece_available():
             from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
-        else:
-            from .utils.dummy_tokenizers_objects import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+
     else:
         from .utils.dummy_tokenizers_objects import *
 
@@ -1657,8 +1652,7 @@ if TYPE_CHECKING:
 
         if is_sentencepiece_available():
             from .models.speech_to_text import Speech2TextProcessor
-        else:
-            from .utils.dummy_speech_objects import Speech2TextProcessor
+
     else:
         from .utils.dummy_speech_objects import *
 
