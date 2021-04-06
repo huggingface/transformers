@@ -15,10 +15,11 @@ CPM
 
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 CPM (Chinese Pre-trained Language Model) is a Transformer-based autoregressive language model, with 2.6 billion
 parameters and 100GB Chinese training data. To the best of our knowledge, CPM is the largest Chinese pre-trained
-language model, which could facilitate downstream Chinese NLP tasks, such as conversation, essay generation, cloze test,
-and language understanding.
+language model, which could facilitate downstream Chinese NLP tasks, such as conversation, essay generation, cloze
+test, and language understanding.
 
 Paper: https://arxiv.org/abs/2012.00413
 
