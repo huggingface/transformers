@@ -224,6 +224,17 @@ class MultiHeadSelfAttention(nn.Module):
             k = shape(self.k_lin(key))  # (bs, n_heads, k_length, dim_per_head)
             v = shape(self.v_lin(value))  # (bs, n_heads, k_length, dim_per_head)
 
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_values = (k, v)
+
         q = shape(self.q_lin(query))  # (bs, n_heads, q_length, dim_per_head)
 
         q = q / math.sqrt(dim_per_head)  # (bs, n_heads, q_length, dim_per_head)
@@ -247,8 +258,10 @@ class MultiHeadSelfAttention(nn.Module):
         context = self.out_lin(context)  # (bs, q_length, dim)
 
         if self.is_decoder:
-            context = context + (past_key_values,)
-
+            context = tuple(context) + (past_key_values,)
+            # import pdb 
+            # pdb.set_trace()  
+            
         if output_attentions:
             return (context, weights)
         else:
@@ -285,6 +298,7 @@ class TransformerBlock(nn.Module):
 
         assert config.dim % config.n_heads == 0
 
+        self.is_decoder = config.is_decoder
         self.attention = MultiHeadSelfAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
@@ -310,20 +324,62 @@ class TransformerBlock(nn.Module):
             sa_weights: torch.tensor(bs, n_heads, seq_length, seq_length) The attention weights ffn_output:
             torch.tensor(bs, seq_length, dim) The output of the transformer block contextualization.
         """
+
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_values[:2] if past_key_values is not None else None
         # Self-Attention
-        sa_output = self.attention(
+        self_attention_outputs = self.attention(
             query=x,
             key=x,
             value=x,
             mask=attn_mask,
             head_mask=head_mask,
             output_attentions=output_attentions,
+            past_key_values=self_attn_past_key_value,
         )
+
         if output_attentions:
-            sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
+            sa_output, sa_weights = self_attention_outputs  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
         else:  # To handle these `output_attentions` or `output_hidden_states` cases returning tuples
-            assert type(sa_output) == tuple
-            sa_output = sa_output[0]
+            assert type(self_attention_outputs) == tuple
+            sa_output = self_attention_outputs[0]
+
+        # if decoder, the last output is tuple of self-attn cache
+        if self.is_decoder:
+            outputs = self_attention_outputs[1:-1]
+            present_key_value = self_attention_outputs[-1]
+        else:
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+        cross_attn_present_key_value = None
+        if self.is_decoder and encoder_hidden_states is not None:
+            assert hasattr(
+                self, "crossattention"
+            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+
+            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
+            cross_attn_past_key_value = past_key_values[-2:] if past_key_values is not None else None
+            cross_attention_outputs = self.crossattention(
+                sa_output,
+                attn_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                cross_attn_past_key_value,
+                output_attentions,
+            )
+            attention_output = cross_attention_outputs[0]
+            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
+
+            # add cross-attn cache to positions 3,4 of present_key_value tuple
+            cross_attn_present_key_value = cross_attention_outputs[-1]
+            present_key_value = present_key_value + cross_attn_present_key_value
+
+        import pdb 
+ 
+        # 5. Set name in form
+        pdb.set_trace()  
+
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
 
         # Feed Forward Network
