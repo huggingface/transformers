@@ -62,7 +62,7 @@ class DeiTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.dist_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -78,8 +78,8 @@ class DeiTEmbeddings(nn.Module):
         embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        dist_tokens = self.dist_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, dist_tokens, embeddings), dim=1)
+        distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, distillation_tokens, embeddings), dim=1)
         embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
         return embeddings

@@ -52,7 +52,7 @@ def create_rename_keys(config, base_model=False):
     rename_keys.extend(
         [
             ("cls_token", "deit.embeddings.cls_token"),
-            ("dist_token", "deit.embeddings.dist_token"),
+            ("dist_token", "deit.embeddings.distillation_token"),
             ("patch_embed.proj.weight", "deit.embeddings.patch_embeddings.projection.weight"),
             ("patch_embed.proj.bias", "deit.embeddings.patch_embeddings.projection.bias"),
             ("pos_embed", "deit.embeddings.position_embeddings"),
