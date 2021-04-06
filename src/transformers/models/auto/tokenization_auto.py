@@ -135,6 +135,7 @@ else:
     BertGenerationTokenizer = None
     BigBirdTokenizer = None
     CamembertTokenizer = None
+    CpmTokenizer = None
     DebertaV2Tokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
