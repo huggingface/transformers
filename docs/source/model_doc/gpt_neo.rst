@@ -38,9 +38,9 @@ The :obj:`generate()` method can be used to generate text using GPT Neo model.
     ...          "previously unexplored valley, in the Andes Mountains. Even more surprising to the " \
     ...          "researchers was the fact that the unicorns spoke perfect English."
 
-    >>> input_ids = tokenizer(unicorns, return_tensors="pt").input_ids
+    >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
-    >>> gen_tokens = model.generate(ids, do_sample=True, temperature=0.9, max_length=100,)
+    >>> gen_tokens = model.generate(input_ids, do_sample=True, temperature=0.9, max_length=100,)
     >>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
 
 
