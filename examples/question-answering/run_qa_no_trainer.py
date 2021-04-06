@@ -82,7 +82,7 @@ def parse_args():
         "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
     )
     parser.add_argument(
-        "--do_predict", action="store_false", help="Eval the question answering model"
+        "--do_predict", action="store_true", help="Eval the question answering model"
     )
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
