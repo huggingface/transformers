@@ -131,7 +131,26 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
 
 class AttentionMixin:
-    def _look_back(self, tensor, block_length, window_size, pad_value=0, is_key_value=True):
+    """
+    A few attention utilities for nn.Modules in GPT Neo, to be used as a mixin.
+    """
+
+    @staticmethod
+    def _get_block_length_and_num_blocks(seq_length, window_size):
+        block_length = window_size
+        while seq_length % block_length != 0:
+            block_length -= 1
+        num_blocks = seq_length // block_length
+        return block_length, num_blocks
+
+    @staticmethod
+    def _look_back(tensor, block_length, window_size, pad_value=0, is_key_value=True):
+        """
+        Used to implement attention between consecutive blocks.
+
+        Args:
+            tensor (:obj:`torch.Tensor`): tensor of shape :obj:`[batch_size, seq_length, hidden_dim]` or :obj:`[batch_size, seq_length]`
+        """
         if len(tensor.shape) == 3:
             padding_side = (0, 0, window_size, 0)
         elif len(tensor.shape) == 2:
@@ -140,7 +159,7 @@ class AttentionMixin:
             raise ValueError("Input tensor rank should be one of [2, 3], but is: {}".format(len(tensor.shape)))
 
         padded_tensor = F.pad(tensor, padding_side, value=pad_value)
-        padded_tensor = padded_tensor.unfold(1, window_size + block_length, block_length)
+        padded_tensor = padded_tensor.unfold(dimension=1, size=window_size + block_length, step=block_length)
 
         if is_key_value:
             padded_tensor = padded_tensor.transpose(-2, -1)
