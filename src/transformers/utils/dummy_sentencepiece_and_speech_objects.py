@@ -2,6 +2,6 @@
 from ..file_utils import requires_backends
 
 
-class Speech2TextFeatureExtractor:
+class Speech2TextProcessor:
     def __init__(self, *args, **kwargs):
-        requires_backends(self, ["speech"])
+        requires_backends(self, ["sentencepiece", "speech"])
