@@ -43,6 +43,7 @@ deps = {
     "sphinx-copybutton": "sphinx-copybutton",
     "sphinx-markdown-tables": "sphinx-markdown-tables",
     "sphinx-rtd-theme": "sphinx-rtd-theme==0.4.3",
+    "sphinxext-opengraph": "sphinxext-opengraph==0.4.1",
     "sphinx": "sphinx==3.2.1",
     "starlette": "starlette",
     "tensorflow-cpu": "tensorflow-cpu>=2.3",

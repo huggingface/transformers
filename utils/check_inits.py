@@ -18,7 +18,7 @@ import re
 
 
 PATH_TO_TRANSFORMERS = "src/transformers"
-BACKENDS = ["torch", "tf", "flax", "sentencepiece", "tokenizers", "vision"]
+BACKENDS = ["torch", "tf", "flax", "sentencepiece", "speech", "tokenizers", "vision"]
 
 # Catches a line with a key-values pattern: "bla": ["foo", "bar"]
 _re_import_struct_key_value = re.compile(r'\s+"\S*":\s+\[([^\]]*)\]')

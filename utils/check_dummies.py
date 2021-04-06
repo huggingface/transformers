@@ -26,7 +26,7 @@ _re_single_line_import = re.compile(r"\s+from\s+\S*\s+import\s+([^\(\s].*)\n")
 _re_test_backend = re.compile(r"^\s+if\s+is\_([a-z]*)\_available\(\):\s*$")
 
 
-BACKENDS = ["torch", "tf", "flax", "sentencepiece", "tokenizers", "vision"]
+BACKENDS = ["torch", "tf", "flax", "sentencepiece", "speech", "tokenizers", "vision"]
 
 
 DUMMY_CONSTANT = """

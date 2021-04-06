@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_sentencepiece_available, is_speech_available, is_torch_available
 
 
 _import_structure = {
@@ -25,12 +25,16 @@ _import_structure = {
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
     ],
-    "feature_extraction_speech_to_text": ["Speech2TextFeatureExtractor"],
 }
 
 if is_sentencepiece_available():
-    _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
     _import_structure["tokenization_speech_to_text"] = ["Speech2TextTokenizer"]
+
+if is_speech_available():
+    _import_structure["feature_extraction_speech_to_text"] = ["Speech2TextFeatureExtractor"]
+
+    if is_sentencepiece_available():
+        _import_structure["processing_speech_to_text"] = ["Speech2TextProcessor"]
 
 if is_torch_available():
     _import_structure["modeling_speech_to_text"] = [
@@ -43,11 +47,15 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
-    from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
 
     if is_sentencepiece_available():
-        from .processing_speech_to_text import Speech2TextProcessor
         from .tokenization_speech_to_text import Speech2TextTokenizer
+
+    if is_speech_available():
+        from .feature_extraction_speech_to_text import Speech2TextFeatureExtractor
+
+        if is_sentencepiece_available():
+            from .processing_speech_to_text import Speech2TextProcessor
 
     if is_torch_available():
         from .modeling_speech_to_text import (

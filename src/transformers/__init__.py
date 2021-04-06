@@ -45,6 +45,7 @@ from .file_utils import (
     _BaseLazyModule,
     is_flax_available,
     is_sentencepiece_available,
+    is_speech_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -102,6 +103,7 @@ _import_structure = {
         "is_py3nvml_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
+        "is_speech_available",
         "is_tf_available",
         "is_tokenizers_available",
         "is_torch_available",
@@ -133,9 +135,11 @@ _import_structure = {
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
+        "FEATURE_EXTRACTOR_MAPPING",
         "MODEL_NAMES_MAPPING",
         "TOKENIZER_MAPPING",
         "AutoConfig",
+        "AutoFeatureExtractor",
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
@@ -202,7 +206,6 @@ _import_structure = {
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
-        "Speech2TextFeatureExtractor",
     ],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
@@ -288,7 +291,6 @@ if is_sentencepiece_available():
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
-    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -339,11 +341,26 @@ if is_tokenizers_available():
 
     if is_sentencepiece_available():
         _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
+
 else:
     from .utils import dummy_tokenizers_objects
 
     _import_structure["utils.dummy_tokenizers_objects"] = [
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
+    ]
+
+# Speech-specific objects
+if is_speech_available():
+    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+
+    if is_sentencepiece_available():
+        _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+
+else:
+    from .utils import dummy_speech_objects
+
+    _import_structure["utils.dummy_speech_objects"] = [
+        name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 
 # Vision-specific objects
@@ -1394,6 +1411,7 @@ if TYPE_CHECKING:
         is_py3nvml_available,
         is_sentencepiece_available,
         is_sklearn_available,
+        is_speech_available,
         is_tf_available,
         is_tokenizers_available,
         is_torch_available,
@@ -1429,9 +1447,11 @@ if TYPE_CHECKING:
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
+        FEATURE_EXTRACTOR_MAPPING,
         MODEL_NAMES_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
+        AutoFeatureExtractor,
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
@@ -1494,11 +1514,7 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.speech_to_text import (
-        SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Speech2TextConfig,
-        Speech2TextFeatureExtractor,
-    )
+    from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -1585,7 +1601,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
-        from .models.speech_to_text import Speech2TextProcessor, Speech2TextTokenizer
+        from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -1627,8 +1643,18 @@ if TYPE_CHECKING:
 
         if is_sentencepiece_available():
             from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+
     else:
         from .utils.dummy_tokenizers_objects import *
+
+    if is_speech_available():
+        from .models.speech_to_text import Speech2TextFeatureExtractor
+
+        if is_sentencepiece_available():
+            from .models.speech_to_text import Speech2TextProcessor
+
+    else:
+        from .utils.dummy_speech_objects import *
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
