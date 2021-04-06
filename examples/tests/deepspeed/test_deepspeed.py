@@ -595,3 +595,40 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         return output_dir
+
+    @parameterized.expand(stages)
+    def test_clm(self, stage):
+        # this test exercises model.resize_token_embeddings() which requires param gathering outside
+        # of forward - it's not used by `run_translation.py`, but it is in `run_clm.py`
+
+        data_dir = self.tests_dir / "fixtures"
+        output_dir = self.get_auto_remove_tmp_dir()
+        args = f"""
+            --model_name_or_path sshleifer/tiny-gpt2
+            --train_file {data_dir}/sample_text.txt
+            --validation_file {data_dir}/sample_text.txt
+            --output_dir {output_dir}
+            --overwrite_output_dir
+            --do_train
+            --do_eval
+            --max_train_samples 10
+            --max_val_samples 10
+            --per_device_train_batch_size 5
+            --per_device_eval_batch_size 5
+            --num_train_epochs 1
+            --warmup_steps 8
+            --block_size 128
+            """.split()
+
+        distributed = True
+        ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
+        script = [f"{self.examples_dir_str}/language-modeling/run_clm.py"]
+        num_gpus = get_gpu_count() if distributed else 1
+        launcher = f"deepspeed --num_gpus {num_gpus}".split()
+
+        cmd = launcher + script + args + ds_args
+        # keep for quick debug
+        # print(" ".join([f"\nPYTHONPATH={self.src_dir_str}"] +cmd)); die
+        execute_subprocess_async(cmd, env=self.get_env())
+
+        return output_dir
