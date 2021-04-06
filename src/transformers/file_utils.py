@@ -397,6 +397,11 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
+def is_speech_available():
+    # For now this depends on torchaudio but the exact dependency might evolve in the future.
+    return _torchaudio_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -514,6 +519,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+SPEECH_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
+`pip install torchaudio`
+"""
+
+
+# docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
 `pip install pillow`
@@ -584,6 +596,12 @@ def requires_scatter(obj):
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
     if not is_scatter_available():
         raise ImportError(SCATTER_IMPORT_ERROR.format(name))
+
+
+def requires_speech(obj):
+    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
+    if not is_speech_available():
+        raise ImportError(SPEECH_IMPORT_ERROR.format(name))
 
 
 def requires_vision(obj):

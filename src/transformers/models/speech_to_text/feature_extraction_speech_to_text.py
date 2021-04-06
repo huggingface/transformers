@@ -19,18 +19,14 @@ Feature extractor class for Speech2Text
 from typing import List, Optional, Union
 
 import numpy as np
+import torch
+import torchaudio.compliance.kaldi as ta_kaldi
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...file_utils import PaddingStrategy, TensorType, is_torch_available, is_torchaudio_available
+from ...file_utils import PaddingStrategy, TensorType
 from ...utils import logging
 
-
-if is_torch_available():
-    import torch
-
-if is_torchaudio_available():
-    import torchaudio.compliance.kaldi as ta_kaldi
 
 logger = logging.get_logger(__name__)
 
@@ -75,8 +71,6 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         normalize_vars=True,
         **kwargs
     ):
-        if not is_torchaudio_available():
-            raise ImportError("`Speech2TextFeatureExtractor` requires torchaudio: `pip install torchaudio`.")
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
         self.num_mel_bins = num_mel_bins
         self.do_ceptral_normalize = do_ceptral_normalize

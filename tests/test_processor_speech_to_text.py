@@ -19,12 +19,16 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import Speech2TextFeatureExtractor, Speech2TextProcessor, Speech2TextTokenizer
+from transformers import Speech2TextTokenizer, is_speech_available
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 from .test_feature_extraction_speech_to_text import floats_list
+
+
+if is_speech_available():
+    from transformers import Speech2TextFeatureExtractor, Speech2TextProcessor
 
 
 SAMPLE_SP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/test_sentencepiece.model")
