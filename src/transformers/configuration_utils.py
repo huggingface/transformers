@@ -163,8 +163,8 @@ class PretrainedConfig(object):
           typically for a classification task.
         - **task_specific_params** (:obj:`Dict[str, Any]`, `optional`) -- Additional keyword arguments to store for the
           current task.
-        - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can be one
-          of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
+        - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can
+          be one of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
 
     Parameters linked to the tokenizer
 
@@ -267,9 +267,11 @@ class PretrainedConfig(object):
         allowed_problem_types = ("regression", "single_label_classification", "multi_label_classification")
         if self.problem_type is not None and self.problem_type not in allowed_problem_types:
             raise ValueError(
-                f"""The config parameter `problem_type` not understood:
-                    received {self.problem_type} but only [regression, single_label_classification
-                    and multi_label_classification] are valid."""
+                f"""
+The config parameter `problem_type` not understood:
+                    received {self.problem_type} but only [regression, single_label_classification and
+                    multi_label_classification] are valid.
+                    """
             )
 
         # TPU arguments
