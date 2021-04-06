@@ -911,12 +911,12 @@ The following is an example configuration for ZeRO stage 3:
             "cpu_offload_use_pin_memory" : true,
             "overlap_comm": true,
             "contiguous_gradients": true,
-            "reduce_bucket_size": 1e6,
             "sub_group_size": 1e14,
-            "stage3_max_live_parameters": 1e9,
-            "stage3_max_reuse_distance": 1e9,
+            "reduce_bucket_size": 1e6,
             "stage3_prefetch_bucket_size": 0.94e6,
             "stage3_param_persistence_threshold": 1e4,
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
             "stage3_gather_fp16_weights_on_model_save": true
         }
     }
@@ -926,12 +926,12 @@ Note: if you're migrating from ZeRO-2 configuration that: ``allgather_partitions
 
 **Performance tuning:**
 
-- ``stage3_max_live_parameters``: ``1e9``
-- ``stage3_max_reuse_distance``: ``1e9``
+- ``sub_group_size``: ``1e14``
+- ``reduce_bucket_size``: ``hidden_size*hidden_size``
 - ``stage3_prefetch_bucket_size``: ``0.9 * hidden_size * hidden_size``
 - ``stage3_param_persistence_threshold``: ``10 * hidden_size``
-- ``reduce_bucket_size``: ``hidden_size*hidden_size``
-- ``sub_group_size``: ``1e14``
+- ``stage3_max_live_parameters``: ``1e9``
+- ``stage3_max_reuse_distance``: ``1e9``
 
 If hitting OOM reduce ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``. They should have minimal impact
 on performance unless you are doing activation checkpointing. ``1e9`` would consume ~2GB. The memory is shared by
@@ -947,12 +947,34 @@ backward passes a a single layer granularity and want to keep the parameter in t
 If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persistence_threshold`` as
 recommended above, they will already be fairly small so you won't have to tune those much.
 
+Since ``hidden_size`` varies from model to model, the ``Trainer`` will automatically set the needed value for the 3
+config parameters that contain that variable (using ``model.config.hidden_size``). Just set these values to ``0`` as
+shown below and the right configuration will be passed to DeepSpeed:
+
+.. code-block:: json
+
+    {
+        "zero_optimization": {
+            "stage": 3,
+            "cpu_offload": true,
+            "cpu_offload_params": true,
+            "cpu_offload_use_pin_memory" : true,
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": 0,
+            "stage3_prefetch_bucket_size": 0,
+            "stage3_param_persistence_threshold": 0,
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        }
+    }
+
 ``stage3_gather_fp16_weights_on_model_save`` enables model fp16 weights consolidation when model gets saved. With large
 models and multiple GPUs this is an expensive operation both in terms of memory and speed. It's currently required if
 you plan to resume the training. Watch out for future updates that will remove this limitation and make things more
 flexible.
-
-
 
 
 ZeRO-2 vs ZeRO-3 Performance
@@ -1052,12 +1074,12 @@ Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
            "cpu_offload_use_pin_memory" : true,
            "overlap_comm": true,
            "contiguous_gradients": true,
-           "reduce_bucket_size": 1e6,
            "sub_group_size": 1e14,
-           "stage3_max_live_parameters": 1e9,
-           "stage3_max_reuse_distance": 1e9,
+           "reduce_bucket_size": 1e6,
            "stage3_prefetch_bucket_size": 0.94e6,
            "stage3_param_persistence_threshold": 1e4,
+           "stage3_max_live_parameters": 1e9,
+           "stage3_max_reuse_distance": 1e9,
            "stage3_gather_fp16_weights_on_model_save": true
        },
 

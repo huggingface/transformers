@@ -390,6 +390,7 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     # 2. HF scheduler + HF optimizer: Yes
     # 3. DS scheduler + HF optimizer: Yes
     # 4. HF scheduler + DS optimizer: No
+    #
     # Unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: No
@@ -485,12 +486,21 @@ def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
                     "enabled": True,
                 }
 
-    # now we for sure know if zero3 is enabled
-    deepspeed_zero3_enable(
-        "zero_optimization" in config
-        and "stage" in config["zero_optimization"]
-        and config["zero_optimization"]["stage"] == 3
-    )
+    # zero
+    if "zero_optimization" in config:
+        zero = config["zero_optimization"]
+
+        # now we know for sure if zero3 is enabled
+        deepspeed_zero3_enable(zero.get("stage") == 3)
+
+        # automatically assign the optimal config values based on model config
+        hidden_size = model.config.hidden_size
+        if zero.get("reduce_bucket_size") == 0:
+            zero["reduce_bucket_size"] = hidden_size * hidden_size
+        if zero.get("stage3_prefetch_bucket_size") == 0:
+            zero["stage3_prefetch_bucket_size"] = 0.9 * hidden_size * hidden_size
+        if zero.get("stage3_param_persistence_threshold") == 0:
+            zero["stage3_param_persistence_threshold"] = 10 * hidden_size
 
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
