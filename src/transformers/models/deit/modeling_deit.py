@@ -41,9 +41,7 @@ DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -87,8 +85,7 @@ class DeiTEmbeddings(nn.Module):
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+# Copied from transformers.models.vit.modeling_vit.PatchEmbeddings
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
@@ -117,6 +114,7 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DeiT
 class DeiTSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -175,6 +173,7 @@ class DeiTSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->DeiT
 class DeiTSelfOutput(nn.Module):
     """
     The residual connection is defined in DeiTLayer instead of here (as is the case with other models), due to the
@@ -194,6 +193,7 @@ class DeiTSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DeiT
 class DeiTAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -228,6 +228,7 @@ class DeiTAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
 class DeiTIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -245,6 +246,7 @@ class DeiTIntermediate(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DeiT
 class DeiTOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -260,6 +262,7 @@ class DeiTOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DeiT
 class DeiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -308,6 +311,7 @@ class DeiTLayer(nn.Module):
         return layer_output
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DeiT
 class DeiTEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -364,6 +368,7 @@ class DeiTEncoder(nn.Module):
         )
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->DeiT
 class DeiTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -523,6 +528,7 @@ class DeiTModel(DeiTPreTrainedModel):
         )
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DeiT
 class DeiTPooler(nn.Module):
     def __init__(self, config):
         super().__init__()

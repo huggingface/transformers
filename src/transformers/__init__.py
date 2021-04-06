@@ -619,6 +619,7 @@ if is_torch_available():
             "DeiTForImageClassification",
             "DeiTForImageClassificationWithTeacher",
             "DeiTModel",
+            "DeiTPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
