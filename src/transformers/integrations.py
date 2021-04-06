@@ -319,7 +319,11 @@ def deepspeed_zero3_enable(enable=True):
 
 
 def deepspeed_parse_config(ds_config):
-    """"""
+    """
+    If ``ds_config`` isn't already a dict, read it from the config file.
+
+    If it's already a dict, return a copy of it, so that we can freely modify it.
+    """
     require_version("deepspeed>0.3.13")
 
     if isinstance(ds_config, dict):
