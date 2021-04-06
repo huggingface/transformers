@@ -335,9 +335,9 @@ def postprocess_qa_predictions_with_beam_search(
             # Go through all possibilities for the `n_start_top`/`n_end_top` greater start and end logits.
             for i in range(start_n_top):
                 for j in range(end_n_top):
-                    start_index = start_indexes[i]
+                    start_index = int(start_indexes[i])
                     j_index = i * end_n_top + j
-                    end_index = end_indexes[j_index]
+                    end_index = int(end_indexes[j_index])
                     # Don't consider out-of-scope answers (last part of the test should be unnecessary because of the
                     # p_mask but let's not take any risk)
                     if (
