@@ -77,13 +77,7 @@ def parse_args():
         "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
     )
     parser.add_argument(
-        "--do_train", action="store_true", default=True, required=True, help="Train the question answering model"
-    )
-    parser.add_argument(
-        "--do_eval", action="store_true", default=True, required=True, help="Eval the question answering model"
-    )
-    parser.add_argument(
-        "--do_predict", action="store_false", default=False, required=False, help="Eval the question answering model"
+        "--do_predict", action="store_false", help="Eval the question answering model"
     )
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
@@ -289,13 +283,8 @@ def main():
 
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
-    if args.do_train:
-        column_names = raw_datasets["train"].column_names
-    elif args.do_eval:
-        column_names = raw_datasets["validation"].column_names
-    else:
-        column_names = raw_datasets["test"].column_names
-
+    column_names = raw_datasets["train"].column_names
+    
     question_column_name = "question" if "question" in column_names else column_names[0]
     context_column_name = "context" if "context" in column_names else column_names[1]
     answer_column_name = "answers" if "answers" in column_names else column_names[2]
@@ -407,24 +396,24 @@ def main():
 
         return tokenized_examples
 
-    if args.do_train:
-        if "train" not in raw_datasets:
-            raise ValueError("--do_train requires a train dataset")
-        train_dataset = raw_datasets["train"]
-        if args.max_train_samples is not None:
-            # We will select sample from whole data if agument is specified
-            train_dataset = train_dataset.select(range(args.max_train_samples))
-        # Create train feature from dataset
-        train_dataset = train_dataset.map(
-            prepare_train_features,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not args.overwrite_cache,
-        )
-        if args.max_train_samples is not None:
-            # Number of samples might increase during Feature Creation, We select only specified max samples
-            train_dataset = train_dataset.select(range(args.max_train_samples))
+
+    if "train" not in raw_datasets:
+        raise ValueError("--do_train requires a train dataset")
+    train_dataset = raw_datasets["train"]
+    if args.max_train_samples is not None:
+        # We will select sample from whole data if agument is specified
+        train_dataset = train_dataset.select(range(args.max_train_samples))
+    # Create train feature from dataset
+    train_dataset = train_dataset.map(
+        prepare_train_features,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        remove_columns=column_names,
+        load_from_cache_file=not args.overwrite_cache,
+    )
+    if args.max_train_samples is not None:
+        # Number of samples might increase during Feature Creation, We select only specified max samples
+        train_dataset = train_dataset.select(range(args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -492,25 +481,25 @@ def main():
 
         return tokenized_examples
 
-    if args.do_eval:
-        if "validation" not in raw_datasets:
-            raise ValueError("--do_eval requires a validation dataset")
-        eval_examples = raw_datasets["validation"]
-        if args.max_val_samples is not None:
-            # We will select sample from whole data
-            eval_examples = eval_examples.select(range(args.max_val_samples))
-        # Validation Feature Creation
-        eval_dataset = eval_examples.map(
-            prepare_validation_features,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not args.overwrite_cache,
-        )
 
-        if args.max_val_samples is not None:
-            # During Feature creation dataset samples might increase, we will select required samples again
-            eval_dataset = eval_dataset.select(range(args.max_val_samples))
+    if "validation" not in raw_datasets:
+        raise ValueError("--do_eval requires a validation dataset")
+    eval_examples = raw_datasets["validation"]
+    if args.max_val_samples is not None:
+        # We will select sample from whole data
+        eval_examples = eval_examples.select(range(args.max_val_samples))
+    # Validation Feature Creation
+    eval_dataset = eval_examples.map(
+        prepare_validation_features,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        remove_columns=column_names,
+        load_from_cache_file=not args.overwrite_cache,
+    )
+
+    if args.max_val_samples is not None:
+        # During Feature creation dataset samples might increase, we will select required samples again
+        eval_dataset = eval_dataset.select(range(args.max_val_samples))
 
     if args.do_predict:
         if "test" not in raw_datasets:
@@ -550,11 +539,11 @@ def main():
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
     )
 
-    if args.do_eval:
-        eval_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
-        eval_dataloader = DataLoader(
-            eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
-        )
+
+    eval_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
+    eval_dataloader = DataLoader(
+        eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
+    )
 
     if args.do_predict:
         test_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
@@ -613,7 +602,11 @@ def main():
 
             batch_size = output_logit.shape[0]
             cols = output_logit.shape[1]
-            logits_concat[step : step + batch_size, :cols] = output_logit
+            if step + batch_size < len(dataset):
+                logits_concat[step : step + batch_size, :cols] = output_logit
+            else:
+                logits_concat[step:, :cols] = output_logit[:len(dataset) - step]
+                
             step += batch_size
 
         return logits_concat
@@ -687,62 +680,61 @@ def main():
             if completed_steps >= args.max_train_steps:
                 break
 
-    if args.do_eval:
         # intialize all lists to collect the batches
 
-        all_start_top_log_probs = []
-        all_start_top_index = []
-        all_end_top_log_probs = []
-        all_end_top_index = []
-        all_cls_logits = []
-        for step, batch in enumerate(eval_dataloader):
-            with torch.no_grad():
-                outputs = model(**batch)
-                start_top_log_probs = outputs.start_top_log_probs
-                start_top_index = outputs.start_top_index
-                end_top_log_probs = outputs.end_top_log_probs
-                end_top_index = outputs.end_top_index
-                cls_logits = outputs.cls_logits
+    all_start_top_log_probs = []
+    all_start_top_index = []
+    all_end_top_log_probs = []
+    all_end_top_index = []
+    all_cls_logits = []
+    for step, batch in enumerate(eval_dataloader):
+        with torch.no_grad():
+            outputs = model(**batch)
+            start_top_log_probs = outputs.start_top_log_probs
+            start_top_index = outputs.start_top_index
+            end_top_log_probs = outputs.end_top_log_probs
+            end_top_index = outputs.end_top_index
+            cls_logits = outputs.cls_logits
 
-                if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
-                    start_top_log_probs = accelerator.pad_across_processes(start_top_log_probs, dim=1, pad_index=-100)
-                    start_top_index = accelerator.pad_across_processes(start_top_index, dim=1, pad_index=-100)
-                    end_top_log_probs = accelerator.pad_across_processes(end_top_log_probs, dim=1, pad_index=-100)
-                    end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
-                    cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
+            if not args.pad_to_max_length:  # necessary to pad predictions and labels for being gathered
+                start_top_log_probs = accelerator.pad_across_processes(start_top_log_probs, dim=1, pad_index=-100)
+                start_top_index = accelerator.pad_across_processes(start_top_index, dim=1, pad_index=-100)
+                end_top_log_probs = accelerator.pad_across_processes(end_top_log_probs, dim=1, pad_index=-100)
+                end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
+                cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
-                all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
-                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
-                all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
-                all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
+            all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
+            all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
+            all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
+            all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
+            all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
 
-        max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
+    max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
-        # concatenate all numpy arrays collected above
-        start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
-        start_top_index_concat = create_and_fill_np_array(all_start_top_index, eval_dataset, max_len)
-        end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, eval_dataset, max_len)
-        end_top_index_concat = create_and_fill_np_array(all_end_top_index, eval_dataset, max_len)
-        all_cls_logits = np.concatenate(all_cls_logits, axis=0)
+    # concatenate all numpy arrays collected above
+    start_top_log_probs_concat = create_and_fill_np_array(all_start_top_log_probs, eval_dataset, max_len)
+    start_top_index_concat = create_and_fill_np_array(all_start_top_index, eval_dataset, max_len)
+    end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, eval_dataset, max_len)
+    end_top_index_concat = create_and_fill_np_array(all_end_top_index, eval_dataset, max_len)
+    all_cls_logits = np.concatenate(all_cls_logits, axis=0)
 
-        # delete the list of numpy arrays
-        del start_top_log_probs
-        del start_top_index
-        del end_top_log_probs
-        del end_top_index
+    # delete the list of numpy arrays
+    del start_top_log_probs
+    del start_top_index
+    del end_top_log_probs
+    del end_top_index
 
-        eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
-        outputs_numpy = (
-            start_top_log_probs_concat,
-            start_top_index_concat,
-            end_top_log_probs_concat,
-            end_top_index_concat,
-            cls_logits,
-        )
-        prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
-        eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
-        logger.info(f"Evaluation metrics: {eval_metric}")
+    eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
+    outputs_numpy = (
+        start_top_log_probs_concat,
+        start_top_index_concat,
+        end_top_log_probs_concat,
+        end_top_index_concat,
+        cls_logits,
+    )
+    prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+    eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+    logger.info(f"Evaluation metrics: {eval_metric}")
 
     if args.do_predict:
         # intialize all lists to collect the batches
