@@ -167,7 +167,7 @@ class AttentionMixin:
 
     def _split_heads(self, tensor, num_heads, attn_head_size):
         """
-        splits hidden_size dim into attn_head_size and num_heads
+        Splits hidden_size dim into attn_head_size and num_heads
         """
         new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
         tensor = tensor.view(*new_shape)
@@ -180,7 +180,7 @@ class AttentionMixin:
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
-        merges attn_head_size dim and num_attn_heads dim into hidden_size
+        Merges attn_head_size dim and num_attn_heads dim into hidden_size
         """
         if len(tensor.shape) == 5:
             tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
@@ -193,7 +193,7 @@ class AttentionMixin:
 
     def _split_seq_length_dim_to(self, tensors, dim_factor_1, dim_factor_2, hidden_size):
         """
-        splits sequence length dim of tensors into `dim_factor_1` and `dim_factor_2` dims
+        Splits sequence length dim of tensors into `dim_factor_1` and `dim_factor_2` dims
         """
         batch_size = tensors.shape[0]
         split_dim_shape = (batch_size, dim_factor_1, dim_factor_2)
@@ -288,8 +288,8 @@ class GPTNeoSelfAttention(nn.Module, AttentionMixin):
         else:
             present = None
 
-        nd, ns = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, ns - nd : ns, :ns].bool()
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length].bool()
 
         attn_output, attn_weights = self._attn(
             query, key, value, causal_mask, self.masked_bias, self.attn_dropout, attention_mask, head_mask
@@ -330,8 +330,8 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
 
         self.window_size = config.window_size
 
-    def _create_attention_mask(self, bs, seq_len, num_blocks, block_length, device, attention_mask=None):
-        indices = torch.arange(seq_len, dtype=torch.long, device=device).repeat(bs, 1)
+    def _create_attention_mask(self, batch_size, seq_length, num_blocks, block_length, device, attention_mask=None):
+        indices = torch.arange(seq_length, dtype=torch.long, device=device).repeat(batch_size, 1)
 
         query_indices = self._split_seq_length_dim_to(indices, num_blocks, block_length, self.embed_dim)
         key_indices = self._look_back(indices, block_length, self.window_size, is_key_value=False)
@@ -339,7 +339,7 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
         causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2))
 
         if attention_mask is None:
-            attention_mask = torch.ones(bs, seq_len, dtype=torch.long, device=device)
+            attention_mask = torch.ones(batch_size, seq_length, dtype=torch.long, device=device)
 
         attention_mask = self._look_back(attention_mask, block_length, self.window_size, is_key_value=False)
         attention_mask = attention_mask.unsqueeze(-2)  # Add an extra dimention to account for hidden_dim
@@ -376,17 +376,14 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
         key = self.k_proj(key_value_hidden_states)
         value = self.v_proj(key_value_hidden_states)
 
-        # compute block length and windows
-        batch_size, seq_len = hidden_states.shape[:2]
-        full_seq_length = seq_len + past_length
-        block_length = self.window_size
-        while full_seq_length % block_length != 0:
-            block_length -= 1
-        num_blocks = full_seq_length // block_length
+        # compute block length and num_blocks
+        batch_size, seq_length = hidden_states.shape[:2]
+        full_seq_length = seq_length + past_length
+        block_length, num_blocks = self._get_block_length_and_num_blocks(full_seq_length, self.window_size)
 
         # create buckets
         if layer_past is not None:
-            # we just need 1 window with block_length 1 when caching is enabled
+            # we just need 1 block with block_length 1 when caching is enabled
             query = self._split_seq_length_dim_to(query, 1, 1, self.embed_dim)
         else:
             query = self._split_seq_length_dim_to(query, num_blocks, block_length, self.embed_dim)
@@ -394,7 +391,7 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
         key = self._look_back(key, block_length, self.window_size)
         value = self._look_back(value, block_length, self.window_size)
 
-        # select key/value vectors only for the last window
+        # select key/value vectors only for the last block
         if layer_past is not None:
             key = key[:, -1:, ...]
             value = value[:, -1:, ...]
@@ -407,7 +404,7 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
             batch_size, full_seq_length, num_blocks, block_length, hidden_states.device, attention_mask
         )
         if layer_past is not None:
-            mask = mask[:, -1:, :, -1:, :]  # only take the mask for the last window
+            mask = mask[:, -1:, :, -1:, :]  # only take the mask for the last block
 
         # attn
         attn_output, attn_weights = self._attn(
@@ -421,7 +418,7 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
         )
 
         attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
-        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
+        attn_output = attn_output.reshape(batch_size, seq_length, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
