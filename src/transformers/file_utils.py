@@ -46,17 +46,11 @@ from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
+from transformers.utils.versions import importlib_metadata
 
 from . import __version__
 from .hf_api import HfFolder
 from .utils import logging
-
-
-# The package importlib_metadata is in a different place, depending on the python version.
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -175,10 +169,11 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
-_torchaudio_available = importlib.util.find_spec("torchaudio")
+
+_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
-    logger.debug(f"Successfully imported soundfile version {_torchaudio_version}")
+    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
 except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
@@ -212,7 +207,7 @@ PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", defau
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
 TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 SESSION_ID = uuid4().hex
-DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False)
+DISABLE_TELEMETRY = os.getenv("DISABLE_TELEMETRY", False) in ENV_VARS_TRUE_VALUES
 
 WEIGHTS_NAME = "pytorch_model.bin"
 TF2_WEIGHTS_NAME = "tf_model.h5"
@@ -352,7 +347,7 @@ def is_pandas_available():
     return importlib.util.find_spec("pandas") is not None
 
 
-def is_sagemaker_distributed_available():
+def is_sagemaker_dp_enabled():
     # Get the sagemaker specific env variable.
     sagemaker_params = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
     try:
@@ -366,8 +361,32 @@ def is_sagemaker_distributed_available():
     return importlib.util.find_spec("smdistributed") is not None
 
 
+def is_sagemaker_mp_enabled():
+    # Get the sagemaker specific mp parameters from smp_options variable.
+    smp_options = os.getenv("SM_HP_MP_PARAMETERS", "{}")
+    try:
+        # Parse it and check the field "partitions" is included, it is required for model parallel.
+        smp_options = json.loads(smp_options)
+        if "partitions" not in smp_options:
+            return False
+    except json.JSONDecodeError:
+        return False
+
+    # Get the sagemaker specific framework parameters from mpi_options variable.
+    mpi_options = os.getenv("SM_FRAMEWORK_PARAMS", "{}")
+    try:
+        # Parse it and check the field "sagemaker_distributed_dataparallel_enabled".
+        mpi_options = json.loads(mpi_options)
+        if not mpi_options.get("sagemaker_mpi_enabled", False):
+            return False
+    except json.JSONDecodeError:
+        return False
+    # Lastly, check if the `smdistributed` module is present.
+    return importlib.util.find_spec("smdistributed") is not None
+
+
 def is_training_run_on_sagemaker():
-    return "SAGEMAKER_JOB_NAME" in os.environ and not DISABLE_TELEMETRY
+    return "SAGEMAKER_JOB_NAME" in os.environ
 
 
 def is_soundfile_availble():
@@ -583,8 +602,8 @@ def add_start_docstrings(*docstr):
 
 def add_start_docstrings_to_model_forward(*docstr):
     def docstring_decorator(fn):
-        class_name = ":class:`~transformers.{}`".format(fn.__qualname__.split(".")[0])
-        intro = "   The {} forward method, overrides the :func:`__call__` special method.".format(class_name)
+        class_name = f":class:`~transformers.{fn.__qualname__.split('.')[0]}`"
+        intro = f"   The {class_name} forward method, overrides the :func:`__call__` special method."
         note = r"""
 
     .. note::
@@ -1048,11 +1067,11 @@ def filename_to_url(filename, cache_dir=None):
 
     cache_path = os.path.join(cache_dir, filename)
     if not os.path.exists(cache_path):
-        raise EnvironmentError("file {} not found".format(cache_path))
+        raise EnvironmentError(f"file {cache_path} not found")
 
     meta_path = cache_path + ".json"
     if not os.path.exists(meta_path):
-        raise EnvironmentError("file {} not found".format(meta_path))
+        raise EnvironmentError(f"file {meta_path} not found")
 
     with open(meta_path, encoding="utf-8") as meta_file:
         metadata = json.load(meta_file)
@@ -1158,10 +1177,10 @@ def cached_path(
         output_path = url_or_filename
     elif urlparse(url_or_filename).scheme == "":
         # File, but it doesn't exist.
-        raise EnvironmentError("file {} not found".format(url_or_filename))
+        raise EnvironmentError(f"file {url_or_filename} not found")
     else:
         # Something unknown
-        raise ValueError("unable to parse {} as a URL or as a local path".format(url_or_filename))
+        raise ValueError(f"unable to parse {url_or_filename} as a URL or as a local path")
 
     if extract_compressed_file:
         if not is_zipfile(output_path) and not tarfile.is_tarfile(output_path):
@@ -1190,7 +1209,7 @@ def cached_path(
                 tar_file.extractall(output_path_extracted)
                 tar_file.close()
             else:
-                raise EnvironmentError("Archive format of {} could not be identified".format(output_path))
+                raise EnvironmentError(f"Archive format of {output_path} could not be identified")
 
         return output_path_extracted
 
@@ -1232,8 +1251,13 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
         ua += f"; torch/{_torch_version}"
     if is_tf_available():
         ua += f"; tensorflow/{_tf_version}"
+    if DISABLE_TELEMETRY:
+        return ua + "; telemetry/off"
     if is_training_run_on_sagemaker():
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in define_sagemaker_information().items())
+    # CI will set this value to True
+    if os.environ.get("TRANSFORMERS_IS_CI", "").upper() in ENV_VARS_TRUE_VALUES:
+        ua += "; is_ci/true"
     if isinstance(user_agent, dict):
         ua += "; " + "; ".join(f"{k}/{v}" for k, v in user_agent.items())
     elif isinstance(user_agent, str):
@@ -1243,11 +1267,11 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
 
 def http_get(url: str, temp_file: BinaryIO, proxies=None, resume_size=0, headers: Optional[Dict[str, str]] = None):
     """
-    Donwload remote file. Do not gobble up errors.
+    Download remote file. Do not gobble up errors.
     """
     headers = copy.deepcopy(headers)
     if resume_size > 0:
-        headers["Range"] = "bytes=%d-" % (resume_size,)
+        headers["Range"] = f"bytes={resume_size}-"
     r = requests.get(url, stream=True, proxies=proxies, headers=headers)
     r.raise_for_status()
     content_length = r.headers.get("Content-Length")
@@ -1297,12 +1321,12 @@ def get_from_cache(
 
     headers = {"user-agent": http_user_agent(user_agent)}
     if isinstance(use_auth_token, str):
-        headers["authorization"] = "Bearer {}".format(use_auth_token)
+        headers["authorization"] = f"Bearer {use_auth_token}"
     elif use_auth_token:
         token = HfFolder.get_token()
         if token is None:
             raise EnvironmentError("You specified use_auth_token=True, but a huggingface token was not found.")
-        headers["authorization"] = "Bearer {}".format(token)
+        headers["authorization"] = f"Bearer {token}"
 
     url_to_download = url
     etag = None
@@ -1399,14 +1423,14 @@ def get_from_cache(
         # Download to temporary file, then copy to cache dir once finished.
         # Otherwise you get corrupt cache entries if the download gets interrupted.
         with temp_file_manager() as temp_file:
-            logger.info("%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name)
+            logger.info(f"{url} not found in cache or force_download set to True, downloading to {temp_file.name}")
 
             http_get(url_to_download, temp_file, proxies=proxies, resume_size=resume_size, headers=headers)
 
-        logger.info("storing %s in cache at %s", url, cache_path)
+        logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
 
-        logger.info("creating metadata file for %s", cache_path)
+        logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
         meta_path = cache_path + ".json"
         with open(meta_path, "w") as meta_file:
@@ -1620,8 +1644,7 @@ class ExplicitEnum(Enum):
     @classmethod
     def _missing_(cls, value):
         raise ValueError(
-            "%r is not a valid %s, please select one of %s"
-            % (value, cls.__name__, str(list(cls._value2member_map_.keys())))
+            f"{value} is not a valid {cls.__name__}, please select one of {list(cls._value2member_map_.keys())}"
         )
 
 

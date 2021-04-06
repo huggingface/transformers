@@ -231,10 +231,10 @@ def check_task(task: str) -> Tuple[Dict, Any]:
         if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
             targeted_task = SUPPORTED_TASKS["translation"]
             return targeted_task, (tokens[1], tokens[3])
-        raise KeyError("Invalid translation task {}, use 'translation_XX_to_YY' format".format(task))
+        raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
     raise KeyError(
-        "Unknown task {}, available tasks are {}".format(task, list(SUPPORTED_TASKS.keys()) + ["translation_XX_to_YY"])
+        f"Unknown task {task}, available tasks are {list(SUPPORTED_TASKS.keys()) + ['translation_XX_to_YY']}"
     )
 
 
@@ -351,7 +351,7 @@ def pipeline(
             # Impossible to guest what is the right tokenizer here
             raise Exception(
                 "Impossible to guess which tokenizer to use. "
-                "Please provided a PretrainedTokenizer class or a path/identifier to a pretrained tokenizer."
+                "Please provided a PreTrainedTokenizer class or a path/identifier to a pretrained tokenizer."
             )
 
     modelcard = None
@@ -363,7 +363,7 @@ def pipeline(
 
     # Infer the framework form the model
     if framework is None:
-        framework, model = infer_framework_from_model(model, targeted_task, revision=revision)
+        framework, model = infer_framework_from_model(model, targeted_task, revision=revision, task=task)
 
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
@@ -373,18 +373,20 @@ def pipeline(
             # For tuple we have (tokenizer name, {kwargs})
             use_fast = tokenizer[1].pop("use_fast", use_fast)
             tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer[0], use_fast=use_fast, revision=revision, **tokenizer[1]
+                tokenizer[0], use_fast=use_fast, revision=revision, _from_pipeline=task, **tokenizer[1]
             )
         else:
-            tokenizer = AutoTokenizer.from_pretrained(tokenizer, revision=revision, use_fast=use_fast)
+            tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task
+            )
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision)
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
-        modelcard = ModelCard.from_pretrained(modelcard, revision=revision)
+        modelcard = ModelCard.from_pretrained(modelcard, revision=revision, _from_pipeline=task)
 
     # Instantiate model if needed
     if isinstance(model, str):
@@ -407,7 +409,9 @@ def pipeline(
                 f"Pipeline using {framework} framework, but this framework is not supported by this pipeline."
             )
 
-        model = model_class.from_pretrained(model, config=config, revision=revision, **model_kwargs)
+        model = model_class.from_pretrained(
+            model, config=config, revision=revision, _from_pipeline=task, **model_kwargs
+        )
 
     if task == "translation" and model.config.task_specific_params:
         for key in model.config.task_specific_params:

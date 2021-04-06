@@ -193,7 +193,9 @@ You can find here a list of the official notebooks provided by Hugging Face.
 | [Distributed Training Model Parallelism](https://github.com/huggingface/notebooks/blob/master/sagemaker/04_distributed_training_model_parallelism/sagemaker-notebook.ipynb)                     | End-to-End model parallelism example using `SageMakerTrainer` and `run_glue.py` script                           |
 | [Spot Instances and continues training](https://github.com/huggingface/notebooks/blob/master/sagemaker/05_spot_instances/sagemaker-notebook.ipynb)                                              | End-to-End to Text-Classification example using spot instances with continued training.                          |
 | [SageMaker Metrics](https://github.com/huggingface/notebooks/blob/master/sagemaker/06_sagemaker_metrics/sagemaker-notebook.ipynb)                                                               | End-to-End to Text-Classification example using SageMaker Metrics to extract and log metrics during training     |
-| [Distributed Training Data Parallelism Tensorflow](https://github.com/huggingface/notebooks/blob/master/sagemaker/07_tensorflow_distributed_training_data_parallelism/sagemaker-notebook.ipynb) | End-to-End distributed binary Text-Classification example using `Keras` and `TensorFlow`                         |
+| [Distributed Training Data Parallelism Tensorflow](https://github.com/huggingface/notebooks/blob/master/sagemaker/07_tensorflow_distributed_training_data_parallelism/sagemaker-notebook.ipynb) | End-to-End distributed binary Text-Classification example using `Keras` and `TensorFlow`                    
+| [Distributed Seq2Seq Training with Data Parallelism and BART](https://github.com/huggingface/notebooks/blob/master/sagemaker/08_distributed_summarization_bart_t5/sagemaker-notebook.ipynb) | End-to-End distributed summarization example `BART-large` and 🤗 Transformers example script for `summarization`                        |
+
 
 ---
 
@@ -203,7 +205,7 @@ In addition to the Deep Learning Container and the SageMaker SDK, we have implem
 
 ### Distributed Training: Data-Parallel
 
-You can use [SageMaker Data Parallelism Library](https://aws.amazon.com/blogs/aws/managed-data-parallelism-in-amazon-sagemaker-simplifies-training-on-large-datasets/) out of the box for distributed training. We added the functionality of Data Parallelism directly into the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html). If your train.py uses the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.
+You can use [SageMaker Data Parallelism Library](https://aws.amazon.com/blogs/aws/managed-data-parallelism-in-amazon-sagemaker-simplifies-training-on-large-datasets/) out of the box for distributed training. We added the functionality of Data Parallelism directly into the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html). If your `train.py` uses the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.
 
 - [Example Notebook PyTorch](https://github.com/huggingface/notebooks/blob/master/sagemaker/04_distributed_training_model_parallelism/sagemaker-notebook.ipynb)
 - [Example Notebook TensorFlow](https://github.com/huggingface/notebooks/blob/master/sagemaker/07_tensorflow_distributed_training_data_parallelism/sagemaker-notebook.ipynb)
@@ -230,16 +232,12 @@ huggingface_estimator = HuggingFace(
 
 ### Distributed Training: Model-Parallel
 
-You can use [SageMaker Model Parallelism Library](https://aws.amazon.com/blogs/aws/amazon-sagemaker-simplifies-training-deep-learning-models-with-billions-of-parameters/) out of the box for distributed training. We extended the Trainer API to the [SageMakerTrainer](https://github.com/huggingface/transformers/blob/461e8cacf94d1f76367cc9ba2cfd5b9bd3641c81/src/transformers/sagemaker/trainer_sm.py#L72) to use the model parallelism library. Therefore you only have to change the imports in your `train.py`.
+You can use [SageMaker Model Parallelism Library](https://aws.amazon.com/blogs/aws/amazon-sagemaker-simplifies-training-deep-learning-models-with-billions-of-parameters/) out of the box for distributed training. We added the functionality of Model Parallelism directly into the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html). If your `train.py` uses the [Trainer](https://huggingface.co/transformers/main_classes/trainer.html) API you only need to define the distribution parameter in the HuggingFace Estimator.  
+For detailed information about the adjustments take a look [here](https://sagemaker.readthedocs.io/en/stable/api/training/smd_model_parallel_general.html?highlight=modelparallel#required-sagemaker-python-sdk-parameters).
+
 
 - [Example Notebook](https://github.com/huggingface/notebooks/blob/master/sagemaker/04_distributed_training_model_parallelism/sagemaker-notebook.ipynb)
 
-```python
-from transformers.sagemaker import SageMakerTrainingArguments as TrainingArguments
-from transformers.sagemaker import SageMakerTrainer as Trainer
-```
-
-After the adjustments in the train.py you need to extend the distribution configuration in the HuggingFace Estimator. For detailed information about the adjustments take a look [here](https://sagemaker.readthedocs.io/en/stable/api/training/smd_model_parallel_general.html?highlight=modelparallel#required-sagemaker-python-sdk-parameters).
 
 ```python
 # configuration for running training on smdistributed Model Parallel

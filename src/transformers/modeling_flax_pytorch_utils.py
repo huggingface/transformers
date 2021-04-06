@@ -43,10 +43,10 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
         raise
 
     pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info("Loading PyTorch weights from {}".format(pt_path))
+    logger.info(f"Loading PyTorch weights from {pt_path}")
 
     pt_state_dict = torch.load(pt_path, map_location="cpu")
-    logger.info("PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values())} parameters.")
+    logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
     flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
 

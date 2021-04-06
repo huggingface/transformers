@@ -5,3 +5,8 @@ from ..file_utils import requires_vision
 class ImageFeatureExtractionMixin:
     def __init__(self, *args, **kwargs):
         requires_vision(self)
+
+
+class ViTFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_vision(self)

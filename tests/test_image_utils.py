@@ -264,7 +264,9 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
         # During the conversion rescale and channel first will be applied.
         expected = array.transpose(2, 0, 1).astype(np.float32) / 255.0
-        expected = (expected - np.array(mean)[:, None, None]) / np.array(std)[:, None, None]
+        np_mean = np.array(mean).astype(np.float32)[:, None, None]
+        np_std = np.array(std).astype(np.float32)[:, None, None]
+        expected = (expected - np_mean) / np_std
         self.assertTrue(np.array_equal(normalized_image, expected))
 
     def test_normalize_array(self):
@@ -313,3 +315,55 @@ class ImageFeatureExtractionTester(unittest.TestCase):
 
         normalized_tensor = feature_extractor.normalize(tensor, torch.tensor(mean), torch.tensor(std))
         self.assertTrue(torch.equal(normalized_tensor, expected))
+
+    def test_center_crop_image(self):
+        feature_extractor = ImageFeatureExtractionMixin()
+        image = get_random_image(16, 32)
+
+        # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
+        crop_sizes = [8, (8, 64), 20, (32, 64)]
+        for size in crop_sizes:
+            cropped_image = feature_extractor.center_crop(image, size)
+            self.assertTrue(isinstance(cropped_image, PIL.Image.Image))
+
+            # PIL Image.size is transposed compared to NumPy or PyTorch (width first instead of height first).
+            expected_size = (size, size) if isinstance(size, int) else (size[1], size[0])
+            self.assertEqual(cropped_image.size, expected_size)
+
+    def test_center_crop_array(self):
+        feature_extractor = ImageFeatureExtractionMixin()
+        image = get_random_image(16, 32)
+        array = feature_extractor.to_numpy_array(image)
+
+        # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
+        crop_sizes = [8, (8, 64), 20, (32, 64)]
+        for size in crop_sizes:
+            cropped_array = feature_extractor.center_crop(array, size)
+            self.assertTrue(isinstance(cropped_array, np.ndarray))
+
+            expected_size = (size, size) if isinstance(size, int) else size
+            self.assertEqual(cropped_array.shape[-2:], expected_size)
+
+            # Check result is consistent with PIL.Image.crop
+            cropped_image = feature_extractor.center_crop(image, size)
+            self.assertTrue(np.array_equal(cropped_array, feature_extractor.to_numpy_array(cropped_image)))
+
+    @require_torch
+    def test_center_crop_tensor(self):
+        feature_extractor = ImageFeatureExtractionMixin()
+        image = get_random_image(16, 32)
+        array = feature_extractor.to_numpy_array(image)
+        tensor = torch.tensor(array)
+
+        # Test various crop sizes: bigger on all dimensions, on one of the dimensions only and on both dimensions.
+        crop_sizes = [8, (8, 64), 20, (32, 64)]
+        for size in crop_sizes:
+            cropped_tensor = feature_extractor.center_crop(tensor, size)
+            self.assertTrue(isinstance(cropped_tensor, torch.Tensor))
+
+            expected_size = (size, size) if isinstance(size, int) else size
+            self.assertEqual(cropped_tensor.shape[-2:], expected_size)
+
+            # Check result is consistent with PIL.Image.crop
+            cropped_image = feature_extractor.center_crop(image, size)
+            self.assertTrue(torch.equal(cropped_tensor, torch.tensor(feature_extractor.to_numpy_array(cropped_image))))
