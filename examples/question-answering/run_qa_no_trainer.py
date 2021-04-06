@@ -593,9 +593,6 @@ def main():
 
     metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
 
-    def compute_metrics(p: EvalPrediction):
-        return metric.compute(predictions=p.predictions, references=p.label_ids)
-
     # Create and fill numpy array of size len_of_validation_data * max_length_of_output_tensor
     def create_and_fill_np_array(start_or_end_logits, dataset, max_len):
         """
@@ -609,18 +606,18 @@ def main():
                 The maximum length of the output tensor. ( See the model.eval() part for more details )
         """
 
-        step_size = 0
+        step = 0
         # create a numpy array and fill it with -100.
         logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float64)
         # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
         for i, output_logit in enumerate(start_or_end_logits):  # populate columns
             # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
-            # And after every iteration we have to change the step_size
+            # And after every iteration we have to change the step
 
             batch_size = output_logit.shape[0]
             cols = output_logit.shape[1]
-            logits_concat[step_size : step_size + batch_size, :cols] = output_logit
-            step_size = batch_size
+            logits_concat[step : step + batch_size, :cols] = output_logit
+            step += batch_size
 
         return logits_concat
 
@@ -707,8 +704,8 @@ def main():
                     start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
                     end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
-                all_start_logits.append(accelerator.gather(start_logits.cpu().numpy()))
-                all_end_logits.append(accelerator.gather(end_logits.cpu().numpy()))
+                all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
+                all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
 
@@ -716,13 +713,14 @@ def main():
         start_logits_concat = create_and_fill_np_array(all_start_logits, eval_dataset, max_len)
         end_logits_concat = create_and_fill_np_array(all_end_logits, eval_dataset, max_len)
 
+        # delete the list of numpy arrays
         del all_start_logits
         del all_end_logits
 
         eval_dataset.set_format(type=None, columns=list(eval_dataset.features.keys()))
         outputs_numpy = (start_logits_concat, end_logits_concat)
-        predictions = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
-        eval_metric = compute_metrics(predictions)
+        prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+        eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
         logger.info(f"Evaluation metrics: {eval_metric}")
 
     # Prediction
@@ -739,22 +737,23 @@ def main():
                     start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
                     end_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
 
-                all_start_logits.append(accelerator.gather(start_logits.cpu().numpy()))
-                all_end_logits.append(accelerator.gather(end_logits.cpu().numpy()))
+                all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
+                all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
         # concatenate the numpy array
         start_logits_concat = create_and_fill_np_array(all_start_logits, test_dataset, max_len)
         end_logits_concat = create_and_fill_np_array(all_end_logits, test_dataset, max_len)
 
+        # delete the list of numpy arrays
         del all_start_logits
         del all_end_logits
 
         # Now we need to add extra columns which we removed for post processing
         test_dataset.set_format(type=None, columns=list(test_dataset.features.keys()))
         outputs_numpy = (start_logits_concat, end_logits_concat)
-        predictions = post_processing_function(test_examples, test_dataset, outputs_numpy)
-        eval_metric = compute_metrics(predictions)
+        prediction = post_processing_function(test_examples, test_dataset, outputs_numpy)
+        eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
         logger.info(f"Test metrics: {eval_metric}")
 
     if args.output_dir is not None:

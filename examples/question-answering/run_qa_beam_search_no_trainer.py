@@ -591,9 +591,6 @@ def main():
 
     metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
 
-    def compute_metrics(p: EvalPrediction):
-        return metric.compute(predictions=p.predictions, references=p.label_ids)
-
     def create_and_fill_np_array(start_or_end_logits, dataset, max_len):
         """
         Create and fill numpy array of size len_of_validation_data * max_length_of_output_tensor
@@ -606,18 +603,18 @@ def main():
                 The maximum length of the output tensor. ( See the model.eval() part for more details )
         """
 
-        step_size = 0
+        step = 0
         # create a numpy array and fill it with -100.
         logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float32)
         # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
         for i, output_logit in enumerate(start_or_end_logits):  # populate columns
             # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
-            # And after every iteration we have to change the step_size
+            # And after every iteration we have to change the step
 
             batch_size = output_logit.shape[0]
             cols = output_logit.shape[1]
-            logits_concat[step_size : step_size + batch_size, :cols] = output_logit
-            step_size = batch_size
+            logits_concat[step : step + batch_size, :cols] = output_logit
+            step += batch_size
 
         return logits_concat
 
@@ -712,12 +709,13 @@ def main():
                     start_top_index = accelerator.pad_across_processes(start_top_index, dim=1, pad_index=-100)
                     end_top_log_probs = accelerator.pad_across_processes(end_top_log_probs, dim=1, pad_index=-100)
                     end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
+                    cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs.cpu().numpy()))
-                all_start_top_index.append(accelerator.gather(start_top_index.cpu().numpy()))
-                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs.cpu().numpy()))
-                all_end_top_index.append(accelerator.gather(end_top_index.cpu().numpy()))
-                all_cls_logits.append(accelerator.gather(cls_logits.cpu().numpy()))
+                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
+                all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
+                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
+                all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
+                all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
@@ -726,7 +724,9 @@ def main():
         start_top_index_concat = create_and_fill_np_array(all_start_top_index, eval_dataset, max_len)
         end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, eval_dataset, max_len)
         end_top_index_concat = create_and_fill_np_array(all_end_top_index, eval_dataset, max_len)
+        all_cls_logits = np.concatenate(all_cls_logits, axis=0)
 
+        # delete the list of numpy arrays
         del start_top_log_probs
         del start_top_index
         del end_top_log_probs
@@ -740,9 +740,9 @@ def main():
             end_top_index_concat,
             cls_logits,
         )
-        predictions = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
-        eval_metric = compute_metrics(predictions)
-        logger.info(f"Test metrics: {eval_metric}")
+        prediction = post_processing_function(eval_examples, eval_dataset, outputs_numpy)
+        eval_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
+        logger.info(f"Evaluation metrics: {eval_metric}")
 
     if args.do_predict:
         # intialize all lists to collect the batches
@@ -766,12 +766,13 @@ def main():
                     start_top_index = accelerator.pad_across_processes(start_top_index, dim=1, pad_index=-100)
                     end_top_log_probs = accelerator.pad_across_processes(end_top_log_probs, dim=1, pad_index=-100)
                     end_top_index = accelerator.pad_across_processes(end_top_index, dim=1, pad_index=-100)
+                    cls_logits = accelerator.pad_across_processes(cls_logits, dim=1, pad_index=-100)
 
-                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs.cpu().numpy()))
-                all_start_top_index.append(accelerator.gather(start_top_index.cpu().numpy()))
-                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs.cpu().numpy()))
-                all_end_top_index.append(accelerator.gather(end_top_index.cpu().numpy()))
-                all_cls_logits.append(accelerator.gather(cls_logits.cpu().numpy()))
+                all_start_top_log_probs.append(accelerator.gather(start_top_log_probs).cpu().numpy())
+                all_start_top_index.append(accelerator.gather(start_top_index).cpu().numpy())
+                all_end_top_log_probs.append(accelerator.gather(end_top_log_probs).cpu().numpy())
+                all_end_top_index.append(accelerator.gather(end_top_index).cpu().numpy())
+                all_cls_logits.append(accelerator.gather(cls_logits).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_end_top_log_probs])  # Get the max_length of the tensor
 
@@ -780,7 +781,9 @@ def main():
         start_top_index_concat = create_and_fill_np_array(all_start_top_index, test_dataset, max_len)
         end_top_log_probs_concat = create_and_fill_np_array(all_end_top_log_probs, test_dataset, max_len)
         end_top_index_concat = create_and_fill_np_array(all_end_top_index, test_dataset, max_len)
+        all_cls_logits = np.concatenate(all_cls_logits, axis=0)
 
+        # delete the list of numpy arrays
         del start_top_log_probs
         del start_top_index
         del end_top_log_probs
@@ -794,8 +797,9 @@ def main():
             end_top_index_concat,
             cls_logits,
         )
-        predictions = post_processing_function(test_examples, test_dataset, outputs_numpy)
-        test_metric = compute_metrics(predictions)
+
+        prediction = post_processing_function(test_examples, test_dataset, outputs_numpy)
+        test_metric = metric.compute(predictions=prediction.predictions, references=prediction.label_ids)
         logger.info(f"Test metrics: {test_metric}")
 
     if args.output_dir is not None:
