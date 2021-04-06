@@ -175,7 +175,7 @@ class ViTSelfAttention(nn.Module):
 
 class ViTSelfOutput(nn.Module):
     """
-    The residual connection is defined in VitLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 

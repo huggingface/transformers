@@ -376,7 +376,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DeiTConfig
-    base_model_prefix = "deit"
+    base_model_prefix = "vit"
 
     def _init_weights(self, module):
         """ Initialize the weights """

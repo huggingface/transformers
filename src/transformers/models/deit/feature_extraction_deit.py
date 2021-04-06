@@ -41,12 +41,15 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         size (:obj:`int`, `optional`, defaults to 256):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         resample (:obj:`int`, `optional`, defaults to 256):
-            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`, :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`. Default filter is :obj:`PIL.Image.BICUBIC`.
-            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
+            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
+            Default filter is :obj:`PIL.Image.BICUBIC`. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         do_center_crop (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether to crop the input at the center. If the input size is smaller than :obj:`crop_size` along any edge, the image is padded with 0's and then center cropped.
+            Whether to crop the input at the center. If the input size is smaller than :obj:`crop_size` along any edge,
+            the image is padded with 0's and then center cropped.
         crop_size (:obj:`int`, `optional`, defaults to 256):
-            Desired output size when applying center-cropping. Only has an effect if :obj:`do_center_crop` is set to :obj:`True`.
+            Desired output size when applying center-cropping. Only has an effect if :obj:`do_center_crop` is set to
+            :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with :obj:`image_mean` and :obj:`image_std`.
         image_mean (:obj:`int`, defaults to :obj:`[0.485, 0.456, 0.406]`):
@@ -57,7 +60,18 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize=True, size=256, resample=Image.BICUBIC, do_center_crop=True, crop_size=224, do_normalize=True, image_mean=None, image_std=None, **kwargs):
+    def __init__(
+        self,
+        do_resize=True,
+        size=256,
+        resample=Image.BICUBIC,
+        do_center_crop=True,
+        crop_size=224,
+        do_normalize=True,
+        image_mean=None,
+        image_std=None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size

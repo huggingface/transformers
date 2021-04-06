@@ -28,7 +28,7 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import DeiTConfig, DeiTForImageClassification, DeiTModel
+    from transformers import DeiTConfig, DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
     from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -143,6 +143,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         (
             DeiTModel,
             DeiTForImageClassification,
+            DeiTForImageClassificationWithTeacher,
         )
         if is_torch_available()
         else ()

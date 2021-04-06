@@ -1089,6 +1089,37 @@ class DebertaV2PreTrainedModel:
         requires_backends(self, ["torch"])
 
 
+DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DeiTForImageClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DeiTForImageClassificationWithTeacher:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DeiTModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DeiTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
