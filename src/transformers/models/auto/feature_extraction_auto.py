@@ -36,7 +36,7 @@ else:
 # Build the list of all feature extractors
 FEATURE_EXTRACTOR_MAPPING = OrderedDict(
     [
-        ("speech_to_text", Speech2TextFeatureExtractor),
+        ("s2t", Speech2TextFeatureExtractor),
         ("vit", ViTFeatureExtractor),
         ("wav2vec2", Wav2Vec2FeatureExtractor),
     ]
