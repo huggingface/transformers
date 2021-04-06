@@ -1474,6 +1474,17 @@ We do however use it internally in several places, one such example is when load
 large models it won't be possible to load it on one GPU and then spread it out to multiple GPUs, due to memory
 limitations.
 
+Also under ZeRO-3, if you write your own code and run into a model parameter weight that looks like:
+
+.. code-block:: python
+
+   tensor([1.], device='cuda:0', dtype=torch.float16, requires_grad=True)
+
+stress on ``tensor([1.])``, or if you get an error where it says the parameter is of size ``1``, instead of some much
+larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
+
+
+
 
 
 Notes

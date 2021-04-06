@@ -661,7 +661,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if new_num_tokens is None:
             return old_embeddings
 
-        old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
+                old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        else:
+            old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
@@ -678,8 +685,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         self._init_weights(new_embeddings)
 
         # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
+
+        # numbers of tokens to copy
+        n = min(old_num_tokens, new_num_tokens)
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
+        else:
+            new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
 
