@@ -45,7 +45,7 @@ FEATURE_EXTRACTOR_MAPPING = OrderedDict(
 
 def feature_extractor_class_from_name(class_name: str):
     for c in FEATURE_EXTRACTOR_MAPPING.values():
-        if c.__name__ == class_name:
+        if c is not None and c.__name__ == class_name:
             return c
 
 
