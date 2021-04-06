@@ -15,11 +15,12 @@
 import importlib.util
 import json
 import os
+import warnings
 from dataclasses import dataclass, field
 
 import torch
 
-from transformers.file_utils import cached_property, is_sagemaker_distributed_available
+from transformers.file_utils import cached_property, is_sagemaker_dp_enabled
 from transformers.training_args import TrainingArguments
 from transformers.utils import logging
 
@@ -66,6 +67,14 @@ class SageMakerTrainingArguments(TrainingArguments):
         metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in SageMakerTrainer"},
     )
 
+    def __post_init__(self):
+        super().__post_init__()
+        warnings.warn(
+            "`SageMakerTrainingArguments` is deprecated and will be removed in v5 of Transformers. You can use "
+            "`TrainingArguments` instead.",
+            FutureWarning,
+        )
+
     @cached_property
     def _setup_devices(self) -> "torch.device":
         logger.info("PyTorch: setting up devices")
@@ -76,7 +85,7 @@ class SageMakerTrainingArguments(TrainingArguments):
             local_rank = smp.local_rank()
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
-        elif is_sagemaker_distributed_available():
+        elif is_sagemaker_dp_enabled():
             import smdistributed.dataparallel.torch.distributed as dist
 
             dist.init_process_group()

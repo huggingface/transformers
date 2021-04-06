@@ -153,7 +153,7 @@ class MultiHeadAttention(nn.Module):
             klen = qlen if cache is None else cache["slen"] + qlen
         else:
             klen = kv.size(1)
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         n_heads = self.n_heads
         dim_per_head = self.dim // n_heads
         mask_reshape = (bs, 1, qlen, klen) if mask.dim() == 3 else (bs, 1, 1, klen)

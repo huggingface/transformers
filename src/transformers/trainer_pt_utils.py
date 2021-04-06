@@ -32,11 +32,11 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, Sampler
 
-from .file_utils import is_sagemaker_distributed_available, is_torch_tpu_available
+from .file_utils import is_sagemaker_dp_enabled, is_sagemaker_mp_enabled, is_torch_tpu_available
 from .utils import logging
 
 
-if is_sagemaker_distributed_available():
+if is_sagemaker_dp_enabled():
     import smdistributed.dataparallel.torch.distributed as dist
 else:
     import torch.distributed as dist
@@ -276,11 +276,8 @@ def nested_new_like(arrays, num_samples, padding_index=-100):
     return np.full_like(arrays, padding_index, shape=(num_samples, *arrays.shape[1:]))
 
 
-def nested_expand_like(arrays, new_seq_length, padding_index=-100):
+def expand_like(arrays, new_seq_length, padding_index=-100):
     """ Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
-    if isinstance(arrays, (list, tuple)):
-        return type(arrays)(nested_expand_like(x, new_seq_length, padding_index=padding_index) for x in arrays)
-
     result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result
@@ -291,13 +288,6 @@ def nested_truncate(tensors, limit):
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_truncate(t, limit) for t in tensors)
     return tensors[:limit]
-
-
-def _get_first_shape(arrays):
-    """Return the shape of the first array found in the nested struct `arrays`."""
-    if isinstance(arrays, (list, tuple)):
-        return _get_first_shape(arrays[0])
-    return arrays.shape
 
 
 class DistributedTensorGatherer:
@@ -367,21 +357,15 @@ class DistributedTensorGatherer:
         if self._storage is None:
             self._storage = nested_new_like(arrays, self.total_samples, padding_index=self.padding_index)
             self._offsets = list(range(0, self.total_samples, self.process_length))
-        else:
-            storage_shape = _get_first_shape(self._storage)
-            arrays_shape = _get_first_shape(arrays)
-            if len(storage_shape) > 1 and storage_shape[1] < arrays_shape[1]:
-                # If we get new arrays that are too big too fit, we expand the shape fo the storage
-                self._storage = nested_expand_like(self._storage, arrays_shape[1], padding_index=self.padding_index)
-        slice_len = self._nested_set_tensors(self._storage, arrays)
+
+        slice_len, self._storage = self._nested_set_tensors(self._storage, arrays)
         for i in range(self.world_size):
             self._offsets[i] += slice_len
 
     def _nested_set_tensors(self, storage, arrays):
         if isinstance(arrays, (list, tuple)):
-            for x, y in zip(storage, arrays):
-                slice_len = self._nested_set_tensors(x, y)
-            return slice_len
+            result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
+            return result[0][0], type(arrays)(r[1] for r in result)
         assert (
             arrays.shape[0] % self.world_size == 0
         ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
@@ -391,10 +375,13 @@ class DistributedTensorGatherer:
             if len(arrays.shape) == 1:
                 storage[self._offsets[i] : self._offsets[i] + slice_len] = arrays[i * slice_len : (i + 1) * slice_len]
             else:
+                # Expand the array on the fly if needed.
+                if len(storage.shape) > 1 and storage.shape[1] < arrays.shape[1]:
+                    storage = expand_like(storage, arrays.shape[1], padding_index=self.padding_index)
                 storage[self._offsets[i] : self._offsets[i] + slice_len, : arrays.shape[1]] = arrays[
                     i * slice_len : (i + 1) * slice_len
                 ]
-        return slice_len
+        return slice_len, storage
 
     def finalize(self):
         """
@@ -805,3 +792,40 @@ def get_parameter_names(model, forbidden_layer_types):
     # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
     result += list(model._parameters.keys())
     return result
+
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    @smp.step()
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
+        outputs = model(**inputs)
+        loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
+        loss /= gradient_accumulation_steps
+        model.backward(loss)
+        return loss
+
+    @smp.step()
+    def smp_forward_only(model, inputs):
+        return model(**inputs)
+
+    def smp_gather(tensor):
+        if isinstance(tensor, (list, tuple)):
+            return type(tensor)(smp_gather(t) for t in tensor)
+        elif isinstance(tensor, dict):
+            return type(tensor)({k: smp_gather(v) for k, v in tensor.items()})
+        elif not isinstance(tensor, torch.Tensor):
+            raise TypeError(
+                f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
+            )
+        all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
+        return torch.cat([t.cpu() for t in all_tensors], dim=0)
+
+    def smp_nested_concat(tensor):
+        if isinstance(tensor, (list, tuple)):
+            return type(tensor)(smp_nested_concat(t) for t in tensor)
+        elif isinstance(tensor, dict):
+            return type(tensor)({k: smp_nested_concat(v) for k, v in tensor.items()})
+        # It doesn't seem possible to check here if `tensor` is a StepOutput because StepOutput lives in `smp.step`
+        # which is also the name of the decorator so Python is confused.
+        return tensor.concat().detach().cpu()

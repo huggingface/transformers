@@ -89,6 +89,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
+    "docutils==0.16.0",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -107,6 +108,7 @@ _deps = [
     "onnxruntime>=1.4.0",
     "packaging",
     "parameterized",
+    "Pillow",
     "protobuf",
     "psutil",
     "pydantic",
@@ -124,6 +126,7 @@ _deps = [
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+    "sphinxext-opengraph==0.4.1",
     "sphinx==3.2.1",
     "starlette",
     "tensorflow-cpu>=2.3",
@@ -230,6 +233,7 @@ extras["sagemaker"] = deps_list("sagemaker")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["vision"] = deps_list("Pillow")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
@@ -239,10 +243,26 @@ extras["testing"] = (
     + extras["retrieval"]
     + extras["modelcreation"]
 )
-extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
+extras["docs"] = deps_list(
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
+)
 extras["quality"] = deps_list("black", "isort", "flake8")
 
-extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
+extras["all"] = (
+    extras["tf"]
+    + extras["torch"]
+    + extras["flax"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["speech"]
+    + extras["vision"]
+)
 
 extras["dev"] = (
     extras["all"]

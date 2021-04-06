@@ -17,6 +17,7 @@
 
 from collections import OrderedDict
 
+from ... import GPTNeoConfig
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import is_sentencepiece_available, is_tokenizers_available
 from ...utils import logging
@@ -264,6 +265,7 @@ TOKENIZER_MAPPING = OrderedDict(
         (BigBirdConfig, (BigBirdTokenizer, None)),
         (IBertConfig, (RobertaTokenizer, RobertaTokenizerFast)),
         (Wav2Vec2Config, (Wav2Vec2CTCTokenizer, None)),
+        (GPTNeoConfig, (GPT2Tokenizer, GPT2TokenizerFast)),
     ]
 )
 
@@ -383,6 +385,7 @@ class AutoTokenizer:
 
         """
         config = kwargs.pop("config", None)
+        kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
             config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
@@ -399,7 +402,7 @@ class AutoTokenizer:
 
             if tokenizer_class is None:
                 raise ValueError(
-                    "Tokenizer class {} does not exist or is not currently imported.".format(tokenizer_class_candidate)
+                    f"Tokenizer class {tokenizer_class_candidate} does not exist or is not currently imported."
                 )
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
@@ -428,8 +431,6 @@ class AutoTokenizer:
                     )
 
         raise ValueError(
-            "Unrecognized configuration class {} to build an AutoTokenizer.\n"
-            "Model type should be one of {}.".format(
-                config.__class__, ", ".join(c.__name__ for c in TOKENIZER_MAPPING.keys())
-            )
+            f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"
+            f"Model type should be one of {', '.join(c.__name__ for c in TOKENIZER_MAPPING.keys())}."
         )

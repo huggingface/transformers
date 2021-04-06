@@ -151,9 +151,9 @@ environment variable for ``TRANSFORMERS_CACHE``.
 
 ### Note on model downloads (Continuous Integration or large-scale deployments)
 
-If you expect to be downloading large volumes of models (more than 1,000) from our hosted bucket (for instance through
+If you expect to be downloading large volumes of models (more than 10,000) from huggingface.co (for instance through
 your CI setup, or a large-scale production deployment), please cache the model files on your end. It will be way
-faster, and cheaper. Feel free to contact us privately if you need any help.
+faster, and cheaper. Feel free to contact us privately, we'd love to help with this.
 
 ### Offline mode
 

@@ -27,14 +27,14 @@ logging.set_verbosity_info()
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, config_file, pytorch_dump_path):
     # Initialise PyTorch model
     config = T5Config.from_json_file(config_file)
-    print("Building PyTorch model from configuration: {}".format(str(config)))
+    print(f"Building PyTorch model from configuration: {config}")
     model = T5ForConditionalGeneration(config)
 
     # Load weights from tf checkpoint
     load_tf_weights_in_t5(model, config, tf_checkpoint_path)
 
     # Save pytorch-model
-    print("Save PyTorch model to {}".format(pytorch_dump_path))
+    print(f"Save PyTorch model to {pytorch_dump_path}")
     model.save_pretrained(pytorch_dump_path)
 
 

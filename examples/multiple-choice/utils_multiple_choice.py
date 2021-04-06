@@ -99,13 +99,7 @@ if is_torch_available():
             processor = processors[task]()
 
             cached_features_file = os.path.join(
-                data_dir,
-                "cached_{}_{}_{}_{}".format(
-                    mode.value,
-                    tokenizer.__class__.__name__,
-                    str(max_seq_length),
-                    task,
-                ),
+                data_dir, f"cached_{mode.value}_{tokenizer.__class__.__name__}_{max_seq_length}_{task}"
             )
 
             # Make sure only the first process in distributed training processes the dataset,
@@ -125,14 +119,14 @@ if is_torch_available():
                         examples = processor.get_test_examples(data_dir)
                     else:
                         examples = processor.get_train_examples(data_dir)
-                    logger.info("Training examples: %s", len(examples))
+                    logger.info(f"Training examples: {len(examples)}")
                     self.features = convert_examples_to_features(
                         examples,
                         label_list,
                         max_seq_length,
                         tokenizer,
                     )
-                    logger.info("Saving features into cached file %s", cached_features_file)
+                    logger.info(f"Saving features into cached file {cached_features_file}")
                     torch.save(self.features, cached_features_file)
 
         def __len__(self):
@@ -172,7 +166,7 @@ if is_tf_available():
                 examples = processor.get_test_examples(data_dir)
             else:
                 examples = processor.get_train_examples(data_dir)
-            logger.info("Training examples: %s", len(examples))
+            logger.info(f"Training examples: {len(examples)}")
 
             self.features = convert_examples_to_features(
                 examples,
@@ -184,7 +178,7 @@ if is_tf_available():
             def gen():
                 for (ex_index, ex) in tqdm.tqdm(enumerate(self.features), desc="convert examples to features"):
                     if ex_index % 10000 == 0:
-                        logger.info("Writing example %d of %d" % (ex_index, len(examples)))
+                        logger.info(f"Writing example {ex_index} of {len(examples)}")
 
                     yield (
                         {
@@ -255,7 +249,7 @@ class RaceProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         high = os.path.join(data_dir, "train/high")
         middle = os.path.join(data_dir, "train/middle")
         high = self._read_txt(high)
@@ -264,7 +258,7 @@ class RaceProcessor(DataProcessor):
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         high = os.path.join(data_dir, "dev/high")
         middle = os.path.join(data_dir, "dev/middle")
         high = self._read_txt(high)
@@ -273,7 +267,7 @@ class RaceProcessor(DataProcessor):
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} test".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} test")
         high = os.path.join(data_dir, "test/high")
         middle = os.path.join(data_dir, "test/middle")
         high = self._read_txt(high)
@@ -298,7 +292,7 @@ class RaceProcessor(DataProcessor):
         """Creates examples for the training and dev sets."""
         examples = []
         for (_, data_raw) in enumerate(lines):
-            race_id = "%s-%s" % (set_type, data_raw["race_id"])
+            race_id = f"{set_type}-{data_raw['race_id']}"
             article = data_raw["article"]
             for i in range(len(data_raw["answers"])):
                 truth = str(ord(data_raw["answers"][i]) - ord("A"))
@@ -322,17 +316,17 @@ class SynonymProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mctrain.csv")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mchp.csv")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
 
         return self._create_examples(self._read_csv(os.path.join(data_dir, "mctest.csv")), "test")
 
@@ -368,17 +362,17 @@ class SwagProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "train.csv")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_csv(os.path.join(data_dir, "val.csv")), "dev")
 
     def get_test_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         raise ValueError(
             "For swag testing, the input file does not contain a label column. It can not be tested in current code"
             "setting!"
@@ -419,16 +413,16 @@ class ArcProcessor(DataProcessor):
 
     def get_train_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} train".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} train")
         return self._create_examples(self._read_json(os.path.join(data_dir, "train.jsonl")), "train")
 
     def get_dev_examples(self, data_dir):
         """See base class."""
-        logger.info("LOOKING AT {} dev".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} dev")
         return self._create_examples(self._read_json(os.path.join(data_dir, "dev.jsonl")), "dev")
 
     def get_test_examples(self, data_dir):
-        logger.info("LOOKING AT {} test".format(data_dir))
+        logger.info(f"LOOKING AT {data_dir} test")
         return self._create_examples(self._read_json(os.path.join(data_dir, "test.jsonl")), "test")
 
     def get_labels(self):
@@ -450,7 +444,7 @@ class ArcProcessor(DataProcessor):
             elif truth in "1234":
                 return int(truth) - 1
             else:
-                logger.info("truth ERROR! %s", str(truth))
+                logger.info(f"truth ERROR! {truth}")
                 return None
 
         examples = []
@@ -496,11 +490,11 @@ class ArcProcessor(DataProcessor):
         if type == "train":
             assert len(examples) > 1
             assert examples[0].label is not None
-        logger.info("len examples: %s}", str(len(examples)))
-        logger.info("Three choices: %s", str(three_choice))
-        logger.info("Five choices: %s", str(five_choice))
-        logger.info("Other choices: %s", str(other_choices))
-        logger.info("four choices: %s", str(four_choice))
+        logger.info(f"len examples: {len(examples)}")
+        logger.info(f"Three choices: {three_choice}")
+        logger.info(f"Five choices: {five_choice}")
+        logger.info(f"Other choices: {other_choices}")
+        logger.info(f"four choices: {four_choice}")
 
         return examples
 
@@ -520,7 +514,7 @@ def convert_examples_to_features(
     features = []
     for (ex_index, example) in tqdm.tqdm(enumerate(examples), desc="convert examples to features"):
         if ex_index % 10000 == 0:
-            logger.info("Writing example %d of %d" % (ex_index, len(examples)))
+            logger.info(f"Writing example {ex_index} of {len(examples)}")
         choices_inputs = []
         for ending_idx, (context, ending) in enumerate(zip(example.contexts, example.endings)):
             text_a = context
@@ -570,7 +564,7 @@ def convert_examples_to_features(
 
     for f in features[:2]:
         logger.info("*** Example ***")
-        logger.info("feature: %s" % f)
+        logger.info("feature: {f}")
 
     return features
 

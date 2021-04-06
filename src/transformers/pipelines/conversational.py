@@ -94,15 +94,14 @@ class Conversation:
         if self.new_user_input:
             if overwrite:
                 logger.warning(
-                    'User input added while unprocessed input was existing: "{}" was overwritten with: "{}".'.format(
-                        self.new_user_input, text
-                    )
+                    f'User input added while unprocessed input was existing: "{self.new_user_input}" was overwritten '
+                    f'with: "{text}".'
                 )
                 self.new_user_input = text
             else:
                 logger.warning(
-                    'User input added while unprocessed input was existing: "{}" new input ignored: "{}". '
-                    "Set `overwrite` to True to overwrite unprocessed user input".format(self.new_user_input, text)
+                    f'User input added while unprocessed input was existing: "{self.new_user_input}" new input '
+                    f'ignored: "{text}". Set `overwrite` to True to overwrite unprocessed user input'
                 )
         else:
             self.new_user_input = text
@@ -148,10 +147,10 @@ class Conversation:
             Example: Conversation id: 7d15686b-dc94-49f2-9c4b-c9eac6a1f114 user >> Going to the movies tonight - any
             suggestions? bot >> The Big Lebowski
         """
-        output = "Conversation id: {} \n".format(self.uuid)
+        output = f"Conversation id: {self.uuid} \n"
         for is_user, text in self.iter_texts():
             name = "user" if is_user else "bot"
-            output += "{} >> {} \n".format(name, text)
+            output += f"{name} >> {text} \n"
         return output
 
 
@@ -232,10 +231,8 @@ class ConversationalPipeline(Pipeline):
                 ), "ConversationalPipeline expects a Conversation or list of Conversations as an input"
                 if conversation.new_user_input is None:
                     raise ValueError(
-                        "Conversation with UUID {} does not contain new user input to process. "
-                        "Add user inputs with the conversation's `add_user_input` method".format(
-                            type(conversation.uuid)
-                        )
+                        f"Conversation with UUID {type(conversation.uuid)} does not contain new user input to process. "
+                        "Add user inputs with the conversation's `add_user_input` method"
                     )
             assert (
                 self.tokenizer.pad_token_id is not None or self.tokenizer.eos_token_id is not None
