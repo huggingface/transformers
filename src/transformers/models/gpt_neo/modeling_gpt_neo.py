@@ -132,11 +132,15 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
 class AttentionMixin:
     """
-    A few attention utilities for nn.Modules in GPT Neo, to be used as a mixin.
+    A few attention related utilities for attention modules in GPT Neo, to be used as a mixin.
     """
 
     @staticmethod
     def _get_block_length_and_num_blocks(seq_length, window_size):
+        """
+        Computes ``block_length`` and ``num_blocks`` such that ``seq_length`` becomes evenly divisible by
+        ``block_length``.
+        """
         block_length = window_size
         while seq_length % block_length != 0:
             block_length -= 1
@@ -146,17 +150,57 @@ class AttentionMixin:
     @staticmethod
     def _look_back(tensor, block_length, window_size, pad_value=0, is_key_value=True):
         """
-        Used to implement attention between consecutive blocks.
+        Used to implement attention between consecutive blocks. This method assumes that dim 1 of :obj:`tensor`
+        represents the :obj:`seq_length` dimention. It splits :obj:`seq_length` dimention into :obj:`num_blocks` and
+        :obj:`window_size` + :obj:`block_length`. It pads the :obj:`seq_length` dimention if necessary.
+
+        Example::
+            tensor: torch.tensor([[[ 0.4983],
+                                    [ 2.6918],
+                                    [-0.0071],
+                                    [ 1.0492],
+                                    [-1.8348],
+                                    [ 0.7672],
+                                    [ 0.2986],
+                                    [ 0.0285]]])
+            with shape (1, 8, 1)
+            block_length = window_size = 4
+            _look_back =>
+                torch.tensor([[[[ 0.0000],
+                                [ 0.0000],
+                                [ 0.0000],
+                                [ 0.0000],
+                                [ 0.4983],
+                                [ 2.6918],
+                                [-0.0071],
+                                [ 1.0492]],
+
+                                [[ 0.4983],
+                                [ 2.6918],
+                                [-0.0071],
+                                [ 1.0492],
+                                [-1.8348],
+                                [ 0.7672],
+                                [ 0.2986],
+                                [ 0.0285]]]])
 
         Args:
             tensor (:obj:`torch.Tensor`): tensor of shape :obj:`[batch_size, seq_length, hidden_dim]` or :obj:`[batch_size, seq_length]`
+            block_length (:obj:`int`): An integer specifying the length of each block, used as a step size when creating the blocks.
+            window_size (:obj:`int`): An integer specifying the size of attention window, used to calculate the final block size when creating the block.
+            pad_value (obj:`int`): An integer specifying the value to use when padding the :obj:`tensor`.
+            is_key_value (:obj:`bool`): A boolean indicating if the :obj:`tensor` is a key/value tensor.
+
+        Returns:
+            tensor of shape :obj:`[batch_size, num_blocks, window_size + block_length, ...]` if :obj:`is_key_value` is
+            :obj:`True` else a tensor of shape :obj:`[batch_size, window_size + block_length, num_blocks, ...]`
         """
         if len(tensor.shape) == 3:
             padding_side = (0, 0, window_size, 0)
         elif len(tensor.shape) == 2:
             padding_side = (window_size, 0)
         else:
-            raise ValueError("Input tensor rank should be one of [2, 3], but is: {}".format(len(tensor.shape)))
+            raise ValueError(f"Input tensor rank should be one of [2, 3], but is: {len(tensor.shape)}")
 
         padded_tensor = F.pad(tensor, padding_side, value=pad_value)
         padded_tensor = padded_tensor.unfold(dimension=1, size=window_size + block_length, step=block_length)
@@ -176,7 +220,7 @@ class AttentionMixin:
         elif len(tensor.shape) == 4:
             return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
         else:
-            raise ValueError("Input tensor rank should be one of [4, 5], but is: {}".format(len(tensor.shape)))
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
 
     def _merge_heads(self, tensor, num_heads, attn_head_size):
         """
@@ -187,7 +231,7 @@ class AttentionMixin:
         elif len(tensor.shape) == 4:
             tensor = tensor.permute(0, 2, 1, 3).contiguous()
         else:
-            raise ValueError("Input tensor rank should be one of [4, 5], but is: {}".format(len(tensor.shape)))
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
@@ -203,7 +247,7 @@ class AttentionMixin:
         elif len(tensors.shape) == 2:
             return torch.reshape(tensors, split_dim_shape)
         else:
-            raise ValueError("Input vector rank should be one of [2, 3], but is: {}".format(len(tensors.shape)))
+            raise ValueError(f"Input vector rank should be one of [2, 3], but is: {len(tensors.shape)}")
 
     def _attn(self, query, key, value, causal_mask, masked_bias, attn_dropout, attention_mask=None, head_mask=None):
         # Keep the attention weights computation in fp32 to avoid overflow issues
@@ -336,16 +380,26 @@ class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
         query_indices = self._split_seq_length_dim_to(indices, num_blocks, block_length, self.embed_dim)
         key_indices = self._look_back(indices, block_length, self.window_size, is_key_value=False)
 
+        # create mask tensor such that each block contains a causal_mask for that block
         causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2))
 
         if attention_mask is None:
             attention_mask = torch.ones(batch_size, seq_length, dtype=torch.long, device=device)
 
+        # A block can also be padded becuase of the _look_back operation
+        # look back into the attention_block such that it will also get padded the same way
+        # and have 0s in the padded position
         attention_mask = self._look_back(attention_mask, block_length, self.window_size, is_key_value=False)
         attention_mask = attention_mask.unsqueeze(-2)  # Add an extra dimention to account for hidden_dim
 
+        # Multiply the causal_mask with attention_mask so the padded positions (by _look_back operation)
+        # will contain 0s.
+        # This also makes sure that other positions ignored by the attention_mask will also be ignored
+        # in the causal_mask.
         causal_mask = causal_mask * attention_mask
 
+        # In GPT Neo's local attention each window can attend to at most window_size tokens
+        # rest of the tokens should be ignored.
         relative_position = key_indices.unsqueeze(-2) - query_indices.unsqueeze(-1)
         visible = torch.gt(relative_position, -self.window_size)
 
@@ -443,9 +497,8 @@ class GPTNeoAttention(nn.Module):
             self.attention = GPTNeoLocalSelfAttention(config)
         else:
             raise NotImplementedError(
-                "Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: {}. Select attn layer types from ['global', 'local'] only.".format(
-                    self.attention_layers
-                )
+                f"Only attn layer types 'global' and 'local' exist, but got `config.attention_layers`: {self.attention_layers}."
+                "Select attn layer types from ['global', 'local'] only."
             )
 
     def forward(
