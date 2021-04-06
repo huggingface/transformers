@@ -126,6 +126,7 @@ _deps = [
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+    "sphinxext-opengraph==0.4.1",
     "sphinx==3.2.1",
     "starlette",
     "tensorflow-cpu>=2.3",
@@ -243,11 +244,25 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 extras["docs"] = deps_list(
-    "docutils", "recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton"
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
 )
 extras["quality"] = deps_list("black", "isort", "flake8")
 
-extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"] + extras["speech"] + extras["vision"]
+extras["all"] = (
+    extras["tf"]
+    + extras["torch"]
+    + extras["flax"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["speech"]
+    + extras["vision"]
+)
 
 extras["dev"] = (
     extras["all"]
