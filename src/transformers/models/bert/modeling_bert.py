@@ -1463,7 +1463,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.problem_type = config.problem_type
+        self.config = config
 
         self.bert = BertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -1518,27 +1518,27 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.problem_type is None:
+            if self.config.problem_type is None:
                 if self.num_labels == 1:
-                    self.problem_type = "regression"
+                    self.config.problem_type = "regression"
                 elif self.num_labels > 1 and type(labels) == torch.long:
-                    self.problem_type = "single_label_classification"
+                    self.config.problem_type = "single_label_classification"
                 else:
-                    self.problem_type = "multi_label_classification"
+                    self.config.problem_type = "multi_label_classification"
 
-            if self.problem_type == "regression":
+            if self.config.problem_type == "regression":
                 loss_fct = MSELoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels)
-            elif self.problem_type in ("single_label_classification"):
+            elif self.config.problem_type in ("single_label_classification"):
                 loss_fct = CrossEntropyLoss()
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.problem_type in ("multi_label_classification"):
+            elif self.config.problem_type in ("multi_label_classification"):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
             else:
                 raise ValueError(
                     f"""The config parameter `problem_type` not understood:
-                    received {self.problem_type} but only [regression, single_label_classification
+                    received {self.config.problem_type} but only [regression, single_label_classification
                     and multi_label_classification] are valid."""
                 )
         if not return_dict:
