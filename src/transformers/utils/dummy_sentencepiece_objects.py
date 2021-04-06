@@ -110,11 +110,6 @@ class ReformerTokenizer:
         requires_backends(self, ["sentencepiece"])
 
 
-class Speech2TextProcessor:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["sentencepiece"])
-
-
 class Speech2TextTokenizer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece"])

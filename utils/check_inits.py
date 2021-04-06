@@ -19,6 +19,7 @@ import re
 
 PATH_TO_TRANSFORMERS = "src/transformers"
 
+
 # Matches is_xxx_available()
 _re_backend = re.compile(r"is\_([a-z]*)_available()")
 # Catches a line with a key-values pattern: "bla": ["foo", "bar"]

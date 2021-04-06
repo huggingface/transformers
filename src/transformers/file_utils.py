@@ -397,6 +397,11 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
+def is_speech_available():
+    # For now this depends on torchaudio but the exact dependency might evolve in the future.
+    return _torchaudio_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -514,6 +519,13 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+SPEECH_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
+`pip install torchaudio`
+"""
+
+
+# docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
 `pip install pillow`
@@ -530,6 +542,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
         ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
+        ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
         ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
         ("tokenziers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
         ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
