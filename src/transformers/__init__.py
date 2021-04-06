@@ -135,9 +135,11 @@ _import_structure = {
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
+        "FEATURE_EXTRACTOR_MAPPING",
         "MODEL_NAMES_MAPPING",
         "TOKENIZER_MAPPING",
         "AutoConfig",
+        "AutoFeatureExtractor",
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
@@ -1449,9 +1451,11 @@ if TYPE_CHECKING:
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
+        FEATURE_EXTRACTOR_MAPPING,
         MODEL_NAMES_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
+        AutoFeatureExtractor,
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer

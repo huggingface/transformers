@@ -14,9 +14,12 @@
 # limitations under the License.
 """ AutoFeatureExtractor class. """
 
+from collections import OrderedDict
+
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...file_utils import is_speech_available, is_vision_available
 from ..wav2vec2.feature_extraction_wav2vec2 import Wav2Vec2FeatureExtractor
+from .configuration_auto import replace_list_option_in_docstrings
 
 
 if is_speech_available():
@@ -33,9 +36,9 @@ else:
 # Build the list of all feature extractors
 FEATURE_EXTRACTOR_MAPPING = OrderedDict(
     [
-        ("speech_to_text", Speech2TextFeatureExtractor)
-        ("vit", ViTFeatureExtractor)
-        ("wav2vec2", Wav2Vec2FeatureExtractor)
+        ("speech_to_text", Speech2TextFeatureExtractor),
+        ("vit", ViTFeatureExtractor),
+        ("wav2vec2", Wav2Vec2FeatureExtractor),
     ]
 )
 
@@ -61,7 +64,7 @@ class AutoFeatureExtractor:
         )
 
     @classmethod
-    @replace_list_option_in_docstrings(SLOW_TOKENIZER_MAPPING)
+    @replace_list_option_in_docstrings(FEATURE_EXTRACTOR_MAPPING)
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
         Instantiate one of the feature extractor classes of the library from a pretrained model vocabulary.
@@ -129,7 +132,7 @@ class AutoFeatureExtractor:
 
         """
         kwargs["_from_auto"] = True
-        config_dict, _ = FeatureExtractionMixin.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
         
         if "feature_extraction_type" in config_dict:
             feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extraction_type"])
