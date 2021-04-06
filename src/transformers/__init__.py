@@ -213,6 +213,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
+    "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -299,7 +300,7 @@ else:
         name for name in dir(dummy_sentencepiece_objects) if not name.startswith("_")
     ]
 
-# tokenziers-backed objects
+# tokenizers-backed objects
 if is_tokenizers_available():
     # Fast tokenizers
     _import_structure["models.convbert"].append("ConvBertTokenizerFast")
@@ -348,6 +349,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
 
@@ -426,6 +428,7 @@ if is_torch_available():
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
+            "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
             "MODEL_FOR_MASKED_LM_MAPPING",
             "MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
             "MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
@@ -867,6 +870,14 @@ if is_torch_available():
             "load_tf_weights_in_transfo_xl",
         ]
     )
+    _import_structure["models.vit"].extend(
+        [
+            "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ViTForImageClassification",
+            "ViTModel",
+            "ViTPreTrainedModel",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1289,7 +1300,26 @@ else:
 # FLAX-backed objects
 if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
-    _import_structure["models.auto"].extend(["FLAX_MODEL_MAPPING", "FlaxAutoModel"])
+    _import_structure["models.auto"].extend(
+        [
+            "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
+            "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
+            "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
+            "FLAX_MODEL_FOR_PRETRAINING_MAPPING",
+            "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_MAPPING",
+            "FlaxAutoModel",
+            "FlaxAutoModelForMaskedLM",
+            "FlaxAutoModelForMultipleChoice",
+            "FlaxAutoModelForNextSentencePrediction",
+            "FlaxAutoModelForPreTraining",
+            "FlaxAutoModelForQuestionAnswering",
+            "FlaxAutoModelForSequenceClassification",
+            "FlaxAutoModelForTokenClassification",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -1310,7 +1340,6 @@ else:
     _import_structure["utils.dummy_flax_objects"] = [
         name for name in dir(dummy_flax_objects) if not name.startswith("_")
     ]
-
 
 # Direct imports for type-checking
 if TYPE_CHECKING:
@@ -1479,6 +1508,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
+    from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -1541,6 +1571,7 @@ if TYPE_CHECKING:
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
+    from .utils import logging
 
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
@@ -1601,6 +1632,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
 
@@ -1650,6 +1682,12 @@ if TYPE_CHECKING:
             TopKLogitsWarper,
             TopPLogitsWarper,
         )
+        from .generation_stopping_criteria import (
+            MaxLengthCriteria,
+            MaxTimeCriteria,
+            StoppingCriteria,
+            StoppingCriteriaList,
+        )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
         from .models.albert import (
@@ -1666,6 +1704,7 @@ if TYPE_CHECKING:
         )
         from .models.auto import (
             MODEL_FOR_CAUSAL_LM_MAPPING,
+            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_MASKED_LM_MAPPING,
             MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
             MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -1874,6 +1913,7 @@ if TYPE_CHECKING:
             IBertForSequenceClassification,
             IBertForTokenClassification,
             IBertModel,
+            IBertPreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2024,6 +2064,12 @@ if TYPE_CHECKING:
             TransfoXLModel,
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
+        )
+        from .models.vit import (
+            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTForImageClassification,
+            ViTModel,
+            ViTPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2383,7 +2429,24 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
-        from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
+        from .models.auto import (
+            FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+            FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+            FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+            FLAX_MODEL_FOR_PRETRAINING_MAPPING,
+            FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_MAPPING,
+            FlaxAutoModel,
+            FlaxAutoModelForMaskedLM,
+            FlaxAutoModelForMultipleChoice,
+            FlaxAutoModelForNextSentencePrediction,
+            FlaxAutoModelForPreTraining,
+            FlaxAutoModelForQuestionAnswering,
+            FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForTokenClassification,
+        )
         from .models.bert import (
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
@@ -2400,6 +2463,7 @@ if TYPE_CHECKING:
         # Import the same objects as dummies to get them in the namespace.
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_flax_objects import *
+
 else:
     import importlib
     import os

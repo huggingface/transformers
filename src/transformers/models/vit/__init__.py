@@ -17,33 +17,37 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_torch_available
+from ...file_utils import _BaseLazyModule, is_torch_available, is_vision_available
 
 
 _import_structure = {
-    "configuration_gpt_neo": ["GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP", "GPTNeoConfig"],
+    "configuration_vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
 }
 
+if is_vision_available():
+    _import_structure["feature_extraction_vit"] = ["ViTFeatureExtractor"]
+
 if is_torch_available():
-    _import_structure["modeling_gpt_neo"] = [
-        "GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "GPTNeoForCausalLM",
-        "GPTNeoModel",
-        "GPTNeoPreTrainedModel",
-        "load_tf_weights_in_gpt_neo",
+    _import_structure["modeling_vit"] = [
+        "VIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ViTForImageClassification",
+        "ViTModel",
+        "ViTPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_gpt_neo import GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP, GPTNeoConfig
+    from .configuration_vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+
+    if is_vision_available():
+        from .feature_extraction_vit import ViTFeatureExtractor
 
     if is_torch_available():
-        from .modeling_gpt_neo import (
-            GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST,
-            GPTNeoForCausalLM,
-            GPTNeoModel,
-            GPTNeoPreTrainedModel,
-            load_tf_weights_in_gpt_neo,
+        from .modeling_vit import (
+            VIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ViTForImageClassification,
+            ViTModel,
+            ViTPreTrainedModel,
         )
 
 

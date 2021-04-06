@@ -14,13 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...)
+Fine-tuning the library models for causal language modeling (BERT, ALBERT, RoBERTa...)
 on a text file or a dataset without using HuggingFace Trainer.
 
 Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
+https://huggingface.co/models?filter=causal-lm
 """
-# You can also adapt this script on your own mlm task. Pointers for this are left as comments.
+# You can also adapt this script on your own causal language modeling task. Pointers for this are left as comments.
 
 import argparse
 import logging
@@ -41,10 +41,10 @@ from transformers import (
     MODEL_MAPPING,
     AdamW,
     AutoConfig,
-    AutoModelForMaskedLM,
+    AutoModelForCausalLM,
     AutoTokenizer,
-    DataCollatorForLanguageModeling,
     SchedulerType,
+    default_data_collator,
     get_scheduler,
     set_seed,
 )
@@ -56,7 +56,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a causal language modeling task")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -79,11 +79,6 @@ def parse_args():
         "--validation_split_percentage",
         default=5,
         help="The percentage of the train set used as validation set in case there's no validation split",
-    )
-    parser.add_argument(
-        "--pad_to_max_length",
-        action="store_true",
-        help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -160,16 +155,10 @@ def parse_args():
         choices=MODEL_TYPES,
     )
     parser.add_argument(
-        "--max_seq_length",
+        "--block_size",
         type=int,
         default=None,
-        help="The maximum total input sequence length after tokenization. Sequences longer than this will be truncated.",
-    )
-    parser.add_argument(
-        "--line_by_line",
-        type=bool,
-        default=False,
-        help="Whether distinct lines of text in the dataset are to be handled as distinct sequences.",
+        help="Optional input sequence length after tokenization. The training dataset will be truncated in block of this size for training. Default to the model max input length for single sentence inputs (take into account special tokens).",
     )
     parser.add_argument(
         "--preprocessing_num_workers",
@@ -179,9 +168,6 @@ def parse_args():
     )
     parser.add_argument(
         "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
-    )
-    parser.add_argument(
-        "--mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
     )
 
     args = parser.parse_args()
@@ -289,14 +275,14 @@ def main():
         )
 
     if args.model_name_or_path:
-        model = AutoModelForMaskedLM.from_pretrained(
+        model = AutoModelForCausalLM.from_pretrained(
             args.model_name_or_path,
             from_tf=bool(".ckpt" in args.model_name_or_path),
             config=config,
         )
     else:
         logger.info("Training new model from scratch")
-        model = AutoModelForMaskedLM.from_config(config)
+        model = AutoModelForCausalLM.from_config(config)
 
     model.resize_token_embeddings(len(tokenizer))
 
@@ -305,107 +291,77 @@ def main():
     column_names = raw_datasets["train"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
-    if args.max_seq_length is None:
-        max_seq_length = tokenizer.model_max_length
-        if max_seq_length > 1024:
+    def tokenize_function(examples):
+        return tokenizer(examples[text_column_name])
+
+    tokenized_datasets = raw_datasets.map(
+        tokenize_function,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        remove_columns=column_names,
+        load_from_cache_file=not args.overwrite_cache,
+    )
+
+    if args.block_size is None:
+        block_size = tokenizer.model_max_length
+        if block_size > 1024:
             logger.warn(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
-                "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
+                "Picking 1024 instead. You can change that default value by passing --block_size xxx."
             )
-            max_seq_length = 1024
+        block_size = 1024
     else:
-        if args.max_seq_length > tokenizer.model_max_length:
+        if args.block_size > tokenizer.model_max_length:
             logger.warn(
-                f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
-                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+                f"The block_size passed ({args.block_size}) is larger than the maximum length for the model"
+                f"({tokenizer.model_max_length}). Using block_size={tokenizer.model_max_length}."
             )
-        max_seq_length = min(args.max_seq_length, tokenizer.model_max_length)
+        block_size = min(args.block_size, tokenizer.model_max_length)
 
-    if args.line_by_line:
-        # When using line_by_line, we just tokenize each nonempty line.
-        padding = "max_length" if args.pad_to_max_length else False
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of block_size.
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+        # customize this part to your needs.
+        total_length = (total_length // block_size) * block_size
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + block_size] for i in range(0, total_length, block_size)]
+            for k, t in concatenated_examples.items()
+        }
+        result["labels"] = result["input_ids"].copy()
+        return result
 
-        def tokenize_function(examples):
-            # Remove empty lines
-            examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-            return tokenizer(
-                examples["text"],
-                padding=padding,
-                truncation=True,
-                max_length=max_seq_length,
-                # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
-                # receives the `special_tokens_mask`.
-                return_special_tokens_mask=True,
-            )
+    # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a remainder
+    # for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value might be slower
+    # to preprocess.
+    #
+    # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
+    # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=[text_column_name],
-            load_from_cache_file=not args.overwrite_cache,
-        )
-    else:
-        # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
-        # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
-        # efficient when it receives the `special_tokens_mask`.
-        def tokenize_function(examples):
-            return tokenizer(examples[text_column_name], return_special_tokens_mask=True)
+    lm_datasets = tokenized_datasets.map(
+        group_texts,
+        batched=True,
+        num_proc=args.preprocessing_num_workers,
+        load_from_cache_file=not args.overwrite_cache,
+    )
 
-        tokenized_datasets = raw_datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            remove_columns=column_names,
-            load_from_cache_file=not args.overwrite_cache,
-        )
-
-        # Main data processing function that will concatenate all texts from our dataset and generate chunks of
-        # max_seq_length.
-        def group_texts(examples):
-            # Concatenate all texts.
-            concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
-            total_length = len(concatenated_examples[list(examples.keys())[0]])
-            # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
-            # customize this part to your needs.
-            total_length = (total_length // max_seq_length) * max_seq_length
-            # Split by chunks of max_len.
-            result = {
-                k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
-                for k, t in concatenated_examples.items()
-            }
-            return result
-
-        # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
-        # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
-        # might be slower to preprocess.
-        #
-        # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
-        # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
-
-        tokenized_datasets = tokenized_datasets.map(
-            group_texts,
-            batched=True,
-            num_proc=args.preprocessing_num_workers,
-            load_from_cache_file=not args.overwrite_cache,
-        )
-
-    train_dataset = tokenized_datasets["train"]
-    eval_dataset = tokenized_datasets["validation"]
+    train_dataset = lm_datasets["train"]
+    eval_dataset = lm_datasets["validation"]
 
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
-    # Data collator
-    # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=args.mlm_probability)
-
     # DataLoaders creation:
     train_dataloader = DataLoader(
-        train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
+        train_dataset, shuffle=True, collate_fn=default_data_collator, batch_size=args.per_device_train_batch_size
     )
-    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
+    eval_dataloader = DataLoader(
+        eval_dataset, collate_fn=default_data_collator, batch_size=args.per_device_eval_batch_size
+    )
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.

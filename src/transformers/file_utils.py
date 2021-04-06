@@ -46,17 +46,11 @@ from tqdm.auto import tqdm
 
 import requests
 from filelock import FileLock
+from transformers.utils.versions import importlib_metadata
 
 from . import __version__
 from .hf_api import HfFolder
 from .utils import logging
-
-
-# The package importlib_metadata is in a different place, depending on the python version.
-if sys.version_info < (3, 8):
-    import importlib_metadata
-else:
-    import importlib.metadata as importlib_metadata
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -175,10 +169,11 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _soundfile_available = False
 
-_torchaudio_available = importlib.util.find_spec("torchaudio")
+
+_torchaudio_available = importlib.util.find_spec("torchaudio") is not None
 try:
     _torchaudio_version = importlib_metadata.version("torchaudio")
-    logger.debug(f"Successfully imported soundfile version {_torchaudio_version}")
+    logger.debug(f"Successfully imported torchaudio version {_torchaudio_version}")
 except importlib_metadata.PackageNotFoundError:
     _torchaudio_available = False
 
