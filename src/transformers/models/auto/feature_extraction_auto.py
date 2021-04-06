@@ -51,8 +51,8 @@ def feature_extractor_class_from_name(class_name: str):
 
 class AutoFeatureExtractor:
     r"""
-    This is a generic feature extractor class that will be instantiated as one of the feature extractor classes of the library when
-    created with the :meth:`AutoFeatureExtractor.from_pretrained` class method.
+    This is a generic feature extractor class that will be instantiated as one of the feature extractor classes of the
+    library when created with the :meth:`AutoFeatureExtractor.from_pretrained` class method.
 
     This class cannot be instantiated directly using ``__init__()`` (throws an error).
     """
@@ -133,9 +133,9 @@ class AutoFeatureExtractor:
         """
         kwargs["_from_auto"] = True
         config_dict, _ = FeatureExtractionMixin.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
-        
-        if "feature_extraction_type" in config_dict:
-            feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extraction_type"])
+
+        if "feature_extractor_type" in config_dict:
+            feature_extractor_class = feature_extractor_class_from_name(config_dict["feature_extractor_type"])
             return feature_extractor_class.from_dict(config_dict, **kwargs)
         else:
             # Fallback: use pattern matching on the string.
@@ -144,7 +144,7 @@ class AutoFeatureExtractor:
                     return feature_extractor_class.from_dict(config_dict, **kwargs)
 
         raise ValueError(
-            f"Unrecognized model in {pretrained_model_name_or_path}. Should have a `feature_extraction_type` key in "
+            f"Unrecognized model in {pretrained_model_name_or_path}. Should have a `feature_extractor_type` key in "
             "its feature_extraction_config.json, or contain one of the following strings "
             f"in its name: {', '.join(FEATURE_EXTRACTOR_MAPPING.keys())}"
         )

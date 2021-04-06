@@ -16,13 +16,12 @@
 import os
 import unittest
 
-from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
-from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
-from transformers.models.roberta.configuration_roberta import RobertaConfig
-from transformers.testing_utils import DUMMY_UNKWOWN_IDENTIFIER
+from transformers import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 
 
-SAMPLE_ROBERTA_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy-config.json")
+SAMPLE_FEATURE_EXTRACTION_CONFIG = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "fixtures/dummy_feature_extractor_config.json"
+)
 
 
 class AutoFeatureExtractorTest(unittest.TestCase):
@@ -30,17 +29,9 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         config = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsInstance(config, Wav2Vec2FeatureExtractor)
 
-    def test_config_model_type_from_local_file(self):
-        config = AutoFeatureExtractor.from_pretrained(SAMPLE_ROBERTA_CONFIG)
-        self.assertIsInstance(config, RobertaConfig)
-
-    def test_config_model_type_from_model_identifier(self):
-        config = AutoConfig.from_pretrained(DUMMY_UNKWOWN_IDENTIFIER)
-        self.assertIsInstance(config, RobertaConfig)
-
-    def test_config_for_model_str(self):
-        config = AutoConfig.for_model("roberta")
-        self.assertIsInstance(config, RobertaConfig)
+    def test_feature_extractor_from_local_file(self):
+        config = AutoFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG)
+        self.assertIsInstance(config, Wav2Vec2FeatureExtractor)
 
     def test_pattern_matching_fallback(self):
         """
@@ -48,6 +39,6 @@ class AutoFeatureExtractorTest(unittest.TestCase):
         perform a few safety checks on the config mapping's order.
         """
         # no key string should be included in a later key string (typical failure case)
-        keys = list(CONFIG_MAPPING.keys())
+        keys = list(FEATURE_EXTRACTOR_MAPPING.keys())
         for i, key in enumerate(keys):
             self.assertFalse(any(key in later_key for later_key in keys[i + 1 :]))

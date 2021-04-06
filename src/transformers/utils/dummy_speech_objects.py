@@ -10,3 +10,8 @@ class Speech2TextFeatureExtractor:
 class Speech2TextProcessor:
     def __init__(self, *args, **kwargs):
         requires_speech(self)
+
+
+class Speech2TextProcessor:
+    def __init__(self, *args, **kwargs):
+        requires_speech(self)

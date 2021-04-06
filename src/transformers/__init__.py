@@ -1648,7 +1648,7 @@ if TYPE_CHECKING:
         if is_sentencepiece_available():
             from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
         else:
-            from .utils.dummy_tokenizers_objects import *
+            from .utils.dummy_tokenizers_objects import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
     else:
         from .utils.dummy_tokenizers_objects import *
 
