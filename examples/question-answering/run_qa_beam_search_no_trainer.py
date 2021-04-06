@@ -76,9 +76,7 @@ def parse_args():
     parser.add_argument(
         "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
     )
-    parser.add_argument(
-        "--do_predict", action="store_true", help="Eval the question answering model"
-    )
+    parser.add_argument("--do_predict", action="store_true", help="Eval the question answering model")
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
@@ -284,7 +282,7 @@ def main():
     # Preprocessing the datasets.
     # Preprocessing is slighlty different for training and evaluation.
     column_names = raw_datasets["train"].column_names
-    
+
     question_column_name = "question" if "question" in column_names else column_names[0]
     context_column_name = "context" if "context" in column_names else column_names[1]
     answer_column_name = "answers" if "answers" in column_names else column_names[2]
@@ -396,7 +394,6 @@ def main():
 
         return tokenized_examples
 
-
     if "train" not in raw_datasets:
         raise ValueError("--do_train requires a train dataset")
     train_dataset = raw_datasets["train"]
@@ -481,7 +478,6 @@ def main():
 
         return tokenized_examples
 
-
     if "validation" not in raw_datasets:
         raise ValueError("--do_eval requires a validation dataset")
     eval_examples = raw_datasets["validation"]
@@ -539,11 +535,8 @@ def main():
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
     )
 
-
     eval_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
-    eval_dataloader = DataLoader(
-        eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size
-    )
+    eval_dataloader = DataLoader(eval_dataset, collate_fn=data_collator, batch_size=args.per_device_eval_batch_size)
 
     if args.do_predict:
         test_dataset.set_format(type="torch", columns=["attention_mask", "input_ids", "token_type_ids"])
@@ -605,8 +598,8 @@ def main():
             if step + batch_size < len(dataset):
                 logits_concat[step : step + batch_size, :cols] = output_logit
             else:
-                logits_concat[step:, :cols] = output_logit[:len(dataset) - step]
-                
+                logits_concat[step:, :cols] = output_logit[: len(dataset) - step]
+
             step += batch_size
 
         return logits_concat
