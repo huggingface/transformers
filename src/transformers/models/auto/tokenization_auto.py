@@ -28,7 +28,6 @@ from ..bertweet.tokenization_bertweet import BertweetTokenizer
 from ..blenderbot.tokenization_blenderbot import BlenderbotTokenizer
 from ..blenderbot_small.tokenization_blenderbot_small import BlenderbotSmallTokenizer
 from ..convbert.tokenization_convbert import ConvBertTokenizer
-from ..cpm.tokenization_cpm import CpmTokenizer
 from ..ctrl.tokenization_ctrl import CTRLTokenizer
 from ..deberta.tokenization_deberta import DebertaTokenizer
 from ..distilbert.tokenization_distilbert import DistilBertTokenizer
@@ -116,6 +115,7 @@ if is_sentencepiece_available():
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..big_bird.tokenization_big_bird import BigBirdTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
+    from ..cpm.tokenization_cpm import CpmTokenizer
     from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
     from ..m2m_100 import M2M100Tokenizer
     from ..marian.tokenization_marian import MarianTokenizer
