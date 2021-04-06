@@ -18,6 +18,7 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.file_utils import cached_property
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -430,11 +431,47 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             # check attn size
             self.assertListEqual(shapes, expected_shape)
 
+
+@require_torch
+class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
+    @cached_property
+    def model(self):
+        return GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B").to(torch_device)
+
+    @cached_property
+    def tokenizer(self):
+        return GPT2Tokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
+
+    @slow
+    def test_lm_generate_gpt_neo(self):
+        for checkpointing in [True, False]:
+            model = self.model
+            model.config.gradient_checkpointing = checkpointing
+            input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
+            # fmt: off
+            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # The dog-eared copy of the book, which is a collection of essays by the late author,
+            # fmt: on
+            output_ids = model.generate(input_ids, do_sample=False)
+            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
+
+    @slow
+    def test_gpt_neo_sample(self):
+        model = self.model
+        tokenizer = self.tokenizer
+
+        torch.manual_seed(0)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+        input_ids = tokenized.input_ids.to(torch_device)
+        output_ids = model.generate(input_ids, do_sample=True)
+        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+
+        EXPECTED_OUTPUT_STR = "Today is a nice day and if you don’t get the memo here is what you can"
+        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
+
     @slow
     def test_batch_generation(self):
-        model = GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B")
-        model.to(torch_device)
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        model = self.model
+        tokenizer = self.tokenizer
 
         tokenizer.padding_side = "left"
 
@@ -479,33 +516,3 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
         for model_name in GPT_NEO_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = GPTNeoModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-
-@require_torch
-class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
-    @slow
-    def test_lm_generate_gpt_neo(self):
-        for checkpointing in [True, False]:
-            model = GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B", gradient_checkpointing=checkpointing)
-            model.to(torch_device)
-            input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
-            # fmt: off
-            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # The dog-eared copy of the book, which is a collection of essays by the late author,
-            # fmt: on
-            output_ids = model.generate(input_ids, do_sample=False)
-            self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
-
-    @slow
-    def test_gpt_neo_sample(self):
-        tokenizer = GPT2Tokenizer.from_pretrained("EleutherAI/gpt-neo-1.3B")
-        model = GPTNeoForCausalLM.from_pretrained("EleutherAI/gpt-neo-1.3B")
-        model.to(torch_device)
-
-        torch.manual_seed(0)
-        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
-        input_ids = tokenized.input_ids.to(torch_device)
-        output_ids = model.generate(input_ids, do_sample=True)
-        output_str = tokenizer.decode(output_ids[0], skip_special_tokens=True)
-
-        EXPECTED_OUTPUT_STR = "Today is a nice day and if you don’t get the memo here is what you can"
-        self.assertEqual(output_str, EXPECTED_OUTPUT_STR)
