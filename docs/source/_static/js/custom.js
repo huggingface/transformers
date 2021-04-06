@@ -62,7 +62,7 @@ function addIcon() {
 function addCustomFooter() {
     const customFooter = document.createElement("div");
     const questionOrIssue = document.createElement("div");
-    questionOrIssue.innerHTML = "Stuck? Read our <a href='https://medium.com/huggingface'>Blog posts</a> or <a href='https://github.com/huggingface/transformers'>Create an issue</a>";
+    questionOrIssue.innerHTML = "Stuck? Read our <a href='https://huggingface.co/blog'>Blog posts</a> or <a href='https://github.com/huggingface/transformers'>Create an issue</a>";
     customFooter.appendChild(questionOrIssue);
     customFooter.classList.add("footer");
 
