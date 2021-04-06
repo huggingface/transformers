@@ -337,14 +337,15 @@ if is_tokenizers_available():
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-    if is_sentencepiece_available():
-        _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
 else:
     from .utils import dummy_tokenizers_objects
 
     _import_structure["utils.dummy_tokenizers_objects"] = [
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
     ]
+
+if is_sentencepiece_available() and is_tokenizers_available():
+    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
 
 # Vision-specific objects
 if is_vision_available():
@@ -1625,10 +1626,11 @@ if TYPE_CHECKING:
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
-        if is_sentencepiece_available():
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
     else:
         from .utils.dummy_tokenizers_objects import *
+
+    if is_sentencepiece_available() and is_tokenizers_available():
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin

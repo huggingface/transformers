@@ -403,7 +403,7 @@ class RagRetriever:
 
     @classmethod
     def from_pretrained(cls, retriever_name_or_path, indexed_dataset=None, **kwargs):
-        requires_backends(self, ["datasets", "faiss"])
+        requires_backends(cls, ["datasets", "faiss"])
         config = kwargs.pop("config", None) or RagConfig.from_pretrained(retriever_name_or_path, **kwargs)
         rag_tokenizer = RagTokenizer.from_pretrained(retriever_name_or_path, config=config)
         question_encoder_tokenizer = rag_tokenizer.question_encoder

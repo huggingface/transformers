@@ -33,7 +33,7 @@ class SentencePieceExtractor:
     """
 
     def __init__(self, model: str):
-        reuiqres_backends(self, "sentencepiece")
+        requires_backends(self, "sentencepiece")
         from sentencepiece import SentencePieceProcessor
 
         self.sp = SentencePieceProcessor()
