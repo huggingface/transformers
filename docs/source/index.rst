@@ -429,6 +429,7 @@ TensorFlow and/or Flax.
     model_doc/bort
     model_doc/camembert
     model_doc/convbert
+    model_doc/cpm
     model_doc/ctrl
     model_doc/deberta
     model_doc/deberta_v2
