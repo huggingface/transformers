@@ -130,7 +130,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     return model
 
 
-class AttentionMixin:
+class GPTNeoAttentionMixin:
     """
     A few attention related utilities for attention modules in GPT Neo, to be used as a mixin.
     """
@@ -155,34 +155,13 @@ class AttentionMixin:
         :obj:`window_size` + :obj:`block_length`. It pads the :obj:`seq_length` dimention if necessary.
 
         Example::
-            tensor: torch.tensor([[[ 0.4983],
-                                    [ 2.6918],
-                                    [-0.0071],
-                                    [ 1.0492],
-                                    [-1.8348],
-                                    [ 0.7672],
-                                    [ 0.2986],
-                                    [ 0.0285]]])
+
+            tensor: torch.tensor([[[ 0.4983], [ 2.6918], [-0.0071], [ 1.0492], [-1.8348], [ 0.7672], [ 0.2986], [ 0.0285]]])
             with shape (1, 8, 1)
             block_length = window_size = 4
             _look_back =>
-                torch.tensor([[[[ 0.0000],
-                                [ 0.0000],
-                                [ 0.0000],
-                                [ 0.0000],
-                                [ 0.4983],
-                                [ 2.6918],
-                                [-0.0071],
-                                [ 1.0492]],
-
-                                [[ 0.4983],
-                                [ 2.6918],
-                                [-0.0071],
-                                [ 1.0492],
-                                [-1.8348],
-                                [ 0.7672],
-                                [ 0.2986],
-                                [ 0.0285]]]])
+            torch.tensor([[[[ 0.0000], [ 0.0000], [ 0.0000], [ 0.0000], [ 0.4983], [ 2.6918], [-0.0071], [ 1.0492]],
+                           [[ 0.4983], [ 2.6918], [-0.0071], [ 1.0492], [-1.8348], [ 0.7672], [ 0.2986], [ 0.0285]]]])
 
         Args:
             tensor (:obj:`torch.Tensor`): tensor of shape :obj:`[batch_size, seq_length, hidden_dim]` or :obj:`[batch_size, seq_length]`
@@ -274,7 +253,7 @@ class AttentionMixin:
         return attn_output, attn_weights
 
 
-class GPTNeoSelfAttention(nn.Module, AttentionMixin):
+class GPTNeoSelfAttention(nn.Module, GPTNeoAttentionMixin):
     def __init__(self, config):
         super().__init__()
 
@@ -328,7 +307,7 @@ class GPTNeoSelfAttention(nn.Module, AttentionMixin):
             value = torch.cat((past_value, value), dim=-2)
 
         if use_cache is True:
-            present = (key, value)  # transpose to have same shapes
+            present = (key, value)
         else:
             present = None
 
@@ -350,7 +329,7 @@ class GPTNeoSelfAttention(nn.Module, AttentionMixin):
         return outputs  # a, present, (attentions)
 
 
-class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
+class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
     def __init__(self, config):
         super().__init__()
 

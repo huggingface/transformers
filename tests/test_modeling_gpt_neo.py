@@ -36,7 +36,7 @@ if is_torch_available():
         GPTNeoForCausalLM,
         GPTNeoModel,
     )
-    from transformers.models.gpt_neo.modeling_gpt_neo import AttentionMixin, GPTNeoLocalSelfAttention
+    from transformers.models.gpt_neo.modeling_gpt_neo import GPTNeoAttentionMixin, GPTNeoLocalSelfAttention
 
 
 class GPTNeoModelTester:
@@ -459,8 +459,8 @@ class GPTNeoLocalAttentionTest(unittest.TestCase):
 
         # check when seq_length is divisible by window_size
         window_size = 4
-        block_length, num_block = AttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
-        blocked_hidden_states = AttentionMixin._look_back(hidden_states, block_length, window_size)
+        block_length, num_block = GPTNeoAttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
+        blocked_hidden_states = GPTNeoAttentionMixin._look_back(hidden_states, block_length, window_size)
         expected_shape = [batch_size, num_block, window_size + block_length, hidden_size]
         self.assertListEqual(list(blocked_hidden_states.shape), expected_shape)
         # The last block should contain the last (window_size + block_length) hidden_states
@@ -470,8 +470,8 @@ class GPTNeoLocalAttentionTest(unittest.TestCase):
 
         # check when seq_length is not divisible by window_size
         window_size = 3
-        block_length, num_block = AttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
-        blocked_hidden_states = AttentionMixin._look_back(hidden_states, block_length, window_size)
+        block_length, num_block = GPTNeoAttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
+        blocked_hidden_states = GPTNeoAttentionMixin._look_back(hidden_states, block_length, window_size)
         expected_shape = [batch_size, num_block, window_size + block_length, hidden_size]
         self.assertListEqual(list(blocked_hidden_states.shape), expected_shape)
         # The last block should contain the last (window_size + block_length) hidden_states
@@ -481,8 +481,8 @@ class GPTNeoLocalAttentionTest(unittest.TestCase):
 
         # check when window_size is > seq_length
         window_size = 19
-        block_length, num_block = AttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
-        blocked_hidden_states = AttentionMixin._look_back(hidden_states, block_length, window_size)
+        block_length, num_block = GPTNeoAttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
+        blocked_hidden_states = GPTNeoAttentionMixin._look_back(hidden_states, block_length, window_size)
         expected_shape = [batch_size, num_block, window_size + block_length, hidden_size]
         self.assertListEqual(list(blocked_hidden_states.shape), expected_shape)
 
@@ -500,7 +500,7 @@ class GPTNeoLocalAttentionTest(unittest.TestCase):
         layer = GPTNeoLocalSelfAttention(config)
         window_size = config.window_size
         batch_size, seq_length = 8, 1
-        block_length, num_blocks = AttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
+        block_length, num_blocks = GPTNeoAttentionMixin._get_block_length_and_num_blocks(seq_length, window_size)
 
         causal_mask = layer._create_attention_mask(batch_size, seq_length, num_blocks, block_length, torch_device)
         # check shapes
@@ -566,7 +566,8 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
             model.config.gradient_checkpointing = checkpointing
             input_ids = torch.tensor([[464, 3290]], dtype=torch.long, device=torch_device)  # The dog
             # fmt: off
-            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]  # The dog-eared copy of the book, which is a collection of essays by the late author,
+            # The dog-eared copy of the book, which is a collection of essays by the late author,
+            expected_output_ids = [464, 3290, 12, 3380, 4866, 286, 262, 1492, 11, 543, 318, 257, 4947, 286, 27126, 416, 262, 2739, 1772, 11]
             # fmt: on
             output_ids = model.generate(input_ids, do_sample=False)
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
