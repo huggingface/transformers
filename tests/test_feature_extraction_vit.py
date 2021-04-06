@@ -42,11 +42,11 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         image_size=18,
         min_resolution=30,
         max_resolution=400,
-        image_mean=(0.5, 0.5, 0.5),
-        image_std=(0.5, 0.5, 0.5),
-        do_normalize=True,
         do_resize=True,
         size=18,
+        do_normalize=True,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -54,11 +54,11 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         self.image_size = image_size
         self.min_resolution = min_resolution
         self.max_resolution = max_resolution
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean
+        self.image_std = image_std
 
     def prepare_feat_extract_dict(self):
         return {

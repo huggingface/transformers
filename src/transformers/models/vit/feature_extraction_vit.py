@@ -36,27 +36,27 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
-        image_mean (:obj:`int`, defaults to :obj:`(0.5, 0.5, 0.5)`):
-            The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`(0.5, 0.5, 0.5)`):
-            The sequence of standard deviations for each channel, to be used when normalizing images.
-        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not to normalize the input with mean and standard deviation.
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 224):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
+            Whether or not to normalize the input with mean and standard deviation.
+        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+            The sequence of means for each channel, to be used when normalizing images.
+        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+            The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, image_mean=None, image_std=None, do_normalize=True, do_resize=True, size=224, **kwargs):
+    def __init__(self, do_resize=True, size=224, do_normalize=True, image_mean=None, image_std=None, **kwargs):
         super().__init__(**kwargs)
-        self.image_mean = (0.5, 0.5, 0.5)
-        self.image_std = (0.5, 0.5, 0.5)
-        self.do_normalize = do_normalize
         self.do_resize = do_resize
         self.size = size
+        self.do_normalize = do_normalize
+        self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
+        self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
 
     def __call__(
         self,
