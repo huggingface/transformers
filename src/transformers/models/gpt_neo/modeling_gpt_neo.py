@@ -130,7 +130,88 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
     return model
 
 
-class GPTNeoSelfAttention(nn.Module):
+class AttentionMixin:
+    def _look_back(self, tensor, block_length, window_size, pad_value=0, is_key_value=True):
+        if len(tensor.shape) == 3:
+            padding_side = (0, 0, window_size, 0)
+        elif len(tensor.shape) == 2:
+            padding_side = (window_size, 0)
+        else:
+            raise ValueError("Input tensor rank should be one of [2, 3], but is: {}".format(len(tensor.shape)))
+
+        padded_tensor = F.pad(tensor, padding_side, value=pad_value)
+        padded_tensor = padded_tensor.unfold(1, window_size + block_length, block_length)
+
+        if is_key_value:
+            padded_tensor = padded_tensor.transpose(-2, -1)
+        return padded_tensor
+
+    def _split_heads(self, tensor, num_heads, attn_head_size):
+        """
+        splits hidden_size dim into attn_head_size and num_heads
+        """
+        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        tensor = tensor.view(*new_shape)
+        if len(tensor.shape) == 5:
+            return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
+        elif len(tensor.shape) == 4:
+            return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+        else:
+            raise ValueError("Input tensor rank should be one of [4, 5], but is: {}".format(len(tensor.shape)))
+
+    def _merge_heads(self, tensor, num_heads, attn_head_size):
+        """
+        merges attn_head_size dim and num_attn_heads dim into hidden_size
+        """
+        if len(tensor.shape) == 5:
+            tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
+        elif len(tensor.shape) == 4:
+            tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        else:
+            raise ValueError("Input tensor rank should be one of [4, 5], but is: {}".format(len(tensor.shape)))
+        new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
+        return tensor.view(new_shape)
+
+    def _split_seq_length_dim_to(self, tensors, dim_factor_1, dim_factor_2, hidden_size):
+        """
+        splits sequence length dim of tensors into `dim_factor_1` and `dim_factor_2` dims
+        """
+        batch_size = tensors.shape[0]
+        split_dim_shape = (batch_size, dim_factor_1, dim_factor_2)
+
+        if len(tensors.shape) == 3:
+            return torch.reshape(tensors, split_dim_shape + (hidden_size,))
+        elif len(tensors.shape) == 2:
+            return torch.reshape(tensors, split_dim_shape)
+        else:
+            raise ValueError("Input vector rank should be one of [2, 3], but is: {}".format(len(tensors.shape)))
+
+    def _attn(self, query, key, value, causal_mask, masked_bias, attn_dropout, attention_mask=None, head_mask=None):
+        # Keep the attention weights computation in fp32 to avoid overflow issues
+        query = query.to(torch.float32)
+        key = key.to(torch.float32)
+
+        attn_weights = torch.matmul(query, key.transpose(-1, -2))
+        attn_weights = torch.where(causal_mask, attn_weights, masked_bias.to(attn_weights.dtype))
+
+        if attention_mask is not None:
+            # Apply the attention mask
+            attn_weights = attn_weights + attention_mask
+
+        attn_weights = nn.Softmax(dim=-1)(attn_weights)
+        attn_weights = attn_weights.to(value.dtype)
+        attn_weights = attn_dropout(attn_weights)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attn_weights = attn_weights * head_mask
+
+        attn_output = torch.matmul(attn_weights, value)
+
+        return attn_output, attn_weights
+
+
+class GPTNeoSelfAttention(nn.Module, AttentionMixin):
     def __init__(self, config):
         super().__init__()
 
@@ -159,46 +240,6 @@ class GPTNeoSelfAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=True)
 
-    def _attn(self, query, key, value, attention_mask=None, head_mask=None, output_attentions=False):
-        # Keep the attention weights computation in fp32 to avoid overflow issues
-        query = query.to(torch.float32)
-        key = key.to(torch.float32)
-
-        attn_weights = torch.matmul(query, key.transpose(3, 2))
-        nd, ns = attn_weights.size(-2), attn_weights.size(-1)
-
-        mask = self.bias[:, :, ns - nd : ns, :ns]
-        attn_weights = torch.where(mask.bool(), attn_weights, self.masked_bias.to(attn_weights.dtype))
-
-        if attention_mask is not None:
-            # Apply the attention mask
-            attn_weights = attn_weights + attention_mask
-
-        attn_weights = nn.Softmax(dim=-1)(attn_weights)
-        attn_weights = attn_weights.to(value.dtype)
-        attn_weights = self.attn_dropout(attn_weights)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
-
-        outputs = (attn_output,)
-        if output_attentions:
-            outputs += (attn_weights,)
-        return outputs
-
-    def merge_heads(self, tensor):
-        tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        new_shape = tensor.size()[:-2] + (tensor.size(-2) * tensor.size(-1),)
-        return tensor.view(*new_shape)  # in Tensorflow implem: fct merge_states
-
-    def split_heads(self, tensor):
-        new_shape = tensor.size()[:-1] + (self.num_heads, tensor.size(-1) // self.num_heads)
-        tensor = tensor.view(*new_shape)  # in Tensorflow implem: fct split_states
-        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
-
     def forward(
         self,
         hidden_states,
@@ -213,9 +254,9 @@ class GPTNeoSelfAttention(nn.Module):
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
 
-        query = self.split_heads(query)
-        key = self.split_heads(key)
-        value = self.split_heads(value)
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
 
         if layer_past is not None:
             past_key = layer_past[0]
@@ -228,17 +269,25 @@ class GPTNeoSelfAttention(nn.Module):
         else:
             present = None
 
-        outputs = self._attn(query, key, value, attention_mask, head_mask, output_attentions)
-        attn_output = outputs[0]
+        nd, ns = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, ns - nd : ns, :ns].bool()
 
-        attn_output = self.merge_heads(attn_output)
+        attn_output, attn_weights = self._attn(
+            query, key, value, causal_mask, self.masked_bias, self.attn_dropout, attention_mask, head_mask
+        )
+
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
-        return (attn_output, present) + outputs[1:]  # a, present, (attentions)
+        outputs = (attn_output, present)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs  # a, present, (attentions)
 
 
-class GPTNeoLocalSelfAttention(nn.Module):
+class GPTNeoLocalSelfAttention(nn.Module, AttentionMixin):
     def __init__(self, config):
         super().__init__()
 
@@ -262,89 +311,29 @@ class GPTNeoLocalSelfAttention(nn.Module):
 
         self.window_size = config.window_size
 
-    def shift(self, tensor, offset, pad_value=0, dim=2):
-        num_blocks = tensor.shape[1]
-        dims = (len(tensor.shape) - dim) * (0, 0)
-        padded_tensor = F.pad(tensor, (*dims, offset, 0), value=pad_value)
-        return padded_tensor[:, :num_blocks, ...]
+    def _create_attention_mask(self, bs, seq_len, num_blocks, block_length, device, attention_mask=None):
+        indices = torch.arange(seq_len, dtype=torch.long, device=device).repeat(bs, 1)
 
-    def look_around(self, tensor, block_length, window_size):
-        num_complete_blocks = window_size // block_length
+        query_indices = self._split_seq_length_dim_to(indices, num_blocks, block_length, self.embed_dim)
+        key_indices = self._look_back(indices, block_length, self.window_size, is_key_value=False)
 
-        parts = [tensor]
-        for i in range(1, num_complete_blocks + 1):
-            parts = [self.shift(tensor, i)] + parts
+        causal_mask = torch.ge(query_indices.unsqueeze(-1), key_indices.unsqueeze(-2))
 
-        partial_size = window_size % block_length
-        if partial_size > 0:
-            margin = tensor[:, :, block_length - partial_size : block_length, ...]
-            parts = [self.shift(margin, num_complete_blocks + 1)] + parts
-        return torch.cat(parts, dim=2)
+        if attention_mask is None:
+            attention_mask = torch.ones(bs, seq_len, dtype=torch.long, device=device)
 
-    def split_heads(self, tensor):
-        new_shape = tensor.size()[:-1] + (self.num_heads, tensor.size(-1) // self.num_heads)
-        tensor = tensor.view(*new_shape)
-        return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
+        attention_mask = self._look_back(attention_mask, block_length, self.window_size, is_key_value=False)
+        attention_mask = attention_mask.unsqueeze(-2)  # Add an extra dimention to account for hidden_dim
 
-    def merge_heads(self, tensor):
-        tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
-        new_shape = tensor.size()[:-2] + (tensor.size(-2) * tensor.size(-1),)
-        return tensor.view(*new_shape)
+        causal_mask = causal_mask * attention_mask
 
-    def _split_seq_length_dim_to(self, tensors, dim_factor1, dim_factor2):
-        return tensors.reshape(tensors.size()[0], dim_factor1, dim_factor2, -1)
+        relative_position = key_indices.unsqueeze(-2) - query_indices.unsqueeze(-1)
+        visible = torch.gt(relative_position, -self.window_size)
 
-    def create_attention_mask(self, bs, seq_len, windows, block_length, attention_mask):
-        ticker = torch.arange(seq_len)[None, :]
-        b_t = ticker.reshape(1, windows, block_length)
+        causal_mask = causal_mask * visible
+        causal_mask = causal_mask.unsqueeze(-3).bool()  # Add an extra dimention to account for num_heads
 
-        bq_t = b_t
-        bq_k = self.look_around(b_t, block_length, self.window_size)
-
-        # compute attn mask
-        # this matches the original implem in mess-tensorflow
-        # https://github.com/tensorflow/mesh/blob/8bd599a21bad01cef1300a8735c17306ce35db6e/mesh_tensorflow/transformer/attention.py#L805
-        relative_position = bq_k.unsqueeze(-2) - bq_t.unsqueeze(-1)
-        relative_position = relative_position.transpose(-1, -2)
-
-        sequence_id = torch.ones(bs, seq_len)
-        q_seq = sequence_id.reshape(-1, windows, block_length)
-        m_seq = sequence_id.reshape(-1, windows, block_length)
-        m_seq = self.look_around(m_seq, block_length, self.window_size)
-
-        if attention_mask is not None:
-            attention_mask = attention_mask.to(m_seq.device)
-            attention_mask = attention_mask.reshape(-1, windows, block_length)
-            attention_mask = self.look_around(attention_mask, block_length, self.window_size)
-            m_seq *= attention_mask
-
-        visible = torch.eq(q_seq.unsqueeze(-1), m_seq.unsqueeze(-2)).transpose(-1, -2)
-        visible = torch.logical_and(visible, torch.gt(relative_position, -self.window_size))
-        mask = torch.logical_and(visible, torch.less_equal(relative_position, 0)).transpose(-1, -2).unsqueeze(2)
-        return mask
-
-    def _attn(self, query, key, value, causal_mask, head_mask=None, output_attentions=False):
-        # Keep the attention weights computation in fp32 to avoid overflow issues
-        query = query.to(torch.float32)
-        key = key.to(torch.float32)
-
-        attn_weights = torch.matmul(query, key.transpose(4, 3))
-        attn_weights = torch.where(causal_mask, attn_weights, self.masked_bias.to(attn_weights.dtype))
-
-        attn_weights = nn.Softmax(dim=-1)(attn_weights)
-        attn_weights = attn_weights.to(value.dtype)
-        attn_weights = self.attn_dropout(attn_weights)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attn_weights = attn_weights * head_mask
-
-        attn_output = torch.matmul(attn_weights, value)
-
-        outputs = (attn_output,)
-        if output_attentions:
-            outputs += (attn_weights,)
-        return outputs
+        return causal_mask
 
     def forward(
         self,
@@ -379,40 +368,50 @@ class GPTNeoLocalSelfAttention(nn.Module):
         # create buckets
         if layer_past is not None:
             # we just need 1 window with block_length 1 when caching is enabled
-            query = self._split_seq_length_dim_to(query, 1, 1)
+            query = self._split_seq_length_dim_to(query, 1, 1, self.embed_dim)
         else:
-            query = self._split_seq_length_dim_to(query, num_blocks, block_length)
+            query = self._split_seq_length_dim_to(query, num_blocks, block_length, self.embed_dim)
 
-        key = self._split_seq_length_dim_to(key, num_blocks, block_length)
-        value = self._split_seq_length_dim_to(value, num_blocks, block_length)
-
-        key = self.look_around(key, block_length, self.window_size)
-        value = self.look_around(value, block_length, self.window_size)
+        key = self._look_back(key, block_length, self.window_size)
+        value = self._look_back(value, block_length, self.window_size)
 
         # select key/value vectors only for the last window
         if layer_past is not None:
             key = key[:, -1:, ...]
             value = value[:, -1:, ...]
 
-        query = self.split_heads(query)
-        key = self.split_heads(key)
-        value = self.split_heads(value)
+        query = self._split_heads(query, self.num_heads, self.head_dim)
+        key = self._split_heads(key, self.num_heads, self.head_dim)
+        value = self._split_heads(value, self.num_heads, self.head_dim)
 
-        mask = self.create_attention_mask(batch_size, full_seq_length, num_blocks, block_length, attention_mask)
+        mask = self._create_attention_mask(
+            batch_size, full_seq_length, num_blocks, block_length, hidden_states.device, attention_mask
+        )
         if layer_past is not None:
             mask = mask[:, -1:, :, -1:, :]  # only take the mask for the last window
-        mask = mask.to(hidden_states.device)
 
         # attn
-        attn_outputs = self._attn(query, key, value, mask, head_mask, output_attentions)
-        attn = attn_outputs[0]
+        attn_output, attn_weights = self._attn(
+            query,
+            key,
+            value,
+            causal_mask=mask,
+            masked_bias=self.masked_bias,
+            attn_dropout=self.attn_dropout,
+            head_mask=head_mask,
+        )
 
-        attn = self.merge_heads(attn)
-        attn = attn.reshape(batch_size, seq_len, self.embed_dim)
+        attn_output = self._merge_heads(attn_output, self.num_heads, self.head_dim)
+        attn_output = attn_output.reshape(batch_size, seq_len, self.embed_dim)
 
-        attn = self.out_proj(attn)
-        attn = self.resid_dropout(attn)
-        return (attn,) + attn_outputs[1:]
+        attn_output = self.out_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        outputs = (attn_output,)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs  # a, (attentions)
 
 
 class GPTNeoAttention(nn.Module):
