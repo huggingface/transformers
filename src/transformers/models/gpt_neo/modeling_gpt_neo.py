@@ -114,7 +114,7 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
 
         if name == ["wte"]:
             # if vocab is padded, then trim off the padding embeddings
-            array = array[:config.vocab_size]
+            array = array[: config.vocab_size]
 
         try:
             assert (
