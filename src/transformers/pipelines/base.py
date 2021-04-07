@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 def infer_framework_from_model(
-    model, model_classes: Optional[Dict[str, type]] = None, revision: Optional[str] = None, task: Optional[str] = None
+    model, model_classes: Optional[Dict[str, type]] = None, task: Optional[str] = None, **model_kwargs
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
@@ -65,10 +65,11 @@ def infer_framework_from_model(
             from.
         model_classes (dictionary :obj:`str` to :obj:`type`, `optional`):
             A mapping framework to class.
-        revision (:obj:`str`, `optional`):
-            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-            git-based system for storing models and other artifacts on huggingface.co, so ``revision`` can be any
-            identifier allowed by git.
+        task (:obj:`str`):
+            The task defining which pipeline will be returned.
+        model_kwargs:
+            Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
+            **model_kwargs)` function.
 
     Returns:
         :obj:`Tuple`: A tuple framework, model.
@@ -80,19 +81,20 @@ def infer_framework_from_model(
             "To install PyTorch, read the instructions at https://pytorch.org/."
         )
     if isinstance(model, str):
+        model_kwargs["_from_pipeline"] = task
         if is_torch_available() and not is_tf_available():
             model_class = model_classes.get("pt", AutoModel)
-            model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
+            model = model_class.from_pretrained(model, **model_kwargs)
         elif is_tf_available() and not is_torch_available():
             model_class = model_classes.get("tf", TFAutoModel)
-            model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
+            model = model_class.from_pretrained(model, **model_kwargs)
         else:
             try:
                 model_class = model_classes.get("pt", AutoModel)
-                model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
+                model = model_class.from_pretrained(model, **model_kwargs)
             except OSError:
                 model_class = model_classes.get("tf", TFAutoModel)
-                model = model_class.from_pretrained(model, revision=revision, _from_pipeline=task)
+                model = model_class.from_pretrained(model, **model_kwargs)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model
