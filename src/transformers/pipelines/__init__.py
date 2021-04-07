@@ -246,6 +246,7 @@ def pipeline(
     framework: Optional[str] = None,
     revision: Optional[str] = None,
     use_fast: bool = True,
+    use_auth_token: Optional[Union[str, bool]] = None,
     model_kwargs: Dict[str, Any] = {},
     **kwargs
 ) -> Pipeline:
@@ -308,6 +309,10 @@ def pipeline(
             artifacts on huggingface.co, so ``revision`` can be any identifier allowed by git.
         use_fast (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use a Fast tokenizer if possible (a :class:`~transformers.PreTrainedTokenizerFast`).
+        use_auth_token (:obj:`str` or `bool`, `optional`):
+            The token to use as HTTP bearer authorization for remote files. If :obj:`True`, will use the token
+            generated when running :obj:`transformers-cli login` (stored in :obj:`~/.huggingface`).
+            revision(:obj:`str`, `optional`, defaults to :obj:`"main"`):
         model_kwargs:
             Additional dictionary of keyword arguments passed along to the model's :obj:`from_pretrained(...,
             **model_kwargs)` function.
@@ -367,6 +372,9 @@ def pipeline(
 
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
+    # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
+
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
         if isinstance(tokenizer, tuple):
@@ -377,12 +385,12 @@ def pipeline(
             )
         else:
             tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task
+                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task, **model_kwargs
             )
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task)
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
