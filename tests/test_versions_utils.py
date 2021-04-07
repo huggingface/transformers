@@ -52,6 +52,9 @@ class DependencyVersionCheckTest(TestCasePlus):
         # gt
         require_version_core("numpy>1.0.0")
 
+        # mix
+        require_version_core("numpy>1.0.0,<1000")
+
         # requirement w/o version
         require_version_core("numpy")
 
