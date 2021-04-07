@@ -19,9 +19,8 @@ from .test_modeling_xlnet import XLNetModelTest
 
 
 class CpmTokenizationTest(XLNetModelTest):
-
     def test_pre_tokenization(self):
-        tokenizer = CpmTokenizer.from_pretrained('TsinghuaAI/CPM-Generate')
+        tokenizer = CpmTokenizer.from_pretrained("TsinghuaAI/CPM-Generate")
         text = "Hugging Face大法好，谁用谁知道。"
         normalized_text = "Hugging Face大法好,谁用谁知道。<unk>"
         bpe_tokens = "▁Hu gg ing ▁ ▂ ▁F ace ▁大法 ▁好 ▁ , ▁谁 ▁用 ▁谁 ▁知 道 ▁ 。".split()
