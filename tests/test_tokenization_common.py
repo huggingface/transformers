@@ -69,13 +69,14 @@ def merge_model_tokenizer_mappings(
     model_tokenizer_mapping = OrderedDict([])
 
     for configuration in configurations:
-        model = model_mapping[configuration]
-        tokenizer = tokenizer_mapping[configuration][0]
-        tokenizer_fast = tokenizer_mapping[configuration][1]
+        if configuration in model_mapping and configuration in tokenizer_mapping:
+            model = model_mapping[configuration]
+            tokenizer = tokenizer_mapping[configuration][0]
+            tokenizer_fast = tokenizer_mapping[configuration][1]
 
-        model_tokenizer_mapping.update({tokenizer: (configuration, model)})
-        if tokenizer_fast is not None:
-            model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
+            model_tokenizer_mapping.update({tokenizer: (configuration, model)})
+            if tokenizer_fast is not None:
+                model_tokenizer_mapping.update({tokenizer_fast: (configuration, model)})
 
     return model_tokenizer_mapping
 

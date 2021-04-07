@@ -89,6 +89,7 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
+    "docutils==0.16.0",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -125,6 +126,7 @@ _deps = [
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+    "sphinxext-opengraph==0.4.1",
     "sphinx==3.2.1",
     "starlette",
     "tensorflow-cpu>=2.3",
@@ -241,10 +243,26 @@ extras["testing"] = (
     + extras["retrieval"]
     + extras["modelcreation"]
 )
-extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
+extras["docs"] = deps_list(
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
+)
 extras["quality"] = deps_list("black", "isort", "flake8")
 
-extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"] + extras["speech"] + extras["vision"]
+extras["all"] = (
+    extras["tf"]
+    + extras["torch"]
+    + extras["flax"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["speech"]
+    + extras["vision"]
+)
 
 extras["dev"] = (
     extras["all"]
@@ -287,7 +305,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.5.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.6.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

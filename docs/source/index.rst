@@ -392,6 +392,7 @@ TensorFlow and/or Flax.
     migration
     contributing
     add_new_model
+    fast_tokenizers
     testing
     serialization
 

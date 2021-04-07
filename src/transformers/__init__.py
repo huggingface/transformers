@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.5.0.dev0"
+__version__ = "4.6.0.dev0"
 
 # Work around to update TensorFlow's absl.logging threshold which alters the
 # default Python logging output behavior when present.
@@ -45,6 +45,7 @@ from .file_utils import (
     _BaseLazyModule,
     is_flax_available,
     is_sentencepiece_available,
+    is_speech_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -102,6 +103,7 @@ _import_structure = {
         "is_py3nvml_available",
         "is_sentencepiece_available",
         "is_sklearn_available",
+        "is_speech_available",
         "is_tf_available",
         "is_tokenizers_available",
         "is_torch_available",
@@ -133,9 +135,11 @@ _import_structure = {
     "models.auto": [
         "ALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CONFIG_MAPPING",
+        "FEATURE_EXTRACTOR_MAPPING",
         "MODEL_NAMES_MAPPING",
         "TOKENIZER_MAPPING",
         "AutoConfig",
+        "AutoFeatureExtractor",
         "AutoTokenizer",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
@@ -203,7 +207,6 @@ _import_structure = {
     "models.speech_to_text": [
         "SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Speech2TextConfig",
-        "Speech2TextFeatureExtractor",
     ],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
@@ -289,7 +292,6 @@ if is_sentencepiece_available():
     _import_structure["models.pegasus"].append("PegasusTokenizer")
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
-    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -338,13 +340,40 @@ if is_tokenizers_available():
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-    if is_sentencepiece_available():
-        _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
 else:
     from .utils import dummy_tokenizers_objects
 
     _import_structure["utils.dummy_tokenizers_objects"] = [
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
+    ]
+
+if is_sentencepiece_available() and is_tokenizers_available():
+    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
+else:
+    from .utils import dummy_sentencepiece_and_tokenizers_objects
+
+    _import_structure["utils.dummy_sentencepiece_and_tokenizers_objects"] = [
+        name for name in dir(dummy_sentencepiece_and_tokenizers_objects) if not name.startswith("_")
+    ]
+
+# Speech-specific objects
+if is_speech_available():
+    _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+
+else:
+    from .utils import dummy_speech_objects
+
+    _import_structure["utils.dummy_speech_objects"] = [
+        name for name in dir(dummy_speech_objects) if not name.startswith("_")
+    ]
+
+if is_sentencepiece_available() and is_speech_available():
+    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+else:
+    from .utils import dummy_sentencepiece_and_speech_objects
+
+    _import_structure["utils.dummy_sentencepiece_and_speech_objects"] = [
+        name for name in dir(dummy_sentencepiece_and_speech_objects) if not name.startswith("_")
     ]
 
 # Vision-specific objects
@@ -1314,7 +1343,26 @@ else:
 # FLAX-backed objects
 if is_flax_available():
     _import_structure["modeling_flax_utils"] = ["FlaxPreTrainedModel"]
-    _import_structure["models.auto"].extend(["FLAX_MODEL_MAPPING", "FlaxAutoModel"])
+    _import_structure["models.auto"].extend(
+        [
+            "FLAX_MODEL_FOR_MASKED_LM_MAPPING",
+            "FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING",
+            "FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
+            "FLAX_MODEL_FOR_PRETRAINING_MAPPING",
+            "FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "FLAX_MODEL_MAPPING",
+            "FlaxAutoModel",
+            "FlaxAutoModelForMaskedLM",
+            "FlaxAutoModelForMultipleChoice",
+            "FlaxAutoModelForNextSentencePrediction",
+            "FlaxAutoModelForPreTraining",
+            "FlaxAutoModelForQuestionAnswering",
+            "FlaxAutoModelForSequenceClassification",
+            "FlaxAutoModelForTokenClassification",
+        ]
+    )
     _import_structure["models.bert"].extend(
         [
             "FlaxBertForMaskedLM",
@@ -1389,6 +1437,7 @@ if TYPE_CHECKING:
         is_py3nvml_available,
         is_sentencepiece_available,
         is_sklearn_available,
+        is_speech_available,
         is_tf_available,
         is_tokenizers_available,
         is_torch_available,
@@ -1424,9 +1473,11 @@ if TYPE_CHECKING:
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
+        FEATURE_EXTRACTOR_MAPPING,
         MODEL_NAMES_MAPPING,
         TOKENIZER_MAPPING,
         AutoConfig,
+        AutoFeatureExtractor,
         AutoTokenizer,
     )
     from .models.bart import BartConfig, BartTokenizer
@@ -1490,11 +1541,7 @@ if TYPE_CHECKING:
     from .models.reformer import REFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, ReformerConfig
     from .models.retribert import RETRIBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, RetriBertConfig, RetriBertTokenizer
     from .models.roberta import ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, RobertaConfig, RobertaTokenizer
-    from .models.speech_to_text import (
-        SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Speech2TextConfig,
-        Speech2TextFeatureExtractor,
-    )
+    from .models.speech_to_text import SPEECH_TO_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, Speech2TextConfig
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
@@ -1567,6 +1614,7 @@ if TYPE_CHECKING:
     from .training_args import TrainingArguments
     from .training_args_seq2seq import Seq2SeqTrainingArguments
     from .training_args_tf import TFTrainingArguments
+    from .utils import logging
 
     if is_sentencepiece_available():
         from .models.albert import AlbertTokenizer
@@ -1580,7 +1628,7 @@ if TYPE_CHECKING:
         from .models.mt5 import MT5Tokenizer
         from .models.pegasus import PegasusTokenizer
         from .models.reformer import ReformerTokenizer
-        from .models.speech_to_text import Speech2TextProcessor, Speech2TextTokenizer
+        from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -1620,10 +1668,24 @@ if TYPE_CHECKING:
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
-        if is_sentencepiece_available():
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
     else:
         from .utils.dummy_tokenizers_objects import *
+
+    if is_sentencepiece_available() and is_tokenizers_available():
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+    else:
+        from .utils.dummies_sentencepiece_and_tokenizers_objects import *
+
+    if is_speech_available():
+        from .models.speech_to_text import Speech2TextFeatureExtractor
+
+    else:
+        from .utils.dummy_speech_objects import *
+
+    if is_speech_available() and is_sentencepiece_available():
+        from .models.speech_to_text import Speech2TextProcessor
+    else:
+        from .utils.dummy_sentencepiece_and_speech_objects import *
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
@@ -1676,6 +1738,12 @@ if TYPE_CHECKING:
             TemperatureLogitsWarper,
             TopKLogitsWarper,
             TopPLogitsWarper,
+        )
+        from .generation_stopping_criteria import (
+            MaxLengthCriteria,
+            MaxTimeCriteria,
+            StoppingCriteria,
+            StoppingCriteriaList,
         )
         from .generation_utils import top_k_top_p_filtering
         from .modeling_utils import Conv1D, PreTrainedModel, apply_chunking_to_forward, prune_layer
@@ -1902,6 +1970,7 @@ if TYPE_CHECKING:
             IBertForSequenceClassification,
             IBertForTokenClassification,
             IBertModel,
+            IBertPreTrainedModel,
         )
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -2428,7 +2497,24 @@ if TYPE_CHECKING:
 
     if is_flax_available():
         from .modeling_flax_utils import FlaxPreTrainedModel
-        from .models.auto import FLAX_MODEL_MAPPING, FlaxAutoModel
+        from .models.auto import (
+            FLAX_MODEL_FOR_MASKED_LM_MAPPING,
+            FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
+            FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
+            FLAX_MODEL_FOR_PRETRAINING_MAPPING,
+            FLAX_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            FLAX_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            FLAX_MODEL_MAPPING,
+            FlaxAutoModel,
+            FlaxAutoModelForMaskedLM,
+            FlaxAutoModelForMultipleChoice,
+            FlaxAutoModelForNextSentencePrediction,
+            FlaxAutoModelForPreTraining,
+            FlaxAutoModelForQuestionAnswering,
+            FlaxAutoModelForSequenceClassification,
+            FlaxAutoModelForTokenClassification,
+        )
         from .models.bert import (
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
