@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 
 def infer_framework_from_model(
-    model, model_classes: Optional[Dict[str, type]] = None, task: Optional[str] = None, **kwargs
+    model, model_classes: Optional[Dict[str, type]] = None, task: Optional[str] = None, **model_kwargs
 ):
     """
     Select framework (TensorFlow or PyTorch) to use from the :obj:`model` passed. Returns a tuple (framework, model).
@@ -81,20 +81,20 @@ def infer_framework_from_model(
             "To install PyTorch, read the instructions at https://pytorch.org/."
         )
     if isinstance(model, str):
-        kwargs["_from_pipeline"] = task
+        model_kwargs["_from_pipeline"] = task
         if is_torch_available() and not is_tf_available():
             model_class = model_classes.get("pt", AutoModel)
-            model = model_class.from_pretrained(model, kwargs)
+            model = model_class.from_pretrained(model, **model_kwargs)
         elif is_tf_available() and not is_torch_available():
             model_class = model_classes.get("tf", TFAutoModel)
-            model = model_class.from_pretrained(model, kwargs)
+            model = model_class.from_pretrained(model, **model_kwargs)
         else:
             try:
                 model_class = model_classes.get("pt", AutoModel)
-                model = model_class.from_pretrained(model, kwargs)
+                model = model_class.from_pretrained(model, **model_kwargs)
             except OSError:
                 model_class = model_classes.get("tf", TFAutoModel)
-                model = model_class.from_pretrained(model, kwargs)
+                model = model_class.from_pretrained(model, **model_kwargs)
 
     framework = "tf" if model.__class__.__name__.startswith("TF") else "pt"
     return framework, model
