@@ -240,7 +240,7 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 def pipeline(
     task: str,
-    model: Optional[Union[str, PreTrainedModel]] = None,
+    model: Optional = None,
     config: Optional[Union[str, PretrainedConfig]] = None,
     tokenizer: Optional[Union[str, PreTrainedTokenizer]] = None,
     framework: Optional[str] = None,
@@ -373,7 +373,7 @@ def pipeline(
     task_class, model_class = targeted_task["impl"], targeted_task[framework]
 
     # Retrieve use_auth_token and add it to model_kwargs to be used in .from_pretrained
-    model_kwargs["use_auth_token"] = use_auth_token
+    model_kwargs["use_auth_token"] = model_kwargs.get("use_auth_token", use_auth_token)
 
     # Instantiate tokenizer if needed
     if isinstance(tokenizer, (str, tuple)):
