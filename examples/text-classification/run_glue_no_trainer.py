@@ -274,7 +274,7 @@ def main():
             )
             label_to_id = {i: label_name_to_id[label_list[i]] for i in range(num_labels)}
         else:
-            logger.warn(
+            logger.warning(
                 "Your model seems to have been trained with labels, but they don't match the dataset: ",
                 f"model labels: {list(sorted(label_name_to_id.keys()))}, dataset labels: {list(sorted(label_list))}."
                 "\nIgnoring the model labels as a result.",

@@ -319,7 +319,7 @@ def main():
     text_column_name = "text" if "text" in column_names else column_names[0]
 
     if data_args.max_seq_length > tokenizer.model_max_length:
-        logger.warn(
+        logger.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )

@@ -450,7 +450,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warn("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `BertGenerationDecoder` as a standalone, add `is_decoder=True.`")
 
         self.bert = BertGenerationEncoder(config)
         self.lm_head = BertGenerationOnlyLMHead(config)
