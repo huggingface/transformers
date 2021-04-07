@@ -142,7 +142,7 @@ class ZeroShotClassificationPipeline(Pipeline):
         """
         if "multi_class" in kwargs and kwargs["multi_class"] is not None:
             multi_label = kwargs.pop("multi_class")
-            logger.warn(
+            logger.warning(
                 "The `multi_class` argument has been deprecated and renamed to `multi_label`. "
                 "`multi_class` will be removed in a future version of Transformers."
             )

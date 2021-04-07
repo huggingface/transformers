@@ -194,7 +194,7 @@ if (
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
-    logger.warn(
+    logger.warning(
         "In Transformers v4.0.0, the default path to cache downloaded models changed from "
         "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
         "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
