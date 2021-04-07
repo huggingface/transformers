@@ -377,12 +377,12 @@ def pipeline(
             )
         else:
             tokenizer = AutoTokenizer.from_pretrained(
-                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task
+                tokenizer, revision=revision, use_fast=use_fast, _from_pipeline=task, **model_kwargs
             )
 
     # Instantiate config if needed
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task)
+        config = AutoConfig.from_pretrained(config, revision=revision, _from_pipeline=task, **model_kwargs)
 
     # Instantiate modelcard if needed
     if isinstance(modelcard, str):
