@@ -101,6 +101,7 @@ _deps = [
     "isort>=5.5.4",
     "jax>=0.2.8",
     "jaxlib>=0.1.59",
+    "jieba",
     "keras2onnx",
     "numpy>=1.17",
     "onnxconverter-common",
