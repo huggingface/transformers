@@ -42,9 +42,9 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_mean (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_std (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 

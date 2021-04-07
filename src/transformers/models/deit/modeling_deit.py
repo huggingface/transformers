@@ -368,7 +368,7 @@ class DeiTEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->DeiT
+# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->DeiT all-casing
 class DeiTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -376,7 +376,7 @@ class DeiTPreTrainedModel(PreTrainedModel):
     """
 
     config_class = DeiTConfig
-    base_model_prefix = "vit"
+    base_model_prefix = "deit"
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -656,7 +656,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         self.cls_classifier = (
             nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
-        self.dist_classifier = (
+        self.distillation_classifier = (
             nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
         )
 
@@ -713,7 +713,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         sequence_output = outputs[0]
 
         cls_logits = self.cls_classifier(sequence_output[:, 0, :])
-        dist_logits = self.dist_classifier(sequence_output[:, 1, :])
+        dist_logits = self.distillation_classifier(sequence_output[:, 1, :])
 
         # during inference, return the average of both classifier predictions
         logits = (cls_logits + dist_logits) / 2

@@ -80,8 +80,8 @@ def create_rename_keys(config, base_model=False):
                 ("norm.bias", "deit.layernorm.bias"),
                 ("head.weight", "cls_classifier.weight"),
                 ("head.bias", "cls_classifier.bias"),
-                ("head_dist.weight", "dist_classifier.weight"),
-                ("head_dist.bias", "dist_classifier.bias"),
+                ("head_dist.weight", "distillation_classifier.weight"),
+                ("head_dist.bias", "distillation_classifier.bias"),
             ]
         )
 

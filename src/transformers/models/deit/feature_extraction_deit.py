@@ -52,9 +52,9 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with :obj:`image_mean` and :obj:`image_std`.
-        image_mean (:obj:`int`, defaults to :obj:`[0.485, 0.456, 0.406]`):
+        image_mean (:obj:`List[int]`, defaults to :obj:`[0.485, 0.456, 0.406]`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.229, 0.224, 0.225]`):
+        image_std (:obj:`List[int]`, defaults to :obj:`[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
     """
 
