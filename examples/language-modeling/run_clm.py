@@ -136,8 +136,8 @@ class DataTrainingArguments:
     block_size: Optional[int] = field(
         default=None,
         metadata={
-            "help": "Optional input sequence length after tokenization."
-            "The training dataset will be truncated in block of this size for training."
+            "help": "Optional input sequence length after tokenization. "
+            "The training dataset will be truncated in block of this size for training. "
             "Default to the model max input length for single sentence inputs (take into account special tokens)."
         },
     )
