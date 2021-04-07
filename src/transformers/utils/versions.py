@@ -62,18 +62,12 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
         hint (:obj:`str`, `optional`): what suggestion to print in case of requirements not being met
     """
 
-    # note: while pkg_resources.require_version(requirement) is a much simpler way to do it, it
-    # fails if some of the dependencies of the dependencies are not matching, which is not necessarily
-    # bad, hence the more complicated check - which also should be faster, since it doesn't check
-    # dependencies of dependencies.
-
     hint = f"\n{hint}" if hint is not None else ""
 
     # non-versioned check
     if re.match(r"^[\w_\-\d]+$", requirement):
         pkg, op, want_ver = requirement, None, None
     else:
-        # match = re.findall(r"^([^!=<>\s]+)([\s!=<>]{1,2})(.+)", requirement)
         match = re.findall(r"^([^!=<>\s]+)([\s!=<>]{1,2}.+)", requirement)
         if not match:
             raise ValueError(
