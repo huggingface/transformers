@@ -30,7 +30,7 @@ class MegatronBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.MegatronBertModel`. It is
     used to instantiate a MEGATRON_BERT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the MEGATRON_BERT
-    `bert-base-uncased <https://huggingface.co/bert-base-uncased>`__ architecture.
+    `megatron-bert-uncased-345m <https://huggingface.co/nvidia/megatron-bert-uncased-345m>`__ architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
     outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.

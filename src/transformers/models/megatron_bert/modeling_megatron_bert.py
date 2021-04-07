@@ -60,10 +60,10 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "MegatronBertConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
-_CHECKPOINT_FOR_DOC = "nvidia/megatron-bert"
+_CHECKPOINT_FOR_DOC = "nvidia/megatron-bert-cased-345m"
 
 MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nvidia/megatron-bert",
+    "nvidia/megatron-bert-cased-345m",
     # See all MegatronBERT models at https://huggingface.co/models?filter=megatron_bert
 ]
 
@@ -1057,8 +1057,8 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
             >>> from transformers import BertTokenizer, MegatronBertForPreTraining
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
-            >>> model = MegatronBertForPreTraining.from_pretrained('nvidia/megatron-bert')
+            >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
+            >>> model = MegatronBertForPreTraining.from_pretrained('nvidia/megatron-bert-cased-345m')
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1179,8 +1179,8 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
             >>> from transformers import BertTokenizer, MegatronBertLMHeadModel, MegatronBertConfig
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-large-cased')
-            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert', is_decoder=True)
+            >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
+            >>> model = MegatronBertLMHeadModel.from_pretrained('nvidia/megatron-bert-cased-345m', is_decoder=True)
 
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -1402,8 +1402,8 @@ class MegatronBertForNextSentencePrediction(MegatronBertPreTrainedModel):
             >>> from transformers import BertTokenizer, MegatronBertForNextSentencePrediction
             >>> import torch
 
-            >>> tokenizer = BertTokenizer.from_pretrained('bert-large-uncased')
-            >>> model = MegatronBertForNextSentencePrediction.from_pretrained('nvidia/megatron-bert')
+            >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')
+            >>> model = MegatronBertForNextSentencePrediction.from_pretrained('nvidia/megatron-bert-cased-345m')
 
             >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
             >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
