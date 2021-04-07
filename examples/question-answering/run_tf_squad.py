@@ -181,7 +181,7 @@ def main():
     # Get datasets
     if data_args.use_tfds:
         if data_args.version_2_with_negative:
-            logger.warn("tensorflow_datasets does not handle version 2 of SQuAD. Switch to version 1 automatically")
+            logger.warning("tensorflow_datasets does not handle version 2 of SQuAD. Switch to version 1 automatically")
 
         try:
             import tensorflow_datasets as tfds
