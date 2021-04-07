@@ -1190,9 +1190,6 @@ def cached_path(
             use_auth_token=use_auth_token,
             local_files_only=local_files_only,
         )
-        umask = os.umask(0o666)
-        os.umask(umask)
-        os.chmod(output_path, 0o666 & ~umask)
     elif os.path.exists(url_or_filename):
         # File, and it exists.
         output_path = url_or_filename
