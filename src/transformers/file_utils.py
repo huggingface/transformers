@@ -1190,9 +1190,6 @@ def cached_path(
             use_auth_token=use_auth_token,
             local_files_only=local_files_only,
         )
-        umask = os.umask(0o666)
-        os.umask(umask)
-        os.chmod(output_path, 0o666 & ~umask)
     elif os.path.exists(url_or_filename):
         # File, and it exists.
         output_path = url_or_filename
@@ -1450,6 +1447,11 @@ def get_from_cache(
 
         logger.info(f"storing {url} in cache at {cache_path}")
         os.replace(temp_file.name, cache_path)
+
+        # NamedTemporaryFile creates a file with hardwired 0600 perms (ignoring umask), so fixing it.
+        umask = os.umask(0o666)
+        os.umask(umask)
+        os.chmod(cache_path, 0o666 & ~umask)
 
         logger.info(f"creating metadata file for {cache_path}")
         meta = {"url": url, "etag": etag}
