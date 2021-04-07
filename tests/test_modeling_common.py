@@ -34,6 +34,7 @@ if is_torch_available():
     from transformers import (
         BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
         MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
         MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
@@ -47,6 +48,7 @@ if is_torch_available():
         BertModel,
         PretrainedConfig,
         PreTrainedModel,
+        T5ForConditionalGeneration,
     )
 
 
@@ -56,6 +58,9 @@ def _config_zero_init(config):
         if "_range" in key or "_std" in key or "initializer_factor" in key:
             setattr(configs_no_init, key, 1e-10)
     return configs_no_init
+
+
+TINY_T5 = "patrickvonplaten/t5-tiny-random"
 
 
 @require_torch
@@ -95,6 +100,7 @@ class ModelTesterMixin:
             elif model_class in [
                 *MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING.values(),
                 *MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING.values(),
+                *MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING.values(),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -168,7 +174,7 @@ class ModelTesterMixin:
                     self.assertIn(
                         ((param.data.mean() * 1e9).round() / 1e9).item(),
                         [0.0, 1.0],
-                        msg="Parameter {} of model {} seems not properly initialized".format(name, model_class),
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
     def test_determinism(self):
@@ -927,7 +933,7 @@ class ModelTesterMixin:
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
 
-                    with self.subTest(msg="Missing keys for {}".format(model.__class__.__name__)):
+                    with self.subTest(msg=f"Missing keys for {model.__class__.__name__}"):
                         self.assertGreater(len(loading_info["missing_keys"]), 0)
 
     def test_tie_model_weights(self):
@@ -1287,3 +1293,11 @@ class ModelUtilsTest(unittest.TestCase):
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
+
+    def test_model_from_pretrained_with_different_pretrained_model_name(self):
+        model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
+        self.assertIsNotNone(model)
+
+        with self.assertRaises(Exception) as context:
+            BertModel.from_pretrained(TINY_T5)
+        self.assertTrue("You tried to initiate a model of type" in str(context.exception))

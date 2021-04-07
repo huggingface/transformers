@@ -55,8 +55,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "xlm-mlm-enro-1024": "https://huggingface.co/xlm-mlm-enro-1024/resolve/main/merges.txt",
         "xlm-mlm-tlm-xnli15-1024": "https://huggingface.co/xlm-mlm-tlm-xnli15-1024/resolve/main/merges.txt",
         "xlm-mlm-xnli15-1024": "https://huggingface.co/xlm-mlm-xnli15-1024/resolve/main/merges.txt",
-        "xlm-clm-enfr-1024": "https://huggingface.co/xlm-mlm-enfr-1024/resolve/main/merges.txt",
-        "xlm-clm-ende-1024": "https://huggingface.co/xlm-mlm-ende-1024/resolve/main/merges.txt",
+        "xlm-clm-enfr-1024": "https://huggingface.co/xlm-clm-enfr-1024/resolve/main/merges.txt",
+        "xlm-clm-ende-1024": "https://huggingface.co/xlm-clm-ende-1024/resolve/main/merges.txt",
         "xlm-mlm-17-1280": "https://huggingface.co/xlm-mlm-17-1280/resolve/main/merges.txt",
         "xlm-mlm-100-1280": "https://huggingface.co/xlm-mlm-100-1280/resolve/main/merges.txt",
     },
@@ -682,7 +682,7 @@ class XLMTokenizer(PreTrainedTokenizer):
                 import Mykytea
 
                 self.ja_word_tokenizer = Mykytea.Mykytea(
-                    "-model %s/local/share/kytea/model.bin" % os.path.expanduser("~")
+                    f"-model {os.path.expanduser('~')}/local/share/kytea/model.bin"
                 )
             except (AttributeError, ImportError):
                 logger.error(
@@ -954,7 +954,7 @@ class XLMTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -971,8 +971,8 @@ class XLMTokenizer(PreTrainedTokenizer):
             for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        "Saving vocabulary to {}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!".format(merge_file)
+                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
+                        " Please check that the tokenizer is not corrupted!"
                     )
                     index = token_index
                 writer.write(" ".join(bpe_tokens) + "\n")

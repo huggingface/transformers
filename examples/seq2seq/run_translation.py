@@ -20,17 +20,14 @@ Fine-tuning the library models for sequence to sequence.
 
 import logging
 import os
-import re
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 from datasets import load_dataset, load_metric
 
 import transformers
-from filelock import FileLock
 from transformers import (
     AutoConfig,
     AutoModelForSeq2SeqLM,
@@ -44,21 +41,14 @@ from transformers import (
     default_data_collator,
     set_seed,
 )
-from transformers.file_utils import is_offline_mode
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
 
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.6.0.dev0")
 
 logger = logging.getLogger(__name__)
-
-try:
-    nltk.data.find("tokenizers/punkt")
-except (LookupError, OSError):
-    if is_offline_mode():
-        raise LookupError(
-            "Offline mode: run this script without TRANSFORMERS_OFFLINE first to download nltk data files"
-        )
-    with FileLock(".lock") as lock:
-        nltk.download("punkt", quiet=True)
 
 
 @dataclass
@@ -103,42 +93,27 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    task: str = field(
-        default="summarization",
-        metadata={
-            "help": "The name of the task, should be summarization (or summarization_{dataset} for evaluating "
-            "pegasus) or translation (or translation_{xx}_to_{yy})."
-        },
-    )
+    source_lang: str = field(default=None, metadata={"help": "Source language id for translation."})
+    target_lang: str = field(default=None, metadata={"help": "Target language id for translation."})
+
     dataset_name: Optional[str] = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
     dataset_config_name: Optional[str] = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    text_column: Optional[str] = field(
-        default=None,
-        metadata={"help": "The name of the column in the datasets containing the full texts (for summarization)."},
-    )
-    summary_column: Optional[str] = field(
-        default=None,
-        metadata={"help": "The name of the column in the datasets containing the summaries (for summarization)."},
-    )
-    train_file: Optional[str] = field(
-        default=None, metadata={"help": "The input training data file (a jsonlines or csv file)."}
-    )
+    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a jsonlines)."})
     validation_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input evaluation data file to evaluate the metrics (rouge/sacreblue) on "
-            "(a jsonlines or csv file)."
+            "help": "An optional input evaluation data file to evaluate the metrics (sacreblue) on "
+            "a jsonlines file."
         },
     )
     test_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input test data file to evaluate the metrics (rouge/sacreblue) on "
-            "(a jsonlines or csv file)."
+            "help": "An optional input test data file to evaluate the metrics (sacreblue) on " "a jsonlines file."
         },
     )
     overwrite_cache: bool = field(
@@ -200,8 +175,6 @@ class DataTrainingArguments:
             "value if set."
         },
     )
-    source_lang: Optional[str] = field(default=None, metadata={"help": "Source language id for translation."})
-    target_lang: Optional[str] = field(default=None, metadata={"help": "Target language id for translation."})
     num_beams: Optional[int] = field(
         default=None,
         metadata={
@@ -222,34 +195,17 @@ class DataTrainingArguments:
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            if self.train_file is not None:
-                extension = self.train_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-            if self.validation_file is not None:
-                extension = self.validation_file.split(".")[-1]
-                assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
-        if not self.task.startswith("summarization") and not self.task.startswith("translation"):
-            raise ValueError(
-                "`task` should be summarization, summarization_{dataset}, translation or translation_{xx}_to_{yy}."
-            )
+        elif self.source_lang is None or self.target_lang is None:
+            raise ValueError("Need to specify the source language and the target language.")
+
+        if self.train_file is not None:
+            extension = self.train_file.split(".")[-1]
+            assert extension == "json", "`train_file` should be a json file."
+        if self.validation_file is not None:
+            extension = self.validation_file.split(".")[-1]
+            assert extension == "json", "`validation_file` should be a json file."
         if self.val_max_target_length is None:
             self.val_max_target_length = self.max_target_length
-
-
-summarization_name_mapping = {
-    "amazon_reviews_multi": ("review_body", "review_title"),
-    "big_patent": ("description", "abstract"),
-    "cnn_dailymail": ("article", "highlights"),
-    "orange_sum": ("text", "summary"),
-    "pn_summary": ("article", "summary"),
-    "psc": ("extract_text", "summary_text"),
-    "samsum": ("dialogue", "summary"),
-    "thaisum": ("body", "summary"),
-    "xglue": ("news_body", "news_title"),
-    "xsum": ("document", "summary"),
-    "wiki_summary": ("article", "highlights"),
-}
 
 
 def main():
@@ -264,6 +220,18 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    if data_args.source_prefix is None and model_args.model_name_or_path in [
+        "t5-small",
+        "t5-base",
+        "t5-large",
+        "t5-3b",
+        "t5-11b",
+    ]:
+        logger.warning(
+            "You're running a t5 model but didn't provide a source prefix, which is expected, e.g. with "
+            "`--source_prefix 'translate English to German: ' `"
+        )
 
     # Detecting last checkpoint.
     last_checkpoint = None
@@ -296,18 +264,15 @@ def main():
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
 
-    # Get the datasets: you can either provide your own CSV/JSON training and evaluation files (see below)
+    # Get the datasets: you can either provide your own JSON training and evaluation files (see below)
     # or just provide the name of one of the public datasets available on the hub at https://huggingface.co/datasets/
     # (the dataset will be downloaded automatically from the datasets Hub).
     #
-    # For CSV/JSON files in the summarization task, this script will use the first column for the full texts and the
-    # second column for the summaries (unless you specify column names for this with the `text_column` and
-    # `summary_column` arguments).
     # For translation, only JSON files are supported, with one field named "translation" containing two keys for the
     # source and target languages (unless you adapt what follows).
     #
@@ -387,53 +352,15 @@ def main():
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
-    if data_args.task.startswith("translation") or isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
+    if isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
         if data_args.source_lang is not None:
             tokenizer.src_lang = data_args.source_lang
         if data_args.target_lang is not None:
             tokenizer.tgt_lang = data_args.target_lang
 
-    # To serialize preprocess_function below, each of those four variables needs to be defined (even if we won't use
-    # them all).
-    source_lang, target_lang, text_column, summary_column = None, None, None, None
-
-    if data_args.task.startswith("summarization"):
-        # Get the column names for input/target.
-        dataset_columns = summarization_name_mapping.get(data_args.dataset_name, None)
-        if data_args.text_column is None:
-            text_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
-        else:
-            text_column = data_args.text_column
-            if text_column not in column_names:
-                raise ValueError(
-                    f"--text_column' value '{data_args.text_column}' needs to be one of: {', '.join(column_names)}"
-                )
-        if data_args.summary_column is None:
-            summary_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
-        else:
-            summary_column = data_args.summary_column
-            if summary_column not in column_names:
-                raise ValueError(
-                    f"--summary_column' value '{data_args.summary_column}' needs to be one of: {', '.join(column_names)}"
-                )
-    else:
-        # Get the language codes for input/target.
-        lang_search = re.match("translation_([a-z]+)_to_([a-z]+)", data_args.task)
-        if data_args.source_lang is not None:
-            source_lang = data_args.source_lang.split("_")[0]
-        else:
-            assert (
-                lang_search is not None
-            ), "Provide a source language via --source_lang or rename your task 'translation_xx_to_yy'."
-            source_lang = lang_search.groups()[0]
-
-        if data_args.target_lang is not None:
-            target_lang = data_args.target_lang.split("_")[0]
-        else:
-            assert (
-                lang_search is not None
-            ), "Provide a target language via --target_lang or rename your task 'translation_xx_to_yy'."
-            target_lang = lang_search.groups()[1]
+    # Get the language codes for input/target.
+    source_lang = data_args.source_lang.split("_")[0]
+    target_lang = data_args.target_lang.split("_")[0]
 
     # Temporarily set max_target_length for training.
     max_target_length = data_args.max_target_length
@@ -446,12 +373,8 @@ def main():
         )
 
     def preprocess_function(examples):
-        if data_args.task.startswith("translation"):
-            inputs = [ex[source_lang] for ex in examples["translation"]]
-            targets = [ex[target_lang] for ex in examples["translation"]]
-        else:
-            inputs = examples[text_column]
-            targets = examples[summary_column]
+        inputs = [ex[source_lang] for ex in examples["translation"]]
+        targets = [ex[target_lang] for ex in examples["translation"]]
         inputs = [prefix + inp for inp in inputs]
         model_inputs = tokenizer(inputs, max_length=data_args.max_source_length, padding=padding, truncation=True)
 
@@ -526,19 +449,11 @@ def main():
         )
 
     # Metric
-    metric_name = "rouge" if data_args.task.startswith("summarization") else "sacrebleu"
-    metric = load_metric(metric_name)
+    metric = load_metric("sacrebleu")
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
-        labels = [label.strip() for label in labels]
-
-        # rougeLSum expects newline after each sentence
-        if metric_name == "rouge":
-            preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in preds]
-            labels = ["\n".join(nltk.sent_tokenize(label)) for label in labels]
-        else:  # sacrebleu
-            labels = [[label] for label in labels]
+        labels = [[label.strip()] for label in labels]
 
         return preds, labels
 
@@ -555,13 +470,8 @@ def main():
         # Some simple post-processing
         decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
-        if metric_name == "rouge":
-            result = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-            # Extract a few results from ROUGE
-            result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
-        else:
-            result = metric.compute(predictions=decoded_preds, references=decoded_labels)
-            result = {"bleu": result["score"]}
+        result = metric.compute(predictions=decoded_preds, references=decoded_labels)
+        result = {"bleu": result["score"]}
 
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
@@ -601,6 +511,7 @@ def main():
         trainer.save_state()
 
     # Evaluation
+    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
@@ -613,7 +524,6 @@ def main():
         trainer.log_metrics("eval", metrics)
         trainer.save_metrics("eval", metrics)
 
-    # predict
     if training_args.do_predict:
         logger.info("*** Test ***")
 
@@ -639,6 +549,8 @@ def main():
                 output_test_preds_file = os.path.join(training_args.output_dir, "test_generations.txt")
                 with open(output_test_preds_file, "w") as writer:
                     writer.write("\n".join(test_preds))
+
+    return results
 
 
 def _mp_fn(index):

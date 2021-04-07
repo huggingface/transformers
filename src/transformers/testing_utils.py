@@ -39,6 +39,7 @@ from .file_utils import (
     is_torch_available,
     is_torch_tpu_available,
     is_torchaudio_available,
+    is_vision_available,
 )
 from .integrations import is_optuna_available, is_ray_available
 
@@ -61,7 +62,7 @@ def parse_flag_from_env(key, default=False):
             _value = strtobool(value)
         except ValueError:
             # More values are supported, but let's keep the message simple.
-            raise ValueError("If set, {} must be yes or no.".format(key))
+            raise ValueError(f"If set, {key} must be yes or no.")
     return _value
 
 
@@ -74,12 +75,13 @@ def parse_int_from_env(key, default=None):
         try:
             _value = int(value)
         except ValueError:
-            raise ValueError("If set, {} must be a int.".format(key))
+            raise ValueError(f"If set, {key} must be a int.")
     return _value
 
 
 _run_slow_tests = parse_flag_from_env("RUN_SLOW", default=False)
 _run_pt_tf_cross_tests = parse_flag_from_env("RUN_PT_TF_CROSS_TESTS", default=False)
+_run_pt_flax_cross_tests = parse_flag_from_env("RUN_PT_FLAX_CROSS_TESTS", default=False)
 _run_custom_tokenizers = parse_flag_from_env("RUN_CUSTOM_TOKENIZERS", default=False)
 _run_pipeline_tests = parse_flag_from_env("RUN_PIPELINE_TESTS", default=False)
 _run_git_lfs_tests = parse_flag_from_env("RUN_GIT_LFS_TESTS", default=False)
@@ -103,6 +105,25 @@ def is_pt_tf_cross_test(test_case):
             return test_case
         else:
             return pytest.mark.is_pt_tf_cross_test()(test_case)
+
+
+def is_pt_flax_cross_test(test_case):
+    """
+    Decorator marking a test as a test that control interactions between PyTorch and Flax
+
+    PT+FLAX tests are skipped by default and we can run only them by setting RUN_PT_FLAX_CROSS_TESTS environment
+    variable to a truthy value and selecting the is_pt_flax_cross_test pytest mark.
+
+    """
+    if not _run_pt_flax_cross_tests or not is_torch_available() or not is_flax_available():
+        return unittest.skip("test is PT+FLAX test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_pt_flax_cross_test()(test_case)
 
 
 def is_pipeline_test(test_case):
@@ -135,6 +156,17 @@ def slow(test_case):
         return unittest.skip("test is slow")(test_case)
     else:
         return test_case
+
+
+def tooslow(test_case):
+    """
+    Decorator marking a test as too slow.
+
+    Slow tests are skipped while they're in the process of being fixed. No test should stay tagged as "tooslow" as
+    these will not be tested by the CI.
+
+    """
+    return unittest.skip("test is too slow")(test_case)
 
 
 def custom_tokenizers(test_case):
@@ -198,12 +230,9 @@ def require_torch_scatter(test_case):
 
 def require_torchaudio(test_case):
     """
-    Decorator marking a test that requires torchaudio.
-
-    These tests are skipped when torchaudio isn't installed.
-
+    Decorator marking a test that requires torchaudio. These tests are skipped when torchaudio isn't installed.
     """
-    if not is_torchaudio_available:
+    if not is_torchaudio_available():
         return unittest.skip("test requires torchaudio")(test_case)
     else:
         return test_case
@@ -211,10 +240,7 @@ def require_torchaudio(test_case):
 
 def require_tf(test_case):
     """
-    Decorator marking a test that requires TensorFlow.
-
-    These tests are skipped when TensorFlow isn't installed.
-
+    Decorator marking a test that requires TensorFlow. These tests are skipped when TensorFlow isn't installed.
     """
     if not is_tf_available():
         return unittest.skip("test requires TensorFlow")(test_case)
@@ -224,10 +250,7 @@ def require_tf(test_case):
 
 def require_flax(test_case):
     """
-    Decorator marking a test that requires JAX & Flax
-
-    These tests are skipped when one / both are not installed
-
+    Decorator marking a test that requires JAX & Flax. These tests are skipped when one / both are not installed
     """
     if not is_flax_available():
         test_case = unittest.skip("test requires JAX & Flax")(test_case)
@@ -236,10 +259,7 @@ def require_flax(test_case):
 
 def require_sentencepiece(test_case):
     """
-    Decorator marking a test that requires SentencePiece.
-
-    These tests are skipped when SentencePiece isn't installed.
-
+    Decorator marking a test that requires SentencePiece. These tests are skipped when SentencePiece isn't installed.
     """
     if not is_sentencepiece_available():
         return unittest.skip("test requires SentencePiece")(test_case)
@@ -249,10 +269,7 @@ def require_sentencepiece(test_case):
 
 def require_tokenizers(test_case):
     """
-    Decorator marking a test that requires 🤗 Tokenizers.
-
-    These tests are skipped when 🤗 Tokenizers isn't installed.
-
+    Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     if not is_tokenizers_available():
         return unittest.skip("test requires tokenizers")(test_case)
@@ -281,11 +298,21 @@ def require_scatter(test_case):
         return test_case
 
 
+def require_vision(test_case):
+    """
+    Decorator marking a test that requires the vision dependencies. These tests are skipped when torchaudio isn't
+    installed.
+    """
+    if not is_vision_available():
+        return unittest.skip("test requires vision")(test_case)
+    else:
+        return test_case
+
+
 def require_torch_multi_gpu(test_case):
     """
-    Decorator marking a test that requires a multi-GPU setup (in PyTorch).
-
-    These tests are skipped on a machine without multiple GPUs.
+    Decorator marking a test that requires a multi-GPU setup (in PyTorch). These tests are skipped on a machine without
+    multiple GPUs.
 
     To run *only* the multi_gpu tests, assuming all test names contain multi_gpu: $ pytest -sv ./tests -k "multi_gpu"
     """
@@ -460,10 +487,14 @@ def assert_screenout(out, what):
 class CaptureStd:
     """
     Context manager to capture:
-        stdout, clean it up and make it available via obj.out stderr, and make it available via obj.err
 
-        init arguments: - out - capture stdout: True/False, default True - err - capture stdout: True/False, default
-        True
+        - stdout, clean it up and make it available via obj.out
+        - stderr, and make it available via obj.err
+
+        init arguments:
+
+        - out - capture stdout: True/False, default True
+        - err - capture stdout: True/False, default True
 
         Examples::
 

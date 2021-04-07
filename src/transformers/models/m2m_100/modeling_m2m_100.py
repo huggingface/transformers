@@ -688,7 +688,6 @@ class M2M100Encoder(M2M100PreTrainedModel):
 
         self.init_weights()
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartEncoder.forward with MBart->M2M100
     def forward(
         self,
         input_ids=None,
@@ -853,7 +852,6 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
         self.init_weights()
 
-    # Copied from transformers.models.mbart.modeling_mbart.MBartDecoder.forward with MBart->M2M100
     def forward(
         self,
         input_ids=None,

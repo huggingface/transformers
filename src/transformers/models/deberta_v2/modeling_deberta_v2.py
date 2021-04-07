@@ -561,8 +561,8 @@ class DisentangledSelfAttention(torch.nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_attention_heads = config.num_attention_heads
         _attention_head_size = config.hidden_size // config.num_attention_heads
@@ -573,7 +573,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         self.value_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
 
         self.share_att_key = getattr(config, "share_att_key", False)
-        self.pos_att_type = config.pos_att_type
+        self.pos_att_type = config.pos_att_type if config.pos_att_type is not None else []
         self.relative_attention = getattr(config, "relative_attention", False)
 
         if self.relative_attention:

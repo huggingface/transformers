@@ -17,19 +17,19 @@ Simple check list from AllenNLP repo: https://github.com/allenai/allennlp/blob/m
 
 To create the package for pypi.
 
-1. Change the version in __init__.py, setup.py as well as docs/source/conf.py. Remove the master from the links in
-   the new models of the README:
-   (https://huggingface.co/transformers/master/model_doc/ -> https://huggingface.co/transformers/model_doc/)
-   then run `make fix-copies` to fix the index of the documentation.
+1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
+   documentation.
+   
+2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
-2. Unpin specific versions from setup.py that use a git install.
+3. Unpin specific versions from setup.py that use a git install.
 
-2. Commit these changes with the message: "Release: VERSION"
+4. Commit these changes with the message: "Release: VERSION"
 
-3. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
+5. Add a tag in git to mark the release: "git tag VERSION -m 'Adds tag VERSION for pypi' "
    Push the tag to git: git push --tags origin master
 
-4. Build both the sources and the wheel. Do not change anything in setup.py between
+6. Build both the sources and the wheel. Do not change anything in setup.py between
    creating the wheel and the source distribution (obviously).
 
    For the wheel, run: "python setup.py bdist_wheel" in the top level directory.
@@ -38,7 +38,7 @@ To create the package for pypi.
    For the sources, run: "python setup.py sdist"
    You should now have a /dist directory with both .whl and .tar.gz source versions.
 
-5. Check that everything looks correct by uploading the package to the pypi test server:
+7. Check that everything looks correct by uploading the package to the pypi test server:
 
    twine upload dist/* -r pypitest
    (pypi suggest using twine as other methods upload files via plaintext.)
@@ -48,16 +48,12 @@ To create the package for pypi.
    Check that you can install it in a virtualenv by running:
    pip install -i https://testpypi.python.org/pypi transformers
 
-6. Upload the final version to actual pypi:
+8. Upload the final version to actual pypi:
    twine upload dist/* -r pypi
 
-7. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
+9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 
-8. Add the release version to docs/source/_static/js/custom.js and .circleci/deploy.sh
-
-9. Update README.md to redirect to correct documentation.
-
-10. Update the version in __init__.py, setup.py to the new version "-dev" and push to master.
+10. Run `make post-release` (or `make post-patch` for a patch release).
 """
 
 import os
@@ -93,11 +89,12 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
+    "docutils==0.16.0",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.2.2",
+    "flax>=0.3.2",
     "fugashi>=1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
@@ -111,10 +108,12 @@ _deps = [
     "onnxruntime>=1.4.0",
     "packaging",
     "parameterized",
+    "Pillow",
     "protobuf",
     "psutil",
     "pydantic",
     "pytest",
+    "pytest-sugar",
     "pytest-xdist",
     "python>=3.6.0",
     "recommonmark",
@@ -127,6 +126,7 @@ _deps = [
     "sphinx-copybutton",
     "sphinx-markdown-tables",
     "sphinx-rtd-theme==0.4.3",  # sphinx-rtd-theme==0.5.0 introduced big changes in the style.
+    "sphinxext-opengraph==0.4.1",
     "sphinx==3.2.1",
     "starlette",
     "tensorflow-cpu>=2.3",
@@ -139,6 +139,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "sagemaker>=2.31.0",
 ]
 
 
@@ -225,21 +226,43 @@ else:
 
 extras["tokenizers"] = deps_list("tokenizers")
 extras["onnxruntime"] = deps_list("onnxruntime", "onnxruntime-tools")
+extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxruntime"]
 extras["modelcreation"] = deps_list("cookiecutter")
+
+extras["sagemaker"] = deps_list("sagemaker")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
+extras["vision"] = deps_list("Pillow")
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
-    deps_list("pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets")
+    deps_list(
+        "pytest", "pytest-xdist", "timeout-decorator", "parameterized", "psutil", "datasets", "pytest-sugar", "black"
+    )
     + extras["retrieval"]
     + extras["modelcreation"]
 )
-extras["docs"] = deps_list("recommonmark", "sphinx", "sphinx-markdown-tables", "sphinx-rtd-theme", "sphinx-copybutton")
+extras["docs"] = deps_list(
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
+)
 extras["quality"] = deps_list("black", "isort", "flake8")
 
-extras["all"] = extras["tf"] + extras["torch"] + extras["flax"] + extras["sentencepiece"] + extras["tokenizers"]
+extras["all"] = (
+    extras["tf"]
+    + extras["torch"]
+    + extras["flax"]
+    + extras["sentencepiece"]
+    + extras["tokenizers"]
+    + extras["speech"]
+    + extras["vision"]
+)
 
 extras["dev"] = (
     extras["all"]
@@ -282,7 +305,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.4.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.6.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Sam Shleifer, Patrick von Platen, Sylvain Gugger, Google AI Language Team Authors, Open AI team Authors, Facebook AI Authors, Carnegie Mellon University Authors",
     author_email="thomas@huggingface.co",
     description="State-of-the-art Natural Language Processing for TensorFlow 2.0 and PyTorch",

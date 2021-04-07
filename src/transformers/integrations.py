@@ -19,12 +19,10 @@ import io
 import json
 import numbers
 import os
-import re
 import tempfile
+from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
 
-from .trainer_utils import SchedulerType
 from .utils import logging
 from .utils.versions import require_version
 
@@ -270,26 +268,37 @@ def rewrite_logs(d):
     return new_d
 
 
-def init_deepspeed(trainer, num_training_steps):
+def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     """
-    Init DeepSpeed, after converting any relevant Trainer's args into DeepSpeed configuration
+    Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
+
+    If ``resume_from_checkpoint`` was passed then an attempt to resume from a previously saved checkpoint will be made.
 
     Args:
         trainer: Trainer object
         num_training_steps: per single gpu
+        resume_from_checkpoint: path to a checkpoint if to resume from after normal DeepSpeedEngine load
 
     Returns: model, optimizer, lr_scheduler
+
     """
     import deepspeed
 
-    require_version("deepspeed>0.3.10")
+    require_version("deepspeed>0.3.12")
 
     args = trainer.args
     ds_config_file = args.deepspeed
     model = trainer.model
 
-    with io.open(ds_config_file, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    if isinstance(args.deepspeed, dict):
+        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
+        # modified it, it will not be accepted here again, since some config params must be not set by users
+        config = deepcopy(args.deepspeed)
+    elif isinstance(args.deepspeed, str):
+        with io.open(ds_config_file, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    else:
+        raise ValueError("expecting either a path to a config file or a pre-populated dict")
 
     # The following code translates relevant trainer's cl args into the DS config
 
@@ -321,28 +330,49 @@ def init_deepspeed(trainer, num_training_steps):
     else:  # override only if the ds config doesn't already have this section
         config["gradient_clipping"] = args.max_grad_norm
 
+    # Optimizer + Scheduler
+    # Currently support combos:
+    # 1. DS scheduler + DS optimizer: Yes
+    # 2. HF scheduler + HF optimizer: Yes
+    # 3. DS scheduler + HF optimizer: Yes
+    # 4. HF scheduler + DS optimizer: No
+    # Unless Offload is enabled in which case it's:
+    # 1. DS scheduler + DS optimizer: Yes
+    # 2. HF scheduler + HF optimizer: No
+    # 3. DS scheduler + HF optimizer: No
+    # 4. HF scheduler + DS optimizer: No
+
+    optimizer = None
     if "optimizer" in config:
-        logger.info(
-            f"Keeping the `optimizer` config from {ds_config_file} intact, ignoring any optimizer-specific cl args"
+        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+
+        # to avoid inconsistent values of lr and warm up steps the command line args override config
+        params = dict(
+            lr=args.learning_rate,
+            betas=[args.adam_beta1, args.adam_beta2],
+            eps=args.adam_epsilon,
+            weight_decay=args.weight_decay,
         )
+        for k, v in params.items():
+            if k in config["optimizer"]["params"]:
+                logger.info(f"setting optimizer.params.{k} to {v}")
+                config["optimizer"]["params"][k] = v
+
     else:  # override only if the ds config doesn't already have this section
-        # ds supports Adam, AdamW, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
-        # To use other optimizers requires voiding warranty with: `"zero_allow_untested_optimizer": true"`
-
-        optimizer_configs = {
-            "AdamW": {
-                "lr": args.learning_rate,
-                "betas": [args.adam_beta1, args.adam_beta2],
-                "eps": args.adam_epsilon,
-                "weight_decay": args.weight_decay,
-            }
-        }
-        optimizer = "AdamW"
-
-        config["optimizer"] = {
-            "type": optimizer,
-            "params": optimizer_configs[optimizer],
-        }
+        if (
+            "zero_optimization" in config
+            and "cpu_offload" in config["zero_optimization"]
+            and config["zero_optimization"]["cpu_offload"] is True
+        ):
+            raise ValueError("ZeRO Offload can only work with DeepSpeed optimizers")
+        else:
+            # ds supports Adam, OneBitAdam, and Lamb optimizers and can import other optimizers from torch.
+            # But trainer uses AdamW by default.
+            # To use other optimizers so using a different scheduler requires voiding warranty with: `zero_allow_untested_optimizer`
+            trainer.create_optimizer()
+            optimizer = trainer.optimizer
+            # flag that this is non-native optimizer
+            config["zero_allow_untested_optimizer"] = True
 
     # DS schedulers (deepspeed/runtime/lr_schedules.py):
     #
@@ -352,34 +382,33 @@ def init_deepspeed(trainer, num_training_steps):
     # OneCycle     | na                   | na                                | 1CLR
     # WarmupLR     | constant_with_warmup | get_constant_schedule_with_warmup | w/ warmup_min_lr=0
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
+    lr_scheduler = None
     if "scheduler" in config:
-        logger.info(
-            f"Keeping the `scheduler` config from {ds_config_file} intact, ignoring any scheduler-specific cl args"
-        )
-    else:  # override only if the ds config doesn't already have this section
-        if args.lr_scheduler_type == SchedulerType.LINEAR:
-            scheduler = "WarmupDecayLR"
-            params = {
-                "last_batch_iteration": -1,
-                "total_num_steps": num_training_steps,
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            }
-        elif args.lr_scheduler_type == SchedulerType.CONSTANT_WITH_WARMUP:
-            scheduler = "WarmupLR"
-            params = {
-                "warmup_min_lr": 0,
-                "warmup_max_lr": args.learning_rate,
-                "warmup_num_steps": args.warmup_steps,
-            }
-        else:
-            raise ValueError(f"{args.lr_scheduler_type} scheduler type is not supported by DeepSpeed")
+        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        # the user won't easily know the correct num_training_steps should they use WarmupDecayLR,
+        # so let's set it to the correct value
+        if config["scheduler"]["type"] == "WarmupDecayLR":
+            logger.info(f"setting scheduler.params.total_num_steps to {num_training_steps}")
+            config["scheduler"]["params"]["total_num_steps"] = num_training_steps
 
-        config["scheduler"] = {
-            "type": scheduler,
-            "params": params,
-        }
+        # to avoid inconsistent values of lr and warmup steps the command line args override config
+        params = dict(
+            warmup_max_lr=args.learning_rate,
+            warmup_num_steps=args.warmup_steps,
+        )
+        for k, v in params.items():
+            if k in config["scheduler"]["params"]:
+                logger.info(f"setting scheduler.params.{k} to {v}")
+                config["scheduler"]["params"][k] = v
+
+    else:  # override only if the ds config doesn't already have this section
+        if "optimizer" in config:
+            # to make this option work, we need to init DS optimizer first, then init HS scheduler,
+            # then pass the HS scheduler to DS init, which is not possible at the moment
+            raise ValueError("At the moment HF scheduler + DeepSpeed optimizer combination is not possible")
+        else:
+            trainer.create_scheduler(num_training_steps=num_training_steps)
+            lr_scheduler = trainer.lr_scheduler
 
     # fp16
     if trainer.fp16_backend is not None:
@@ -406,17 +435,27 @@ def init_deepspeed(trainer, num_training_steps):
                     "enabled": True,
                 }
 
-    # for clarity extract the specific cl args that are being passed to deepspeed
-    ds_args = dict(local_rank=args.local_rank)
+    # keep for quick debug:
+    # from pprint import pprint; pprint(config)
 
     # init that takes part of the config via `args`, and the bulk of it via `config_params`
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
-        args=SimpleNamespace(**ds_args),  # expects an obj
         model=model,
         model_parameters=model_parameters,
         config_params=config,
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
     )
+
+    if resume_from_checkpoint is not None:  # and os.path.isdir(resume_from_checkpoint):
+        logger.info(f"Attempting to resume from {resume_from_checkpoint}")
+        # this magically updates self.optimizer and self.lr_scheduler
+        load_path, _ = model.load_checkpoint(
+            resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+        )
+        if load_path is None:
+            raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
 
     return model, optimizer, lr_scheduler
 
@@ -494,12 +533,9 @@ class TensorBoardCallback(TrainerCallback):
                 else:
                     logger.warning(
                         "Trainer is attempting to log a value of "
-                        '"%s" of type %s for key "%s" as a scalar. '
+                        f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                         "This invocation of Tensorboard's writer.add_scalar() "
-                        "is incorrect so we dropped this attribute.",
-                        v,
-                        type(v),
-                        k,
+                        "is incorrect so we dropped this attribute."
                     )
             self.tb_writer.flush()
 
@@ -519,20 +555,12 @@ class WandbCallback(TrainerCallback):
         if has_wandb:
             import wandb
 
-            wandb.ensure_configured()
-            if wandb.api.api_key is None:
-                has_wandb = False
-                logger.warning(
-                    "W&B installed but not logged in. Run `wandb login` or set the WANDB_API_KEY env variable."
-                )
-                self._wandb = None
-            else:
-                self._wandb = wandb
+            self._wandb = wandb
         self._initialized = False
         # log outputs
         self._log_model = os.getenv("WANDB_LOG_MODEL", "FALSE").upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
 
-    def setup(self, args, state, model, reinit, **kwargs):
+    def setup(self, args, state, model, **kwargs):
         """
         Setup the optional Weights & Biases (`wandb`) integration.
 
@@ -541,7 +569,8 @@ class WandbCallback(TrainerCallback):
 
         Environment:
             WANDB_LOG_MODEL (:obj:`bool`, `optional`, defaults to :obj:`False`):
-                Whether or not to log model as artifact at the end of training.
+                Whether or not to log model as artifact at the end of training. Use along with
+                `TrainingArguments.load_best_model_at_end` to upload best model.
             WANDB_WATCH (:obj:`str`, `optional` defaults to :obj:`"gradients"`):
                 Can be :obj:`"gradients"`, :obj:`"all"` or :obj:`"false"`. Set to :obj:`"false"` to disable gradient
                 logging or :obj:`"all"` to log gradients and parameters.
@@ -570,13 +599,19 @@ class WandbCallback(TrainerCallback):
             else:
                 run_name = args.run_name
 
-            self._wandb.init(
-                project=os.getenv("WANDB_PROJECT", "huggingface"),
-                config=combined_dict,
-                name=run_name,
-                reinit=reinit,
-                **init_args,
-            )
+            if self._wandb.run is None:
+                self._wandb.init(
+                    project=os.getenv("WANDB_PROJECT", "huggingface"),
+                    name=run_name,
+                    **init_args,
+                )
+            # add config parameters (run may have been created manually)
+            self._wandb.config.update(combined_dict, allow_val_change=True)
+
+            # define default x-axis (for latest wandb versions)
+            if getattr(self._wandb, "define_metric", None):
+                self._wandb.define_metric("train/global_step")
+                self._wandb.define_metric("*", step_metric="train/global_step", step_sync=True)
 
             # keep track of model topology and gradients, unsupported on TPU
             if not is_torch_tpu_available() and os.getenv("WANDB_WATCH") != "false":
@@ -588,23 +623,20 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         hp_search = state.is_hyper_param_search
-        if not self._initialized or hp_search:
-            self.setup(args, state, model, reinit=hp_search, **kwargs)
+        if hp_search:
+            self._wandb.finish()
+        if not self._initialized:
+            self.setup(args, state, model, **kwargs)
 
     def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._wandb is None:
             return
-        # commit last step
-        if state.is_world_process_zero:
-            self._wandb.log({})
         if self._log_model and self._initialized and state.is_world_process_zero:
             from .trainer import Trainer
 
             fake_trainer = Trainer(args=args, model=model, tokenizer=tokenizer)
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
-                # use run name and ensure it's a valid Artifact name
-                artifact_name = re.sub(r"[^a-zA-Z0-9_\.\-]", "", self._wandb.run.name)
                 metadata = (
                     {
                         k: v
@@ -617,7 +649,7 @@ class WandbCallback(TrainerCallback):
                         "train/total_floss": state.total_flos,
                     }
                 )
-                artifact = self._wandb.Artifact(name=f"run-{artifact_name}", type="model", metadata=metadata)
+                artifact = self._wandb.Artifact(name=f"model-{self._wandb.run.id}", type="model", metadata=metadata)
                 for f in Path(temp_dir).glob("*"):
                     if f.is_file():
                         with artifact.new_file(f.name, mode="wb") as fa:
@@ -628,10 +660,10 @@ class WandbCallback(TrainerCallback):
         if self._wandb is None:
             return
         if not self._initialized:
-            self.setup(args, state, model, reinit=False)
+            self.setup(args, state, model)
         if state.is_world_process_zero:
             logs = rewrite_logs(logs)
-            self._wandb.log(logs, step=state.global_step)
+            self._wandb.log({**logs, "train/global_step": state.global_step})
 
 
 class CometCallback(TrainerCallback):
