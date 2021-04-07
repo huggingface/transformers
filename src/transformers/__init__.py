@@ -339,9 +339,6 @@ if is_tokenizers_available():
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-    if is_sentencepiece_available():
-        _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
-
 else:
     from .utils import dummy_tokenizers_objects
 
@@ -349,18 +346,33 @@ else:
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
     ]
 
+if is_sentencepiece_available() and is_tokenizers_available():
+    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
+else:
+    from .utils import dummy_sentencepiece_and_tokenizers_objects
+
+    _import_structure["utils.dummy_sentencepiece_and_tokenizers_objects"] = [
+        name for name in dir(dummy_sentencepiece_and_tokenizers_objects) if not name.startswith("_")
+    ]
+
 # Speech-specific objects
 if is_speech_available():
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-
-    if is_sentencepiece_available():
-        _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
 
 else:
     from .utils import dummy_speech_objects
 
     _import_structure["utils.dummy_speech_objects"] = [
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
+    ]
+
+if is_sentencepiece_available() and is_speech_available():
+    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+else:
+    from .utils import dummy_sentencepiece_and_speech_objects
+
+    _import_structure["utils.dummy_sentencepiece_and_speech_objects"] = [
+        name for name in dir(dummy_sentencepiece_and_speech_objects) if not name.startswith("_")
     ]
 
 # Vision-specific objects
@@ -1641,20 +1653,24 @@ if TYPE_CHECKING:
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
-        if is_sentencepiece_available():
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
-
     else:
         from .utils.dummy_tokenizers_objects import *
+
+    if is_sentencepiece_available() and is_tokenizers_available():
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+    else:
+        from .utils.dummies_sentencepiece_and_tokenizers_objects import *
 
     if is_speech_available():
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
-        if is_sentencepiece_available():
-            from .models.speech_to_text import Speech2TextProcessor
-
     else:
         from .utils.dummy_speech_objects import *
+
+    if is_speech_available() and is_sentencepiece_available():
+        from .models.speech_to_text import Speech2TextProcessor
+    else:
+        from .utils.dummy_sentencepiece_and_speech_objects import *
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
