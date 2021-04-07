@@ -77,7 +77,7 @@ class LogitsProcessorList(list):
     This class can be used to create a list of :class:`~transformers.LogitsProcessor` or
     :class:`~transformers.LogitsWarper` to subsequently process a :obj:`scores` input tensor. This class inherits from
     list and adds a specific `__call__` method to apply each :class:`~transformers.LogitsProcessor` or
-    :class:`~transformers.LogitsProcessor` to the inputs.
+    :class:`~transformers.LogitsWarper` to the inputs.
     """
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
