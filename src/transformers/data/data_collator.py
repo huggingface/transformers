@@ -201,7 +201,7 @@ def _collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = None
     # Check if padding is necessary.
     length_of_first = examples[0].size(0)
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
-    if are_tensors_same_length:
+    if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
         return torch.stack(examples, dim=0)
 
     # If yes, check if we have a `pad_token`.

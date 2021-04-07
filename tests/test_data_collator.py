@@ -146,11 +146,8 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["labels"].shape, torch.Size([2, 6]))
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2] + [-1] * 3)
 
-    def test_data_collator_for_language_modeling(self):
+    def _test_no_pad_and_pad(self, no_pad_features, pad_features):
         tokenizer = BertTokenizer(self.vocab_file)
-        no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
-        pad_features = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
-
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
         batch = data_collator(no_pad_features)
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
@@ -210,6 +207,15 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
         self.assertTrue(torch.any(masked_tokens))
         self.assertTrue(all(x == -100 for x in batch["labels"][~masked_tokens].tolist()))
+
+    def test_data_collator_for_language_modeling(self):
+        no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
+        pad_features = [{"input_ids": list(range(5))}, {"input_ids": list(range(10))}]
+        self._test_no_pad_and_pad(no_pad_features, pad_features)
+
+        no_pad_features = [list(range(10)), list(range(10))]
+        pad_features = [list(range(5)), list(range(10))]
+        self._test_no_pad_and_pad(no_pad_features, pad_features)
 
     def test_plm(self):
         tokenizer = BertTokenizer(self.vocab_file)
