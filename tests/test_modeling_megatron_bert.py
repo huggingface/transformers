@@ -33,6 +33,7 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         MegatronBertConfig,
+        MegatronBertForCausalLM,
         MegatronBertForMaskedLM,
         MegatronBertForMultipleChoice,
         MegatronBertForNextSentencePrediction,
@@ -154,6 +155,15 @@ class MegatronBertModelTester:
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = MegatronBertForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def create_and_check_megatron_bert_for_next_sequence_prediction(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -260,6 +270,7 @@ class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
         (
             MegatronBertModel,
             MegatronBertForMaskedLM,
+            MegatronBertForCausalLM,
             MegatronBertForMultipleChoice,
             MegatronBertForNextSentencePrediction,
             MegatronBertForPreTraining,

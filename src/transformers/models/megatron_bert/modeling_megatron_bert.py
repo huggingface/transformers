@@ -1107,7 +1107,7 @@ class MegatronBertForPreTraining(MegatronBertPreTrainedModel):
     """MegatronBert Model with a `language modeling` head on top for CLM fine-tuning. """,
     MEGATRON_BERT_START_DOCSTRING,
 )
-class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
+class MegatronBertForCausalLM(MegatronBertPreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -1116,7 +1116,7 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `MegatronBertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `MegatronBertForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.bert = MegatronBertModel(config, add_pooling_layer=False)
         self.cls = MegatronBertOnlyMLMHead(config)
@@ -1176,7 +1176,7 @@ class MegatronBertLMHeadModel(MegatronBertPreTrainedModel):
 
         Example::
 
-            >>> from transformers import BertTokenizer, MegatronBertLMHeadModel, MegatronBertConfig
+            >>> from transformers import BertTokenizer, MegatronBertForCausalLM, MegatronBertConfig
             >>> import torch
 
             >>> tokenizer = BertTokenizer.from_pretrained('nvidia/megatron-bert-cased-345m')

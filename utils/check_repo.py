@@ -88,7 +88,6 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "FlaubertForQuestionAnswering",
     "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
-    "MegatronBertLMHeadModel",
     "OpenAIGPTDoubleHeadsModel",
     "RagModel",
     "RagSequenceForGeneration",

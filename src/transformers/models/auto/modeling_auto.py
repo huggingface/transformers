@@ -175,6 +175,7 @@ from ..mbart.modeling_mbart import (
     MBartModel,
 )
 from ..megatron_bert.modeling_megatron_bert import (
+    MegatronBertForCausalLM,
     MegatronBertForMaskedLM,
     MegatronBertForMultipleChoice,
     MegatronBertForNextSentencePrediction,
@@ -470,6 +471,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
+        (MegatronBertConfig, MegatronBertForCausalLM),
     ]
 )
 

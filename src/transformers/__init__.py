@@ -769,6 +769,7 @@ if is_torch_available():
     _import_structure["models.megatron_bert"].extend(
         [
             "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MegatronBertForCausalLM",
             "MegatronBertForMaskedLM",
             "MegatronBertForMultipleChoice",
             "MegatronBertForNextSentencePrediction",
@@ -2016,6 +2017,7 @@ if TYPE_CHECKING:
         )
         from .models.megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegatronBertForCausalLM,
             MegatronBertForMaskedLM,
             MegatronBertForMultipleChoice,
             MegatronBertForNextSentencePrediction,

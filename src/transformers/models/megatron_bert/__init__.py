@@ -17,20 +17,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tf_available, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_torch_available
 
 
 _import_structure = {
     "configuration_megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
-    "tokenization_megatron_bert": ["MegatronBertTokenizer"],
 }
-
-if is_tokenizers_available():
-    _import_structure["tokenization_megatron_bert_fast"] = ["MegatronBertTokenizerFast"]
 
 if is_torch_available():
     _import_structure["modeling_megatron_bert"] = [
         "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "MegatronBertForCausalLM",
         "MegatronBertForMaskedLM",
         "MegatronBertForMultipleChoice",
         "MegatronBertForNextSentencePrediction",
@@ -43,14 +40,11 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
-    from .tokenization_megatron_bert import MegatronBertTokenizer
-
-    if is_tokenizers_available():
-        from .tokenization_megatron_bert_fast import MegatronBertTokenizerFast
 
     if is_torch_available():
         from .modeling_megatron_bert import (
             MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegatronBertForCausalLM,
             MegatronBertForMaskedLM,
             MegatronBertForMultipleChoice,
             MegatronBertForNextSentencePrediction,
