@@ -28,6 +28,7 @@ else:
     Speech2TextFeatureExtractor = None
 
 if is_vision_available():
+    from ..deit.feature_extraction_deit import DeiTFeatureExtractor
     from ..vit.feature_extraction_vit import ViTFeatureExtractor
 else:
     ViTFeatureExtractor = None
@@ -36,6 +37,7 @@ else:
 # Build the list of all feature extractors
 FEATURE_EXTRACTOR_MAPPING = OrderedDict(
     [
+        ("deit", DeiTFeatureExtractor),
         ("s2t", Speech2TextFeatureExtractor),
         ("vit", ViTFeatureExtractor),
         ("wav2vec2", Wav2Vec2FeatureExtractor),

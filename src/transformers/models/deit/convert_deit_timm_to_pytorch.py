@@ -178,7 +178,10 @@ def convert_deit_checkpoint(deit_name, pytorch_dump_folder_path):
     model.load_state_dict(state_dict)
 
     # Check outputs on an image, prepared by DeiTFeatureExtractor
-    feature_extractor = DeiTFeatureExtractor(size=config.image_size)
+    size = int(
+        (256 / 224) * config.image_size
+    )  # to maintain same ratio w.r.t. 224 images, see https://github.com/facebookresearch/deit/blob/ab5715372db8c6cad5740714b2216d55aeae052e/datasets.py#L103
+    feature_extractor = DeiTFeatureExtractor(size=size, crop_size=config.image_size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)

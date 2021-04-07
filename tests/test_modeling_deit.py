@@ -28,7 +28,13 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import DeiTConfig, DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
+    from transformers import (
+        MODEL_MAPPING,
+        DeiTConfig,
+        DeiTForImageClassification,
+        DeiTForImageClassificationWithTeacher,
+        DeiTModel,
+    )
     from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
@@ -309,6 +315,23 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            if model_class in MODEL_MAPPING.values() or model_class == DeiTForImageClassificationWithTeacher:
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
