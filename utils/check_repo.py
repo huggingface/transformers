@@ -79,60 +79,26 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
-    "M2M100Encoder",
-    "M2M100Decoder",
-    "Speech2TextEncoder",
-    "Speech2TextDecoder",
-    "LEDEncoder",
-    "LEDDecoder",
-    "BartDecoder",
-    "BartDecoderWrapper",
-    "BartEncoder",
-    "BlenderbotSmallEncoder",
-    "BlenderbotSmallDecoder",
-    "BlenderbotSmallDecoderWrapper",
-    "BlenderbotEncoder",
-    "BlenderbotDecoder",
-    "BlenderbotDecoderWrapper",
-    "DPRContextEncoder",
-    "DPREncoder",
     "DPRReader",
     "DPRSpanPredictor",
     "FlaubertForQuestionAnswering",
     "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
-    "MT5EncoderModel",
-    "MBartEncoder",
-    "MBartDecoder",
-    "MBartDecoderWrapper",
     "OpenAIGPTDoubleHeadsModel",
-    "PegasusEncoder",
-    "PegasusDecoder",
-    "PegasusDecoderWrapper",
-    "ProphetNetDecoder",
-    "ProphetNetEncoder",
-    "ProphetNetDecoderWrapper",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
     "T5Stack",
-    "T5EncoderModel",
-    "TFDPRContextEncoder",
-    "TFDPREncoder",
     "TFDPRReader",
     "TFDPRSpanPredictor",
     "TFFunnelBaseModel",
     "TFGPT2DoubleHeadsModel",
-    "TFMT5EncoderModel",
     "TFOpenAIGPTDoubleHeadsModel",
     "TFRagModel",
     "TFRagSequenceForGeneration",
     "TFRagTokenForGeneration",
-    "TFT5EncoderModel",
     "Wav2Vec2ForCTC",
     "XLMForQuestionAnswering",
-    "XLMProphetNetDecoder",
-    "XLMProphetNetEncoder",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
 ]
@@ -286,12 +252,23 @@ def get_all_auto_configured_models():
     return [cls.__name__ for cls in result]
 
 
+def ignore_unautoclassed(model_name):
+    """Rules to determine if `name` should be in an auto class."""
+    # Special white list
+    if model_name in IGNORE_NON_AUTO_CONFIGURED:
+        return True
+    # Encoder and Decoder should be ignored
+    if "Encoder" in model_name or "Decoder" in model_name:
+        return True
+    return False
+
+
 def check_models_are_auto_configured(module, all_auto_models):
     """ Check models defined in module are each in an auto class."""
     defined_models = get_models(module)
     failures = []
     for model_name, _ in defined_models:
-        if model_name not in all_auto_models and model_name not in IGNORE_NON_AUTO_CONFIGURED:
+        if model_name not in all_auto_models and not ignore_unautoclassed(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not present in any of the auto mapping. "
                 "If that is intended behavior, add its name to `IGNORE_NON_AUTO_CONFIGURED` in the file "
@@ -414,6 +391,7 @@ UNDOCUMENTED_OBJECTS = [
     "convert_tf_weight_name_to_pt_weight_name",  # Internal used to convert model weights
     "logger",  # Internal logger
     "logging",  # External module
+    "requires_backends",  # Internal function
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
