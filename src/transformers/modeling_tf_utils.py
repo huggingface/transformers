@@ -290,7 +290,7 @@ def booleans_processing(config, **kwargs):
             or kwargs["output_hidden_states"] is not None
             or ("use_cache" in kwargs and kwargs["use_cache"] is not None)
         ):
-            tf_logger.warn(
+            tf_logger.warning(
                 "The parameters `output_attentions`, `output_hidden_states` and `use_cache` cannot be updated when calling a model."
                 "They have to be set to True/False in the config object (i.e.: `config=XConfig.from_pretrained('name', output_attentions=True)`)."
             )
@@ -299,7 +299,9 @@ def booleans_processing(config, **kwargs):
         final_booleans["output_hidden_states"] = config.output_hidden_states
 
         if kwargs["return_dict"] is not None:
-            tf_logger.warn("The parameter `return_dict` cannot be set in graph mode and will always be set to `True`.")
+            tf_logger.warning(
+                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
+            )
         final_booleans["return_dict"] = True
 
         if "use_cache" in kwargs:
@@ -398,7 +400,7 @@ def input_processing(func, config, input_ids, **kwargs):
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
-                logger.warn(
+                logger.warning(
                     f"The parameter {k} does not belongs to the parameter list {parameter_names} and will be ignored."
                 )
                 continue

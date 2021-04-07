@@ -262,7 +262,7 @@ class PretrainedConfig(object):
 
         # TPU arguments
         if kwargs.pop("xla_device", None) is not None:
-            logger.warn(
+            logger.warning(
                 "The `xla_device` argument has been deprecated in v4.4.0 of Transformers. It is ignored and you can "
                 "safely remove it from your `config.json` file."
             )
