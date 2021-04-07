@@ -31,6 +31,7 @@ if is_vision_available():
     from ..deit.feature_extraction_deit import DeiTFeatureExtractor
     from ..vit.feature_extraction_vit import ViTFeatureExtractor
 else:
+    DeiTFeatureExtractor = None
     ViTFeatureExtractor = None
 
 

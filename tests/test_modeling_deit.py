@@ -316,6 +316,16 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # special case for DeiTForImageClassificationWithTeacher model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
+                inputs_dict["labels"] = None
+
+        return inputs_dict
+
     def test_training(self):
         if not self.model_tester.is_training:
             return
@@ -324,7 +334,11 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         for model_class in self.all_model_classes:
-            if model_class in MODEL_MAPPING.values() or model_class == DeiTForImageClassificationWithTeacher:
+            # DeiTForImageClassificationWithTeacher supports inference-only
+            if (
+                model_class in MODEL_MAPPING.values()
+                or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
+            ):
                 continue
             model = model_class(config)
             model.to(torch_device)
