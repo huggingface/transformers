@@ -831,7 +831,7 @@ class SpecialTokensMixin:
 
             In order to do that, please use the :meth:`~transformers.PreTrainedModel.resize_token_embeddings` method.
 
-        Using : obj:`add_special_tokens` will ensure your special tokens can be used in several ways:
+        Using :obj:`add_special_tokens` will ensure your special tokens can be used in several ways:
 
         - Special tokens are carefully handled by the tokenizer (they are never split).
         - You can easily refer to special tokens using tokenizer class attributes like :obj:`tokenizer.cls_token`. This
