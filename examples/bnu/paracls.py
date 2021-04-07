@@ -62,7 +62,7 @@ def compute_metrics(p: EvalPrediction):
     elif is_regression:
         return {"mse": ((preds - p.label_ids) ** 2).mean().item()}
     else:
-        return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
+        return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()} 
 
 
 training_args = TrainingArguments(
@@ -75,6 +75,7 @@ training_args = TrainingArguments(
     logging_dir='logs',  # directory for storing logs
     logging_steps=10,
 )
+
 
 model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
 
