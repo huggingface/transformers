@@ -1174,7 +1174,7 @@ class BigBirdPegasusEncoderAttention(nn.Module):
         to_blocked_mask=None,
     ):
 
-        if self.attention_type == "original_full":
+        if self.config.attention_type == "original_full":
             self_outputs = self.self(
                 hidden_states,
                 attention_mask,
@@ -1192,8 +1192,11 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
 
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.output(self_outputs[0])#, hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        # print("Attention_outputs", attention_output)
+        # print("self output", self_outputs[1:])
+        # print("outputs", outputs)
         return outputs
 
 
@@ -1359,6 +1362,12 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
         output_attentions: bool = False,
+        # block_sparse config
+        band_mask=None,
+        from_mask=None,
+        to_mask=None,
+        from_blocked_mask=None,
+        to_blocked_mask=None,
     ):
         """
         Args:
@@ -1372,23 +1381,34 @@ class BigBirdPegasusEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states, attn_weights, _ = self.self_attn(
+        hidden_states = self.self_attn_layer_norm(hidden_states) # +
+        self_attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
+            # layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
+            # block_sparse config
+            band_mask=band_mask,
+            from_mask=from_mask,
+            to_mask=to_mask,
+            from_blocked_mask=from_blocked_mask,
+            to_blocked_mask=to_blocked_mask,
         )
+        # print(len(self_attention_outputs), len(self_attention_outputs[0]))
+        hidden_states = self_attention_outputs[0]
+
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states) # +
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        # hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        # hidden_states = self.final_layer_norm(hidden_states)
 
         if hidden_states.dtype == torch.float16 and (
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
@@ -1399,7 +1419,7 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         outputs = (hidden_states,)
 
         if output_attentions:
-            outputs += (attn_weights,)
+            outputs += (self_attention_outputs[1],)
 
         return outputs
 
@@ -1466,6 +1486,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
+        hidden_states = self.self_attn_layer_norm(hidden_states) # +
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
@@ -1475,7 +1496,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
         )
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        # hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Cross-Attention Block
         cross_attn_present_key_value = None
@@ -1485,6 +1506,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            hidden_states = self.encoder_attn_layer_norm(hidden_states) # +
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -1495,19 +1517,20 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             )
             hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            # hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # add cross-attn to positions 3,4 of present_key_value tuple
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
         residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states) # +
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        # hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        # hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -1722,6 +1745,9 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
     def __init__(self, config: BigBirdPegasusConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
 
+        self.attention_type = config.attention_type
+        self.block_size = config.block_size
+
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
@@ -1813,13 +1839,27 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = self.layernorm_embedding(hidden_states)
+        # hidden_states = self.layernorm_embedding(hidden_states)
+        # TODO: check if its in embedding
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        if attention_mask is None:
+            attention_mask = torch.ones(input_shape, device=hidden_states.device)
+
         # expand attention_mask
-        if attention_mask is not None:
+        if self.attention_type == "original_full":
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+            blocked_encoder_mask = band_mask = from_mask = to_mask = None
+        elif self.attention_type == "block_sparse":
+            blocked_encoder_mask, band_mask, from_mask, to_mask = self.create_masks_for_block_sparse_attn(
+                attention_mask, self.block_size
+            )
+            attention_mask = None
+        else:
+            raise ValueError(
+                f"attention_type can either be original_full or block_sparse, but is {self.attention_type}"
+            )
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1845,12 +1885,18 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                             return module(*inputs, output_attentions)
 
                         return custom_forward
-
+                    # TODO: fix it
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
+                        # block_sparse config
+                        band_mask=band_mask,
+                        from_mask=from_mask,
+                        to_mask=to_mask,
+                        from_blocked_mask=blocked_encoder_mask,
+                        to_blocked_mask=blocked_encoder_mask,
                     )
                 else:
                     layer_outputs = encoder_layer(
@@ -1858,6 +1904,12 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                         attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
+                        # block_sparse config
+                        band_mask=band_mask,
+                        from_mask=from_mask,
+                        to_mask=to_mask,
+                        from_blocked_mask=blocked_encoder_mask,
+                        to_blocked_mask=blocked_encoder_mask,
                     )
 
                 hidden_states = layer_outputs[0]
@@ -1865,6 +1917,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
+        hidden_states = self.layernorm_embedding(hidden_states)
+    
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
@@ -1873,6 +1927,87 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
+
+    # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
+    @staticmethod
+    def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
+
+        batch_size, seq_length = attention_mask.size()
+        assert (
+            seq_length % block_size == 0
+        ), f"Sequence length must be multiple of block size, but sequence length is {seq_length}, while block size is {block_size}."
+
+        def create_band_mask_from_inputs(from_blocked_mask, to_blocked_mask):
+            """
+            Create 3D attention mask from a 2D tensor mask.
+
+            Args:
+                from_blocked_mask: 2D Tensor of shape [batch_size,
+                from_seq_length//from_block_size, from_block_size].
+                to_blocked_mask: int32 Tensor of shape [batch_size,
+                to_seq_length//to_block_size, to_block_size].
+
+            Returns:
+                float Tensor of shape [batch_size, 1, from_seq_length//from_block_size-4, from_block_size,
+                3*to_block_size].
+            """
+            exp_blocked_to_pad = torch.cat(
+                [to_blocked_mask[:, 1:-3], to_blocked_mask[:, 2:-2], to_blocked_mask[:, 3:-1]], dim=2
+            )
+            band_mask = torch.einsum("blq,blk->blqk", from_blocked_mask[:, 2:-2], exp_blocked_to_pad)
+            band_mask.unsqueeze_(1)
+            return band_mask
+
+        blocked_encoder_mask = attention_mask.view(batch_size, seq_length // block_size, block_size)
+        band_mask = create_band_mask_from_inputs(blocked_encoder_mask, blocked_encoder_mask)
+
+        from_mask = attention_mask.view(batch_size, 1, seq_length, 1)
+        to_mask = attention_mask.view(batch_size, 1, 1, seq_length)
+
+        return blocked_encoder_mask, band_mask, from_mask, to_mask
+
+    # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel._pad_to_block_size
+    def _pad_to_block_size(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        token_type_ids: torch.Tensor,
+        position_ids: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        pad_token_id: int,
+    ):
+        """A helper function to pad tokens and mask to work with implementation of BigBird block-sparse attention."""
+        # padding
+        block_size = self.config.block_size
+
+        input_shape = input_ids.shape if input_ids is not None else inputs_embeds.shape
+        batch_size, seq_len = input_shape[:2]
+
+        padding_len = (block_size - seq_len % block_size) % block_size
+        if padding_len > 0:
+            logger.info(
+                "Input ids are automatically padded from {} to {} to be a multiple of `config.block_size`: {}".format(
+                    seq_len, seq_len + padding_len, block_size
+                )
+            )
+            if input_ids is not None:
+                input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
+            if position_ids is not None:
+                # pad with position_id = pad_token_id as in modeling_bigbird.BigBirdEmbeddings
+                position_ids = F.pad(position_ids, (0, padding_len), value=pad_token_id)
+            if inputs_embeds is not None:
+                input_ids_padding = inputs_embeds.new_full(
+                    (batch_size, padding_len),
+                    self.config.pad_token_id,
+                    dtype=torch.long,
+                )
+                inputs_embeds_padding = self.embeddings(input_ids_padding)
+                inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
+
+            attention_mask = F.pad(attention_mask, (0, padding_len), value=False)  # no attention on the padding tokens
+            token_type_ids = F.pad(token_type_ids, (0, padding_len), value=0)  # pad with token_type_id = 0
+
+        return padding_len, input_ids, attention_mask, token_type_ids, position_ids, inputs_embeds
 
 
 class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
@@ -2043,9 +2178,9 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = self.layernorm_embedding(hidden_states)
+        # hidden_states = self.layernorm_embedding(hidden_states)
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training) # TODO: check
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -2115,6 +2250,8 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
+
+        hidden_states = self.layernorm_embedding(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
