@@ -119,7 +119,7 @@ We also provide a few learning rate scheduling tools. With the following, we can
 .. code-block:: python
 
     from transformers import get_linear_schedule_with_warmup
-    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_train_steps)
+    scheduler = get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps)
 
 Then all we have to do is call ``scheduler.step()`` after ``optimizer.step()``.
 
