@@ -91,6 +91,7 @@ from ..flaubert.modeling_tf_flaubert import (
     TFFlaubertWithLMHeadModel,
 )
 from ..funnel.modeling_tf_funnel import (
+    TFFunnelBaseModel,
     TFFunnelForMaskedLM,
     TFFunnelForMultipleChoice,
     TFFunnelForPreTraining,
@@ -242,7 +243,7 @@ TF_MODEL_MAPPING = OrderedDict(
         (XLMConfig, TFXLMModel),
         (CTRLConfig, TFCTRLModel),
         (ElectraConfig, TFElectraModel),
-        (FunnelConfig, TFFunnelModel),
+        (FunnelConfig, (TFFunnelModel, TFFunnelBaseModel)),
         (DPRConfig, TFDPRQuestionEncoder),
         (MPNetConfig, TFMPNetModel),
         (BartConfig, TFBartModel),
