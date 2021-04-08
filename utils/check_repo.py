@@ -86,7 +86,6 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "DPRReader",
     "DPRSpanPredictor",
     "FlaubertForQuestionAnswering",
-    "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
     "OpenAIGPTDoubleHeadsModel",
     "RagModel",
@@ -95,7 +94,6 @@ IGNORE_NON_AUTO_CONFIGURED = [
     "T5Stack",
     "TFDPRReader",
     "TFDPRSpanPredictor",
-    "TFFunnelBaseModel",
     "TFGPT2DoubleHeadsModel",
     "TFOpenAIGPTDoubleHeadsModel",
     "TFRagModel",
@@ -153,7 +151,7 @@ def get_model_modules():
 def get_models(module):
     """ Get the objects in module that are models."""
     models = []
-    model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel)
+    model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel, transformers.FlaxPreTrainedModel)
     for attr_name in dir(module):
         if "Pretrained" in attr_name or "PreTrained" in attr_name:
             continue
@@ -244,15 +242,29 @@ def check_all_models_are_tested():
         raise Exception(f"There were {len(failures)} failures:\n" + "\n".join(failures))
 
 
+def _list_models(model_mapping):
+    result = []
+    for model in model_mapping.values():
+        if isinstance(model, (list, tuple)):
+            result += list(model)
+        else:
+            result.append(model)
+
+    return result
+
+
 def get_all_auto_configured_models():
     """ Return the list of all models in at least one auto class."""
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     for attr_name in dir(transformers.models.auto.modeling_auto):
         if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.models.auto.modeling_auto, attr_name).values())
+            result = result | set(_list_models(getattr(transformers.models.auto.modeling_auto, attr_name)))
     for attr_name in dir(transformers.models.auto.modeling_tf_auto):
         if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.models.auto.modeling_tf_auto, attr_name).values())
+            result = result | set(_list_models(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
+    for attr_name in dir(transformers.models.auto.modeling_flax_auto):
+        if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING"):
+            result = result | set(_list_models(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
     return [cls.__name__ for cls in result]
 
 
