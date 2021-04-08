@@ -143,6 +143,9 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            enable_sampling=enable_sampling,
+            nbest_size=nbest_size,
+            alpha=alpha,
             **kwargs,
         )
 
