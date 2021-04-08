@@ -20,7 +20,7 @@ import unittest
 from copy import deepcopy
 
 from parameterized import parameterized
-from transformers import TrainingArguments
+from transformers import TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
@@ -37,9 +37,10 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 
-bindir = os.path.abspath(os.path.dirname(__file__))
-with ExtendSysPath(f"{bindir}/.."):
-    from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
+if is_torch_available():
+    bindir = os.path.abspath(os.path.dirname(__file__))
+    with ExtendSysPath(f"{bindir}/.."):
+        from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
 
 
 set_seed(42)
