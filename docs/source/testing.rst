@@ -797,7 +797,9 @@ leave any data in there.
 
 Temporary sys.path override
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-If you need to temporary override ``sys.path`` to import from another test for example, you can use the ``ExtendSysPath`` context manager. Example:
+
+If you need to temporary override ``sys.path`` to import from another test for example, you can use the
+``ExtendSysPath`` context manager. Example:
 
 
 .. code-block:: python
