@@ -16,16 +16,16 @@ import dataclasses
 import io
 import json
 import os
-import sys
 import unittest
 from copy import deepcopy
 
 from parameterized import parameterized
-from transformers import TrainingArguments
+from transformers import TrainingArguments, is_torch_available
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
+    ExtendSysPath,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -38,8 +38,11 @@ from transformers.trainer_utils import set_seed
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(f"{bindir}/../../../tests")
-from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
+with ExtendSysPath(f"{bindir}/.."):
+    from test_trainer import TrainerIntegrationCommon  # noqa
+
+    if is_torch_available():
+        from test_trainer import get_regression_trainer  # noqa
 
 
 set_seed(42)
