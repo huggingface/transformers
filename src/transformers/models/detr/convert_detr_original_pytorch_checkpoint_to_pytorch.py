@@ -19,12 +19,11 @@ import argparse
 from pathlib import Path
 
 import torch
-import torchvision.transforms as T
 from packaging import version
 from PIL import Image
 
 import requests
-from transformers import DetrConfig, DetrForObjectDetection, DetrModel
+from transformers import DetrConfig, DetrForObjectDetection, DetrModel, DetrFeatureExtractor
 from transformers.utils import logging
 from transformers.utils.coco_classes import id2label
 
@@ -36,102 +35,31 @@ logger = logging.get_logger(__name__)
 rename_keys = []
 for i in range(6):
     # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-    rename_keys.append(
-        (
-            f"transformer.encoder.layers.{i}.self_attn.out_proj.weight",
-            f"encoder.layers.{i}.self_attn.out_proj.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.encoder.layers.{i}.self_attn.out_proj.bias",
-            f"encoder.layers.{i}.self_attn.out_proj.bias",
-        )
-    )
+    rename_keys.append((f"transformer.encoder.layers.{i}.self_attn.out_proj.weight", f"encoder.layers.{i}.self_attn.out_proj.weight"))
+    rename_keys.append((f"transformer.encoder.layers.{i}.self_attn.out_proj.bias", f"encoder.layers.{i}.self_attn.out_proj.bias"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear1.weight", f"encoder.layers.{i}.fc1.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear1.bias", f"encoder.layers.{i}.fc1.bias"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear2.weight", f"encoder.layers.{i}.fc2.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.linear2.bias", f"encoder.layers.{i}.fc2.bias"))
-    rename_keys.append(
-        (
-            f"transformer.encoder.layers.{i}.norm1.weight",
-            f"encoder.layers.{i}.self_attn_layer_norm.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.encoder.layers.{i}.norm1.bias",
-            f"encoder.layers.{i}.self_attn_layer_norm.bias",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.encoder.layers.{i}.norm2.weight",
-            f"encoder.layers.{i}.final_layer_norm.weight",
-        )
-    )
+    rename_keys.append((f"transformer.encoder.layers.{i}.norm1.weight", f"encoder.layers.{i}.self_attn_layer_norm.weight"))
+    rename_keys.append((f"transformer.encoder.layers.{i}.norm1.bias", f"encoder.layers.{i}.self_attn_layer_norm.bias"))
+    rename_keys.append((f"transformer.encoder.layers.{i}.norm2.weight", f"encoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.encoder.layers.{i}.norm2.bias", f"encoder.layers.{i}.final_layer_norm.bias"))
     # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.self_attn.out_proj.weight",
-            f"decoder.layers.{i}.self_attn.out_proj.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.self_attn.out_proj.bias",
-            f"decoder.layers.{i}.self_attn.out_proj.bias",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.multihead_attn.out_proj.weight",
-            f"decoder.layers.{i}.encoder_attn.out_proj.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.multihead_attn.out_proj.bias",
-            f"decoder.layers.{i}.encoder_attn.out_proj.bias",
-        )
-    )
+    rename_keys.append((f"transformer.decoder.layers.{i}.self_attn.out_proj.weight", f"decoder.layers.{i}.self_attn.out_proj.weight"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.self_attn.out_proj.bias", f"decoder.layers.{i}.self_attn.out_proj.bias"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.multihead_attn.out_proj.weight", f"decoder.layers.{i}.encoder_attn.out_proj.weight"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.multihead_attn.out_proj.bias", f"decoder.layers.{i}.encoder_attn.out_proj.bias"))
     rename_keys.append((f"transformer.decoder.layers.{i}.linear1.weight", f"decoder.layers.{i}.fc1.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.linear1.bias", f"decoder.layers.{i}.fc1.bias"))
     rename_keys.append((f"transformer.decoder.layers.{i}.linear2.weight", f"decoder.layers.{i}.fc2.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.linear2.bias", f"decoder.layers.{i}.fc2.bias"))
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.norm1.weight",
-            f"decoder.layers.{i}.self_attn_layer_norm.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.norm1.bias",
-            f"decoder.layers.{i}.self_attn_layer_norm.bias",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.norm2.weight",
-            f"decoder.layers.{i}.encoder_attn_layer_norm.weight",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.norm2.bias",
-            f"decoder.layers.{i}.encoder_attn_layer_norm.bias",
-        )
-    )
-    rename_keys.append(
-        (
-            f"transformer.decoder.layers.{i}.norm3.weight",
-            f"decoder.layers.{i}.final_layer_norm.weight",
-        )
-    )
+    rename_keys.append((f"transformer.decoder.layers.{i}.norm1.weight", f"decoder.layers.{i}.self_attn_layer_norm.weight"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.norm1.bias", f"decoder.layers.{i}.self_attn_layer_norm.bias"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.norm2.weight", f"decoder.layers.{i}.encoder_attn_layer_norm.weight"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.norm2.bias", f"decoder.layers.{i}.encoder_attn_layer_norm.bias"))
+    rename_keys.append((f"transformer.decoder.layers.{i}.norm3.weight", f"decoder.layers.{i}.final_layer_norm.weight"))
     rename_keys.append((f"transformer.decoder.layers.{i}.norm3.bias", f"decoder.layers.{i}.final_layer_norm.bias"))
-
 
 # convolutional projection + query embeddings + layernorm of decoder
 rename_keys.extend(
@@ -143,7 +71,6 @@ rename_keys.extend(
         ("transformer.decoder.norm.bias", "decoder.layernorm.bias"),
     ]
 )
-
 
 def remove_object_detection_heads_(state_dict):
     ignore_keys = [
@@ -159,11 +86,9 @@ def remove_object_detection_heads_(state_dict):
     for k in ignore_keys:
         state_dict.pop(k, None)
 
-
 def rename_key(state_dict, old, new):
     val = state_dict.pop(old)
     state_dict[new] = val
-
 
 def read_in_q_k_v(state_dict):
     # first: transformer encoder
@@ -201,7 +126,6 @@ def read_in_q_k_v(state_dict):
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.weight"] = in_proj_weight_cross_attn[-256:, :]
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
-
 # since we renamed the classification heads of the object detection model, we need to rename the original keys:
 rename_keys_object_detection_model = [
     ("class_embed.weight", "class_labels_classifier.weight"),
@@ -213,7 +137,6 @@ rename_keys_object_detection_model = [
     ("bbox_embed.layers.2.weight", "bbox_predictor.layers.2.weight"),
     ("bbox_embed.layers.2.bias", "bbox_predictor.layers.2.bias"),
 ]
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():

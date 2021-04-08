@@ -62,8 +62,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.size = size
         self.max_size = max_size
         self.do_normalize = do_normalize
-        self.image_mean = [0.5, 0.5, 0.5]
-        self.image_std = [0.5, 0.5, 0.5]
+        self.image_mean = [0.485, 0.456, 0.406]
+        self.image_std = [0.229, 0.224, 0.225]
 
     def __call__(
         self,

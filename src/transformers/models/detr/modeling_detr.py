@@ -52,8 +52,6 @@ from .configuration_detr import DetrConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "DetrConfig"
-_TOKENIZER_FOR_DOC = "DetrTokenizer"
-
 
 DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/detr-resnet-50",
