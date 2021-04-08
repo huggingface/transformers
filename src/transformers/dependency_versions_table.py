@@ -36,6 +36,7 @@ deps = {
     "recommonmark": "recommonmark",
     "regex": "regex!=2019.12.17",
     "requests": "requests",
+    "sacrebleu": "sacrebleu>=1.4.12",
     "sacremoses": "sacremoses",
     "scikit-learn": "scikit-learn",
     "sentencepiece": "sentencepiece==0.1.91",
