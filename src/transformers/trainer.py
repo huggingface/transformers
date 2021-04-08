@@ -1161,7 +1161,7 @@ class Trainer:
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
                         scale_after = self.scaler.get_scale()
-                        optimizer_was_run = scale_before == scale_after
+                        optimizer_was_run = scale_before <= scale_after
                     else:
                         self.optimizer.step()
 
