@@ -34,7 +34,7 @@ from transformers.trainer_utils import set_seed
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(f"{bindir}/../../seq2seq")
+sys.path.append(f"{bindir}/../../examples/seq2seq")
 from run_translation import main  # noqa
 
 

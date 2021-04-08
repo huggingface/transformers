@@ -38,7 +38,7 @@ from transformers.trainer_utils import set_seed
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(f"{bindir}/../../../tests")
+sys.path.append(f"{bindir}/..")
 from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
 
 
