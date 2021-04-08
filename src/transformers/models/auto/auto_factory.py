@@ -438,3 +438,14 @@ def auto_class_factory(name, model_mapping, checkpoint_for_example="bert-base-ca
     from_pretrained = replace_list_option_in_docstrings(model_mapping)(from_pretrained)
     new_class.from_pretrained = classmethod(from_pretrained)
     return new_class
+
+
+def get_values(model_mapping):
+    result = []
+    for model in model_mapping.values():
+        if isinstance(model, (list, tuple)):
+            result += list(model)
+        else:
+            result.append(model)
+
+    return result
