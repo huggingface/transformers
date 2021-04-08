@@ -24,8 +24,8 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 
+from .dependency_versions_check import dep_version_check
 from .utils import logging
-from .utils.versions import require_version
 
 
 logger = logging.get_logger(__name__)
@@ -324,7 +324,7 @@ def deepspeed_parse_config(ds_config):
 
     If it's already a dict, return a copy of it, so that we can freely modify it.
     """
-    require_version("deepspeed>0.3.13")
+    dep_version_check("deepspeed")
 
     if isinstance(ds_config, dict):
         # Don't modify user's data should they want to reuse it (e.g. in tests), because once we

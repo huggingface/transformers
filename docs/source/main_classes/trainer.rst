@@ -274,6 +274,14 @@ Install the library via pypi:
 
     pip install fairscale
 
+or via ``transformers``' ``extras``:
+
+.. code-block:: bash
+
+    pip install transformers[fairscale]
+
+(will become available starting from ``transformers==4.6.0``)
+
 or find more details on `the FairScale's GitHub page <https://github.com/facebookresearch/fairscale/#installation>`__.
 
 If you're still struggling with the build, first make sure to read :ref:`zero-install-notes`.
@@ -418,6 +426,14 @@ Install the library via pypi:
 .. code-block:: bash
 
     pip install deepspeed
+
+or via ``transformers``' ``extras``:
+
+.. code-block:: bash
+
+    pip install transformers[deepspeed]
+
+(will become available starting from ``transformers==4.6.0``)
 
 or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__ and
 `advanced install <https://www.deepspeed.ai/tutorials/advanced-install/>`__.
