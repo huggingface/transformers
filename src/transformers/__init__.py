@@ -191,6 +191,7 @@ _import_structure = {
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
     "models.mbart": ["MBartConfig"],
+    "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
@@ -763,6 +764,20 @@ if is_torch_available():
             "MBartForQuestionAnswering",
             "MBartForSequenceClassification",
             "MBartModel",
+        ]
+    )
+    _import_structure["models.megatron_bert"].extend(
+        [
+            "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MegatronBertForCausalLM",
+            "MegatronBertForMaskedLM",
+            "MegatronBertForMultipleChoice",
+            "MegatronBertForNextSentencePrediction",
+            "MegatronBertForPreTraining",
+            "MegatronBertForQuestionAnswering",
+            "MegatronBertForSequenceClassification",
+            "MegatronBertForTokenClassification",
+            "MegatronBertModel",
         ]
     )
     _import_structure["models.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
@@ -1514,6 +1529,7 @@ if TYPE_CHECKING:
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
     from .models.mbart import MBartConfig
+    from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
@@ -1998,6 +2014,18 @@ if TYPE_CHECKING:
             MBartForQuestionAnswering,
             MBartForSequenceClassification,
             MBartModel,
+        )
+        from .models.megatron_bert import (
+            MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegatronBertForCausalLM,
+            MegatronBertForMaskedLM,
+            MegatronBertForMultipleChoice,
+            MegatronBertForNextSentencePrediction,
+            MegatronBertForPreTraining,
+            MegatronBertForQuestionAnswering,
+            MegatronBertForSequenceClassification,
+            MegatronBertForTokenClassification,
+            MegatronBertModel,
         )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (
