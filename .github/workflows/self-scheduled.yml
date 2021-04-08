@@ -156,6 +156,8 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
+          pip install fairscale
+          pip install deepspeed
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
