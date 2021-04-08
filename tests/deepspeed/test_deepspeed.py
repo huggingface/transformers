@@ -37,10 +37,12 @@ from transformers.testing_utils import (
 from transformers.trainer_utils import set_seed
 
 
-if is_torch_available():
-    bindir = os.path.abspath(os.path.dirname(__file__))
-    with ExtendSysPath(f"{bindir}/.."):
-        from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
+bindir = os.path.abspath(os.path.dirname(__file__))
+with ExtendSysPath(f"{bindir}/.."):
+    from test_trainer import TrainerIntegrationCommon  # noqa
+
+    if is_torch_available():
+        from test_trainer import get_regression_trainer  # noqa
 
 
 set_seed(42)
