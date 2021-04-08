@@ -1165,7 +1165,7 @@ class Trainer:
                     else:
                         self.optimizer.step()
 
-                    if optimizer_was_run and not self.deepspeed :
+                    if optimizer_was_run and not self.deepspeed:
                         self.lr_scheduler.step()
 
                     model.zero_grad()
