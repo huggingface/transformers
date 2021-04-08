@@ -503,6 +503,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianForCausalLM),
         (BlenderbotConfig, BlenderbotForCausalLM),
         (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
+        (MegatronBertConfig, MegatronBertForCausalLM),
     ]
 )
 
