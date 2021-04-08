@@ -32,6 +32,7 @@ import math
 from .configuration_fastspeech2 import FastSpeech2Config
 from transformers import PreTrainedModel
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import warnings
 
 ### G2P
 # A simple Seq2Seq GRU->GRU network to fix and guess phoenemes from
@@ -238,7 +239,6 @@ class Generator(nn.Module):
           audio = audio[:-(self.hop_length*10)]
         audio = MAX_WAV_VALUE * audio
         audio = audio.clamp(min=-MAX_WAV_VALUE, max=MAX_WAV_VALUE-1)
-        audio = audio.short()
         return audio
 
 
@@ -732,8 +732,10 @@ class UpsampleEncoder(nn.Module):
         enc_slf_attn_list = []
         batch_size, max_len = src_seq.shape[0], src_seq.shape[1]
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
-        if not self.training and src_seq.shape[1] > self.max_seq_len:
-            enc_output = src_seq + get_sinusoid_encoding_table(src_seq.shape[1], self.encoder_hidden)[:src_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(src_seq.dtype).to(device)
+        if src_seq.shape[1] > self.max_seq_len:
+            position = get_sinusoid_encoding_table(src_seq.shape[1], self.encoder_hidden)[:src_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(src_seq.dtype).to(device)
+            position.requires_grad=False
+            enc_output = src_seq + position
         else:
             enc_output = src_seq + self.position_enc[:, :max_len, :].expand(batch_size, -1, -1)
         for enc_layer in self.layer_stack:
@@ -827,8 +829,10 @@ class Encoder(nn.Module):
         # -- Prepare masks
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
         # -- Forward
-        if not self.training and src_seq.shape[1] > self.max_seq_len:
-            enc_output = self.src_word_emb(src_seq) + get_sinusoid_encoding_table(src_seq.shape[1], self.encoder_hidden)[:src_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(src_seq.dtype).to(device)
+        if src_seq.shape[1] > self.max_seq_len:
+            position = get_sinusoid_encoding_table(src_seq.shape[1], self.encoder_hidden)[:src_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(src_seq.dtype).to(device)
+            position.requires_grad = False
+            enc_output = self.src_word_emb(src_seq) + position
         else:
             enc_output = self.src_word_emb(src_seq) + self.position_enc[:, :max_len, :].expand(batch_size, -1, -1)
         for enc_layer in self.layer_stack:
@@ -880,8 +884,10 @@ class Decoder(nn.Module):
         slf_attn_mask = mask.unsqueeze(1).expand(-1, max_len, -1)
 
         # -- Forward
-        if not self.training and enc_seq.shape[1] > self.max_seq_len:
-            dec_output = enc_seq + get_sinusoid_encoding_table(enc_seq.shape[1], self.decoder_hidden)[:enc_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(enc_seq.dtype).to(device)
+        if enc_seq.shape[1] > self.max_seq_len:
+            position =  get_sinusoid_encoding_table(enc_seq.shape[1], self.decoder_hidden)[:enc_seq.shape[1], :].unsqueeze(0).expand(batch_size, -1, -1).to(enc_seq.dtype).to(device)
+            position.requires_grad=False
+            dec_output = enc_seq + position
         else:
             dec_output = enc_seq + self.position_enc[:, :max_len, :].expand(batch_size, -1, -1)
         dec_output=dec_output.type(enc_seq.dtype)
@@ -1080,9 +1086,17 @@ class FastSpeech2(FastSpeech2PreTrainedModel):
 
         return mask
 
-    def forward(self, src_seq, attention_mask, mel_len=None, d_target=None, p_target=None, e_target=None, max_src_len=None, max_mel_len=None, log_d_target=None, use_postnet=None):
+    def to_wav_list(self, wav_tensor, wav_len):
+      wav = [w[:l] for w, l in zip(wav_tensor, wav_len)]
+      return wav
+
+    def forward(self, src_seq, attention_mask, return_wav_list=True, mel_len=None, d_target=None, p_target=None, e_target=None, max_src_len=None, max_mel_len=None, log_d_target=None, use_postnet=None):
         #src_mask = self.get_mask_from_lengths(src_len, max_src_len)
+
         device = next(self.parameters()).device
+        if self.training and return_wav_list:
+          warnings.warn("In train mode, a tensor for all wavs should be returned. automatically setting return_wav_list=False")
+          return_wav_list=False
         if src_seq.device != device:
             src_seq = src_seq.to(device)
         if attention_mask.device != device:
@@ -1104,10 +1118,24 @@ class FastSpeech2(FastSpeech2PreTrainedModel):
         else:
             mel_postnet = mel_output
         wav = self.generator.inference(mel_postnet.transpose(1, 2))
+       
+        
         if len(wav.size())>1: 
-          wav = [w[:l*self.hop_length] for w, l in zip(wav, mel_len)]
+          wav_mask = torch.zeros(wav.size()).to(device)
+          if return_wav_list:
+            wav = [w[:l*self.hop_length] for w, l in zip(wav, mel_len)]
+          #there's probably a more efficient way to do this using arange
+          for i, l in enumerate(mel_len):
+            wav_mask[i, :l*self.hop_length] = 1.
+          wav_len =  [l*self.hop_length for l in  mel_len]
         else:
-          wav = wav.unsqueeze(0)
+          wav_len =  [len(wav)*self.hop_length]
+          wav_mask = torch.ones((1, len(wav))).to(device)
+          if return_wav_list:
+            wav = [wav]
+          else:
+           wav = wav.unsqueeze(0)
+          
         if log_d_target is not None:
             log_d_target_prev_req_grad = log_d_target.requires_grad
             p_target_prev_req_grad = p_target.requires_grad
@@ -1145,8 +1173,8 @@ class FastSpeech2(FastSpeech2PreTrainedModel):
         else:
             total_loss = None
 
-        return mel_output, mel_postnet, log_d_predicted, p_predicted, e_predicted, src_mask, mel_mask, mel_len, wav, total_loss
-
+        return mel_output, mel_postnet, log_d_predicted, p_predicted, e_predicted, src_mask, mel_mask, mel_len, wav_len, wav_mask, wav, total_loss
+    
 
 
 class FastSpeech2ForPretraining(FastSpeech2PreTrainedModel):
@@ -1161,6 +1189,9 @@ class FastSpeech2ForPretraining(FastSpeech2PreTrainedModel):
 
     def set_output_embeddings(self, new_embeddings):
         self.fastspeech2.g2p.decoder.fc = new_embeddings
+    
+    def to_wav_list(self, wav_tensor, wav_len):
+      return self.fastspeech2.to_wav_list(wav_tensor, wav_len)
     
     def forward(self, input_ids, attention_mask, **vargs):
       return self.fastspeech2(input_ids, attention_mask, **vargs)
