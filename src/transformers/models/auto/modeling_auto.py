@@ -174,6 +174,17 @@ from ..mbart.modeling_mbart import (
     MBartForSequenceClassification,
     MBartModel,
 )
+from ..megatron_bert.modeling_megatron_bert import (
+    MegatronBertForCausalLM,
+    MegatronBertForMaskedLM,
+    MegatronBertForMultipleChoice,
+    MegatronBertForNextSentencePrediction,
+    MegatronBertForPreTraining,
+    MegatronBertForQuestionAnswering,
+    MegatronBertForSequenceClassification,
+    MegatronBertForTokenClassification,
+    MegatronBertModel,
+)
 from ..mobilebert.modeling_mobilebert import (
     MobileBertForMaskedLM,
     MobileBertForMultipleChoice,
@@ -298,6 +309,7 @@ from .configuration_auto import (
     M2M100Config,
     MarianConfig,
     MBartConfig,
+    MegatronBertConfig,
     MobileBertConfig,
     MPNetConfig,
     MT5Config,
@@ -355,6 +367,7 @@ MODEL_MAPPING = OrderedDict(
         (BertConfig, BertModel),
         (OpenAIGPTConfig, OpenAIGPTModel),
         (GPT2Config, GPT2Model),
+        (MegatronBertConfig, MegatronBertModel),
         (MobileBertConfig, MobileBertModel),
         (TransfoXLConfig, TransfoXLModel),
         (XLNetConfig, XLNetModel),
@@ -398,6 +411,7 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
         (BigBirdConfig, BigBirdForPreTraining),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
+        (MegatronBertConfig, MegatronBertForPreTraining),
         (MobileBertConfig, MobileBertForPreTraining),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
@@ -441,6 +455,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (BertConfig, BertForMaskedLM),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
+        (MegatronBertConfig, MegatronBertForMaskedLM),
         (MobileBertConfig, MobileBertForMaskedLM),
         (TransfoXLConfig, TransfoXLLMHeadModel),
         (XLNetConfig, XLNetLMHeadModel),
@@ -456,6 +471,7 @@ MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
+        (MegatronBertConfig, MegatronBertForCausalLM),
     ]
 )
 
@@ -487,6 +503,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (MarianConfig, MarianForCausalLM),
         (BlenderbotConfig, BlenderbotForCausalLM),
         (BlenderbotSmallConfig, BlenderbotSmallForCausalLM),
+        (MegatronBertConfig, MegatronBertForCausalLM),
     ]
 )
 
@@ -514,6 +531,7 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForMaskedLM),
         (SqueezeBertConfig, SqueezeBertForMaskedLM),
         (BertConfig, BertForMaskedLM),
+        (MegatronBertConfig, MegatronBertForMaskedLM),
         (MobileBertConfig, MobileBertForMaskedLM),
         (FlaubertConfig, FlaubertWithLMHeadModel),
         (XLMConfig, XLMWithLMHeadModel),
@@ -566,6 +584,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING = OrderedDict(
         (LayoutLMConfig, LayoutLMForSequenceClassification),
         (BertConfig, BertForSequenceClassification),
         (XLNetConfig, XLNetForSequenceClassification),
+        (MegatronBertConfig, MegatronBertForSequenceClassification),
         (MobileBertConfig, MobileBertForSequenceClassification),
         (FlaubertConfig, FlaubertForSequenceClassification),
         (XLMConfig, XLMForSequenceClassification),
@@ -602,6 +621,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING = OrderedDict(
         (BertConfig, BertForQuestionAnswering),
         (XLNetConfig, XLNetForQuestionAnsweringSimple),
         (FlaubertConfig, FlaubertForQuestionAnsweringSimple),
+        (MegatronBertConfig, MegatronBertForQuestionAnswering),
         (MobileBertConfig, MobileBertForQuestionAnswering),
         (XLMConfig, XLMForQuestionAnsweringSimple),
         (ElectraConfig, ElectraForQuestionAnswering),
@@ -637,6 +657,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = OrderedDict(
         (RobertaConfig, RobertaForTokenClassification),
         (SqueezeBertConfig, SqueezeBertForTokenClassification),
         (BertConfig, BertForTokenClassification),
+        (MegatronBertConfig, MegatronBertForTokenClassification),
         (MobileBertConfig, MobileBertForTokenClassification),
         (XLNetConfig, XLNetForTokenClassification),
         (AlbertConfig, AlbertForTokenClassification),
@@ -663,6 +684,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
         (SqueezeBertConfig, SqueezeBertForMultipleChoice),
         (BertConfig, BertForMultipleChoice),
         (DistilBertConfig, DistilBertForMultipleChoice),
+        (MegatronBertConfig, MegatronBertForMultipleChoice),
         (MobileBertConfig, MobileBertForMultipleChoice),
         (XLNetConfig, XLNetForMultipleChoice),
         (AlbertConfig, AlbertForMultipleChoice),
@@ -677,6 +699,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING = OrderedDict(
 MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING = OrderedDict(
     [
         (BertConfig, BertForNextSentencePrediction),
+        (MegatronBertConfig, MegatronBertForNextSentencePrediction),
         (MobileBertConfig, MobileBertForNextSentencePrediction),
     ]
 )
