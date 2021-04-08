@@ -255,18 +255,8 @@ extras["all"] = (
     + extras["vision"]
 )
 
-extras["dev"] = (
-    extras["all"]
-    + extras["testing"]
-    + extras["quality"]
-    + extras["ja"]
-    + extras["docs"]
-    + extras["sklearn"]
-    + extras["modelcreation"]
-)
-
 # "docs" needs "all" to resolve all the references
-extras["docs"] = extras["all"] + deps_list(
+extras["docs_specific"] = deps_list(
     "docutils",
     "recommonmark",
     "sphinx",
@@ -274,6 +264,18 @@ extras["docs"] = extras["all"] + deps_list(
     "sphinx-rtd-theme",
     "sphinx-copybutton",
     "sphinxext-opengraph",
+)
+
+extras["docs"] = extras["all"] + extras["docs_specific"]
+
+extras["dev"] = (
+    extras["all"]
+    + extras["testing"]
+    + extras["quality"]
+    + extras["ja"]
+    + extras["docs_specific"]
+    + extras["sklearn"]
+    + extras["modelcreation"]
 )
 
 extras["torchhub"] = deps_list(
