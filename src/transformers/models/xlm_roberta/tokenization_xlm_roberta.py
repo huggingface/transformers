@@ -94,6 +94,18 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         additional_special_tokens (:obj:`List[str]`, `optional`, defaults to :obj:`["<s>NOTUSED", "</s>NOTUSED"]`):
             Additional special tokens used by the tokenizer.
+        enable_sampling (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            Enable subword regularization.
+        nbest_size (:obj:`int`, `optional`, defaults to -1):
+            Sampling parameters for unigram. Invalid for BPE-Dropout.
+            nbest_size = {0,1}: No sampling is performed.
+            nbest_size > 1: samples from the nbest_size results.
+            nbest_size < 0: assuming that nbest_size is infinite and samples
+                from the all hypothesis (lattice) using
+                forward-filtering-and-backward-sampling algorithm.
+        alpha (:obj:`float`, `optional`, defaults to 0.1):
+            Soothing parameter for unigram sampling, and dropout probability of
+            merge operations for BPE-dropout.
 
     Attributes:
         sp_model (:obj:`SentencePieceProcessor`):
@@ -115,6 +127,9 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         unk_token="<unk>",
         pad_token="<pad>",
         mask_token="<mask>",
+        enable_sampling=False,
+        nbest_size=-1,
+        alpha=0.1,
         **kwargs
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -131,7 +146,11 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-        self.sp_model = spm.SentencePieceProcessor()
+        self.sp_model = spm.SentencePieceProcessor(
+            enable_sampling=enable_sampling,
+            nbest_size=nbest_size,
+            alpha=alpha,
+        )
         self.sp_model.Load(str(vocab_file))
         self.vocab_file = vocab_file
 
@@ -252,7 +271,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         return vocab
 
     def _tokenize(self, text):
-        return self.sp_model.EncodeAsPieces(text)
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         """ Converts a token (str) in an id using the vocab. """
