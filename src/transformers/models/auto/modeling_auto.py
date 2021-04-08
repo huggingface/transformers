@@ -105,6 +105,7 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2Model,
 )
 from ..deit.modeling_deit import DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
+from ..detr.modeling_detr import DetrForObjectDetection, DetrModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -304,6 +305,7 @@ from .configuration_auto import (
     DebertaConfig,
     DebertaV2Config,
     DeiTConfig,
+    DetrConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -355,6 +357,7 @@ MODEL_MAPPING = OrderedDict(
         (BigBirdPegasusConfig, BigBirdPegasusModel),
         (DeiTConfig, DeiTModel),
         (LukeConfig, LukeModel),
+        (DetrConfig, DetrModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
@@ -562,6 +565,13 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
         (DebertaConfig, DebertaForMaskedLM),
         (DebertaV2Config, DebertaV2ForMaskedLM),
         (IBertConfig, IBertForMaskedLM),
+    ]
+)
+
+MODEL_FOR_OBJECT_DETECTION_MAPPING = OrderedDict(
+    [
+        # Model for Object Detection mapping
+        (DetrConfig, DetrForObjectDetection),
     ]
 )
 
