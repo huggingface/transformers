@@ -244,16 +244,6 @@ extras["testing"] = (
     + extras["modelcreation"]
 )
 
-extras["docs_specific"] = deps_list(
-    "docutils",
-    "recommonmark",
-    "sphinx",
-    "sphinx-markdown-tables",
-    "sphinx-rtd-theme",
-    "sphinx-copybutton",
-    "sphinxext-opengraph",
-)
-
 extras["quality"] = deps_list("black", "isort", "flake8")
 
 extras["all"] = (
@@ -266,6 +256,15 @@ extras["all"] = (
     + extras["vision"]
 )
 
+extras["docs_specific"] = deps_list(
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
+)
 # "docs" needs "all" to resolve all the references
 extras["docs"] = extras["all"] + extras["docs_specific"]
 
