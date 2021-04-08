@@ -272,13 +272,13 @@ Install the library via pypi:
 
 .. code-block:: bash
 
-   pip install fairscale
+    pip install fairscale
 
 or via ``transformers``' ``extras``:
 
 .. code-block:: bash
 
-   pip install transformers[fairscale]
+    pip install transformers[fairscale]
 
 (will become available starting from ``transformers==4.6.0``)
 
@@ -425,13 +425,13 @@ Install the library via pypi:
 
 .. code-block:: bash
 
-   pip install deepspeed
+    pip install deepspeed
 
 or via ``transformers``' ``extras``:
 
 .. code-block:: bash
 
-   pip install transformers[deepspeed]
+    pip install transformers[deepspeed]
 
 (will become available starting from ``transformers==4.6.0``)
 
