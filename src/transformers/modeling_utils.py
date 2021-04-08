@@ -41,6 +41,7 @@ from .file_utils import (
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
+from .integrations import is_deepspeed_zero3_enabled
 from .utils import logging
 
 
@@ -660,7 +661,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if new_num_tokens is None:
             return old_embeddings
 
-        old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
+                old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        else:
+            old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
@@ -677,8 +685,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         self._init_weights(new_embeddings)
 
         # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
+
+        # numbers of tokens to copy
+        n = min(old_num_tokens, new_num_tokens)
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
+        else:
+            new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
 
@@ -1056,7 +1073,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        model = cls(config, *model_args, **model_kwargs)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+            # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
+            with deepspeed.zero.Init():
+                model = cls(config, *model_args, **model_kwargs)
+        else:
+            model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
             try:
@@ -1114,15 +1140,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             # so we need to apply the function recursively.
             def load(module: nn.Module, prefix=""):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                module._load_from_state_dict(
-                    state_dict,
-                    prefix,
-                    local_metadata,
-                    True,
-                    missing_keys,
-                    unexpected_keys,
-                    error_msgs,
-                )
+                args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                if is_deepspeed_zero3_enabled():
+                    import deepspeed
+
+                    # because zero3 puts placeholders in model params, this context
+                    # manager gathers (unpartitions) the params of the current layer, then loads from
+                    # the state dict and then re-partitions them again
+                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                        if torch.distributed.get_rank() == 0:
+                            module._load_from_state_dict(*args)
+                else:
+                    module._load_from_state_dict(*args)
+
                 for name, child in module._modules.items():
                     if child is not None:
                         load(child, prefix + name + ".")
