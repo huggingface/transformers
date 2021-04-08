@@ -1151,17 +1151,21 @@ class Trainer:
                             )
 
                     # Optimizer step
+                    optimizer_was_run = True
                     if self.deepspeed:
                         pass  # called outside the loop
                     elif is_torch_tpu_available():
                         xm.optimizer_step(self.optimizer)
                     elif self.use_amp:
+                        scale_before = self.scaler.get_scale()
                         self.scaler.step(self.optimizer)
                         self.scaler.update()
+                        scale_after = self.scaler.get_scale()
+                        optimizer_was_run = scale_before <= scale_after
                     else:
                         self.optimizer.step()
 
-                    if not self.deepspeed:
+                    if optimizer_was_run and not self.deepspeed:
                         self.lr_scheduler.step()
 
                     model.zero_grad()
