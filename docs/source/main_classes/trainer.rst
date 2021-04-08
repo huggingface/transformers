@@ -134,6 +134,8 @@ Toward Training Trillion Parameter Models, by Samyam Rajbhandari, Jeff Rasley, O
 
 This provided support is new and experimental as of this writing.
 
+.. _zero-install-notes:
+
 Installation Notes
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -156,7 +158,8 @@ please, read the following notes first.
 In these notes we give examples for what to do when ``pytorch`` has been built with CUDA ``10.2``. If your situation is
 different remember to adjust the version number to the one you are after.
 
-**Possible problem #1:**
+Possible problem #1
+=======================================================================================================================
 
 While, Pytorch comes with its own CUDA toolkit, to build these two projects you must have an identical version of CUDA
 installed system-wide.
@@ -176,7 +179,8 @@ If you don't have CUDA installed system-wide, install it first. You will find th
 search engine. For example, if you're on Ubuntu you may want to search for: `ubuntu cuda 10.2 install
 <https://www.google.com/search?q=ubuntu+cuda+10.2+install>`__.
 
-**Possible problem #2:**
+Possible problem #2
+=======================================================================================================================
 
 Another possible common problem is that you may have more than one CUDA toolkit installed system-wide. For example you
 may have:
@@ -222,7 +226,8 @@ exist. ``lib64`` sub-directory is where the various CUDA ``.so`` objects, like `
 that your system will have it named differently, but if it is adjust it to reflect your reality.
 
 
-**Possible problem #3:**
+Possible problem #3
+=======================================================================================================================
 
 Some older CUDA versions may refuse to build with newer compilers. For example, you my have ``gcc-9`` but it wants
 ``gcc-7``.
@@ -247,13 +252,6 @@ should find ``gcc-7`` (and ``g++7``) and then the build will succeed.
 
 As always make sure to edit the paths in the example to match your situation.
 
-**If still unsuccessful:**
-
-If after addressing these you still encounter build issues, please, proceed with the GitHub Issue of `FairScale
-<https://github.com/facebookresearch/fairscale/issues>`__ and `Deepspeed
-<https://github.com/microsoft/DeepSpeed/issues>`__, depending on the project you have the problem with.
-
-
 FairScale
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -267,20 +265,66 @@ provides support for the following features from `the ZeRO paper <https://arxiv.
 
 You will need at least two GPUs to use this feature.
 
-To deploy this feature:
 
-1. Install the library via pypi:
+**Installation**:
 
-   .. code-block:: bash
+Install the library via pypi:
 
-       pip install fairscale
+.. code-block:: bash
 
-   or find more details on `the FairScale's GitHub page
-   <https://github.com/facebookresearch/fairscale/#installation>`__.
+    pip install fairscale
 
-2. To use the first version of Sharded data-parallelism, add ``--sharded_ddp simple`` to the command line arguments,
-   and make sure you have added the distributed launcher ``-m torch.distributed.launch
-   --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
+or find more details on `the FairScale's GitHub page <https://github.com/facebookresearch/fairscale/#installation>`__.
+
+If you're still struggling with the build, first make sure to read :ref:`zero-install-notes`.
+
+If it's still not resolved the build issue, here are a few more ideas.
+
+``fairscale`` seems to have an issue with the recently introduced by pip build isolation feature. If you have a problem
+with it, you may want to try one of:
+
+.. code-block:: bash
+
+   pip install fairscale --no-build-isolation .
+
+or:
+
+.. code-block:: bash
+
+   git clone https://github.com/facebookresearch/fairscale/
+   cd fairscale
+   rm -r dist build
+   python setup.py bdist_wheel
+   pip uninstall -y fairscale
+   pip install dist/fairscale-*.whl
+
+``fairscale`` also has issues with building against pytorch-nightly, so if you use it you may have to try one of:
+
+.. code-block:: bash
+
+   pip uninstall -y fairscale; pip install fairscale --pre \
+   -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html \
+   --no-cache --no-build-isolation
+
+or:
+
+.. code-block:: bash
+
+   pip install -v --disable-pip-version-check . \
+   -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html --pre
+
+Of course, adjust the urls to match the cuda version you use.
+
+If after trying everything suggested you still encounter build issues, please, proceed with the GitHub Issue of
+`FairScale <https://github.com/facebookresearch/fairscale/issues>`__.
+
+
+
+**Usage**:
+
+To use the first version of Sharded data-parallelism, add ``--sharded_ddp simple`` to the command line arguments, and
+make sure you have added the distributed launcher ``-m torch.distributed.launch
+--nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
 
 For example here is how you could use it for ``run_translation.py`` with 2 GPUs:
 
@@ -346,19 +390,23 @@ DeepSpeed
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 `DeepSpeed <https://github.com/microsoft/DeepSpeed>`__ implements everything described in the `ZeRO paper
-<https://arxiv.org/abs/1910.02054>`__, except ZeRO's stage 3. "Parameter Partitioning (Pos+g+p)". Currently it provides
-full support for:
+<https://arxiv.org/abs/1910.02054>`__. Currently it provides full support for:
 
 1. Optimizer State Partitioning (ZeRO stage 1)
-2. Add Gradient Partitioning (ZeRO stage 2)
-3. Custom fp16 handling
-4. A range of fast Cuda-extension-based Optimizers
-5. ZeRO-Offload
+2. Gradient Partitioning (ZeRO stage 2)
+3. Param Partitioning (ZeRO stage 3)
+4. Custom mixed precision training handling
+5. A range of fast CUDA-extension-based Optimizers
+6. ZeRO-Offload
 
 ZeRO-Offload has its own dedicated paper: `ZeRO-Offload: Democratizing Billion-Scale Model Training
 <https://arxiv.org/abs/2101.06840>`__.
 
-DeepSpeed is currently used only for training, as all the currently available features are of no use to inference.
+DeepSpeed ZeRO-2 is currently used only for training, as all the currently available features are of no use to
+inference.
+
+DeepSpeed ZeRO-3 can be used for inference as well, since it allows huge models to be loaded on multiple GPUs, which
+won't be possible on a single GPU.
 
 
 
@@ -371,7 +419,74 @@ Install the library via pypi:
 
     pip install deepspeed
 
-or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__.
+or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__ and
+`advanced install <https://www.deepspeed.ai/tutorials/advanced-install/>`__.
+
+If you're still struggling with the build, first make sure to read :ref:`zero-install-notes`.
+
+If you don't prebuild the extensions and rely on them to be built at run time and you tried all of the above solutions
+to no avail, the next thing to try is to pre-build the modules before installing them.
+
+To make a local build for DeepSpeed:
+
+.. code-block:: bash
+
+   git clone https://github.com/microsoft/DeepSpeed/
+   cd DeepSpeed
+   rm -rf build
+   TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 pip install . \
+   --global-option="build_ext" --global-option="-j8" --no-cache -v \
+   --disable-pip-version-check 2>&1 | tee build.log
+
+Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use.
+
+Or if you need to use the same setup on multiple machines, make a binary wheel:
+
+.. code-block:: bash
+
+   git clone https://github.com/microsoft/DeepSpeed/
+   cd DeepSpeed
+   rm -rf build
+   TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 \
+   python setup.py build_ext -j8 bdist_wheel
+
+it will generate something like ``dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` which now you can install
+as ``pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` locally or on any other machine.
+
+Again, remember to ensure to adjust ``TORCH_CUDA_ARCH_LIST`` to the target architectures.
+
+You can find the complete list of NVIDIA GPUs and their corresponding **Compute Capabilities** (same as arch in this
+context) `here <https://developer.nvidia.com/cuda-gpus>`__.
+
+You can check the archs pytorch was built with using:
+
+.. code-block:: bash
+
+   python -c "import torch; print(torch.cuda.get_arch_list())"
+
+Here is how to find out the arch for one of the installed GPU. For example, for GPU 0:
+
+.. code-block:: bash
+
+   CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
+   print(torch.cuda.get_device_properties(torch.device('cuda')))"
+
+If the output is:
+
+.. code-block:: bash
+
+   _CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24268MB, multi_processor_count=82)
+
+then you know that this card's arch is ``8.6``.
+
+You can also leave ``TORCH_CUDA_ARCH_LIST`` out completely and then the build program will automatically query the
+architecture of the GPUs the build is made on. This may or may not match the GPUs on the target machines, that's why
+it's best to specify the desired archs explicitly.
+
+If after trying everything suggested you still encounter build issues, please, proceed with the GitHub Issue of
+`Deepspeed <https://github.com/microsoft/DeepSpeed/issues>`__,
+
+
 
 Deployment with multiple GPUs
 =======================================================================================================================
@@ -498,7 +613,7 @@ Deployment in Notebooks
 The problem with running notebook cells as a script is that there is no normal ``deepspeed`` launcher to rely on, so
 under certain setups we have to emulate it.
 
-Here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
+If you're using only 1 GPU, here is how you'd have to adjust your training code in the notebook to use DeepSpeed.
 
 .. code-block:: python
 
@@ -516,7 +631,11 @@ Here is how you'd have to adjust your training code in the notebook to use DeepS
     trainer = Trainer(...)
     trainer.train()
 
-Note: `...` stands for the normal arguments that you'd pass to the functions.
+Note: ``...`` stands for the normal arguments that you'd pass to the functions.
+
+If you want to use more than 1 GPU, you must use a multi-process environment for DeepSpeed to work. That is, you have
+to use the launcher for that purpose and this cannot be accomplished by emulating the distributed environment presented
+at the beginning of this section.
 
 If you want to create the config file on the fly in the notebook in the current directory, you could have a dedicated
 cell with:
@@ -570,21 +689,29 @@ cell with:
     EOT
 
 
-That's said if the script is not in the notebook cells, you can launch ``deepspeed`` normally via shell from a cell
-with:
+If the training script is in a normal file and not in the notebook cells, you can launch ``deepspeed`` normally via
+shell from a cell. For example, to use ``run_translation.py`` you would launch it with:
 
 .. code-block::
 
-   !deepspeed examples/seq2seq/run_translation.py ...
+   !git clone https://github.com/huggingface/transformers
+   !cd transformers; deepspeed examples/seq2seq/run_translation.py ...
 
-or with bash magic, where you can write a multi-line code for the shell to run:
+or with ``%%bash`` magic, where you can write a multi-line code for the shell program to run:
 
 .. code-block::
 
    %%bash
 
-   cd /somewhere
+   git clone https://github.com/huggingface/transformers
+   cd transformers
    deepspeed examples/seq2seq/run_translation.py ...
+
+In such case you don't need any of the code presented at the beginning of this section.
+
+Note: ``%%bash`` magic is neat, but currently it buffers the output so you won't see the logs until the process
+completes.
+
 
 
 
@@ -717,26 +844,45 @@ Of course, you will need to adjust the values in this example to your situation.
 ZeRO
 =======================================================================================================================
 
+`Zero Redundancy Optimizer (ZeRO) <https://www.deepspeed.ai/tutorials/zero/>`__ is the work horse of DeepSpeed. It
+support 3 different levels (stages) of optimization. The first one is not quite interesting for scalability purposes,
+therefore this document focuses on stages 2 and 3. You will find more indepth information in the DeepSpeed
+documentation.
+
 The ``zero_optimization`` section of the configuration file is the most important part (`docs
 <https://www.deepspeed.ai/docs/config-json/#zero-optimizations-for-fp16-training>`__), since that is where you define
-which ZeRO stages you want to enable and how to configure them.
+which ZeRO stages you want to enable and how to configure them. You will find the explanation for each parameter in the
+DeepSpeed docs.
+
+This section has to be configured exclusively via DeepSpeed configuration - the :class:`~transformers.Trainer` provides
+no equivalent command line arguments.
+
+Note: currently DeepSpeed doesn't validate parameter names, so if you misspell any, it'll use the default setting for
+the parameter that got misspelled. You can watch the DeepSpeed engine start up log messages to see what values it is
+going to use.
+
+
+ZeRO-2 Config
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+The following is an example configuration for ZeRO stage 2:
 
 .. code-block:: json
 
     {
-       "zero_optimization": {
-           "stage": 2,
-           "allgather_partitions": true,
-           "allgather_bucket_size": 5e8,
-           "overlap_comm": true,
-           "reduce_scatter": true,
-           "reduce_bucket_size": 5e8,
-           "contiguous_gradients": true,
-           "cpu_offload": true
-       }
+        "zero_optimization": {
+            "stage": 2,
+            "allgather_partitions": true,
+            "allgather_bucket_size": 5e8,
+            "overlap_comm": true,
+            "reduce_scatter": true,
+            "reduce_bucket_size": 5e8,
+            "contiguous_gradients": true,
+            "cpu_offload": true
+        }
     }
 
-Notes:
+**Performance tuning:**
 
 - enabling ``cpu_offload`` should reduce GPU RAM usage (it requires ``"stage": 2``)
 - ``"overlap_comm": true`` trades off increased GPU RAM usage to lower all-reduce latency. ``overlap_comm`` uses 4.5x
@@ -748,9 +894,217 @@ Notes:
   the slower the communication, and the more GPU RAM will be available to other tasks. So if a bigger batch size is
   important, getting a slightly slower training time could be a good trade.
 
-This section has to be configured exclusively via DeepSpeed configuration - the :class:`~transformers.Trainer` provides
-no equivalent command line arguments.
 
+ZeRO-3 Config
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+The following is an example configuration for ZeRO stage 3:
+
+
+.. code-block:: json
+
+    {
+        "zero_optimization": {
+            "stage": 3,
+            "cpu_offload": true,
+            "cpu_offload_params": true,
+            "cpu_offload_use_pin_memory" : true,
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": 1e6,
+            "stage3_prefetch_bucket_size": 0.94e6,
+            "stage3_param_persistence_threshold": 1e4,
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        }
+    }
+
+Note: if you're migrating from ZeRO-2 configuration that: ``allgather_partitions``, ``allgather_bucket_size`` and
+``reduce_scatter`` configuration parameters are not used in ZeRO-3. If you keep these they will just be ignored.
+
+**Performance tuning:**
+
+- ``sub_group_size``: ``1e14``
+- ``reduce_bucket_size``: ``hidden_size*hidden_size``
+- ``stage3_prefetch_bucket_size``: ``0.9 * hidden_size * hidden_size``
+- ``stage3_param_persistence_threshold``: ``10 * hidden_size``
+- ``stage3_max_live_parameters``: ``1e9``
+- ``stage3_max_reuse_distance``: ``1e9``
+
+If hitting OOM reduce ``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``. They should have minimal impact
+on performance unless you are doing activation checkpointing. ``1e9`` would consume ~2GB. The memory is shared by
+``stage3_max_live_parameters`` and ``stage3_max_reuse_distance``, so its not additive, its just 2GB total.
+
+``stage3_max_live_parameters`` is the upper limit on how many full parameters you want to keep on the GPU at any given
+time. "reuse distance" is a metric we are using to figure out when will a parameter be used again in the future, and we
+use the ``stage3_max_reuse_distance`` to decide whether to throw away the parameter or to keep it. If a parameter is
+going to be used again in near future (less than ``stage3_max_reuse_distance``) then we keep it to reduce communication
+overhead. This is super helpful when you have activation checkpointing enabled, where we do a forward recompute and
+backward passes a a single layer granularity and want to keep the parameter in the forward recompute till the backward
+
+If you set ``reduce_bucket_size``, ``stage3_prefetch_bucket_size`` and ``stage3_param_persistence_threshold`` as
+recommended above, they will already be fairly small so you won't have to tune those much.
+
+Since ``hidden_size`` varies from model to model, the ``Trainer`` will automatically set the needed value for the 3
+config parameters that contain that variable (using ``model.config.hidden_size``). Just set these values to ``0`` as
+shown below and the right configuration will be passed to DeepSpeed:
+
+.. code-block:: json
+
+    {
+        "zero_optimization": {
+            "stage": 3,
+            "cpu_offload": true,
+            "cpu_offload_params": true,
+            "cpu_offload_use_pin_memory" : true,
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": 0,
+            "stage3_prefetch_bucket_size": 0,
+            "stage3_param_persistence_threshold": 0,
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        }
+    }
+
+``stage3_gather_fp16_weights_on_model_save`` enables model fp16 weights consolidation when model gets saved. With large
+models and multiple GPUs this is an expensive operation both in terms of memory and speed. It's currently required if
+you plan to resume the training. Watch out for future updates that will remove this limitation and make things more
+flexible.
+
+
+ZeRO-2 vs ZeRO-3 Performance
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+ZeRO-3 is likely to be slower than ZeRO-2 if everything else is configured the same because the former has to gather
+model weights in addition to what ZeRO-2 does. If ZeRO-2 meets your needs and you don't need to scale beyond a few GPUs
+then you may choose to stick to it. It's important to understand that ZeRO-3 enables a much higher scalability capacity
+at a cost of speed.
+
+It's possible to adjust ZeRO-3 configuration to make it perform closer to ZeRO-2:
+
+- set ``stage3_param_persistence_threshold`` to a very large number - larger than the largest parameter, e.g., ``6 *
+  hidden_size * hidden_size``. This will keep the parameters on the GPUs.
+- turn off ``cpu_offload_params`` since ZeRO-2 doesn't have that option.
+
+The performance will likely improve significantly with just ``cpu_offload_params`` turned off, even if you don't change
+``stage3_param_persistence_threshold``. Of course, these changes will impact the size of the model you can train. So
+these help you to trade scalability for speed depending on your needs.
+
+
+
+ZeRO-2 Example
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Here is a full ZeRO-2 all-enabled configuration file ``ds_config_zero2.json``:
+
+.. code-block:: json
+
+   {
+       "fp16": {
+           "enabled": true,
+           "loss_scale": 0,
+           "loss_scale_window": 1000,
+           "initial_scale_power": 16,
+           "hysteresis": 2,
+           "min_loss_scale": 1
+       },
+
+       "zero_optimization": {
+           "stage": 2,
+           "allgather_partitions": true,
+           "allgather_bucket_size": 2e8,
+           "overlap_comm": true,
+           "reduce_scatter": true,
+           "reduce_bucket_size": 2e8,
+           "contiguous_gradients": true,
+           "cpu_offload": true
+       },
+
+       "optimizer": {
+           "type": "AdamW",
+           "params": {
+               "lr": 3e-5,
+               "betas": [0.8, 0.999],
+               "eps": 1e-8,
+               "weight_decay": 3e-7
+           }
+       },
+
+       "scheduler": {
+           "type": "WarmupLR",
+           "params": {
+               "warmup_min_lr": 0,
+               "warmup_max_lr": 3e-5,
+               "warmup_num_steps": 500
+           }
+       },
+
+       "steps_per_print": 2000,
+       "wall_clock_breakdown": false
+   }
+
+
+
+ZeRO-3 Example
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
+
+.. code-block:: json
+
+   {
+       "fp16": {
+           "enabled": true,
+           "loss_scale": 0,
+           "loss_scale_window": 1000,
+           "initial_scale_power": 16,
+           "hysteresis": 2,
+           "min_loss_scale": 1
+       },
+
+       "zero_optimization": {
+           "stage": 3,
+           "cpu_offload": true,
+           "cpu_offload_params": true,
+           "cpu_offload_use_pin_memory" : true,
+           "overlap_comm": true,
+           "contiguous_gradients": true,
+           "sub_group_size": 1e14,
+           "reduce_bucket_size": 1e6,
+           "stage3_prefetch_bucket_size": 0.94e6,
+           "stage3_param_persistence_threshold": 1e4,
+           "stage3_max_live_parameters": 1e9,
+           "stage3_max_reuse_distance": 1e9,
+           "stage3_gather_fp16_weights_on_model_save": true
+       },
+
+       "optimizer": {
+           "type": "AdamW",
+           "params": {
+               "lr": 3e-5,
+               "betas": [0.8, 0.999],
+               "eps": 1e-8,
+               "weight_decay": 3e-7
+           }
+       },
+
+       "scheduler": {
+           "type": "WarmupLR",
+           "params": {
+               "warmup_min_lr": 0,
+               "warmup_max_lr": 3e-5,
+               "warmup_num_steps": 500
+           }
+       },
+
+       "steps_per_print": 2000,
+       "wall_clock_breakdown": false
+   }
 
 
 Optimizer and Scheduler
@@ -772,7 +1126,7 @@ If ``cpu_offload`` is enabled you must use both DeepSpeed scheduler and DeepSpee
 
 
 Optimizer
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 
 DeepSpeed's main optimizers are Adam, AdamW, OneBitAdam, and Lamb. These have been thoroughly tested with ZeRO and are
@@ -818,7 +1172,7 @@ make sure to adjust the values. e.g. if use Adam you will want ``weight_decay`` 
 
 
 Scheduler
-"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 DeepSpeed supports LRRangeTest, OneCycle, WarmupLR and WarmupDecayLR LR schedulers. The full documentation is `here
 <https://www.deepspeed.ai/docs/config-json/#scheduler-parameters>`__.
@@ -886,11 +1240,7 @@ and ``warmup_max_lr``, ``warmup_num_steps`` and ``total_num_steps`` will be corr
 Automatic Mixed Precision
 =======================================================================================================================
 
-You can work with FP16 in one of the following ways:
-
-1. Pytorch native amp, as documented `here <https://www.deepspeed.ai/docs/config-json/#fp16-training-options>`__.
-2. NVIDIA's apex, as documented `here
-   <https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options>`__.
+You can use automatic mixed precision with either a pytorch-like AMP way or the apex-like way:
 
 If you want to use an equivalent of the Pytorch native amp, you can either configure the ``fp16`` entry in the
 configuration file, or use the following command line arguments: ``--fp16 --fp16_backend amp``.
@@ -909,6 +1259,8 @@ Here is an example of the ``fp16`` configuration:
         },
     }
 
+Here is the `documentation <https://www.deepspeed.ai/docs/config-json/#fp16-training-options>`__.
+
 If you want to use NVIDIA's apex instead, you can can either configure the ``amp`` entry in the configuration file, or
 use the following command line arguments: ``--fp16 --fp16_backend apex --fp16_opt_level 01``.
 
@@ -923,6 +1275,9 @@ Here is an example of the ``amp`` configuration:
         }
     }
 
+Here is the `documentation
+<https://www.deepspeed.ai/docs/config-json/#automatic-mixed-precision-amp-training-options>`__.
+
 
 Gradient Accumulation
 =======================================================================================================================
@@ -935,12 +1290,12 @@ While normally DeepSpeed gets gradient accumulation configured with:
         "gradient_accumulation_steps": 3,
     }
 
-in this case, to enable gradient accumulation, pass the command line `--gradient_accumulation_steps` argument as normal
-and it will get injected into the DeepSpeed configuration.
+in this case, to enable gradient accumulation, pass the command line ``--gradient_accumulation_steps 3`` argument as
+normal and it will get injected into the DeepSpeed configuration.
 
-If you try to add it directly to the configuration file, you will receive an error from the Trainer - this is because
-this setting is needed by the Trainer too, and so this approach ensures that there is a single way of setting this
-value and thus avoid potential subtle errors.
+If you try to add it directly to the configuration file, you will receive an error from the ``Trainer`` - this is
+because this setting is needed by the ``Trainer`` too, and so this approach ensures that there is a single way of
+setting this value and thus avoid potential subtle errors.
 
 
 
@@ -960,6 +1315,175 @@ Here is an example of the ``gradient_clipping`` configuration:
     {
         "gradient_clipping": 1.0,
     }
+
+
+
+Getting the model weights out
+=======================================================================================================================
+
+As long as you continue training and resuming using DeepSpeed you don't need to worry about anything. DeepSpeed stores
+fp32 master weights in its custom checkpoint optimizer files, which are ``global_step*/*optim_states.pt`` (this is glob
+pattern), and are saved under the normal checkpoint.
+
+**FP16 Weights:**
+
+When a model is saved under ZeRO-2, you end up having the normal ``pytorch_model.bin`` file with the model weights, but
+they are only the fp16 version of the weights.
+
+Under ZeRO-3, things are much more complicated, since the model weights are partitioned out over multiple GPUs,
+therefore ``"stage3_gather_fp16_weights_on_model_save": true`` is required to get the ``Trainer`` to save the fp16
+version of the weights. If this setting is ``False`` ``pytorch_model.bin`` won't be created. This is because by default
+DeepSpeed's ``state_dict`` contains a placeholder and not the real weights. If we were to save this ``state_dict`` it
+won't be possible to load it back.
+
+**FP32 Weights:**
+
+While the fp16 weights are fine for resuming training, if you finished finetuning your model and want to upload it to
+the `models hub <https://huggingface.co/models>`__ or pass it to someone else you most likely will want to get the fp32
+weights. This cannot be done during training since this is a process that requires a lot of memory, and therefore this
+is performed offline.
+
+DeepSpeed creates a special conversion script ``zero_to_fp32.py`` which it places in the top-level of the checkpoint
+folder. Using this script you can extract the weights at any point. The script is standalone and you no longer need to
+have the configuration file or a ``Trainer`` to do the extraction.
+
+Let's say your checkpoint folder looks like this:
+
+.. code-block:: bash
+
+   $ ls -l output_dir/checkpoint-1/
+   -rw-rw-r-- 1 stas stas 1.4K Mar 27 20:42 config.json
+   drwxrwxr-x 2 stas stas 4.0K Mar 25 19:52 global_step1/
+   -rw-rw-r-- 1 stas stas   12 Mar 27 13:16 latest
+   -rw-rw-r-- 1 stas stas 827K Mar 27 20:42 optimizer.pt
+   -rw-rw-r-- 1 stas stas 231M Mar 27 20:42 pytorch_model.bin
+   -rw-rw-r-- 1 stas stas  623 Mar 27 20:42 scheduler.pt
+   -rw-rw-r-- 1 stas stas 1.8K Mar 27 20:42 special_tokens_map.json
+   -rw-rw-r-- 1 stas stas 774K Mar 27 20:42 spiece.model
+   -rw-rw-r-- 1 stas stas 1.9K Mar 27 20:42 tokenizer_config.json
+   -rw-rw-r-- 1 stas stas  339 Mar 27 20:42 trainer_state.json
+   -rw-rw-r-- 1 stas stas 2.3K Mar 27 20:42 training_args.bin
+   -rwxrw-r-- 1 stas stas 5.5K Mar 27 13:16 zero_to_fp32.py*
+
+In this example there is just one DeepSpeed checkpoint sub-folder `global_step1`. Therefore to reconstruct the fp32
+weights just run:
+
+.. code-block:: bash
+
+   python zero_to_fp32.py global_step1 pytorch_model.bin
+
+The script will automatically handle either ZeRO-2 or ZeRO-3 checkpoint.
+
+``python zero_to_fp32.py -h`` will give you usage details.
+
+If you have multiple DeepSpeed checkpoint sub-folders, pick the one you know to have the desired weights.
+
+This is it. ``pytorch_model.bin`` will now contain the full fp32 model weights consolidated from multiple GPUs.
+
+Note: currently the script requires 2x general RAM of the final fp32 model weights.
+
+ZeRO 3 Nuances
+=======================================================================================================================
+
+ZeRO 3 is quite different from ZeRO 2 because of its param sharding feature.
+
+While all the efforts were made for things to just work without needing any special changes to your models, in certain
+circumstances you may find the following information to be needed.
+
+
+Registering External Parameters
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+If layer A needs to access weights belonging to layer B, currently layer A needs to tell DeepSpeed about it. This is
+done with the help of ``deepspeed.zero.register_external_parameter`` that needs to be called in ``A.__init__`` and can
+be seen in the following example:
+
+.. code-block:: python
+
+   class ModuleZ3(torch.nn.Module):
+       def __init__(self, *args):
+           super().__init__(self, *args)
+           self.layer1 = SomeLayer()
+           self.layer2 = OtherLayer()
+           deepspeed.zero.register_external_parameter(self, self.layer1.weight)
+
+       def forward(self, input):
+           x = self.layer1(input)
+           # self.layer1.weight is needed in ModuleZ3.forward
+           y = self.layer2(x, self.layer1.weight)
+           return y
+
+In general ``transformers`` models don't use this style of referring to other layer's weights so most likely you won't
+need to use it.
+
+For full details on this method please refer to `Registering External Parameters
+<https://deepspeed.readthedocs.io/en/latest/zero3.html#registering-external-parameters>`__.
+
+
+
+Constructing Massive Models
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+DeepSpeed/ZeRO-3 can handle models with Trillions of parameters which may not fit onto the existing RAM. In such cases,
+but also if you want the initialization to happen much faster, initialize the model using `deepspeed.zero.Init()`
+context manager (which is also a function decorator), like so:
+
+.. code-block:: python
+
+    from transformers import T5ForConditionalGeneration, T5Config
+    import deepspeed
+    with deepspeed.zero.Init():
+       config = T5Config.from_pretrained("t5-small")
+       model = T5ForConditionalGeneration(config)
+
+As you can see this gives you a randomly initialized model.
+
+If you want to use a pretrained model, ``model_class.from_pretrained`` will activate this feature as long as
+``is_deepspeed_zero3_enabled()`` returns ``True``, which can be set manually via ``deepspeed_zero3_enable(True)``.
+Therefore to enable this feature here is the required sequence:
+
+.. code-block:: python
+
+    from transformers.integrations import deepspeed_zero3_enable
+    deepspeed_zero3_enable(True)
+    model = T5ForConditionalGeneration.from_pretrained("t5-small")
+
+If you're using ``Trainer`` command line arguments which include ``--deepspeed ds_config.json`` with ZeRO-3 config
+enabled, then you can skip ``deepspeed_zero3_enable(True)`` as it will try to discover whether it'll be run under
+ZeRO-3 and ``from_pretrained`` will automatically activate this feature.
+
+Note: If the fp16 weights of the model can't fit onto the memory of a single GPU this feature must be used.
+
+For full details on this method and other related features please refer to `Constructing Massive Models
+<https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models>`__.
+
+
+
+
+
+Gathering Parameters
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Under ZeRO-3 on multiple GPUs no single GPU has all the parameters unless it's the parameters for the currently
+executing layer. So if you need to access all parameters from all layers at once there is a specific method to do it.
+Most likely you won't need it, but if you do please refer to `Gathering Parameters
+<https://deepspeed.readthedocs.io/en/latest/zero3.html#manual-parameter-coordination>`__
+
+We do however use it internally in several places, one such example is when loading pretrained model weights in
+``from_pretrained``. We load one layer at a time and immediately partition it to all participating GPUs, as for very
+large models it won't be possible to load it on one GPU and then spread it out to multiple GPUs, due to memory
+limitations.
+
+Also under ZeRO-3, if you write your own code and run into a model parameter weight that looks like:
+
+.. code-block:: python
+
+   tensor([1.], device='cuda:0', dtype=torch.float16, requires_grad=True)
+
+stress on ``tensor([1.])``, or if you get an error where it says the parameter is of size ``1``, instead of some much
+larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
+
+
 
 
 

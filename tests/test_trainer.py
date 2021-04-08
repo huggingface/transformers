@@ -132,6 +132,7 @@ class RegressionModelConfig(PretrainedConfig):
         self.a = a
         self.b = b
         self.double_output = double_output
+        self.hidden_size = 1
 
 
 if is_torch_available():
