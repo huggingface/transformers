@@ -531,6 +531,12 @@ class TrainingArguments:
     )
 
     def __post_init__(self):
+        # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
+        # This needs to happen before any call to self.device or self.n_gpu.
+        env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
+        if env_local_rank != -1 and env_local_rank != self.local_rank:
+            self.local_rank = env_local_rank
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         #  see https://github.com/huggingface/transformers/issues/10628

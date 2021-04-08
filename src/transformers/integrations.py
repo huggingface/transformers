@@ -604,9 +604,11 @@ class TensorBoardCallback(TrainerCallback):
                 self.tb_writer.add_hparams(args.to_sanitized_dict(), metric_dict={})
 
     def on_log(self, args, state, control, logs=None, **kwargs):
-        if state.is_world_process_zero:
-            if self.tb_writer is None:
-                self._init_summary_writer(args)
+        if not state.is_world_process_zero:
+            return
+
+        if self.tb_writer is None:
+            self._init_summary_writer(args)
 
         if self.tb_writer is not None:
             logs = rewrite_logs(logs)
