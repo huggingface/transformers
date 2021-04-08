@@ -26,6 +26,7 @@ from transformers.file_utils import WEIGHTS_NAME
 from transformers.integrations import is_deepspeed_available
 from transformers.testing_utils import (
     CaptureLogger,
+    ExtendSysPath,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -38,8 +39,8 @@ from transformers.trainer_utils import set_seed
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(f"{bindir}/..")
-from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
+with ExtendSysPath(f"{bindir}/.."):
+    from test_trainer import TrainerIntegrationCommon, get_regression_trainer  # noqa
 
 
 set_seed(42)
