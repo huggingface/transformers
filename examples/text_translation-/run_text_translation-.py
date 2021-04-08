@@ -403,7 +403,7 @@ def main():
     )
 
     train_dataset = processed_datasets["train"]
-    train_dataset = train_dataset.select(range(100))
+    train_dataset = train_dataset.select(range(10))
     eval_dataset = processed_datasets["validation"]
 
     # Log a few random samples from the training set:
@@ -470,8 +470,7 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-    # TODO Get the proper metric function
-    # metric = load_metric(xxx)
+
     metric = load_metric("sacrebleu")
 
     def postprocess_text(preds, labels):
@@ -564,31 +563,27 @@ def main():
             if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
                 generated_tokens = pad_tensors_to_max_len(model, generated_tokens, gen_kwargs["max_length"])
 
+
+            decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
             labels = batch.pop("labels")
-            # print(labels,"labels")
-            with torch.no_grad():
-                # compute loss on predict data
-                loss, logits =  model(**batch, labels=labels, use_cache=False)[:2]
 
-            loss = loss.mean().detach()
+            if args.ignore_pad_token_for_loss:
+                # Replace -100 in the labels as we can't decode them.
+                labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
-            logits = generated_tokens if args.predict_with_generate else logits
+            decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-            if labels.shape[-1] < gen_kwargs["max_length"]:
-                labels = pad_tensors_to_max_len(model, labels, gen_kwargs["max_length"])
+            decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
-
-
-                # logits = generated_tokens if args.predict_with_generate else logits
-                # generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
-            # predictions = outputs.logits.argmax(dim=-1)
-            # metric.add_batch(
-            #     predictions=accelerator.gather(predictions),
-            #     references=accelerator.gather(batch["labels"]),
-            # )
-
-        eval_metric = compute_metrics(logits, labels)
+            metric.add_batch(
+                predictions=accelerator.gather(decoded_preds),
+                references=accelerator.gather(decoded_labels),
+            )
+        eval_metric = metric.compute()
         logger.info(f"epoch {epoch}: {eval_metric}")
+
+
+
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
