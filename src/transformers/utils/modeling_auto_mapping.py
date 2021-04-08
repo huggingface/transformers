@@ -21,6 +21,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("BertConfig", "BertForQuestionAnswering"),
         ("XLNetConfig", "XLNetForQuestionAnsweringSimple"),
         ("FlaubertConfig", "FlaubertForQuestionAnsweringSimple"),
+        ("MegatronBertConfig", "MegatronBertForQuestionAnswering"),
         ("MobileBertConfig", "MobileBertForQuestionAnswering"),
         ("XLMConfig", "XLMForQuestionAnsweringSimple"),
         ("ElectraConfig", "ElectraForQuestionAnswering"),
