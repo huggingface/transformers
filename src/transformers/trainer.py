@@ -54,6 +54,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from .dependency_versions_check import dep_version_check
 from .file_utils import (
     WEIGHTS_NAME,
     is_apex_available,
@@ -139,6 +140,7 @@ if is_torch_tpu_available():
     import torch_xla.distributed.parallel_loader as pl
 
 if is_fairscale_available():
+    dep_version_check("fairscale")
     import fairscale
     from fairscale.nn.data_parallel import ShardedDataParallel as ShardedDDP
     from fairscale.optim import OSS

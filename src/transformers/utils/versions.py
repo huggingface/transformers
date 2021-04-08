@@ -60,6 +60,12 @@ def require_version(requirement: str, hint: Optional[str] = None) -> None:
     Args:
         requirement (:obj:`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
         hint (:obj:`str`, `optional`): what suggestion to print in case of requirements not being met
+
+    Example::
+
+       require_version("pandas>1.1.2")
+       require_version("numpy>1.18.5", "this is important to have for whatever reason")
+
     """
 
     hint = f"\n{hint}" if hint is not None else ""
