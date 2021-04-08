@@ -19,7 +19,7 @@ To create the package for pypi.
 
 1. Run `make pre-release` (or `make pre-patch` for a patch release) then run `make fix-copies` to fix the index of the
    documentation.
-   
+
 2. Run Tests for Amazon Sagemaker. The documentation is located in `./tests/sagemaker/README.md`, otherwise @philschmid.
 
 3. Unpin specific versions from setup.py that use a git install.
@@ -243,15 +243,6 @@ extras["testing"] = (
     + extras["retrieval"]
     + extras["modelcreation"]
 )
-extras["docs"] = deps_list(
-    "docutils",
-    "recommonmark",
-    "sphinx",
-    "sphinx-markdown-tables",
-    "sphinx-rtd-theme",
-    "sphinx-copybutton",
-    "sphinxext-opengraph",
-)
 extras["quality"] = deps_list("black", "isort", "flake8")
 
 extras["all"] = (
@@ -272,6 +263,17 @@ extras["dev"] = (
     + extras["docs"]
     + extras["sklearn"]
     + extras["modelcreation"]
+)
+
+# "docs" needs "all" to resolve all the references
+extras["docs"] = extras["all"] + deps_list(
+    "docutils",
+    "recommonmark",
+    "sphinx",
+    "sphinx-markdown-tables",
+    "sphinx-rtd-theme",
+    "sphinx-copybutton",
+    "sphinxext-opengraph",
 )
 
 extras["torchhub"] = deps_list(
