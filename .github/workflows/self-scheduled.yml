@@ -33,8 +33,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
-          pip install deepspeed
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,deepspeed]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -156,9 +155,7 @@ jobs:
         run: |
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
-          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
-          pip install fairscale
-          pip install deepspeed
+          pip install .[sklearn,testing,onnxruntime,sentencepiece,speech,deepspeed,fairscale]
 
       - name: Are GPUs recognized by our DL frameworks
         run: |

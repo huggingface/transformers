@@ -90,7 +90,9 @@ _deps = [
     "cookiecutter==1.7.2",
     "dataclasses",
     "datasets",
+    "deepspeed>0.3.13",
     "docutils==0.16.0",
+    "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
@@ -233,6 +235,8 @@ extras["onnx"] = deps_list("onnxconverter-common", "keras2onnx") + extras["onnxr
 extras["modelcreation"] = deps_list("cookiecutter")
 
 extras["sagemaker"] = deps_list("sagemaker")
+extras["deepspeed"] = deps_list("deepspeed")
+extras["fairscale"] = deps_list("fairscale")
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
 extras["speech"] = deps_list("soundfile", "torchaudio")
