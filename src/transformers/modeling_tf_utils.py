@@ -1037,6 +1037,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin):
             logger.info(f"Saved model created in {saved_model_dir}")
 
         # Save configuration file
+        self.config.architectures = [self.__class__.__name__[2:]]
         self.config.save_pretrained(save_directory)
 
         # If we save using the predefined names, we can load using `from_pretrained`

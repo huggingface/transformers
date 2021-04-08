@@ -247,29 +247,38 @@ MODEL_NAMES_MAPPING = OrderedDict(
 )
 
 
+def _get_class_name(model_class):
+    if isinstance(model_class, (list, tuple)):
+        return " or ".join([f":class:`~transformers.{c.__name__}`" for c in model_class])
+    return f":class:`~transformers.{model_class.__name__}`"
+
+
 def _list_model_options(indent, config_to_class=None, use_model_types=True):
     if config_to_class is None and not use_model_types:
         raise ValueError("Using `use_model_types=False` requires a `config_to_class` dictionary.")
     if use_model_types:
         if config_to_class is None:
-            model_type_to_name = {model_type: config.__name__ for model_type, config in CONFIG_MAPPING.items()}
+            model_type_to_name = {
+                model_type: f":class:`~transformers.{config.__name__}`"
+                for model_type, config in CONFIG_MAPPING.items()
+            }
         else:
             model_type_to_name = {
-                model_type: config_to_class[config].__name__
+                model_type: _get_class_name(config_to_class[config])
                 for model_type, config in CONFIG_MAPPING.items()
                 if config in config_to_class
             }
         lines = [
-            f"{indent}- **{model_type}** -- :class:`~transformers.{model_type_to_name[model_type]}` ({MODEL_NAMES_MAPPING[model_type]} model)"
+            f"{indent}- **{model_type}** -- {model_type_to_name[model_type]} ({MODEL_NAMES_MAPPING[model_type]} model)"
             for model_type in sorted(model_type_to_name.keys())
         ]
     else:
-        config_to_name = {config.__name__: clas.__name__ for config, clas in config_to_class.items()}
+        config_to_name = {config.__name__: _get_class_name(clas) for config, clas in config_to_class.items()}
         config_to_model_name = {
             config.__name__: MODEL_NAMES_MAPPING[model_type] for model_type, config in CONFIG_MAPPING.items()
         }
         lines = [
-            f"{indent}- :class:`~transformers.{config_name}` configuration class: :class:`~transformers.{config_to_name[config_name]}` ({config_to_model_name[config_name]} model)"
+            f"{indent}- :class:`~transformers.{config_name}` configuration class: {config_to_name[config_name]} ({config_to_model_name[config_name]} model)"
             for config_name in sorted(config_to_name.keys())
         ]
     return "\n".join(lines)

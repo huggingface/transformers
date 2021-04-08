@@ -17,6 +17,7 @@
 import unittest
 
 from transformers import FunnelTokenizer, is_torch_available
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -365,7 +366,7 @@ class FunnelModelTest(ModelTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class in MODEL_FOR_PRETRAINING_MAPPING.values():
+            if model_class in get_values(MODEL_FOR_PRETRAINING_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
                 )

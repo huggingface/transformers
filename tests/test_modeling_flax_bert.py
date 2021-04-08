@@ -29,6 +29,7 @@ if is_flax_available():
         FlaxBertForNextSentencePrediction,
         FlaxBertForPreTraining,
         FlaxBertForQuestionAnswering,
+        FlaxBertForSequenceClassification,
         FlaxBertForTokenClassification,
         FlaxBertModel,
     )
@@ -125,6 +126,7 @@ class FlaxBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
             FlaxBertForMultipleChoice,
             FlaxBertForQuestionAnswering,
             FlaxBertForNextSentencePrediction,
+            FlaxBertForSequenceClassification,
             FlaxBertForTokenClassification,
             FlaxBertForQuestionAnswering,
         )

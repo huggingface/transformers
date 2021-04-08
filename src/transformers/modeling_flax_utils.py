@@ -387,6 +387,7 @@ class FlaxPreTrainedModel(ABC):
         # get abs dir
         save_directory = os.path.abspath(save_directory)
         # save config as well
+        self.config.architectures = [self.__class__.__name__[4:]]
         self.config.save_pretrained(save_directory)
 
         # save model
