@@ -43,5 +43,5 @@ for pkg in pkgs_to_check_at_runtime:
         raise ValueError(f"can't find {pkg} in {deps.keys()}, check dependency_versions_table.py")
 
 
-def dep_version_check(pkg, hint=""):
+def dep_version_check(pkg, hint=None):
     require_version(deps[pkg], hint)
