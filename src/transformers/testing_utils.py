@@ -625,7 +625,8 @@ class CaptureLogger:
 @contextlib.contextmanager
 # adapted from https://stackoverflow.com/a/64789046/9201239
 def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
-    """Temporary add given path to `sys.path`.
+    """
+    Temporary add given path to `sys.path`.
 
     Usage ::
 
