@@ -19,6 +19,7 @@ import io
 import json
 import numbers
 import os
+import sys
 import tempfile
 from copy import deepcopy
 from pathlib import Path
@@ -268,7 +269,77 @@ def rewrite_logs(d):
     return new_d
 
 
-def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
+_is_deepspeed_zero3_enabled = None
+
+
+def is_deepspeed_zero3_enabled():
+    """
+    This function answers to the question of whether DeepSpeed is going to be used and run using ZeRO Stage 3.
+
+    It includes an auto-discovery method, see comments in the code for details.
+
+    Returns: ``True`` if either it was explicitly enabled via ``deepspeed_zero3_enable(True)`` or the auto-detector was
+    able to derive that the ``Trainer`` will be running via DeepSpeed ZeRO stage 3.
+    """
+    global _is_deepspeed_zero3_enabled
+    if _is_deepspeed_zero3_enabled is None:
+        _is_deepspeed_zero3_enabled = False
+        # Try to auto-discover if we are about to use DeepSpeed with ZeRO3 enabled. This will only
+        # work for scripts using cli to pass --deepspeed ds_config.json. If cmd args aren't used,
+        # then to get the model efficiently loaded across multiple-gpus one has to explicitly call
+        # is_deepspeed_zero3_enabled(True) **before** instantiating a model object
+        if "--deepspeed" in sys.argv:
+            idx = sys.argv.index("--deepspeed")
+            ds_config = sys.argv[idx + 1]
+            if not os.path.exists(ds_config):
+                raise ValueError("--deepspeed requires a valid path to a config file")
+            config = deepspeed_parse_config(ds_config)
+            if (
+                "zero_optimization" in config
+                and "stage" in config["zero_optimization"]
+                and config["zero_optimization"]["stage"] == 3
+            ):
+                _is_deepspeed_zero3_enabled = True
+
+    return _is_deepspeed_zero3_enabled
+
+
+def deepspeed_zero3_enable(enable=True):
+    """
+    ``is_deepspeed_zero3_enabled()`` tries to derive automatically if DeepSpeed ZeRO 3 is going to be used by looking
+    at ``sys.argv`` which may or may contain information about where to find the DeepSpeed config if any.
+
+    This function allows for explicit enabling/disabling of this global flag.
+
+    Args:
+        enable: if set to ``True`` will make ``is_deepspeed_zero3_enabled()`` return ``True``
+    """
+    global _is_deepspeed_zero3_enabled
+    _is_deepspeed_zero3_enabled = enable
+
+
+def deepspeed_parse_config(ds_config):
+    """
+    If ``ds_config`` isn't already a dict, read it from the config file.
+
+    If it's already a dict, return a copy of it, so that we can freely modify it.
+    """
+    require_version("deepspeed>0.3.13")
+
+    if isinstance(ds_config, dict):
+        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
+        # modified it, it will not be accepted here again, since some config params must be not set by users
+        config = deepcopy(ds_config)
+    elif isinstance(ds_config, str):
+        with io.open(ds_config, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    else:
+        raise ValueError("expecting either a path to a config file or a pre-populated dict")
+
+    return config
+
+
+def deepspeed_init(trainer, num_training_steps, resume_from_checkpoint=None):
     """
     Init DeepSpeed, after updating the DeepSpeed configuration with any relevant Trainer's args.
 
@@ -284,21 +355,10 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     """
     import deepspeed
 
-    require_version("deepspeed>0.3.12")
-
     args = trainer.args
-    ds_config_file = args.deepspeed
     model = trainer.model
 
-    if isinstance(args.deepspeed, dict):
-        # Don't modify user's data should they want to reuse it (e.g. in tests), because once we
-        # modified it, it will not be accepted here again, since some config params must be not set by users
-        config = deepcopy(args.deepspeed)
-    elif isinstance(args.deepspeed, str):
-        with io.open(ds_config_file, "r", encoding="utf-8") as f:
-            config = json.load(f)
-    else:
-        raise ValueError("expecting either a path to a config file or a pre-populated dict")
+    config = deepspeed_parse_config(args.deepspeed)
 
     # The following code translates relevant trainer's cl args into the DS config
 
@@ -324,9 +384,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     config["gradient_accumulation_steps"] = args.gradient_accumulation_steps
 
     if "gradient_clipping" in config:
-        logger.info(
-            f"Keeping the `gradient_clipping` config from {ds_config_file} intact, ignoring any gradient clipping-specific cl args"
-        )
+        logger.info("Keeping the `gradient_clipping` config intact, ignoring any gradient clipping-specific cl args")
     else:  # override only if the ds config doesn't already have this section
         config["gradient_clipping"] = args.max_grad_norm
 
@@ -336,6 +394,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     # 2. HF scheduler + HF optimizer: Yes
     # 3. DS scheduler + HF optimizer: Yes
     # 4. HF scheduler + DS optimizer: No
+    #
     # Unless Offload is enabled in which case it's:
     # 1. DS scheduler + DS optimizer: Yes
     # 2. HF scheduler + HF optimizer: No
@@ -344,7 +403,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
 
     optimizer = None
     if "optimizer" in config:
-        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        logger.info("Updating the `scheduler` config with other command line arguments")
 
         # to avoid inconsistent values of lr and warm up steps the command line args override config
         params = dict(
@@ -384,7 +443,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
     # WarmupDecayLR| linear               | get_linear_schedule_with_warmup   |
     lr_scheduler = None
     if "scheduler" in config:
-        logger.info(f"Updating the `scheduler` config from {ds_config_file} with other command line arguments")
+        logger.info("Updating the `scheduler` config with other command line arguments")
         # the user won't easily know the correct num_training_steps should they use WarmupDecayLR,
         # so let's set it to the correct value
         if config["scheduler"]["type"] == "WarmupDecayLR":
@@ -417,9 +476,7 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
         # - `amp`: which delegates amp work to apex (which needs to be available), but it cannot be used with any ZeRO features, so probably best to be avoided.
         if trainer.fp16_backend == "apex":
             if "amp" in config:
-                logger.info(
-                    f"Keeping the `amp` config from {ds_config_file} intact, ignoring any amp-specific cl args"
-                )
+                logger.info("Keeping the `amp` config intact, ignoring any amp-specific cl args")
             else:
                 config["amp"] = {
                     "enabled": True,
@@ -427,19 +484,33 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
                 }
         elif trainer.fp16_backend == "amp":
             if "fp16" in config:
-                logger.info(
-                    f"Keeping the `fp16` config from {ds_config_file} intact, ignoring any fp16-specific cl args"
-                )
+                logger.info("Keeping the `fp16` config intact, ignoring any fp16-specific cl args")
             else:
                 config["fp16"] = {
                     "enabled": True,
                 }
 
+    # zero
+    if "zero_optimization" in config:
+        zero = config["zero_optimization"]
+
+        # now we know for sure if zero3 is enabled
+        deepspeed_zero3_enable(zero.get("stage") == 3)
+
+        # automatically assign the optimal config values based on model config
+        hidden_size = model.config.hidden_size
+        if zero.get("reduce_bucket_size") == 0:
+            zero["reduce_bucket_size"] = hidden_size * hidden_size
+        if zero.get("stage3_prefetch_bucket_size") == 0:
+            zero["stage3_prefetch_bucket_size"] = 0.9 * hidden_size * hidden_size
+        if zero.get("stage3_param_persistence_threshold") == 0:
+            zero["stage3_param_persistence_threshold"] = 10 * hidden_size
+
     # keep for quick debug:
     # from pprint import pprint; pprint(config)
 
-    # init that takes part of the config via `args`, and the bulk of it via `config_params`
     model_parameters = filter(lambda p: p.requires_grad, model.parameters())
+
     model, optimizer, _, lr_scheduler = deepspeed.initialize(
         model=model,
         model_parameters=model_parameters,
@@ -448,14 +519,26 @@ def init_deepspeed(trainer, num_training_steps, resume_from_checkpoint=None):
         lr_scheduler=lr_scheduler,
     )
 
-    if resume_from_checkpoint is not None:  # and os.path.isdir(resume_from_checkpoint):
-        logger.info(f"Attempting to resume from {resume_from_checkpoint}")
-        # this magically updates self.optimizer and self.lr_scheduler
-        load_path, _ = model.load_checkpoint(
-            resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
-        )
-        if load_path is None:
-            raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
+    if resume_from_checkpoint is not None:
+
+        # it's possible that the user is trying to resume from model_path, which doesn't necessarily
+        # contain a deepspeed checkpoint. e.g. examples just check if the dir exists and assume it's
+        # a resume from a checkpoint and not just a local pretrained weight. So we check here if the
+        # path contains what looks like a deepspeed checkpoint
+        import glob
+
+        deepspeed_checkpoint_dirs = sorted(glob.glob(f"{resume_from_checkpoint}/global_step*"))
+
+        if len(deepspeed_checkpoint_dirs) > 0:
+            logger.info(f"Attempting to resume from {resume_from_checkpoint}")
+            # this magically updates self.optimizer and self.lr_scheduler
+            load_path, _ = model.load_checkpoint(
+                resume_from_checkpoint, load_optimizer_states=True, load_lr_scheduler_states=True
+            )
+            if load_path is None:
+                raise ValueError(f"[deepspeed] failed to resume from checkpoint {resume_from_checkpoint}")
+        else:
+            logger.info(f"{resume_from_checkpoint} doesn't have deepspeed checkpoints, doing nothing")
 
     return model, optimizer, lr_scheduler
 

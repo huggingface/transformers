@@ -17,7 +17,6 @@ The Trainer class, to easily train a 🤗 Transformers from scratch or finetune 
 """
 
 import collections
-import gc
 import inspect
 import math
 import os
@@ -41,7 +40,8 @@ from .integrations import (  # isort: split
     is_ray_tune_available,
     run_hp_search_optuna,
     run_hp_search_ray,
-    init_deepspeed,
+    deepspeed_init,
+    is_deepspeed_zero3_enabled,
 )
 
 import numpy as np
@@ -921,7 +921,7 @@ class Trainer:
             logger.info(f"Loading model from {resume_from_checkpoint}).")
 
             if self.deepspeed:
-                # will be resumed in init_deepspeed
+                # will be resumed in deepspeed_init
                 pass
             elif isinstance(self.model, PreTrainedModel):
                 self.model = self.model.from_pretrained(resume_from_checkpoint)
@@ -965,12 +965,12 @@ class Trainer:
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
-            model, optimizer, lr_scheduler = init_deepspeed(
+            deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
                 self, num_training_steps=max_steps, resume_from_checkpoint=resume_from_checkpoint
             )
-            self.model = model.module
-            self.model_wrapped = model
-            self.deepspeed = model  # DeepSpeedEngine object
+            self.model = deepspeed_engine.module
+            self.model_wrapped = deepspeed_engine
+            self.deepspeed = deepspeed_engine
             self.optimizer = optimizer
             self.lr_scheduler = lr_scheduler
         elif not delay_optimizer_creation:
@@ -1227,18 +1227,6 @@ class Trainer:
         # add remaining tr_loss
         self._total_loss_scalar += tr_loss.item()
 
-        if self.deepspeed:
-            # free up any memory that might be useful for eval
-            self.deepspeed = None
-            self.optimizer = None
-            self.lr_scheduler = None
-            self.model_wrapped = self.model
-            gc.collect()  # force memory release
-            # to restore normal behavior outside of train replay the place_model_on_device logic w/o deepspeed
-            self.place_model_on_device = self.args.place_model_on_device
-            if self.is_model_parallel:
-                self.place_model_on_device = False
-
         self.is_in_train = False
 
         self._memory_tracker.stop_and_update_metrics(metrics)
@@ -1293,6 +1281,8 @@ class Trainer:
         output_dir = os.path.join(run_dir, checkpoint_folder)
         self.save_model(output_dir)
         if self.deepspeed:
+            # under zero3 model file itself doesn't get saved since it's bogus! Unless deepspeed
+            # config `stage3_gather_fp16_weights_on_model_save` is True
             self.deepspeed.save_checkpoint(output_dir)
 
         # Save optimizer and scheduler
@@ -1351,7 +1341,7 @@ class Trainer:
             return
 
         if self.deepspeed:
-            # deepspeed loads optimizer/lr_scheduler together with the model in init_deepspeed
+            # deepspeed loads optimizer/lr_scheduler together with the model in deepspeed_init
             return
 
         if os.path.isfile(os.path.join(checkpoint, "optimizer.pt")) and os.path.isfile(
@@ -1597,6 +1587,10 @@ class Trainer:
 
         Will only save from the main process.
         """
+
+        if output_dir is None:
+            output_dir = self.args.output_dir
+
         if is_torch_tpu_available():
             self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
@@ -1608,8 +1602,31 @@ class Trainer:
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
         ):
             state_dict = self.model.state_dict()
+
             if self.is_world_process_zero():
                 self._save(output_dir, state_dict=state_dict)
+        elif self.deepspeed:
+
+            # this takes care of everything as long as we aren't under zero3
+            if self.is_world_process_zero():
+                self._save(output_dir)
+
+            if is_deepspeed_zero3_enabled():
+                # It's too complicated to try to override different places where the weights dump gets
+                # saved, so since under zero3 the file is bogus, simply delete it. The user should
+                # either user deepspeed checkpoint to resume or to recover full weights use
+                # zero_to_fp32.py stored in the checkpoint.
+                if self.is_world_process_zero():
+                    file = os.path.join(output_dir, WEIGHTS_NAME)
+                    if os.path.isfile(file):
+                        # logger.info(f"deepspeed zero3: removing {file}, see zero_to_fp32.py to recover weights")
+                        os.remove(file)
+
+                # now save the real model if stage3_gather_fp16_weights_on_model_save=True
+                # if false it will not be saved.
+                # This must be called on all ranks
+                self.deepspeed.save_fp16_model(output_dir, WEIGHTS_NAME)
+
         elif self.is_world_process_zero():
             self._save(output_dir)
 
@@ -1848,10 +1865,20 @@ class Trainer:
             prediction_loss_only if prediction_loss_only is not None else self.args.prediction_loss_only
         )
 
-        if self.args.deepspeed and not self.args.do_train:
-            # no harm, but flagging to the user that deepspeed config is ignored for eval
-            # flagging only for when --do_train wasn't passed as only then it's redundant
-            logger.info("Detected the deepspeed argument but it will not be used for evaluation")
+        # if eval is called w/o train init deepspeed here
+        if self.args.deepspeed and not self.deepspeed:
+
+            # XXX: eval doesn't have `resume_from_checkpoint` arg but we should be able to do eval
+            # from the checkpoint eventually
+            deepspeed_engine, _, _ = deepspeed_init(self, num_training_steps=0, resume_from_checkpoint=None)
+            self.model = deepspeed_engine.module
+            self.model_wrapped = deepspeed_engine
+            self.deepspeed = deepspeed_engine
+            # XXX: we don't need optim/sched for inference, but this needs to be sorted out, since
+            # for example the Z3-optimizer is a must for zero3 to work even for inference - what we
+            # don't need is the deepspeed basic optimizer which is self.optimizer.optimizer
+            deepspeed_engine.optimizer.optimizer = None
+            deepspeed_engine.lr_scheduler = None
 
         model = self._wrap_model(self.model, training=False)
 
