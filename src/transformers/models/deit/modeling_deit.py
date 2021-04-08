@@ -17,6 +17,8 @@
 
 import collections.abc
 import math
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -24,7 +26,12 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
@@ -638,6 +645,37 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         )
 
 
+@dataclass
+class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.DeiTForImageClassificationWithTeacher`.
+
+    Args:
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Prediction scores as the average of the cls_logits and distillation logits.
+        cls_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Prediction scores of the classification head (i.e. the linear layer on top of the final hiden state of the
+            class token).
+        distillation_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
+            distillation token).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+    """
+
+    logits: torch.FloatTensor = None
+    cls_logits: torch.FloatTensor = None
+    distillation_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
 @add_start_docstrings(
     """
     DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
@@ -668,17 +706,11 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         self,
         pixel_values=None,
         head_mask=None,
-        labels=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)`, `optional`):
-            Labels for computing the image classification/regression loss. Indices should be in :obj:`[0, ...,
-            config.num_labels - 1]`. If :obj:`config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If :obj:`config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
+        """
         Returns:
 
         Examples::
@@ -713,24 +745,19 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         sequence_output = outputs[0]
 
         cls_logits = self.cls_classifier(sequence_output[:, 0, :])
-        dist_logits = self.distillation_classifier(sequence_output[:, 1, :])
+        distillation_logits = self.distillation_classifier(sequence_output[:, 1, :])
 
         # during inference, return the average of both classifier predictions
-        logits = (cls_logits + dist_logits) / 2
-
-        loss = None
-        if labels is not None:
-            # TODO add support for fine-tuning with distillation
-            # however this relies on a teacher
-            raise NotImplementedError("Fine-tuning with distillation is not yet implemented.")
+        logits = (cls_logits + distillation_logits) / 2
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            output = (logits, cls_logits, distillation_logits) + outputs[2:]
+            return output
 
-        return SequenceClassifierOutput(
-            loss=loss,
+        return DeiTForImageClassificationWithTeacherOutput(
             logits=logits,
+            cls_logits=cls_logits,
+            distillation_logits=distillation_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
