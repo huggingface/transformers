@@ -101,8 +101,8 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             nbest_size = {0,1}: No sampling is performed.
             nbest_size > 1: samples from the nbest_size results.
             nbest_size < 0: assuming that nbest_size is infinite and samples
-                from the all hypothesis (lattice) using
-                forward-filtering-and-backward-sampling algorithm.
+            from the all hypothesis (lattice) using
+            forward-filtering-and-backward-sampling algorithm.
         alpha (:obj:`float`, `optional`, defaults to 0.1):
             Soothing parameter for unigram sampling, and dropout probability of
             merge operations for BPE-dropout.
