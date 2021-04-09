@@ -377,56 +377,89 @@ def make_padding_mask(input_ids, padding_idx=1):
     return padding_mask
 
 
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+    """
+    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    """
+    bsz, src_len = mask.size()
+    tgt_len = tgt_len if tgt_len is not None else src_len
+
+    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+
+    inverted_mask = 1.0 - expanded_mask
+
+    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+
+
 # Helper Modules
 
-
-class EncoderLayer(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->FSMT
+class FSMTEncoderLayer(nn.Module):
     def __init__(self, config: FSMTConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = Attention(self.embed_dim, config.encoder_attention_heads, dropout=config.attention_dropout)
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.self_attn = FSMTAttention(
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
+        )
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
-    def forward(self, x, encoder_padding_mask, layer_head_mask, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        layer_head_mask: torch.Tensor,
+        output_attentions: bool = False,
+    ):
         """
         Args:
-            x (:obj:`torch.Tensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
-            encoder_padding_mask (:obj:`torch.ByteTensor`): binary ByteTensor of shape
-                `(batch, src_len)` where padding elements are indicated by ``1``.
-            for t_tgt, t_src is excluded (or masked out), =0 means it is
-            included in attention
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
                 `(config.encoder_attention_heads,)`.
-
-        Returns:
-            encoded output of shape `(seq_len, batch, embed_dim)`
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
         """
-        residual = x
-        x, attn_weights = self.self_attn(
-            query=x,
-            key=x,
-            key_padding_mask=encoder_padding_mask,
+        residual = hidden_states
+        hidden_states, attn_weights, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.self_attn_layer_norm(x)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        residual = x
-        x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
-        x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.final_layer_norm(x)
-        return x, attn_weights
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
+            clamp_value = torch.finfo(hidden_states.dtype).max - 1000
+            hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class FSMTEncoder(nn.Module):
@@ -440,62 +473,103 @@ class FSMTEncoder(nn.Module):
 
     def __init__(self, config: FSMTConfig, embed_tokens):
         super().__init__()
+
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
-        self.embed_tokens = embed_tokens
+
         embed_dim = embed_tokens.embedding_dim
+        self.padding_idx = embed_tokens.padding_idx
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
+        
+        self.embed_tokens = embed_tokens
+
         self.layers = nn.ModuleList(
-            [EncoderLayer(config) for _ in range(config.encoder_layers)]
-        )  # type: List[EncoderLayer]
+            [FSMTEncoderLayer(config) for _ in range(config.encoder_layers)]
+        ) 
 
     def forward(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        inputs_embeds=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
-        """
+        r"""
         Args:
-            input_ids (:obj:`torch.LongTensor`): tokens in the source language of shape
-                `(batch, src_len)`
-            attention_mask (:obj:`torch.LongTensor`): indicating which indices are padding tokens
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.FSMTTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
             head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
-        Returns:
-            BaseModelOutput or Tuple comprised of:
-
-                - **x** (:obj:`torch.Tensor`): the last encoder layer's output of shape `(src_len, batch, embed_dim)`
-                - **encoder_states** (:obj:`Tuple(torch.FloatTensor`)): all intermediate hidden states of shape
-                  `(src_len, batch, embed_dim)`. Only populated if *output_hidden_states:* is True.
-                - **all_attentions** (:obj:`Tuple(torch.FloatTensor`)): Attention weights for each layer.
-                During training might not be of length n_layers because of layer dropout.
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        # check attention mask and invert
-        if attention_mask is not None:
-            attention_mask = invert_mask(attention_mask)
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds")
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
         embed_pos = self.embed_positions(input_ids)
-        x = inputs_embeds + embed_pos
-        x = F.dropout(x, p=self.dropout, training=self.training)
 
-        # B x T x C -> T x B x C
-        x = x.transpose(0, 1)
+        hidden_states = inputs_embeds + embed_pos
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        # expand attention_mask
+        if attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
             assert head_mask.size()[0] == (
@@ -503,121 +577,164 @@ class FSMTEncoder(nn.Module):
             ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
-                x = x.transpose(0, 1)  # T x B x C -> B x T x C
-                encoder_states += (x,)
-                x = x.transpose(0, 1)  # B x T x C -> T x B x C
+                encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
-                attn = None
+                layer_outputs = (None, None)
             else:
-                x, attn = encoder_layer(
-                    x,
-                    attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                    output_attentions=output_attentions,
-                )
+                if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                    def create_custom_forward(module):
+                        def custom_forward(*inputs):
+                            return module(*inputs, output_attentions)
+
+                        return custom_forward
+
+                    layer_outputs = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(encoder_layer),
+                        hidden_states,
+                        attention_mask,
+                        (head_mask[idx] if head_mask is not None else None),
+                    )
+                else:
+                    layer_outputs = encoder_layer(
+                        hidden_states,
+                        attention_mask,
+                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                        output_attentions=output_attentions,
+                    )
+
+                hidden_states = layer_outputs[0]
 
             if output_attentions:
-                all_attentions = all_attentions + (attn,)
-
-        # T x B x C -> B x T x C
-        x = x.transpose(0, 1)
+                all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
-            encoder_states += (x,)
+            encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [x, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(last_hidden_state=x, hidden_states=encoder_states, attentions=all_attentions)
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
 
 
-class DecoderLayer(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->FSMT
+class FSMTDecoderLayer(nn.Module):
     def __init__(self, config: FSMTConfig):
         super().__init__()
         self.embed_dim = config.d_model
 
-        self.self_attn = Attention(
+        self.self_attn = FSMTAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
+            is_decoder=True,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = LayerNorm(self.embed_dim)
-        self.encoder_attn = Attention(
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn = FSMTAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
-            encoder_decoder_attention=True,
+            is_decoder=True,
         )
-        self.encoder_attn_layer_norm = LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
-        x,
-        encoder_hidden_states,
-        encoder_attn_mask=None,
-        layer_state=None,
-        causal_mask=None,
-        layer_head_mask=None,
-        encoder_layer_head_mask=None,
-        decoder_padding_mask=None,
-        output_attentions=False,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        encoder_layer_head_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = True,
     ):
-        residual = x
-
-        if layer_state is None:
-            layer_state = {}
+        """
+        Args:
+            hidden_states (:obj:`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
+            attention_mask (:obj:`torch.FloatTensor`): attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            encoder_hidden_states (:obj:`torch.FloatTensor`): cross attention input to the layer of shape `(seq_len, batch, embed_dim)`
+            encoder_attention_mask (:obj:`torch.FloatTensor`): encoder attention mask of size
+                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+            layer_head_mask (:obj:`torch.FloatTensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
+            encoder_layer_head_mask (:obj:`torch.FloatTensor`): mask for encoder attention heads in a given layer of
+                size `(config.encoder_attention_heads,)`.
+            past_key_value (:obj:`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
 
         # Self Attention
-        x, self_attn_weights = self.self_attn(
-            query=x,
-            key=x,
-            layer_state=layer_state,  # adds keys to layer state
-            key_padding_mask=decoder_padding_mask,
-            attn_mask=causal_mask,
+        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
+        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
+        # add present self-attn cache to positions 1,2 of present_key_value tuple
+        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+            hidden_states=hidden_states,
+            past_key_value=self_attn_past_key_value,
+            attention_mask=attention_mask,
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.self_attn_layer_norm(x)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # Cross attention
-        residual = x
-        assert self.encoder_attn.cache_key != self.self_attn.cache_key
-        x, cross_attn_weights = self.encoder_attn(
-            query=x,
-            key=encoder_hidden_states,
-            key_padding_mask=encoder_attn_mask,
-            layer_state=layer_state,  # mutates layer state
-            layer_head_mask=encoder_layer_head_mask,
-            output_attentions=output_attentions,
-        )
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.encoder_attn_layer_norm(x)
+        # Cross-Attention Block
+        cross_attn_present_key_value = None
+        cross_attn_weights = None
+        if encoder_hidden_states is not None:
+            residual = hidden_states
+
+            # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
+            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
+            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                layer_head_mask=encoder_layer_head_mask,
+                past_key_value=cross_attn_past_key_value,
+                output_attentions=output_attentions,
+            )
+            hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = residual + hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+
+            # add cross-attn to positions 3,4 of present_key_value tuple
+            present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
-        residual = x
-        x = self.activation_fn(self.fc1(x))
-        x = F.dropout(x, p=self.activation_dropout, training=self.training)
-        x = self.fc2(x)
-        x = F.dropout(x, p=self.dropout, training=self.training)
-        x = residual + x
-        x = self.final_layer_norm(x)
-        return (
-            x,
-            self_attn_weights,
-            layer_state,
-            cross_attn_weights,
-        )  # layer_state = cache for decoding
+        residual = hidden_states
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights, cross_attn_weights)
+
+        if use_cache:
+            outputs += (present_key_value,)
+
+        return outputs
 
 
 class FSMTDecoder(nn.Module):
@@ -635,14 +752,17 @@ class FSMTDecoder(nn.Module):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = embed_tokens.padding_idx
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
+
         self.embed_tokens = embed_tokens
         embed_dim = embed_tokens.embedding_dim
+
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
+
         self.layers = nn.ModuleList(
-            [DecoderLayer(config) for _ in range(config.decoder_layers)]
-        )  # type: List[DecoderLayer]
+            [FSMTDecoderLayer(config) for _ in range(config.decoder_layers)]
+        ) 
 
         self.output_projection = nn.Linear(
             self.embed_tokens.weight.shape[1],
@@ -651,32 +771,51 @@ class FSMTDecoder(nn.Module):
         )
         self.output_projection.weight = self.embed_tokens.weight
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder.forward with Bart->FSMT
     def forward(
         self,
-        input_ids,
-        encoder_hidden_states,
-        encoder_padding_mask,
-        decoder_padding_mask,
-        decoder_causal_mask,
+        input_ids=None,
+        attention_mask=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
         head_mask=None,
         encoder_head_mask=None,
         past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        inputs_embeds=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
-        """
-        Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,
-        EMNLP 2019).
-
+        r"""
         Args:
-            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch, tgt_len)`):
-                previous decoder outputs for teacher forcing
-            encoder_hidden_states: output from the encoder, used for
-                encoder-side attention
-            encoder_padding_mask: for ignoring pad tokens
-            past_key_values (dict or None): dictionary used for storing state during generation
+            input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
+                provide it.
+
+                Indices can be obtained using :class:`~transformers.FSMTTokenizer`. See
+                :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__`
+                for details.
+
+                `What are input IDs? <../glossary.html#input-ids>`__
+            attention_mask (:obj:`torch.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
+                Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
+            encoder_hidden_states (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, encoder_sequence_length, hidden_size)`, `optional`):
+                Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
+                of the decoder.
+            encoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, encoder_sequence_length)`, `optional`):
+                Mask to avoid performing cross-attention on padding tokens indices of encoder input_ids. Mask values
+                selected in ``[0, 1]``:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                `What are attention masks? <../glossary.html#attention-mask>`__
             head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
 
@@ -690,39 +829,72 @@ class FSMTDecoder(nn.Module):
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
-        Returns:
-            BaseModelOutputWithPast or tuple:
+            past_key_values (:obj:`Tuple[Tuple[torch.Tensor]]` of length :obj:`config.n_layers` with each tuple having 2 tuples each of which has 2 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+                Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
+                decoding.
 
-                - the decoder's features of shape `(batch, tgt_len, embed_dim)`
-                - the cache
-                - hidden states
-                - attentions
+                If :obj:`past_key_values` are used, the user can optionally input only the last
+                :obj:`decoder_input_ids` (those that don't have their past key value states given to this model) of
+                shape :obj:`(batch_size, 1)` instead of all :obj:`decoder_input_ids`` of shape :obj:`(batch_size,
+                sequence_length)`.
+            inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
+                Optionally, instead of passing :obj:`input_ids` you can choose to directly pass an embedded
+                representation. This is useful if you want more control over how to convert :obj:`input_ids` indices
+                into associated vectors than the model's internal embedding lookup matrix.
+            output_attentions (:obj:`bool`, `optional`):
+                Whether or not to return the attentions tensors of all attention layers. See ``attentions`` under
+                returned tensors for more detail.
+            output_hidden_states (:obj:`bool`, `optional`):
+                Whether or not to return the hidden states of all layers. See ``hidden_states`` under returned tensors
+                for more detail.
+            return_dict (:obj:`bool`, `optional`):
+                Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
         """
-        # check attention mask and invert
-        if encoder_padding_mask is not None:
-            encoder_padding_mask = invert_mask(encoder_padding_mask)
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # retrieve input_ids and inputs_embeds
+        if input_ids is not None and inputs_embeds is not None:
+            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
+        elif input_ids is not None:
+            input_shape = input_ids.size()
+            input_ids = input_ids.view(-1, input_shape[-1])
+        elif inputs_embeds is not None:
+            input_shape = inputs_embeds.size()[:-1]
+        else:
+            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+
+        # past_key_values_length
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
+
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
+
+        # expand encoder attention mask
+        if encoder_hidden_states is not None and encoder_attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_ids)  # , use_cache=use_cache)
+        positions = self.embed_positions(input_ids)
 
-        if use_cache:
-            input_ids = input_ids[:, -1:]
-            positions = positions[:, -1:]  # happens after we embed them
-            # assert input_ids.ne(self.padding_idx).any()
+        hidden_states = inputs_embeds + positions
 
-        x = self.embed_tokens(input_ids) * self.embed_scale
-        x += positions
-        x = F.dropout(x, p=self.dropout, training=self.training)
-
-        # Convert to FSMT output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        x = x.transpose(0, 1)
-        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        all_cross_attns = () if output_attentions else None
-        next_decoder_cache = []
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        next_decoder_cache = () if use_cache else None
 
         # check if head_mask has a correct number of layers specified if desired
         if head_mask is not None:
@@ -732,58 +904,80 @@ class FSMTDecoder(nn.Module):
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
-                x = x.transpose(0, 1)
-                all_hidden_states += (x,)
-                x = x.transpose(0, 1)
+                all_hidden_states += (hidden_states,)
             dropout_probability = random.uniform(0, 1)
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            layer_state = past_key_values[idx] if past_key_values is not None else None
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-            x, layer_self_attn, layer_past, layer_cross_attn = decoder_layer(
-                x,
-                encoder_hidden_states,
-                encoder_attn_mask=encoder_padding_mask,
-                decoder_padding_mask=decoder_padding_mask,
-                layer_state=layer_state,
-                causal_mask=decoder_causal_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
-                output_attentions=output_attentions,
-            )
+            if getattr(self.config, "gradient_checkpointing", False) and self.training:
+
+                if use_cache:
+                    logger.warn(
+                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
+                        "`use_cache=False`..."
+                    )
+                    use_cache = False
+
+                def create_custom_forward(module):
+                    def custom_forward(*inputs):
+                        # None for past_key_value
+                        return module(*inputs, output_attentions, use_cache)
+
+                    return custom_forward
+
+                layer_outputs = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(decoder_layer),
+                    hidden_states,
+                    attention_mask,
+                    encoder_hidden_states,
+                    encoder_attention_mask,
+                    head_mask[idx] if head_mask is not None else None,
+                    encoder_head_mask[idx] if encoder_head_mask is not None else None,
+                    None,
+                )
+            else:
+
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    encoder_hidden_states=encoder_hidden_states,
+                    encoder_attention_mask=encoder_attention_mask,
+                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
+                    encoder_layer_head_mask=(encoder_head_mask[idx] if encoder_head_mask is not None else None),
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                )
+            hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_decoder_cache.append(layer_past.copy())
+                next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
 
             if output_attentions:
-                all_self_attns += (layer_self_attn,)
-                all_cross_attns += (layer_cross_attn,)
+                all_self_attns += (layer_outputs[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (layer_outputs[2],)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
-            x = x.transpose(0, 1)
-            all_hidden_states += (x,)
-            x = x.transpose(0, 1)
-
-        # Convert to standard output format: (seq_len, BS, model_dim) -> (BS, seq_len, model_dim)
-        x = x.transpose(0, 1)
-        encoder_hidden_states = encoder_hidden_states.transpose(0, 1)
-
-        x = self.output_projection(x)
+            all_hidden_states += (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
-
         if not return_dict:
             return tuple(
-                v for v in [x, next_cache, all_hidden_states, all_self_attns, all_cross_attns] if v is not None
+                v
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                if v is not None
             )
         return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=x,
+            last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
-            cross_attentions=all_cross_attns,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -793,109 +987,107 @@ def _reorder_buffer(attn_cache, new_order):
             attn_cache[k] = input_buffer_k.index_select(0, new_order)
     return attn_cache
 
-
-class Attention(nn.Module):
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->FSMT
+class FSMTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
         self,
-        embed_dim,
-        num_heads,
-        dropout=0.0,
-        bias=True,
-        encoder_decoder_attention=False,  # otherwise self_attention
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert self.head_dim * num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
+        assert (
+            self.head_dim * num_heads == self.embed_dim
+        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
         self.scaling = self.head_dim ** -0.5
+        self.is_decoder = is_decoder
 
-        self.encoder_decoder_attention = encoder_decoder_attention
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.cache_key = "encoder_decoder" if self.encoder_decoder_attention else "self"
 
-    def _shape(self, tensor, seq_len, bsz):
-        return tensor.contiguous().view(seq_len, bsz * self.num_heads, self.head_dim).transpose(0, 1)
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(
         self,
-        query,
-        key: Optional[Tensor],
-        key_padding_mask: Optional[Tensor] = None,
-        layer_state: Optional[Dict[str, Optional[Tensor]]] = None,
-        attn_mask: Optional[Tensor] = None,
-        layer_head_mask: Optional[Tensor] = None,
-        output_attentions=False,
-    ) -> Tuple[Tensor, Optional[Tensor]]:
-        """Input shape: Time(SeqLen) x Batch x Channel"""
-        static_kv: bool = self.encoder_decoder_attention
-        tgt_len, bsz, embed_dim = query.size()
-        assert embed_dim == self.embed_dim
-        assert list(query.size()) == [tgt_len, bsz, embed_dim]
-        # get here for encoder decoder cause of static_kv
-        if layer_state is not None:  # reuse k,v and encoder_padding_mask
-            saved_state = layer_state.get(self.cache_key, {})
-            if "prev_key" in saved_state and static_kv:
-                # previous time steps are cached - no need to recompute key and value if they are static
-                key = None
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+        bsz, tgt_len, embed_dim = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states) * self.scaling
+        # get key, value proj
+        if is_cross_attention and past_key_value is not None:
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
         else:
-            saved_state = None
-            layer_state = {}
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
 
-        q = self.q_proj(query) * self.scaling
-        if static_kv:
-            if key is None:
-                k = v = None
-            else:
-                k = self.k_proj(key)
-                v = self.v_proj(key)
-        else:
-            k = self.k_proj(query)
-            v = self.v_proj(query)
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
 
-        q = self._shape(q, tgt_len, bsz)
-        if k is not None:
-            k = self._shape(k, -1, bsz)
-        if v is not None:
-            v = self._shape(v, -1, bsz)
+        proj_shape = (bsz * self.num_heads, -1, self.head_dim)
+        query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
+        key_states = key_states.view(*proj_shape)
+        value_states = value_states.view(*proj_shape)
 
-        if saved_state is not None:
-            k, v, key_padding_mask = self._use_saved_state(k, v, saved_state, key_padding_mask, static_kv, bsz)
+        src_len = key_states.size(1)
+        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
 
-        # Update cache
-        layer_state[self.cache_key] = {
-            "prev_key": k.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_value": v.view(bsz, self.num_heads, -1, self.head_dim),
-            "prev_key_padding_mask": key_padding_mask if not static_kv else None,
-        }
-
-        assert k is not None
-        src_len = k.size(1)
-        attn_weights = torch.bmm(q, k.transpose(1, 2))
-        assert attn_weights.size() == (bsz * self.num_heads, tgt_len, src_len)
-
-        if attn_mask is not None:
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attn_mask
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
-        if key_padding_mask is not None and key_padding_mask.dim() == 0:
-            key_padding_mask = None
-        assert key_padding_mask is None or key_padding_mask.size()[:2] == (
-            bsz,
+        assert attn_weights.size() == (
+            bsz * self.num_heads,
+            tgt_len,
             src_len,
-        )
+        ), f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
 
-        if key_padding_mask is not None:  # don't attend to padding symbols
-            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
-            reshaped = key_padding_mask.unsqueeze(1).unsqueeze(2)
-            attn_weights = attn_weights.masked_fill(reshaped, float("-inf"))
+        if attention_mask is not None:
+            assert attention_mask.size() == (
+                bsz,
+                1,
+                tgt_len,
+                src_len,
+            ), f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {attention_mask.size()}"
+            attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = F.softmax(attn_weights, dim=-1)
@@ -908,56 +1100,34 @@ class Attention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
-            # make sure that attn_weights are included in graph
+            # this operation is a bit akward, but it's required to
+            # make sure that attn_weights keeps its gradient.
+            # In order to do so, attn_weights have to reshaped
+            # twice and have to be reused in the following
             attn_weights_reshaped = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights_reshaped.view(bsz * self.num_heads, tgt_len, src_len)
         else:
             attn_weights_reshaped = None
 
-        attn_probs = F.dropout(
-            attn_weights,
-            p=self.dropout,
-            training=self.training,
+        attn_probs = F.dropout(attn_weights, p=self.dropout, training=self.training)
+
+        attn_output = torch.bmm(attn_probs, value_states)
+
+        assert attn_output.size() == (
+            bsz * self.num_heads,
+            tgt_len,
+            self.head_dim,
+        ), f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+
+        attn_output = (
+            attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
+            .transpose(1, 2)
+            .reshape(bsz, tgt_len, embed_dim)
         )
 
-        assert v is not None
-        attn_output = torch.bmm(attn_probs, v)
-        assert attn_output.size() == (bsz * self.num_heads, tgt_len, self.head_dim)
-        attn_output = attn_output.transpose(0, 1).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights_reshaped
-
-    def _use_saved_state(self, k, v, saved_state, key_padding_mask, static_kv, bsz):
-        # saved states are stored with shape (bsz, num_heads, seq_len, head_dim)
-        if "prev_key" in saved_state:
-            _prev_key = saved_state["prev_key"]
-            assert _prev_key is not None
-            prev_key = _prev_key.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                k = prev_key
-            else:
-                assert k is not None
-                k = torch.cat([prev_key, k], dim=1)
-        if "prev_value" in saved_state:
-            _prev_value = saved_state["prev_value"]
-            assert _prev_value is not None
-            prev_value = _prev_value.view(bsz * self.num_heads, -1, self.head_dim)
-            if static_kv:
-                v = prev_value
-            else:
-                assert v is not None
-                v = torch.cat([prev_value, v], dim=1)
-        assert k is not None and v is not None
-        prev_key_padding_mask: Optional[Tensor] = saved_state.get("prev_key_padding_mask", None)
-        if prev_key_padding_mask is not None:
-            if static_kv:
-                new_key_padding_mask = prev_key_padding_mask
-            else:
-                new_key_padding_mask = torch.cat([prev_key_padding_mask, key_padding_mask], dim=1)
-        else:
-            new_key_padding_mask = key_padding_mask
-        return k, v, new_key_padding_mask
+        return attn_output, attn_weights_reshaped, past_key_value
 
 
 def fill_with_neg_inf(t):
