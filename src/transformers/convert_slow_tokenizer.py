@@ -652,10 +652,11 @@ class T5Converter(SpmConverter):
 class BigBirdConverter(SpmConverter):
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["$A", "</s>"],
-            pair=["$A", "</s>", "$B", "</s>"],
+            single="[CLS]:0 $A:0 [SEP]:0",
+            pair="[CLS]:0 $A:0 [SEP]:0 $B:1 [SEP]:1",
             special_tokens=[
-                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+                ("[CLS]", self.original_tokenizer.convert_tokens_to_ids("[CLS]")),
+                ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
             ],
         )
 
