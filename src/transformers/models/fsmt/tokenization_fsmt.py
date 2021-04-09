@@ -437,16 +437,8 @@ class FSMTTokenizer(PreTrainedTokenizer):
         """
 
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formatted with special tokens for the model."
-                )
-            return list(
-                map(
-                    lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0,
-                    token_ids_0,
-                )
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
         # no bos used in fairseq
         if token_ids_1 is not None:
