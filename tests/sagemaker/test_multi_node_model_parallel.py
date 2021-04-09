@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 import unittest
@@ -11,7 +12,7 @@ from . import is_sagemaker_available
 
 
 if is_sagemaker_available():
-    from sagemaker import TrainingJobAnalytics
+    from sagemaker import Session, TrainingJobAnalytics
     from sagemaker.huggingface import HuggingFace
 
 
@@ -27,14 +28,14 @@ if is_sagemaker_available():
             "script": "run_glue_model_parallelism.py",
             "model_name_or_path": "roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
-            "results": {"train_runtime": 700, "eval_accuracy": 0.3, "eval_loss": 1.2},
+            "results": {"train_runtime": 1500, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
         {
             "framework": "pytorch",
             "script": "run_glue.py",
             "model_name_or_path": "roberta-large",
             "instance_type": "ml.p3dn.24xlarge",
-            "results": {"train_runtime": 700, "eval_accuracy": 0.3, "eval_loss": 1.2},
+            "results": {"train_runtime": 1500, "eval_accuracy": 0.3, "eval_loss": 1.2},
         },
     ]
 )
@@ -69,13 +70,14 @@ class MultiNodeTest(unittest.TestCase):
 
         distribution = {"smdistributed": {"modelparallel": smp_options}, "mpi": mpi_options}
 
+        name_extension = "trainer" if self.script == "run_glue.py" else "smtrainer"
         # creates estimator
         return HuggingFace(
             entry_point=self.script,
             source_dir=self.env.test_path,
             role=self.env.role,
             image_uri=self.env.image_uri,
-            base_job_name=f"{self.env.base_job_name}-{instance_count}-smp",
+            base_job_name=f"{self.env.base_job_name}-{instance_count}-smp-{name_extension}",
             instance_count=instance_count,
             instance_type=self.instance_type,
             debugger_hook_config=False,
@@ -101,17 +103,22 @@ class MultiNodeTest(unittest.TestCase):
         # run training
         estimator.fit()
 
-        # save csv
-        self.save_results_as_csv(estimator.latest_training_job.name)
         # result dataframe
         result_metrics_df = TrainingJobAnalytics(estimator.latest_training_job.name).dataframe()
 
         # extract kpis
-        train_runtime = list(result_metrics_df[result_metrics_df.metric_name == "train_runtime"]["value"])
         eval_accuracy = list(result_metrics_df[result_metrics_df.metric_name == "eval_accuracy"]["value"])
         eval_loss = list(result_metrics_df[result_metrics_df.metric_name == "eval_loss"]["value"])
+        # get train time from SageMaker job, this includes starting, preprocessing, stopping
+        train_runtime = (
+            Session().describe_training_job(estimator.latest_training_job.name).get("TrainingTimeInSeconds", 999999)
+        )
 
         # assert kpis
-        assert all(t <= self.results["train_runtime"] for t in train_runtime)
+        assert train_runtime <= self.results["train_runtime"]
         assert all(t >= self.results["eval_accuracy"] for t in eval_accuracy)
         assert all(t <= self.results["eval_loss"] for t in eval_loss)
+
+        # dump tests result into json file to share in PR
+        with open(f"{estimator.latest_training_job.name}.json", "w") as outfile:
+            json.dump({"train_time": train_runtime, "eval_accuracy": eval_accuracy, "eval_loss": eval_loss}, outfile)
