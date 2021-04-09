@@ -22,12 +22,14 @@ train_texts, train_labels = read_material_split('./train.txt')
 #
 test_texts, test_labels = read_material_split('./test.txt')
 
+
+# 使用Bert分词器分词
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
 
 train_encodings = tokenizer(train_texts, truncation=True, padding=True)
 test_encodings = tokenizer(test_texts, truncation=True, padding=True)
 
-
+# 继承Dataset类，转换为模型需要的格式
 class materialDataset(torch.utils.data.Dataset):
     def __init__(self, encodings, labels):
         self.encodings = encodings
@@ -41,10 +43,11 @@ class materialDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.labels)
 
-
+# 转换为训练集和测试集
 train_dataset = materialDataset(train_encodings, train_labels)
 test_dataset = materialDataset(test_encodings, test_labels)
 
+# 加载评价标准矩阵，acc and f1
 metric = load_metric("glue", 'mrpc', cache_dir='./metric_dir')
 
 is_regression = False
@@ -62,9 +65,9 @@ def compute_metrics(p: EvalPrediction):
     elif is_regression:
         return {"mse": ((preds - p.label_ids) ** 2).mean().item()}
     else:
-        return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()} 
+        return {"accuracy": (preds == p.label_ids).astype(np.float32).mean().item()}
 
-
+# 设定训练参数
 training_args = TrainingArguments(
     output_dir='results',  # output directory
     num_train_epochs=3,  # total number of training epochs
@@ -76,9 +79,10 @@ training_args = TrainingArguments(
     logging_steps=10,
 )
 
-
+# 加载分类模型
 model = BertForSequenceClassification.from_pretrained("bert-base-uncased")
 
+# 配置训练器并执行训练
 trainer = Trainer(
     model=model,  # the instantiated 🤗 Transformers model to be trained
     args=training_args,  # training arguments, defined above
