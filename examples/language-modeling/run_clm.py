@@ -317,8 +317,10 @@ def main():
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+    # since this will be pickled to avoid _LazyModule error in Hasher force logger loading before tokenize_function
+    tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
+
     def tokenize_function(examples):
-        tok_logger = transformers.utils.logging.get_logger("transformers.tokenization_utils_base")
         with CaptureLogger(tok_logger) as cl:
             output = tokenizer(examples[text_column_name])
         # clm input could be much much longer than block_size
