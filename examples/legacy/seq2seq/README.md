@@ -28,7 +28,7 @@ For deprecated `bertabs` instructions, see [`bertabs/README.md`](https://github.
 - `FSMTForConditionalGeneration`
 - `T5ForConditionalGeneration`
 
-### Downlowd the Datasets
+### Download the Datasets
 
 #### XSUM
 
