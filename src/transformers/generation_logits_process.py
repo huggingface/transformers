@@ -39,9 +39,8 @@ LOGITS_PROCESSOR_INPUTS_DOCSTRING = r"""
 
             `What are input IDs? <../glossary.html#input-ids>`__
         scores (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.vocab_size)`):
-            Prediction scores of a language modeling head. These can be logits for each vocabulary token in generation
-            method not using beam search or log softmax for each vocabulary token in generation method using beam
-            search.
+            Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
+            beam search or log softmax for each vocabulary token when using beam search.
         kwargs:
             Additional logits processor specific kwargs.
 
