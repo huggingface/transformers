@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - ci_*
+      - ci-*
     paths:
       - "src/**"
       - "tests/**"
