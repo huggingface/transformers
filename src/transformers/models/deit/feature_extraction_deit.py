@@ -47,7 +47,7 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_center_crop (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to crop the input at the center. If the input size is smaller than :obj:`crop_size` along any edge,
             the image is padded with 0's and then center cropped.
-        crop_size (:obj:`int`, `optional`, defaults to 256):
+        crop_size (:obj:`int`, `optional`, defaults to 224):
             Desired output size when applying center-cropping. Only has an effect if :obj:`do_center_crop` is set to
             :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
