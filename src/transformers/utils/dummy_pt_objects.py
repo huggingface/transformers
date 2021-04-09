@@ -2,32 +2,6 @@
 from ..file_utils import requires_backends
 
 
-DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class DeiTForImageClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DeiTModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class DeiTPreTrainedModel:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class PyTorchBenchmark:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
@@ -1094,30 +1068,30 @@ DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 class DeiTForImageClassification:
     def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
+        requires_backends(self, ["torch"])
 
 
 class DeiTForImageClassificationWithTeacher:
     def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
+        requires_backends(self, ["torch"])
 
 
 class DeiTModel:
     def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
+        requires_backends(self, ["torch"])
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
+        requires_backends(self, ["torch"])
 
 
 class DeiTPreTrainedModel:
     def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
+        requires_backends(self, ["torch"])
 
     @classmethod
     def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
+        requires_backends(self, ["torch"])
 
 
 DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
