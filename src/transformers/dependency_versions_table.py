@@ -21,6 +21,7 @@ deps = {
     "isort": "isort>=5.5.4",
     "jax": "jax>=0.2.8",
     "jaxlib": "jaxlib>=0.1.59",
+    "jieba": "jieba",
     "keras2onnx": "keras2onnx",
     "nltk": "nltk",
     "numpy": "numpy>=1.17",

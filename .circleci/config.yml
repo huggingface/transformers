@@ -277,7 +277,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece]
+            - run: pip install .[ja,testing,sentencepiece,jieba]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
