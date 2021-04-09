@@ -406,6 +406,7 @@ class AlbertConverter(SpmConverter):
             ],
         )
 
+
 class BarthezConverter(SpmConverter):
     def unk_id(self, proto):
         unk_id = 3
@@ -649,6 +650,7 @@ class T5Converter(SpmConverter):
             ],
         )
 
+
 class BigBirdConverter(SpmConverter):
     def post_processor(self):
         return processors.TemplateProcessing(
@@ -659,6 +661,7 @@ class BigBirdConverter(SpmConverter):
                 ("[SEP]", self.original_tokenizer.convert_tokens_to_ids("[SEP]")),
             ],
         )
+
 
 SLOW_TO_FAST_CONVERTERS = {
     "AlbertTokenizer": AlbertConverter,
