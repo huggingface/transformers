@@ -40,6 +40,10 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 224):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BILINEAR`):
+            An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
+            :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
+            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
         image_mean (:obj:`List[int]`, defaults to :obj:`[0.5, 0.5, 0.5]`):
@@ -50,10 +54,20 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     model_input_names = ["pixel_values"]
 
-    def __init__(self, do_resize=True, size=224, do_normalize=True, image_mean=None, image_std=None, **kwargs):
+    def __init__(
+        self,
+        do_resize=True,
+        size=224,
+        resample=Image.BILINEAR,
+        do_normalize=True,
+        image_mean=None,
+        image_std=None,
+        **kwargs
+    ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
+        self.resample = resample
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.5, 0.5, 0.5]
         self.image_std = image_std if image_std is not None else [0.5, 0.5, 0.5]
@@ -119,7 +133,7 @@ class ViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size) for image in images]
+            images = [self.resize(image=image, size=self.size, resample=self.resample) for image in images]
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 

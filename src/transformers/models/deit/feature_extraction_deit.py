@@ -40,10 +40,10 @@ class DeiTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 256):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
-        resample (:obj:`int`, `optional`, defaults to 256):
+        resample (:obj:`int`, `optional`, defaults to :obj:`PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of :obj:`PIL.Image.NEAREST`, :obj:`PIL.Image.BOX`,
             :obj:`PIL.Image.BILINEAR`, :obj:`PIL.Image.HAMMING`, :obj:`PIL.Image.BICUBIC` or :obj:`PIL.Image.LANCZOS`.
-            Default filter is :obj:`PIL.Image.BICUBIC`. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+            Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         do_center_crop (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to crop the input at the center. If the input size is smaller than :obj:`crop_size` along any edge,
             the image is padded with 0's and then center cropped.

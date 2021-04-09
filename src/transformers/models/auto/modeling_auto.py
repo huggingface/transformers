@@ -97,7 +97,7 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2ForTokenClassification,
     DebertaV2Model,
 )
-from ..deit.modeling_deit import DeiTForImageClassification, DeiTModel
+from ..deit.modeling_deit import DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -515,7 +515,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Image Classification mapping
         (ViTConfig, ViTForImageClassification),
-        (DeiTConfig, DeiTForImageClassification),
+        (DeiTConfig, (DeiTForImageClassification, DeiTForImageClassificationWithTeacher)),
     ]
 )
 

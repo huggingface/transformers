@@ -320,9 +320,9 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
-        # if return_labels:
-        #     if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
-        #         del inputs_dict["labels"]
+        if return_labels:
+            if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
+                del inputs_dict["labels"]
 
         return inputs_dict
 
