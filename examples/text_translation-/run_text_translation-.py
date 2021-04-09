@@ -31,6 +31,7 @@ from tqdm.auto import tqdm
 import torch
 
 import transformers
+import accelerate
 from accelerate import Accelerator
 from transformers import (
     CONFIG_MAPPING,
@@ -66,6 +67,7 @@ def parse_args():
         default=None,
         help="The name of the dataset to use (via the datasets library).",
     )
+
     parser.add_argument(
         "--predict_with_generate",
         type=bool,
@@ -81,22 +83,24 @@ def parse_args():
     parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
     )
+
+
     parser.add_argument(
         "--num_beams", type=int, default=None, help="Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
             "which is used during ``evaluate`` and ``predict``."
     )
+
     parser.add_argument(
         "--max_source_length", type=int, default=1024, help="The maximum total input sequence length after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded."
     )
     parser.add_argument(
-        "--max_target_length", type=int, default=128, help="The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
+        "--max_target_length", type=int, default=128, help="The maximum total sequence length for target text after tokenization. Sequences longer "
+            "than this will be truncated, sequences shorter will be padded."
             "during ``evaluate`` and ``predict``."
     )
     parser.add_argument(
-        "--val_max_target_length", type=int, default=0, help="The maximum total sequence length for validation target text after tokenization. Sequences longer "
+        "--val_max_target_length", type=int, default=None, help="The maximum total sequence length for validation target text after tokenization. Sequences longer "
             "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
             "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
             "during ``evaluate`` and ``predict``."
@@ -138,11 +142,7 @@ def parse_args():
             " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
         ),
     )
-    # parser.add_argument(
-    #     "--pad_to_max_length",
-    #     action="store_true",
-    #     help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
-    # )
+
     parser.add_argument(
         "--model_name_or_path",
         type=str,
@@ -359,17 +359,6 @@ def main():
     max_target_length = args.max_target_length
     padding = "max_length" if args.pad_to_max_length else False
 
-    # if args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
-    #     logger.warn(
-    #         "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
-    #         f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
-    #     )
-
-    def tokenize_function(examples):
-        result = tokenizer(examples[text_column_name], padding=padding, max_length=args.max_length, truncation=True)
-        if "label" in examples:
-            result["labels"] = examples["label"]
-        return result
 
     def preprocess_function(examples):
         inputs = [ex[source_lang] for ex in examples["translation"]]
@@ -392,8 +381,6 @@ def main():
         return model_inputs
 
 
-
-
     processed_datasets = raw_datasets.map(
         preprocess_function,
         batched=True,
@@ -403,7 +390,7 @@ def main():
     )
 
     train_dataset = processed_datasets["train"]
-    train_dataset = train_dataset.select(range(10))
+
     eval_dataset = processed_datasets["validation"]
 
     # Log a few random samples from the training set:
@@ -426,7 +413,6 @@ def main():
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=8 if accelerator.use_fp16 else None,
         )
-        # data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
 
     train_dataloader = DataLoader(
         train_dataset, shuffle=True, collate_fn=data_collator, batch_size=args.per_device_train_batch_size
@@ -479,41 +465,6 @@ def main():
 
         return preds, labels
 
-    def pad_tensors_to_max_len(model, tensor, max_length):
-        # If PAD token is not defined at least EOS token has to be defined
-        pad_token_id = model.config.pad_token_id if model.config.pad_token_id is not None else model.config.eos_token_id
-
-        if pad_token_id is None:
-            raise ValueError(
-                f"Make sure that either `config.pad_token_id` or `config.eos_token_id` is defined if tensor has to be padded to `max_length`={max_length}"
-            )
-
-        padded_tensor = pad_token_id * torch.ones(
-            (tensor.shape[0], max_length), dtype=tensor.dtype, device=tensor.device
-        )
-        padded_tensor[:, : tensor.shape[-1]] = tensor
-        return padded_tensor
-
-    def compute_metrics(preds, labels):
-        # preds, labels = eval_preds
-        if isinstance(preds, tuple):
-            preds = preds[0]
-        decoded_preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
-        if args.ignore_pad_token_for_loss:
-            # Replace -100 in the labels as we can't decode them.
-            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-
-        # Some simple post-processing
-        decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-
-        result = metric.compute(predictions=decoded_preds, references=decoded_labels)
-        result = {"bleu": result["score"]}
-
-        prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
-        result["gen_len"] = np.mean(prediction_lens)
-        result = {k: round(v, 4) for k, v in result.items()}
-        return result
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -547,38 +498,44 @@ def main():
                 break
 
         model.eval()
+
+        if args.val_max_target_length is None:
+            args.val_max_target_length = args.max_target_length
+
         gen_kwargs = {
-            "max_length": args.max_target_length
-            if args is not None
-            else config.max_length,
-            "num_beams": None,
+            "max_length": args.val_max_target_length if args is not None else config.max_length,
+            "num_beams": args.num_beams,
         }
         for step, batch in enumerate(eval_dataloader):
-            generated_tokens = model.generate(
-                batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                **gen_kwargs,
-            )
-            # in case the batch is shorter than max length, the output should be padded
-            if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
-                generated_tokens = pad_tensors_to_max_len(model, generated_tokens, gen_kwargs["max_length"])
+            with torch.no_grad():
+                generated_tokens = model.generate(
+                    batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    **gen_kwargs,
+                )
+                generated_tokens = accelerator.pad_across_processes(generated_tokens, dim=1,
+                                                                    pad_index=tokenizer.pad_token_id)
+                labels = batch["labels"]
+                if not args.pad_to_max_length:
+                    # If we did not pad to max length, we need to pad the labels too
+                    labels = accelerator.pad_across_processes(batch["labels"], dim=1, pad_index=tokenizer.pad_token_id)
 
+                generated_tokens = accelerator.gather(generated_tokens).cpu().numpy()
+                labels = accelerator.gather(labels).cpu().numpy()
 
-            decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-            labels = batch.pop("labels")
+                if args.ignore_pad_token_for_loss:
+                    # Replace -100 in the labels as we can't decode them.
+                    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
 
-            if args.ignore_pad_token_for_loss:
-                # Replace -100 in the labels as we can't decode them.
-                labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+                decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+                decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
-            decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+                decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
-            decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-
-            metric.add_batch(
-                predictions=accelerator.gather(decoded_preds),
-                references=accelerator.gather(decoded_labels),
-            )
+                metric.add_batch(
+                    predictions=accelerator.gather(decoded_preds),
+                    references=accelerator.gather(decoded_labels),
+                )
         eval_metric = metric.compute()
         logger.info(f"epoch {epoch}: {eval_metric}")
 
