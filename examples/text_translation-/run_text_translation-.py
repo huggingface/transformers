@@ -142,7 +142,6 @@ def parse_args():
             " sequences shorter will be padded if `--pad_to_max_lengh` is passed."
         ),
     )
-
     parser.add_argument(
         "--model_name_or_path",
         type=str,
