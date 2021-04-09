@@ -328,6 +328,26 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
 """
 
 
+def _get_model_class(config, model_mapping):
+    supported_models = model_mapping[type(config)]
+    if not isinstance(supported_models, (list, tuple)):
+        return supported_models
+
+    name_to_model = {model.__name__: model for model in supported_models}
+    architectures = getattr(config, "architectures", [])
+    for arch in architectures:
+        if arch in name_to_model:
+            return name_to_model[arch]
+        elif f"TF{arch}" in name_to_model:
+            return name_to_model[f"TF{arch}"]
+        elif f"Flax{arch}" in name_to_model:
+            return name_to_model[f"Flax{arch}"]
+
+    # If not architecture is set in the config or match the supported models, the first element of the tuple is the
+    # defaults.
+    return supported_models[0]
+
+
 class _BaseAutoModelClass:
     # Base class for auto models.
     _model_mapping = None
@@ -341,7 +361,8 @@ class _BaseAutoModelClass:
 
     def from_config(cls, config, **kwargs):
         if type(config) in cls._model_mapping.keys():
-            return cls._model_mapping[type(config)](config, **kwargs)
+            model_class = _get_model_class(config, cls._model_mapping)
+            return model_class(config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
@@ -356,9 +377,8 @@ class _BaseAutoModelClass:
             )
 
         if type(config) in cls._model_mapping.keys():
-            return cls._model_mapping[type(config)].from_pretrained(
-                pretrained_model_name_or_path, *model_args, config=config, **kwargs
-            )
+            model_class = _get_model_class(config, cls._model_mapping)
+            return model_class.from_pretrained(pretrained_model_name_or_path, *model_args, config=config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
@@ -418,3 +438,14 @@ def auto_class_factory(name, model_mapping, checkpoint_for_example="bert-base-ca
     from_pretrained = replace_list_option_in_docstrings(model_mapping)(from_pretrained)
     new_class.from_pretrained = classmethod(from_pretrained)
     return new_class
+
+
+def get_values(model_mapping):
+    result = []
+    for model in model_mapping.values():
+        if isinstance(model, (list, tuple)):
+            result += list(model)
+        else:
+            result.append(model)
+
+    return result

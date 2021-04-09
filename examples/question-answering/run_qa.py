@@ -46,7 +46,7 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.5.0.dev0")
+check_min_version("4.6.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -324,7 +324,7 @@ def main():
     pad_on_right = tokenizer.padding_side == "right"
 
     if data_args.max_seq_length > tokenizer.model_max_length:
-        logger.warn(
+        logger.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )

@@ -56,7 +56,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a Masked Language Modeling task")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -308,14 +308,14 @@ def main():
     if args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
-            logger.warn(
+            logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
                 "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
             )
             max_seq_length = 1024
     else:
         if args.max_seq_length > tokenizer.model_max_length:
-            logger.warn(
+            logger.warning(
                 f"The max_seq_length passed ({args.max_seq_length}) is larger than the maximum length for the"
                 f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
             )
