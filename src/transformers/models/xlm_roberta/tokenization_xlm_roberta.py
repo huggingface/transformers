@@ -97,15 +97,11 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
         enable_sampling (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Enable subword regularization.
         nbest_size (:obj:`int`, `optional`, defaults to -1):
-            Sampling parameters for unigram. Invalid for BPE-Dropout.
-            nbest_size = {0,1}: No sampling is performed.
-            nbest_size > 1: samples from the nbest_size results.
-            nbest_size < 0: assuming that nbest_size is infinite and samples
-            from the all hypothesis (lattice) using
-            forward-filtering-and-backward-sampling algorithm.
+            Sampling parameters for unigram. Invalid for BPE-Dropout. nbest_size = {0,1}: No sampling is performed.
+            nbest_size > 1: samples from the nbest_size results. nbest_size < 0: assuming that nbest_size is infinite
+            and samples from the all hypothesis (lattice) using forward-filtering-and-backward-sampling algorithm.
         alpha (:obj:`float`, `optional`, defaults to 0.1):
-            Smoothing parameter for unigram sampling, and dropout probability of
-            merge operations for BPE-dropout.
+            Smoothing parameter for unigram sampling, and dropout probability of merge operations for BPE-dropout.
 
     Attributes:
         sp_model (:obj:`SentencePieceProcessor`):
