@@ -24,6 +24,7 @@ import unittest
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
+from typing import Iterator, Union
 
 from .file_utils import (
     is_datasets_available,
@@ -619,6 +620,27 @@ class CaptureLogger:
 
     def __repr__(self):
         return f"captured: {self.out}\n"
+
+
+@contextlib.contextmanager
+# adapted from https://stackoverflow.com/a/64789046/9201239
+def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
+    """
+    Temporary add given path to `sys.path`.
+
+    Usage ::
+
+       with ExtendSysPath('/path/to/dir'):
+           mymodule = importlib.import_module('mymodule')
+
+    """
+
+    path = os.fspath(path)
+    try:
+        sys.path.insert(0, path)
+        yield
+    finally:
+        sys.path.remove(path)
 
 
 class TestCasePlus(unittest.TestCase):

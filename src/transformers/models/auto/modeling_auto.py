@@ -124,6 +124,7 @@ from ..flaubert.modeling_flaubert import (
 )
 from ..fsmt.modeling_fsmt import FSMTForConditionalGeneration, FSMTModel
 from ..funnel.modeling_funnel import (
+    FunnelBaseModel,
     FunnelForMaskedLM,
     FunnelForMultipleChoice,
     FunnelForPreTraining,
@@ -377,7 +378,7 @@ MODEL_MAPPING = OrderedDict(
         (CTRLConfig, CTRLModel),
         (ElectraConfig, ElectraModel),
         (ReformerConfig, ReformerModel),
-        (FunnelConfig, FunnelModel),
+        (FunnelConfig, (FunnelModel, FunnelBaseModel)),
         (LxmertConfig, LxmertModel),
         (BertGenerationConfig, BertGenerationEncoder),
         (DebertaConfig, DebertaModel),
