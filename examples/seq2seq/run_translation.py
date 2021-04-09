@@ -34,6 +34,9 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
+    M2M100Tokenizer,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
     MBartTokenizer,
     MBartTokenizerFast,
     Seq2SeqTrainer,
@@ -49,6 +52,9 @@ from transformers.utils import check_min_version
 check_min_version("4.6.0.dev0")
 
 logger = logging.getLogger(__name__)
+
+# A list of all multilingual tokenizer which require src_lang and tgt_lang attributes.
+MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer]
 
 
 @dataclass
@@ -325,9 +331,6 @@ def main():
 
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        assert (
-            data_args.target_lang is not None and data_args.source_lang is not None
-        ), "mBart requires --target_lang and --source_lang"
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
         else:
@@ -352,11 +355,12 @@ def main():
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
-    if isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        if data_args.source_lang is not None:
-            tokenizer.src_lang = data_args.source_lang
-        if data_args.target_lang is not None:
-            tokenizer.tgt_lang = data_args.target_lang
+    if isinstance(tokenizer, MULTILINGUAL_TOKENIZERS):
+        assert (
+            data_args.target_lang is not None and data_args.source_lang is not None
+        ), f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --source_lang and --target_lang arguments."
+        tokenizer.src_lang = data_args.source_lang
+        tokenizer.tgt_lang = data_args.target_lang
 
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
