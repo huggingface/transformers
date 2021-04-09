@@ -274,6 +274,14 @@ Install the library via pypi:
 
     pip install fairscale
 
+or via ``transformers``' ``extras``:
+
+.. code-block:: bash
+
+    pip install transformers[fairscale]
+
+(will become available starting from ``transformers==4.6.0``)
+
 or find more details on `the FairScale's GitHub page <https://github.com/facebookresearch/fairscale/#installation>`__.
 
 If you're still struggling with the build, first make sure to read :ref:`zero-install-notes`.
@@ -419,6 +427,14 @@ Install the library via pypi:
 
     pip install deepspeed
 
+or via ``transformers``' ``extras``:
+
+.. code-block:: bash
+
+    pip install transformers[deepspeed]
+
+(will become available starting from ``transformers==4.6.0``)
+
 or find more details on `the DeepSpeed's GitHub page <https://github.com/microsoft/deepspeed#installation>`__ and
 `advanced install <https://www.deepspeed.ai/tutorials/advanced-install/>`__.
 
@@ -525,7 +541,7 @@ Here is an example of running ``run_translation.py`` under DeepSpeed deploying a
 .. code-block:: bash
 
     deepspeed examples/seq2seq/run_translation.py \
-    --deepspeed examples/tests/deepspeed/ds_config.json \
+    --deepspeed tests/deepspeed/ds_config.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
@@ -550,7 +566,7 @@ To deploy DeepSpeed with one GPU adjust the :class:`~transformers.Trainer` comma
 .. code-block:: bash
 
     deepspeed --num_gpus=1 examples/seq2seq/run_translation.py \
-    --deepspeed examples/tests/deepspeed/ds_config.json \
+    --deepspeed tests/deepspeed/ds_config.json \
     --model_name_or_path t5-small --per_device_train_batch_size 1   \
     --output_dir output_dir --overwrite_output_dir --fp16 \
     --do_train --max_train_samples 500 --num_train_epochs 1 \
