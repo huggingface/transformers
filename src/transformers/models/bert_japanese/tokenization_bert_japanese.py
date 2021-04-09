@@ -21,6 +21,8 @@ import os
 import unicodedata
 from typing import Optional
 
+import mojimoji
+
 from ...utils import logging
 from ..bert.tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer, load_vocab
 
@@ -203,6 +205,7 @@ class MecabTokenizer:
         do_lower_case=False,
         never_split=None,
         normalize_text=True,
+        do_zenkaku=False,
         mecab_dic: Optional[str] = "ipadic",
         mecab_option: Optional[str] = None,
     ):
@@ -226,6 +229,7 @@ class MecabTokenizer:
         self.do_lower_case = do_lower_case
         self.never_split = never_split if never_split is not None else []
         self.normalize_text = normalize_text
+        self.do_zenkaku = do_zenkaku
 
         try:
             import fugashi
@@ -288,6 +292,9 @@ class MecabTokenizer:
         """Tokenizes a piece of text."""
         if self.normalize_text:
             text = unicodedata.normalize("NFKC", text)
+
+        if self.do_zenkaku:
+            text = mojimoji.han_to_zen(text)
 
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
