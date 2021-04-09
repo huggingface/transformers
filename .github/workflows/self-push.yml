@@ -187,7 +187,7 @@ jobs:
           name: run_all_tests_tf_multi_gpu_test_reports
           path: reports
 
-  run_all_tests_torch_cuda_extensions_gpu:
+  run_tests_torch_cuda_extensions_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
       image: nvcr.io/nvidia/pytorch:20.12-py3
@@ -218,9 +218,9 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_failures_short.txt
+        run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
 
-  run_all_tests_torch_cuda_extensions_multi_gpu:
+  run_tests_torch_cuda_extensions_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
       image: nvcr.io/nvidia/pytorch:20.12-py3
@@ -251,14 +251,21 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_failures_short.txt
+        run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
 
 
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [run_tests_torch_gpu, run_tests_tf_gpu, run_tests_torch_multi_gpu, run_tests_tf_multi_gpu]
+    needs: [
+        run_tests_torch_gpu,
+        run_tests_tf_gpu,
+        run_tests_torch_multi_gpu,
+        run_tests_tf_multi_gpu,
+        run_tests_torch_cuda_extensions_gpu,
+        run_tests_torch_cuda_extensions_multi_gpu
+    ]
     steps:
       - uses: actions/checkout@v2
 

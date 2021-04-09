@@ -277,7 +277,7 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_failures_short.txt
+        run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
 
   run_all_tests_torch_cuda_extensions_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
@@ -310,13 +310,20 @@ jobs:
 
       - name: Failure short reports
         if: ${{ always() }}
-        run: cat reports/tests_torch_cuda_extensions_failures_short.txt
+        run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
 
   send_results:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [run_all_tests_torch_gpu, run_all_tests_tf_gpu, run_all_tests_torch_multi_gpu, run_all_tests_tf_multi_gpu]
+    needs: [
+        run_all_tests_torch_gpu,
+        run_all_tests_tf_gpu,
+        run_all_tests_torch_multi_gpu,
+        run_all_tests_tf_multi_gpu,
+        run_all_tests_torch_cuda_extensions_gpu,
+        run_all_tests_torch_cuda_extensions_multi_gpu
+    ]
     steps:
       - uses: actions/checkout@v2
 
