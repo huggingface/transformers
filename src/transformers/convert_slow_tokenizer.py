@@ -341,9 +341,14 @@ class SpmConverter(Converter):
 
     def normalizer(self, proto):
         precompiled_charsmap = proto.normalizer_spec.precompiled_charsmap
-        return normalizers.Sequence(
-            [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
-        )
+        if not precompiled_charsmap:
+            return normalizers.Sequence(
+                [normalizers.Nmt(), normalizers.NFKC(), normalizers.Replace(Regex(" {2,}"), " ")]
+            )
+        else:
+            return normalizers.Sequence(
+                [normalizers.Precompiled(precompiled_charsmap), normalizers.Replace(Regex(" {2,}"), " ")]
+            )
 
     def pre_tokenizer(self, replacement, add_prefix_space):
         return pre_tokenizers.Metaspace(replacement=replacement, add_prefix_space=add_prefix_space)
