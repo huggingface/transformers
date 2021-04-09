@@ -355,7 +355,7 @@ Notes:
   able to use significantly larger batch sizes using the same hardware (e.g. 3x and even bigger) which should lead to
   significantly shorter training time.
 
-3. To use the second version of Sharded data-parallelism, add ``--sharded_ddp zero_dp_2`` or ``--sharded_ddp zero_dp_3`
+3. To use the second version of Sharded data-parallelism, add ``--sharded_ddp zero_dp_2`` or ``--sharded_ddp zero_dp_3``
    to the command line arguments, and make sure you have added the distributed launcher ``-m torch.distributed.launch
    --nproc_per_node=NUMBER_OF_GPUS_YOU_HAVE`` if you haven't been using it already.
 
