@@ -334,8 +334,6 @@ def main():
     if training_args.do_train:
         if last_checkpoint is not None:
             model_path = last_checkpoint
-        elif os.path.isdir(model_args.model_name_or_path):
-            model_path = model_args.model_name_or_path
         else:
             model_path = None
         train_result = trainer.train(model_path=model_path)
