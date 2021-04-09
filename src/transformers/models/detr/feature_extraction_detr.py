@@ -39,37 +39,100 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     Args:
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
-        size (:obj:`int`, `optional`, defaults to 224):
+        size (:obj:`int`, `optional`, defaults to 800):
             Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
         do_normalize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to normalize the input with mean and standard deviation.
-        image_mean (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_mean (:obj:`int`, defaults to :obj:`[0.485, 0.456, 0.406]s`):
             The sequence of means for each channel, to be used when normalizing images.
-        image_std (:obj:`int`, defaults to :obj:`[0.5, 0.5, 0.5]`):
+        image_std (:obj:`int`, defaults to :obj:`[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
+        padding_value (:obj:`float`, defaults to 0.0):
+            The pixel value to use when padding images.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
-        self, do_resize=True, size=224, max_size=1333, do_normalize=True, image_mean=None, image_std=None, **kwargs
+        self, do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, 
+        padding_value=0.0, **kwargs
     ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
         self.size = size
         self.max_size = max_size
         self.do_normalize = do_normalize
-        self.image_mean = [0.485, 0.456, 0.406]
-        self.image_std = [0.229, 0.224, 0.225]
+        self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406] 
+        self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225] 
+        self.padding_value = padding_value
 
+    def resize_with_max_size(image, target, size, max_size=None):
+        # size can be min_size (scalar) or (w, h) tuple
+
+        def get_size_with_aspect_ratio(image_size, size, max_size=None):
+            w, h = image_size
+            if max_size is not None:
+                min_original_size = float(min((w, h)))
+                max_original_size = float(max((w, h)))
+                if max_original_size / min_original_size * size > max_size:
+                    size = int(round(max_size * min_original_size / max_original_size))
+
+            if (w <= h and w == size) or (h <= w and h == size):
+                return (h, w)
+
+            if w < h:
+                ow = size
+                oh = int(size * h / w)
+            else:
+                oh = size
+                ow = int(size * w / h)
+
+            return (oh, ow)
+
+        def get_size(image_size, size, max_size=None):
+            if isinstance(size, (list, tuple)):
+                return size[::-1]
+            else:
+                return get_size_with_aspect_ratio(image_size, size, max_size)
+
+        size = get_size(image.size, size, max_size)
+        rescaled_image = self.resize(image, size)
+
+        if target is None:
+            return rescaled_image, None
+
+        ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(rescaled_image.size, image.size))
+        ratio_width, ratio_height = ratios
+
+        target = target.copy()
+        if "boxes" in target:
+            boxes = target["boxes"]
+            scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
+            target["boxes"] = scaled_boxes
+
+        if "area" in target:
+            area = target["area"]
+            scaled_area = area * (ratio_width * ratio_height)
+            target["area"] = scaled_area
+
+        h, w = size
+        target["size"] = torch.tensor([h, w])
+
+        if "masks" in target:
+            target['masks'] = interpolate(
+                target['masks'][:, None].float(), size, mode="nearest")[:, 0] > 0.5
+
+        return rescaled_image, target
+    
     def __call__(
         self,
         images: Union[
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
+        annotations = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
@@ -88,6 +151,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
+            annotations
+            
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -130,7 +195,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
-            images = [self.resize(image=image, size=self.size) for image in images]
+            if annotations is not None:
+                for idx, image, target in enumerate(zip(images, annotations)):
+                    image, target = self.resize_with_max_size(image=image, target=target, size=self.size, max_size=self.max_size)
+                    images[idx] = image
+                    annotations[idx] = target
+            else:
+                images = [self.resize_with_max_size(image=image, target=None, size=self.size, max_size=self.max_size) for image in images]
+                
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
