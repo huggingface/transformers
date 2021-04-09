@@ -104,7 +104,7 @@ class XLMRobertaTokenizer(PreTrainedTokenizer):
             from the all hypothesis (lattice) using
             forward-filtering-and-backward-sampling algorithm.
         alpha (:obj:`float`, `optional`, defaults to 0.1):
-            Soothing parameter for unigram sampling, and dropout probability of
+            Smoothing parameter for unigram sampling, and dropout probability of
             merge operations for BPE-dropout.
 
     Attributes:
