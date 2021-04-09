@@ -31,7 +31,7 @@ class DeiTConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.DeiTModel`. It is used to
     instantiate an DeiT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DeiT
-    `facebook/deit-base-distilled-patch16-224 <https://huggingface.co/facebook/deit-base-distilled-patch16-2244>`__
+    `facebook/deit-base-distilled-patch16-224 <https://huggingface.co/facebook/deit-base-distilled-patch16-224>`__
     architecture.
 
     Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model

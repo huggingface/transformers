@@ -489,7 +489,7 @@ class DeiTModel(DeiTPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-            >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224', add_pooling_layer=False)
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -598,6 +598,8 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
+            >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
+            >>> # so the head will be randomly initialized, hence the predictions will be random
             >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
             >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
@@ -654,7 +656,7 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
             Prediction scores as the average of the cls_logits and distillation logits.
         cls_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
-            Prediction scores of the classification head (i.e. the linear layer on top of the final hiden state of the
+            Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
             class token).
         distillation_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
             Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
@@ -680,6 +682,11 @@ class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
     """
     DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
     the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
+
+    .. warning::
+
+           This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
+           supported.
     """,
     DEIT_START_DOCSTRING,
 )
@@ -701,7 +708,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
         self.init_weights()
 
     @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=DeiTForImageClassificationWithTeacherOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values=None,
@@ -715,7 +722,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassificationWithTeacher
             >>> from PIL import Image
             >>> import requests
 
@@ -723,7 +730,7 @@ class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
-            >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTForImageClassificationWithTeacher.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
