@@ -265,7 +265,6 @@ class MegatronBertModelTester:
 
 
 @require_torch
-@unittest.skip("Temporary skip to make the CI pass reliably.")
 class MegatronBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (
