@@ -1,5 +1,5 @@
-import os
 import json
+import os
 import subprocess
 import unittest
 from ast import literal_eval
@@ -12,8 +12,7 @@ from . import is_sagemaker_available
 
 
 if is_sagemaker_available():
-    from sagemaker import TrainingJobAnalytics
-    from sagemaker import Session
+    from sagemaker import Session, TrainingJobAnalytics
     from sagemaker.huggingface import HuggingFace
 
 
