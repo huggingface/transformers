@@ -51,13 +51,15 @@ from .configuration_bigbird_pegasus import BigBirdPegasusConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bigbird-pegasus-base"
+_CHECKPOINT_FOR_DOC = "google/bigbird-pegasus-large-arxiv"
 _CONFIG_FOR_DOC = "BigBirdPegasusConfig"
 _TOKENIZER_FOR_DOC = "BigBirdPegasusTokenizer"
 
 
 BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "bigbird-pegasus-base",
+    "google/bigbird-pegasus-large-arxiv",
+    "google/bigbird-pegasus-large-pubmed",
+    "google/bigbird-pegasus-large-bigpatent",
     # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
 ]
 
