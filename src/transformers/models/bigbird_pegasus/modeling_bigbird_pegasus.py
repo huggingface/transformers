@@ -187,6 +187,13 @@ class BigBirdPegasusSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+        # TODO
+        self.qi = hidden_states
+        self.qo = query_layer
+        self.ko = key_layer
+        self.vo = value_layer
+        # 
+
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -1184,6 +1191,7 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 past_key_value,
                 output_attentions,
             )
+            self.self_o = self_outputs[0] # TODO
         else:
             assert (
                 encoder_hidden_states is None
@@ -1193,6 +1201,8 @@ class BigBirdPegasusEncoderAttention(nn.Module):
             )
 
         attention_output = self.output(self_outputs[0])#, hidden_states)
+        self.so_o = attention_output # TODO
+
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         # print("Attention_outputs", attention_output)
         # print("self output", self_outputs[1:])
@@ -1382,6 +1392,9 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states) # +
+
+        self.before_attn_o = hidden_states # TODO
+
         self_attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1401,14 +1414,20 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         # hidden_states = self.self_attn_layer_norm(hidden_states)
 
+        self.after_attn_o = hidden_states # TODO
+
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states) # +
+        self.before_inter_o = hidden_states # TODO
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         # hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        self.after_inter_o = hidden_states # TODO
+
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         # hidden_states = self.final_layer_norm(hidden_states)
+        self.output_o = hidden_states # TODO
 
         if hidden_states.dtype == torch.float16 and (
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
@@ -1843,6 +1862,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         # TODO: check if its in embedding
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        self.embed_o = hidden_states # TODO
+
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=hidden_states.device)
 
@@ -1911,6 +1932,12 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                         from_blocked_mask=blocked_encoder_mask,
                         to_blocked_mask=blocked_encoder_mask,
                     )
+                    # TODO:
+                    if idx == 0:
+                        self.l0_o = layer_outputs[0]
+                    if idx == 15:
+                        self.llast_o = layer_outputs[0]
+                    #
 
                 hidden_states = layer_outputs[0]
 
@@ -1924,6 +1951,9 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        
+        self.encoder_o = hidden_states
+
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )

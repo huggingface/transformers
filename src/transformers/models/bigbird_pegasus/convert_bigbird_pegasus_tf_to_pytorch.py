@@ -89,7 +89,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         # print(k, " -> ", new_k)
         if new_k not in sd:
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
-        if "dense" in k:
+        if any([True if i in k else False for i in ['dense', 'query', 'key', 'value']]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
@@ -100,7 +100,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         # print(k, " -> ", new_k)
         if new_k not in sd and k != "pegasus/embeddings/position_embeddings":
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
-        if "dense" in k:
+        if any([True if i in k else False for i in ['dense', 'query', 'key', 'value']]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         if k != "pegasus/embeddings/position_embeddings":
@@ -164,4 +164,4 @@ if __name__ == "__main__":
 
 # TODO:
 # _ = [print(a[0], a[1]) for a in tf.train.list_variables("src/tf_ckpt/bigbird-pegasus-large-arxiv/model.ckpt-0")]
-# python3 src/transformers/models/bigbird_pegasus/convert_pegasus_tf_to_pytorch.py --tf_ckpt_path src/tf_ckpt/bigbird-pegasus-large-arxiv/model.ckpt-0 --save_dir src/ckpt/bigbird-pegasus-large-arxiv
+# python3 src/transformers/models/bigbird_pegasus/convert_bigbird_pegasus_tf_to_pytorch.py --tf_ckpt_path src/tf_ckpt/bigbird-pegasus-large-arxiv/model.ckpt-0 --save_dir src/google/bigbird-pegasus-large-arxiv
