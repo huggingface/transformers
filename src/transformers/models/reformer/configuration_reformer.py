@@ -44,7 +44,7 @@ class ReformerConfig(PretrainedConfig):
 
             For more information on LSHSelfAttention layer, see `LSH Self Attention
             <reformer.html#lsh-self-attention>`__. For more information on LocalSelfAttention layer, see `Local Self
-            Attention <reformer.html#local-sensitive-hashing-self-attention>`__.
+            Attention <reformer.html#local-self-attention>`__.
         axial_pos_embds (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use axial position embeddings. For more information on how axial position embeddings
             work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__.

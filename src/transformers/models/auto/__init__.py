@@ -22,7 +22,9 @@ from ...file_utils import _BaseLazyModule, is_flax_available, is_tf_available, i
 
 
 _import_structure = {
+    "auto_factory": ["get_values"],
     "configuration_auto": ["ALL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
+    "feature_extraction_auto": ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"],
     "tokenization_auto": ["TOKENIZER_MAPPING", "AutoTokenizer"],
 }
 
@@ -103,7 +105,9 @@ if is_flax_available():
 
 
 if TYPE_CHECKING:
+    from .auto_factory import get_values
     from .configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP, CONFIG_MAPPING, MODEL_NAMES_MAPPING, AutoConfig
+    from .feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
     from .tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 
     if is_torch_available():

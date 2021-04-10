@@ -21,6 +21,7 @@ from unittest.mock import patch
 from transformers.file_utils import is_apex_available
 from transformers.integrations import is_fairscale_available
 from transformers.testing_utils import (
+    ExtendSysPath,
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
@@ -34,8 +35,8 @@ from transformers.trainer_utils import set_seed
 
 
 bindir = os.path.abspath(os.path.dirname(__file__))
-sys.path.append(f"{bindir}/../../seq2seq")
-from run_translation import main  # noqa
+with ExtendSysPath(f"{bindir}/../../examples/seq2seq"):
+    from run_translation import main  # noqa
 
 
 set_seed(42)
