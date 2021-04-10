@@ -314,20 +314,33 @@ def prepare_img():
 class DetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        # TODO replace by facebook/detr-resnet-50
+        return DetrFeatureExtractor() if is_vision_available() else None
 
     def test_inference_no_head(self):
+        # TODO replace by facebook/detr-resnet-50
         model = DetrModel.from_pretrained("nielsr/detr-resnet-50-new").to(torch_device)
         model.eval()
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        pixel_values = encoding["pixel_values"].to(torch_device)
-        pixel_mask = encoding["pixel_mask"].to(torch_device)
+        
+        # standard PyTorch mean-std input image normalization
+        transform = T.Compose([
+            T.Resize(800),
+            T.ToTensor(),
+            T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+        ])
 
+        # mean-std normalize the input image (batch-size: 1)
+        img = transform(image).unsqueeze(0)
+
+        assert img.shape == encoding['pixel_values'].shape
+        assert torch.allclose(img[0,:3,:3,:3], encoding['pixel_values'][0,:3,:3,:3], atol=1e-4)
+        
         with torch.no_grad():
-            outputs = model(pixel_values, pixel_mask)
+            outputs = model(**encoding)
 
         expected_shape = torch.Size((1, 100, 256))
         assert outputs.last_hidden_state.shape == expected_shape

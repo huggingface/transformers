@@ -69,7 +69,15 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225] 
         self.padding_value = padding_value
 
-    def resize_with_max_size(image, target, size, max_size=None):
+    def _max_by_axis(self, the_list):
+        # type: (List[List[int]]) -> List[int]
+        maxes = the_list[0]
+        for sublist in the_list[1:]:
+            for index, item in enumerate(sublist):
+                maxes[index] = max(maxes[index], item)
+        return maxes
+    
+    def resize(self, image, target, size, max_size=None):
         # size can be min_size (scalar) or (w, h) tuple
 
         def get_size_with_aspect_ratio(image_size, size, max_size=None):
@@ -99,7 +107,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 return get_size_with_aspect_ratio(image_size, size, max_size)
 
         size = get_size(image.size, size, max_size)
-        rescaled_image = self.resize(image, size)
+        rescaled_image = self.resize(image, size=size)
 
         if target is None:
             return rescaled_image, None
@@ -197,17 +205,30 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, image, target in enumerate(zip(images, annotations)):
-                    image, target = self.resize_with_max_size(image=image, target=target, size=self.size, max_size=self.max_size)
+                    image, target = self.resize(image=image, target=target, size=self.size, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [self.resize_with_max_size(image=image, target=None, size=self.size, max_size=self.max_size) for image in images]
+                images = [self.resize(image=image, target=None, size=self.size, max_size=self.max_size)[0] for image in images]
                 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
+        # create pixel_mask
+        max_size = self._max_by_axis([list(image.shape) for image in images])
+        batch_shape = [len(images)] + max_size
+        b, c, h, w = batch_shape
+        tensor = np.zeros(batch_shape)
+        mask = np.ones((b, h, w))
+        for img, pad_img, m in zip(images, tensor, mask):
+            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]] = np.copy(img)
+            mask[: img.shape[1], : img.shape[2]] = False
+        
         # return as BatchFeature
-        data = {"pixel_values": images, "pixel_mask": None}
+        data = {"pixel_values": images, "pixel_mask": mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+
+        print(encoded_inputs["pixel_values"].shape)
+        print(encoded_inputs["pixel_mask"].shape)
 
         return encoded_inputs
