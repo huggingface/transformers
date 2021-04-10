@@ -475,7 +475,7 @@ class ViTModel(ViTPreTrainedModel):
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
             >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224')
+            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
