@@ -1,5 +1,5 @@
 # Select base Image
-FROM jithunnair/pytorch:rocm4.1_ubuntu18.04_py3.6_pytorch_deepspeed
+FROM rocm/deepspeed:rocm4.1_ubuntu18.04_py3.6_pytorch
 
 # Install dependencies
 RUN apt update && apt install -y \
