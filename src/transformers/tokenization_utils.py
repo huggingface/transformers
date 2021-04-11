@@ -670,6 +670,16 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         Returns:
             A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
+        if already_has_special_tokens:
+            if token_ids_1 is not None:
+                raise ValueError(
+                    "You should not supply a second sequence if the provided sequence of "
+                    "ids is already formatted with special tokens for the model."
+                )
+
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
         return [0] * ((len(token_ids_1) if token_ids_1 else 0) + len(token_ids_0))
 
     @overload

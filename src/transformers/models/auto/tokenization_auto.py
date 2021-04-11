@@ -115,6 +115,7 @@ if is_sentencepiece_available():
     from ..bert_generation.tokenization_bert_generation import BertGenerationTokenizer
     from ..big_bird.tokenization_big_bird import BigBirdTokenizer
     from ..camembert.tokenization_camembert import CamembertTokenizer
+    from ..cpm.tokenization_cpm import CpmTokenizer
     from ..deberta_v2.tokenization_deberta_v2 import DebertaV2Tokenizer
     from ..m2m_100 import M2M100Tokenizer
     from ..marian.tokenization_marian import MarianTokenizer
@@ -134,6 +135,7 @@ else:
     BertGenerationTokenizer = None
     BigBirdTokenizer = None
     CamembertTokenizer = None
+    CpmTokenizer = None
     DebertaV2Tokenizer = None
     MarianTokenizer = None
     MBartTokenizer = None
@@ -273,6 +275,7 @@ TOKENIZER_MAPPING = OrderedDict(
 NO_CONFIG_TOKENIZER = [
     BertJapaneseTokenizer,
     BertweetTokenizer,
+    CpmTokenizer,
     HerbertTokenizer,
     HerbertTokenizerFast,
     PhobertTokenizer,
