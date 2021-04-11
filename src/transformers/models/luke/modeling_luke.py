@@ -1019,7 +1019,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     """,
     LUKE_START_DOCSTRING,
 )
-class LukeForEntityClassification(nn.Module):
+class LukeForEntityClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1035,14 +1035,19 @@ class LukeForEntityClassification(nn.Module):
     @replace_return_docstrings(output_type=EntityClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
-        entity_ids,
-        entity_position_ids,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
+        position_ids=None,
+        entity_ids=None,
         entity_attention_mask=None,
         entity_token_type_ids=None,
+        entity_position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
     ):
         r"""
@@ -1074,10 +1079,15 @@ class LukeForEntityClassification(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            position_ids=position_ids,
             entity_ids=entity_ids,
             entity_attention_mask=entity_attention_mask,
             entity_token_type_ids=entity_token_type_ids,
             entity_position_ids=entity_position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=True,
         )
 
@@ -1085,6 +1095,7 @@ class LukeForEntityClassification(nn.Module):
         feature_vector = self.dropout(feature_vector)
         logits = self.typing(feature_vector)
 
+        loss = None
         if labels is not None:
             if labels.ndim == 1:
                 loss = F.cross_entropy(logits, labels)
@@ -1095,7 +1106,6 @@ class LukeForEntityClassification(nn.Module):
             output = (
                 logits,
                 outputs.hidden_states,
-                outputs.word_hidden_states,
                 outputs.entity_hidden_states,
                 outputs.attentions,
             )
@@ -1105,7 +1115,6 @@ class LukeForEntityClassification(nn.Module):
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            word_hidden_states=outputs.word_hidden_states,
             entity_hidden_states=outputs.entity_hidden_states,
             attentions=outputs.attentions,
         )
@@ -1118,7 +1127,7 @@ class LukeForEntityClassification(nn.Module):
     """,
     LUKE_START_DOCSTRING,
 )
-class LukeForEntityPairClassification(nn.Module):
+class LukeForEntityPairClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1134,14 +1143,19 @@ class LukeForEntityPairClassification(nn.Module):
     @replace_return_docstrings(output_type=EntityPairClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
-        entity_ids,
-        entity_position_ids,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
+        position_ids=None,
+        entity_ids=None,
         entity_attention_mask=None,
         entity_token_type_ids=None,
+        entity_position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
     ):
         r"""
@@ -1173,19 +1187,25 @@ class LukeForEntityPairClassification(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            position_ids=position_ids,
             entity_ids=entity_ids,
             entity_attention_mask=entity_attention_mask,
             entity_token_type_ids=entity_token_type_ids,
             entity_position_ids=entity_position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=True,
         )
 
         feature_vector = torch.cat(
-            [outputs.entity_last_hidden_state[:, 0, :], outputs.entity_last_hidden_state[1][:, 1, :]], dim=1
+            [outputs.entity_last_hidden_state[:, 0, :], outputs.entity_last_hidden_state[:, 1, :]], dim=1
         )
         feature_vector = self.dropout(feature_vector)
         logits = self.classifier(feature_vector)
 
+        loss = None
         if labels is not None:
             if labels.ndim == 1:
                 loss = F.cross_entropy(logits, labels)
@@ -1196,17 +1216,15 @@ class LukeForEntityPairClassification(nn.Module):
             output = (
                 logits,
                 outputs.hidden_states,
-                outputs.word_hidden_states,
                 outputs.entity_hidden_states,
                 outputs.attentions,
             )
             return ((loss,) + output) if loss is not None else output
 
         return EntityPairClassificationOutput(
-            loss=loss,
+            loss=loss if loss is not None else None,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            word_hidden_states=outputs.word_hidden_states,
             entity_hidden_states=outputs.entity_hidden_states,
             attentions=outputs.attentions,
         )
@@ -1219,7 +1237,7 @@ class LukeForEntityPairClassification(nn.Module):
     """,
     LUKE_START_DOCSTRING,
 )
-class LukeForEntitySpanClassification(nn.Module):
+class LukeForEntitySpanClassification(LukePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1235,16 +1253,21 @@ class LukeForEntitySpanClassification(nn.Module):
     @replace_return_docstrings(output_type=EntitySpanClassificationOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids,
-        entity_ids,
-        entity_position_ids,
-        entity_start_positions,
-        entity_end_positions,
+        input_ids=None,
         attention_mask=None,
         token_type_ids=None,
+        position_ids=None,
+        entity_ids=None,
         entity_attention_mask=None,
         entity_token_type_ids=None,
+        entity_position_ids=None,
+        entity_start_positions=None,
+        entity_end_positions=None,
+        head_mask=None,
+        inputs_embeds=None,
         labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
         return_dict=None,
     ):
         r"""
@@ -1281,10 +1304,15 @@ class LukeForEntitySpanClassification(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            position_ids=position_ids,
             entity_ids=entity_ids,
             entity_attention_mask=entity_attention_mask,
             entity_token_type_ids=entity_token_type_ids,
             entity_position_ids=entity_position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=True,
         )
         hidden_size = outputs.last_hidden_state.size(-1)
@@ -1298,9 +1326,10 @@ class LukeForEntitySpanClassification(nn.Module):
         feature_vector = self.dropout(feature_vector)
         logits = self.classifier(feature_vector)
 
+        loss = None
         if labels is not None:
-            if labels.ndim == 1:
-                loss = F.cross_entropy(logits, labels)
+            if labels.ndim == 2:
+                loss = F.cross_entropy(logits.view(-1, self.num_labels), labels.view(-1))
             else:
                 loss = F.binary_cross_entropy_with_logits(logits.view(-1), labels.view(-1).type_as(logits))
 
@@ -1308,17 +1337,15 @@ class LukeForEntitySpanClassification(nn.Module):
             output = (
                 logits,
                 outputs.hidden_states,
-                outputs.word_hidden_states,
                 outputs.entity_hidden_states,
                 outputs.attentions,
             )
             return ((loss,) + output) if loss is not None else output
 
         return EntitySpanClassificationOutput(
-            loss=loss,
+            loss=loss if loss is not None else None,
             logits=logits,
             hidden_states=outputs.hidden_states,
-            word_hidden_states=outputs.word_hidden_states,
             entity_hidden_states=outputs.entity_hidden_states,
             attentions=outputs.attentions,
         )
