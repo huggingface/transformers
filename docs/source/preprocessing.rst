@@ -46,7 +46,7 @@ is its ``__call__``: you just need to feed your sentence to your tokenizer objec
 
     >>> encoded_input = tokenizer("Hello, I'm a single sentence!")
     >>> print(encoded_input)
-    {'input_ids': [101, 138, 18696, 155, 1942, 3190, 1144, 1572, 13745, 1104, 159, 9664, 2107, 102], 
+    {'input_ids': [101, 8667, 117, 146, 112, 182, 170, 1423, 5650, 106, 102], 
      'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
      'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 
@@ -72,7 +72,7 @@ tokenizer:
 
 .. code-block::
 
-    >>> batch_sentences = ["Hello I'm a single sentence",
+    >>> batch_sentences = ["Hello, I'm a single sentence!",
     ...                    "And another sentence",
     ...                    "And the very very last one"]
     >>> encoded_inputs = tokenizer(batch_sentences)
