@@ -39,7 +39,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ...modeling_outputs import (  # BaseModelOutputWithPastAndCrossAttentions, (Niels): don't think we need this one as DETR uses parallel decoding
+from ...modeling_outputs import (  
     BaseModelOutput,
     BaseModelOutputWithCrossAttentions,
     Seq2SeqModelOutput,
@@ -862,8 +862,7 @@ DETR_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation. If :obj:`past_key_values` is used, optionally only the last :obj:`decoder_inputs_embeds`
-            have to be input (see :obj:`past_key_values`). This is useful if you want more control over how to convert
+            representation. This is useful if you want more control over how to convert
             :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
             If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
@@ -1384,7 +1383,7 @@ class DetrModel(DetrPreTrainedModel):
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
         queries = torch.zeros_like(query_position_embeddings)
 
-        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             inputs_embeds=queries,
             attention_mask=None,
