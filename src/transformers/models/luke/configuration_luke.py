@@ -52,7 +52,7 @@ class LukeConfig(RobertaConfig):
         vocab_size: int = 50267,
         entity_vocab_size: int = 500000,
         entity_emb_size: int = 256,
-        use_entity_aware_attention=False,
+        use_entity_aware_attention=True,
         **kwargs
     ):
         """Constructs LukeConfig."""
