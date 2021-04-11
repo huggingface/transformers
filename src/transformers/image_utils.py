@@ -88,8 +88,7 @@ class ImageFeatureExtractionMixin:
         self._ensure_format_supported(image)
 
         if isinstance(image, PIL.Image.Image):
-            # PIL Image to numpy array has shape (width, height, num_channels) -> we make it (height, width, num_channels)
-            image = np.array(image).transpose((1, 0, 2))
+            image = np.array(image)
 
         if is_torch_tensor(image):
             image = image.numpy()
