@@ -45,6 +45,7 @@ class LukeModelTester:
         seq_length=7,
         is_training=True,
         entity_length=3,
+        mention_length=5,
         use_attention_mask=True,
         use_token_type_ids=True,
         use_entity_ids=True,
@@ -68,6 +69,7 @@ class LukeModelTester:
         initializer_range=0.02,
         num_entity_classification_labels=9,
         num_entity_pair_classification_labels=6,
+        num_entity_span_classification_labels=4,
         use_entity_aware_attention=True,
         scope=None,
     ):
@@ -76,6 +78,7 @@ class LukeModelTester:
         self.seq_length = seq_length
         self.is_training = is_training
         self.entity_length = entity_length
+        self.mention_length = mention_length
         self.use_attention_mask = use_attention_mask
         self.use_token_type_ids = use_token_type_ids
         self.use_entity_ids = use_entity_ids
@@ -99,8 +102,13 @@ class LukeModelTester:
         self.initializer_range = initializer_range
         self.num_entity_classification_labels = num_entity_classification_labels
         self.num_entity_pair_classification_labels = num_entity_pair_classification_labels
+        self.num_entity_span_classification_labels = num_entity_span_classification_labels
         self.scope = scope
         self.use_entity_aware_attention = use_entity_aware_attention
+
+        self.encoder_seq_length = seq_length
+        self.key_length = seq_length
+        self.num_hidden_states_types = 2  # hidden_states and entity_hidden_states
 
     def prepare_config_and_inputs(self):
         # prepare words
@@ -127,17 +135,23 @@ class LukeModelTester:
 
         entity_position_ids = None
         if self.use_entity_position_ids:
-            entity_position_ids = ids_tensor([self.batch_size, self.entity_length], 2)
+            entity_position_ids = ids_tensor(
+                [self.batch_size, self.entity_length, self.mention_length], self.mention_length
+            )
 
         sequence_labels = None
         entity_classification_labels = None
         entity_pair_classification_labels = None
+        entity_span_classification_labels = None
 
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             entity_classification_labels = ids_tensor([self.batch_size], self.num_entity_classification_labels)
             entity_pair_classification_labels = ids_tensor(
                 [self.batch_size], self.num_entity_pair_classification_labels
+            )
+            entity_span_classification_labels = ids_tensor(
+                [self.batch_size, self.entity_length], self.num_entity_span_classification_labels
             )
 
         config = LukeConfig(
@@ -170,6 +184,7 @@ class LukeModelTester:
             sequence_labels,
             entity_classification_labels,
             entity_pair_classification_labels,
+            entity_span_classification_labels,
         )
 
     def create_and_check_model(
@@ -185,6 +200,7 @@ class LukeModelTester:
         sequence_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
+        entity_span_classification_labels,
     ):
         model = LukeModel(config=config)
         model.to(torch_device)
@@ -199,44 +215,6 @@ class LukeModelTester:
             entity_token_type_ids=entity_token_type_ids,
             entity_position_ids=entity_position_ids,
         )
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(
-            result.entity_last_hidden_state.shape, (self.batch_size, self.entity_length, self.hidden_size)
-        )
-
-        # test with words only
-        result = model(input_ids, token_type_ids=token_type_ids)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_entity_aware_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        token_type_ids,
-        entity_ids,
-        entity_attention_mask,
-        entity_token_type_ids,
-        entity_position_ids,
-        sequence_labels,
-        entity_classification_labels,
-        entity_pair_classification_labels,
-    ):
-        model = LukeModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        # test with words + entities
-        result = model(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            entity_ids=entity_ids,
-            entity_attention_mask=entity_attention_mask,
-            entity_token_type_ids=entity_token_type_ids,
-            entity_position_ids=entity_position_ids,
-        )
-
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(
             result.entity_last_hidden_state.shape, (self.batch_size, self.entity_length, self.hidden_size)
@@ -260,6 +238,7 @@ class LukeModelTester:
         sequence_labels,
         entity_classification_labels,
         entity_pair_classification_labels,
+        entity_span_classification_labels,
     ):
         config.num_labels = self.num_entity_classification_labels
         model = LukeForEntityClassification(config)
@@ -278,6 +257,77 @@ class LukeModelTester:
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_entity_classification_labels))
 
+    def create_and_check_for_entity_pair_classification(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        entity_ids,
+        entity_attention_mask,
+        entity_token_type_ids,
+        entity_position_ids,
+        sequence_labels,
+        entity_classification_labels,
+        entity_pair_classification_labels,
+        entity_span_classification_labels,
+    ):
+        config.num_labels = self.num_entity_pair_classification_labels
+        model = LukeForEntityClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            entity_ids=entity_ids,
+            entity_attention_mask=entity_attention_mask,
+            entity_token_type_ids=entity_token_type_ids,
+            entity_position_ids=entity_position_ids,
+            labels=entity_pair_classification_labels,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_entity_pair_classification_labels))
+
+    def create_and_check_for_entity_span_classification(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        token_type_ids,
+        entity_ids,
+        entity_attention_mask,
+        entity_token_type_ids,
+        entity_position_ids,
+        sequence_labels,
+        entity_classification_labels,
+        entity_pair_classification_labels,
+        entity_span_classification_labels,
+    ):
+        config.num_labels = self.num_entity_span_classification_labels
+        model = LukeForEntitySpanClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        entity_start_positions = ids_tensor([self.batch_size, self.entity_length], self.seq_length)
+        entity_end_positions = ids_tensor([self.batch_size, self.entity_length], self.seq_length)
+
+        result = model(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            entity_ids=entity_ids,
+            entity_attention_mask=entity_attention_mask,
+            entity_token_type_ids=entity_token_type_ids,
+            entity_position_ids=entity_position_ids,
+            entity_start_positions=entity_start_positions,
+            entity_end_positions=entity_end_positions,
+            labels=entity_span_classification_labels,
+        )
+        self.parent.assertEqual(
+            result.logits.shape, (self.batch_size, self.entity_length, self.num_entity_span_classification_labels)
+        )
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -292,6 +342,7 @@ class LukeModelTester:
             sequence_labels,
             entity_classification_labels,
             entity_pair_classification_labels,
+            entity_span_classification_labels,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
@@ -321,7 +372,30 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_torchscript = False
     test_resize_embeddings = True
-    test_head_masking = False
+    test_head_masking = True
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+        if model_class == LukeForEntitySpanClassification:
+            inputs_dict["entity_start_positions"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.entity_length), dtype=torch.long, device=torch_device
+            )
+            inputs_dict["entity_end_positions"] = torch.ones(
+                (self.model_tester.batch_size, self.model_tester.entity_length), dtype=torch.long, device=torch_device
+            )
+
+        if return_labels:
+            if model_class in (LukeForEntityClassification, LukeForEntityPairClassification):
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class == LukeForEntitySpanClassification:
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.entity_length),
+                    dtype=torch.long,
+                    device=torch_device,
+                )
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = LukeModelTester(self)
@@ -340,11 +414,138 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
             model = LukeModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_for_entity_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_entity_classification(*config_and_inputs)
+
+    def test_for_entity_pair_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_entity_pair_classification(*config_and_inputs)
+
+    def test_for_entity_span_classification(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_entity_span_classification(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_length = self.model_tester.seq_length
+        entity_length = self.model_tester.entity_length
+        key_length = seq_length + entity_length
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_length + entity_length, key_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            added_hidden_states = self.model_tester.num_hidden_states_types
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_length + entity_length, key_length],
+            )
+
+    def test_entity_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            entity_hidden_states = outputs.entity_hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(entity_hidden_states), expected_num_layers)
+
+            entity_length = self.model_tester.entity_length
+
+            self.assertListEqual(
+                list(entity_hidden_states[0].shape[-2:]),
+                [entity_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_entity_hidden_states(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        entity_hidden_states = outputs.entity_hidden_states[0]
+        entity_hidden_states.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(entity_hidden_states.grad)
+
 
 @require_torch
 class LukeModelIntegrationTests(unittest.TestCase):
     @slow
-    def test_inference_entity_classification(self):
+    def test_inference_base_model(self):
         model = LukeModel.from_pretrained("studio-ousia/luke-base").eval()
         model.to(torch_device)
 
@@ -374,13 +575,3 @@ class LukeModelIntegrationTests(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
         self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_entity_pair_classification(self):
-        # TODO, similar to the test above
-        pass
-
-    @slow
-    def test_inference_entity_span_classification(self):
-        # TODO, similar to the test above
-        pass
