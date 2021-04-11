@@ -101,10 +101,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             return (oh, ow)
 
         def get_size(image_size, size, max_size=None):
-            # size returned must be (w, h) since we use PIL to resize images
             if isinstance(size, (list, tuple)):
                 return size
             else:
+                # size returned must be (w, h) since we use PIL to resize images
+                # so we revert the tuple 
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
 
         size = get_size(image.size, size, max_size)
@@ -220,10 +221,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         batch_shape = [len(images)] + max_size
         b, c, h, w = batch_shape
         tensor = np.zeros(batch_shape)
-        mask = np.ones((b, h, w))
+        mask = np.zeros((b, h, w))
         for img, pad_img, m in zip(images, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]] = np.copy(img)
-            mask[: img.shape[1], : img.shape[2]] = False
+            mask[: img.shape[1], : img.shape[2]] = True
         
         # return as BatchFeature
         data = {"pixel_values": images, "pixel_mask": mask}
