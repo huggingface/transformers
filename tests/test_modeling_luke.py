@@ -575,3 +575,35 @@ class LukeModelIntegrationTests(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.1457, 0.1044, 0.0174]])
         self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+    @slow
+    def test_inference_large_model(self):
+        model = LukeModel.from_pretrained("studio-ousia/luke-large").eval()
+        model.to(torch_device)
+
+        tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-large", task="entity_classification")
+        text = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        span = (39, 42)
+        encoding = tokenizer(text, entity_spans=[span], add_prefix_space=True, return_tensors="pt")
+
+        # move all values to device
+        for key, value in encoding.items():
+            encoding[key] = encoding[key].to(torch_device)
+
+        outputs = model(**encoding)
+
+        # Verify word hidden states
+        expected_shape = torch.Size((1, 42, 1024))
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.0133, 0.0865, 0.0095], [0.3093, -0.2576, -0.7418], [-0.1720, -0.2117, -0.2869]]
+        ).to(torch_device)
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
+
+        # Verify entity hidden states
+        expected_shape = torch.Size((1, 1, 1024))
+        self.assertEqual(outputs.entity_last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor([[0.0466, -0.0106, -0.0179]])
+        self.assertTrue(torch.allclose(outputs.entity_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
