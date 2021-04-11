@@ -74,9 +74,7 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
             weighted average in the self-attention heads.
     """
 
-    word_last_hidden_state: torch.FloatTensor = None
     entity_last_hidden_state: torch.FloatTensor = None
-    word_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -103,9 +101,7 @@ class BaseLukeModelOutput(BaseModelOutput):
             heads.
     """
 
-    word_last_hidden_state: torch.FloatTensor = None
     entity_last_hidden_state: torch.FloatTensor = None
-    word_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
 
 
@@ -138,7 +134,6 @@ class EntityClassificationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    word_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -172,7 +167,6 @@ class EntityPairClassificationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    word_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -206,7 +200,6 @@ class EntitySpanClassificationOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    word_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     entity_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -368,7 +361,6 @@ class LukeSelfAttention(nn.Module):
         entity_hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
         output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
@@ -473,7 +465,6 @@ class LukeAttention(nn.Module):
         entity_hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
         output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
@@ -482,7 +473,6 @@ class LukeAttention(nn.Module):
             entity_hidden_states,
             attention_mask,
             head_mask,
-            encoder_hidden_states,
             output_attentions,
         )
         if entity_hidden_states is None:
@@ -554,7 +544,6 @@ class LukeLayer(nn.Module):
         entity_hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
         output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
@@ -605,24 +594,16 @@ class LukeEncoder(nn.Module):
         entity_hidden_states,
         attention_mask=None,
         head_mask=None,
-        encoder_hidden_states=None,
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
     ):
-        all_hidden_states = () if output_hidden_states else None
         all_word_hidden_states = () if output_hidden_states else None
         all_entity_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        if entity_hidden_states is None:
-            hidden_states = word_hidden_states
-        else:
-            hidden_states = torch.cat([word_hidden_states, entity_hidden_states], dim=1)
-
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
                 all_word_hidden_states = all_word_hidden_states + (word_hidden_states,)
                 all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
 
@@ -641,7 +622,6 @@ class LukeEncoder(nn.Module):
                     entity_hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
                 )
             else:
                 layer_outputs = layer_module(
@@ -649,22 +629,18 @@ class LukeEncoder(nn.Module):
                     entity_hidden_states,
                     attention_mask,
                     layer_head_mask,
-                    encoder_hidden_states,
                     output_attentions,
                 )
 
             word_hidden_states = layer_outputs[0]
-            if entity_hidden_states is None:
-                hidden_states = word_hidden_states
-            else:
+
+            if entity_hidden_states is not None:
                 entity_hidden_states = layer_outputs[1]
-                hidden_states = torch.cat([word_hidden_states, entity_hidden_states], dim=1)
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[2],)
 
         if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
             all_word_hidden_states = all_word_hidden_states + (word_hidden_states,)
             all_entity_hidden_states = all_entity_hidden_states + (entity_hidden_states,)
 
@@ -672,23 +648,19 @@ class LukeEncoder(nn.Module):
             return tuple(
                 v
                 for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attentions,
                     word_hidden_states,
-                    entity_hidden_states,
                     all_word_hidden_states,
+                    all_self_attentions,
+                    entity_hidden_states,
                     all_entity_hidden_states,
                 ]
                 if v is not None
             )
         return BaseLukeModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
+            last_hidden_state=word_hidden_states,
+            hidden_states=all_word_hidden_states,
             attentions=all_self_attentions,
-            word_last_hidden_state=word_hidden_states,
             entity_last_hidden_state=entity_hidden_states,
-            word_hidden_states=all_word_hidden_states,
             entity_hidden_states=all_entity_hidden_states,
         )
 
@@ -893,7 +865,6 @@ class LukeModel(LukePreTrainedModel):
         entity_position_ids=None,
         head_mask=None,
         inputs_embeds=None,
-        encoder_hidden_states=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -978,7 +949,6 @@ class LukeModel(LukePreTrainedModel):
             entity_embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1001,9 +971,7 @@ class LukeModel(LukePreTrainedModel):
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            word_last_hidden_state=encoder_outputs.word_last_hidden_state,
             entity_last_hidden_state=encoder_outputs.entity_last_hidden_state,
-            word_hidden_states=encoder_outputs.word_hidden_states,
             entity_hidden_states=encoder_outputs.entity_hidden_states,
         )
 
