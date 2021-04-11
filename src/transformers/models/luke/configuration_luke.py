@@ -36,6 +36,16 @@ class LukeConfig(RobertaConfig):
     defaults. Please check the parent class for more information.
 
 
+    Args:
+        entity_vocab_size (:obj:`int`, `optional`, defaults to 500000):
+            Entity vocabulary size of the LUKE model. Defines the number of different entities that can be represented
+            by the :obj:`entity_ids` passed when calling :class:`~transformers.LukeModel`.
+        entity_emb_size (:obj:`int`, `optional`, defaults to 256):
+            The number of dimensions of the entity embedding.
+        use_entity_aware_attention (:obj:`bool`, defaults to :obj:`True`):
+            Whether or not the model should use entity-aware self-attention mechanism proposed in the original paper
+            <https://arxiv.org/abs/2010.01057>.
+
     Examples::
         >>> from transformers import LukeConfig, LukeModel
         >>> # Initializing a LUKE configuration
