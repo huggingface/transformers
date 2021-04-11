@@ -230,7 +230,4 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         data = {"pixel_values": images, "pixel_mask": mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
 
-        print(encoded_inputs["pixel_values"].shape)
-        print(encoded_inputs["pixel_mask"].shape)
-
         return encoded_inputs
