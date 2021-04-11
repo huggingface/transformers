@@ -77,7 +77,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 maxes[index] = max(maxes[index], item)
         return maxes
     
-    def resize(self, image, target, size, max_size=None):
+    def _resize(self, image, target, size, max_size=None):
         # size can be min_size (scalar) or (w, h) tuple
 
         def get_size_with_aspect_ratio(image_size, size, max_size=None):
@@ -205,11 +205,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, image, target in enumerate(zip(images, annotations)):
-                    image, target = self.resize(image=image, target=target, size=self.size, max_size=self.max_size)
+                    image, target = self._resize(image=image, target=target, size=self.size, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [self.resize(image=image, target=None, size=self.size, max_size=self.max_size)[0] for image in images]
+                images = [self._resize(image=image, target=None, size=self.size, max_size=self.max_size)[0] for image in images]
                 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
