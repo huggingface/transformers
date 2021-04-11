@@ -198,7 +198,7 @@ class LukeTokenizer(RobertaTokenizer):
             text_pair (:obj:`str`, :obj:`List[str]`, :obj:`List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence must be a string. Note that this
                 tokenizer does not support tokenization based on pretokenized strings.
-            entities (:obj:`List[str]`, obj:`List[List[str]]`, `optional`):
+            entities (:obj:`List[str]`, :obj:`List[List[str]]`, `optional`):
                 The sequence or batch of sequences of entities to be encoded. Each sequence consists of strings
                 representing entities, i.e., special entities (e.g., [MASK]) or entity titles of Wikipedia (e.g., New
                 York). This argument is ignored if you specify the `task` argument in the constructor.

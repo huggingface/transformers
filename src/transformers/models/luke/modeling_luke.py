@@ -70,8 +70,8 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
             each layer plus the initial embedding outputs.
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
+            of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length + entity_length, sequence_length + entity_length)`. Attentions weights after the attention
@@ -101,8 +101,8 @@ class BaseLukeModelOutput(BaseModelOutput):
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
+            of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -133,8 +133,8 @@ class EntityClassificationOutput(ModelOutput):
             each layer plus the initial embedding outputs.
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
+            of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
@@ -166,8 +166,8 @@ class EntityPairClassificationOutput(ModelOutput):
             each layer plus the initial embedding outputs.
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
+            of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
@@ -199,8 +199,8 @@ class EntitySpanClassificationOutput(ModelOutput):
             each layer plus the initial embedding outputs.
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
-            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output of
-            each layer plus the initial embedding outputs.
+            of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
+            of each layer plus the initial embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
@@ -1021,8 +1021,6 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
     are ignored. This is modified from fairseq's `utils.make_positions`.
 
-
-
     Args:
         x: torch.Tensor x:
 
@@ -1074,15 +1072,13 @@ class LukeForEntityClassification(LukePreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)` or :obj:`(batch_size, num_labels), `optional`):
-        Labels for computing the classification loss. If the shape is :obj:`(batch_size,)`, the cross entropy loss is
-        used for the single-label classification. In this case, labels should contain the indices that should be in
-        :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, num_labels)`, the binary cross
-        entropy loss is used for the multi-label classification. In this case, labels should only contain ``[0, 1]``,
-        where 0 and 1 indicate false and true, respectively.
-
+            Labels for computing the classification loss. If the shape is :obj:`(batch_size,)`, the cross entropy loss
+            is used for the single-label classification. In this case, labels should contain the indices that should be
+            in :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, num_labels)`, the binary
+            cross entropy loss is used for the multi-label classification. In this case, labels should only contain
+            ``[0, 1]``, where 0 and 1 indicate false and true, respectively.
 
         Returns:
-
 
         Examples::
 
@@ -1184,15 +1180,13 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
     ):
         r"""
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size,)` or :obj:`(batch_size, num_labels), `optional`):
-        Labels for computing the classification loss. If the shape is :obj:`(batch_size,)`, the cross entropy loss is
-        used for the single-label classification. In this case, labels should contain the indices that should be in
-        :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, num_labels)`, the binary cross
-        entropy loss is used for the multi-label classification. In this case, labels should only contain ``[0, 1]``,
-        where 0 and 1 indicate false and true, respectively.
-
+            Labels for computing the classification loss. If the shape is :obj:`(batch_size,)`, the cross entropy loss
+            is used for the single-label classification. In this case, labels should contain the indices that should be
+            in :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, num_labels)`, the binary
+            cross entropy loss is used for the multi-label classification. In this case, labels should only contain
+            ``[0, 1]``, where 0 and 1 indicate false and true, respectively.
 
         Returns:
-
 
         Examples::
 
@@ -1300,15 +1294,13 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
         labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)` or :obj:`(batch_size,
         entity_length, num_labels), `optional`): Labels for computing the classification loss. If the shape is
-        :obj:`(batch_size, entity_length)`, the cross entropy loss is used for the single-label classification. In
-        this case, labels should contain the indices that should be in :obj:`[0, ..., config.num_labels - 1]`. If the
-        shape is :obj:`(batch_size, entity_length, num_labels)`, the binary cross entropy loss is used for the
-        multi-label classification. In this case, labels should only contain ``[0, 1]``, where 0 and 1 indicate false
-        and true, respectively.
-
+        :obj:`(batch_size, entity_length)`, the cross entropy loss is used for the single-label classification. In this
+        case, labels should contain the indices that should be in :obj:`[0, ..., config.num_labels - 1]`. If the shape
+        is :obj:`(batch_size, entity_length, num_labels)`, the binary cross entropy loss is used for the multi-label
+        classification. In this case, labels should only contain ``[0, 1]``, where 0 and 1 indicate false and true,
+        respectively.
 
         Returns:
-
 
         Examples::
 
