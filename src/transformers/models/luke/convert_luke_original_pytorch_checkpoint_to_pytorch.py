@@ -95,8 +95,8 @@ def convert_luke_checkpoint(checkpoint_path, metadata_path, entity_vocab_path, p
         expected_shape = torch.Size((1, 42, 768))
         expected_slice = torch.tensor([[0.0037, 0.1368, -0.0091], [0.1099, 0.3329, -0.1095], [0.0765, 0.5335, 0.1179]])
 
-    assert outputs.word_last_hidden_state.shape == expected_shape
-    assert torch.allclose(outputs.word_last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
+    assert outputs.last_hidden_state.shape == expected_shape
+    assert torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
 
     # Verify entity hidden states
     if model_size == "large":
