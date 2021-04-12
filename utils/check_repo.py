@@ -30,6 +30,8 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "FSMTEncoder",  # Building part of bigger (tested) model.
+    "FSMTDecoder",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
@@ -81,6 +83,8 @@ IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
     "M2M100Encoder",
     "M2M100Decoder",
+    "FSMTEncoder",
+    "FSMTDecoder",
     "Speech2TextEncoder",
     "Speech2TextDecoder",
     "LEDEncoder",

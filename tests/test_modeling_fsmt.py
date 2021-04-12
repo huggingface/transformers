@@ -16,8 +16,6 @@
 import tempfile
 import unittest
 
-import timeout_decorator  # noqa
-
 from parameterized import parameterized
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
@@ -33,9 +31,9 @@ if is_torch_available():
 
     from transformers import FSMTConfig, FSMTForConditionalGeneration, FSMTModel, FSMTTokenizer
     from transformers.models.fsmt.modeling_fsmt import (
+        FSMTDecoder,
+        FSMTEncoder,
         SinusoidalPositionalEmbedding,
-        _prepare_fsmt_decoder_inputs,
-        invert_mask,
         shift_tokens_right,
     )
     from transformers.pipelines import TranslationPipeline
@@ -106,6 +104,72 @@ class ModelTester:
         inputs_dict["use_cache"] = False
         return config, inputs_dict
 
+    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+        model = FSMTModel(config=config).get_decoder().to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        attention_mask = inputs_dict["attention_mask"]
+        head_mask = inputs_dict["head_mask"]
+
+        # first forward pass
+        outputs = model(input_ids, attention_mask=attention_mask, head_mask=head_mask, use_cache=True)
+
+        output, past_key_values = outputs.to_tuple()
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+
+        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
+    def check_encoder_decoder_model_standalone(self, config, inputs_dict):
+        model = FSMTModel(config=config).to(torch_device).eval()
+        outputs = model(**inputs_dict)
+
+        encoder_last_hidden_state = outputs.encoder_last_hidden_state
+        last_hidden_state = outputs.last_hidden_state
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            encoder = model.get_encoder()
+            encoder.save_pretrained(tmpdirname)
+            encoder = FSMTEncoder.from_pretrained(tmpdirname).to(torch_device)
+
+        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
+            0
+        ]
+
+        self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            decoder = model.get_decoder()
+            decoder.save_pretrained(tmpdirname)
+            decoder = FSMTDecoder.from_pretrained(tmpdirname).to(torch_device)
+
+        last_hidden_state_2 = decoder(
+            input_ids=inputs_dict["decoder_input_ids"],
+            attention_mask=inputs_dict["decoder_attention_mask"],
+            encoder_hidden_states=encoder_last_hidden_state,
+            encoder_attention_mask=inputs_dict["attention_mask"],
+        )[0]
+
+        self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
+
 
 def prepare_fsmt_inputs_dict(
     config,
@@ -122,6 +186,7 @@ def prepare_fsmt_inputs_dict(
         decoder_head_mask = torch.ones(config.decoder_layers, config.decoder_attention_heads, device=torch_device)
     return {
         "input_ids": input_ids,
+        "decoder_input_ids": shift_tokens_right(input_ids, config.pad_token_id),
         "attention_mask": attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
@@ -150,6 +215,14 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_decoder_model_past_with_large_inputs(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_encoder_decoder_model_standalone(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
     # XXX: override test_model_common_attributes / different Embedding type
     def test_model_common_attributes(self):
@@ -180,7 +253,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         # XXX: different std for fairseq version of SinusoidalPositionalEmbedding
         # self.assertAlmostEqual(torch.std(model.encoder.embed_positions.weights).item(), config.init_std, 2)
 
-  
     def test_save_load_missing_keys(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
 
@@ -311,34 +383,6 @@ class FSMTHeadTests(unittest.TestCase):
         config, *_ = self._get_config_and_data()
         model = FSMTForConditionalGeneration(config).eval().to(torch_device)
         model(**model.dummy_inputs)
-
-    def test_prepare_fsmt_decoder_inputs(self):
-        config, *_ = self._get_config_and_data()
-        input_ids = _long_tensor(([4, 4, 2]))
-        decoder_input_ids = _long_tensor([[26388, 2, config.pad_token_id]])
-        ignore = float("-inf")
-        decoder_input_ids, decoder_attn_mask, causal_mask = _prepare_fsmt_decoder_inputs(
-            config, input_ids, decoder_input_ids
-        )
-        expected_causal_mask = torch.tensor(
-            [[0, ignore, ignore], [0, 0, ignore], [0, 0, 0]]  # never attend to the final token, because its pad
-        ).to(input_ids.device)
-        self.assertEqual(decoder_attn_mask.size(), decoder_input_ids.size())
-        self.assertTrue(torch.eq(expected_causal_mask, causal_mask).all())
-
-
-def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
-    """If tensors not close, or a and b arent both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if torch.allclose(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        if len(prefix) > 0:
-            prefix = f"{prefix}: "
-        raise AssertionError(f"{prefix}{a} != {b}")
 
 
 def _long_tensor(tok_lst):
