@@ -341,7 +341,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if not is_batched:
             images = [images]
-            annotations = [annotations]
+            if annotations is not None:
+                annotations = [annotations]
 
         # prepare (annotations -> target)
         if annotations is not None:
