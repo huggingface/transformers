@@ -21,7 +21,6 @@ A data collator will default to :func:`transformers.data.data_collator.default_d
 been provided. This is a function that takes a list of samples from a Dataset as input and collates them into a batch
 of a dict-like object. The default collator performs special handling of potential keys:
 
-
     - ``label``: handles a single value (int or float) per object
     - ``label_ids``: handles a list of values per object
 
@@ -38,40 +37,47 @@ DataCollatorWithPadding
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorWithPadding
-    :members: _call_
+    :special-members: __call__
+    :members:
 
 DataCollatorForTokenClassification
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForTokenClassification
-    :members: _call_, _collate_batch, tolist
+    :special-members: __call__
+    :members:
 
 DataCollatorForSeq2Seq
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForSeq2Seq
-    :members: _call_
+    :special-members: __call__
+    :members:
 
 DataCollatorForLanguageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForLanguageModeling
-    :members: _call_, mask_tokens
+    :special-members: __call__
+    :members: mask_tokens
 
 DataCollatorForWholeWordMask
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForWholeWordMask
-    :members: _call_, _whole_word_mask, mask_tokens
+    :special-members: __call__
+    :members: mask_tokens
 
 DataCollatorForSOP
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForSOP
-    :members: _call_, mask_tokens
+    :special-members: __call__
+    :members: mask_tokens
 
 DataCollatorForPermutationLanguageModeling
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.data.data_collator.DataCollatorForPermutationLanguageModeling
-    :members: _call_, mask_tokens
+    :special-members: __call__
+    :members: mask_tokens
