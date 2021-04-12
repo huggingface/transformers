@@ -112,11 +112,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return masks
         
-
-    # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
-    # with added support for several TensorTypes
-    def convertCocoToDetrFormat(self, image, target, return_masks=False, return_tensors: Optional[Union[str, TensorType]] = None):
-        
+    def get_as_tensor(tensor_type):
         # First: set as_tensor
         # Convert to TensorType
         if not isinstance(tensor_type, TensorType):
@@ -145,9 +141,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             as_tensor = jnp.array
         else:
             as_tensor = np.asarray
-        
-        # Second: convert COCO to DETR format
-        
+
+        return as_tensor
+    
+    # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
+    # with added support for several TensorTypes
+    def convertCocoToDetrFormat(self, image, target, as_tensor, return_masks=False):
+                
         w, h = image.size
 
         image_id = target["image_id"]
@@ -344,12 +344,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if annotations is not None:
                 annotations = [annotations]
 
+        as_tensor = get_as_tensor(return_tensors)
         # prepare (annotations -> target)
         if annotations is not None:
             for idx, image, anno in enumerate(zip(images, annotations)):
                 # TODO update image_id
                 target = {'image_id': anno[0]['image_id'], 'annotations': anno}
-                image, target, as_tensor = self.convertCocoToDetrFormat(image, target, return_tensors=return_tensors)
+                image, target = self.convertCocoToDetrFormat(image, target, as_tensor, return_tensors=return_tensors)
                 images[idx] = image
                 annotations[idx] = target
 
