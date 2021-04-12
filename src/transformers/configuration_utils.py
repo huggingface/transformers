@@ -165,6 +165,12 @@ class PretrainedConfig(object):
           current task.
         - **problem_type** (:obj:`str`, `optional`) -- Problem type for :obj:`XxxForSequenceClassification` models. Can
           be one of (:obj:`"regression"`, :obj:`"single_label_classification"`, :obj:`"multi_label_classification"`).
+          Please note that this parameter is only available in the following models: `"AlbertForSequenceClassification"`,
+          `"BertForSequenceClassification"`, `"BigBirdForSequenceClassification"`, `"ConvBertForSequenceClassification"`,
+          `"DistilBertForSequenceClassification"`, `"ElectraForSequenceClassification"`, `"FunnelForSequenceClassification"`,
+          `"LongformerForSequenceClassification"`, `"MobileBertForSequenceClassification"`, `"ReformerForSequenceClassification"`,
+          `"RobertaForSequenceClassification"`, `"SqueezeBertForSequenceClassification"`, `"XLMForSequenceClassification"` and
+          `"XLNetForSequenceClassification"`.
 
     Parameters linked to the tokenizer
 
