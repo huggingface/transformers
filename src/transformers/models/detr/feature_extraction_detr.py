@@ -57,8 +57,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     model_input_names = ["pixel_values", "pixel_mask"]
 
     def __init__(
-        self, do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, 
-        padding_value=0.0, **kwargs
+        self, do_resize=True, size=800, max_size=1333, do_normalize=True, image_mean=None, image_std=None, **kwargs
     ):
         super().__init__(**kwargs)
         self.do_resize = do_resize
@@ -67,7 +66,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406] 
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225] 
-        self.padding_value = padding_value
 
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L33
     # with added support for several TensorTypes
@@ -282,7 +280,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         images: Union[
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
-        annotations = Union[List[Dict], List[List[Dict]]],
+        annotations = Union[List[Dict], List[List[Dict]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs
     ) -> BatchFeature:
