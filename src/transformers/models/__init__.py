@@ -33,6 +33,7 @@ from . import (
     cpm,
     ctrl,
     deberta,
+    deit,
     dialogpt,
     distilbert,
     dpr,

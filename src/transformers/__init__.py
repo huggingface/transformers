@@ -167,6 +167,7 @@ _import_structure = {
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -380,6 +381,7 @@ else:
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -456,6 +458,7 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -608,6 +611,15 @@ if is_torch_available():
             "DebertaV2ForTokenClassification",
             "DebertaV2Model",
             "DebertaV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.deit"].extend(
+        [
+            "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DeiTForImageClassification",
+            "DeiTForImageClassificationWithTeacher",
+            "DeiTModel",
+            "DeiTPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -1506,6 +1518,7 @@ if TYPE_CHECKING:
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1692,6 +1705,7 @@ if TYPE_CHECKING:
 
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.deit import DeiTFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -1891,6 +1905,13 @@ if TYPE_CHECKING:
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+        )
+        from .models.deit import (
+            DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DeiTForImageClassification,
+            DeiTForImageClassificationWithTeacher,
+            DeiTModel,
+            DeiTPreTrainedModel,
         )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
