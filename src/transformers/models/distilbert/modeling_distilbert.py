@@ -34,8 +34,10 @@ from ...file_utils import (
     replace_return_docstrings,
 )
 from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    # BaseModelOutput,
+    # CausalLMOutput,
+    CausalLMOutputWithCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
     QuestionAnsweringModelOutput,
@@ -258,9 +260,12 @@ class MultiHeadSelfAttention(nn.Module):
         context = self.out_lin(context)  # (bs, q_length, dim)
 
         if self.is_decoder:
-            context = tuple(context) + (past_key_values,)
             # import pdb 
             # pdb.set_trace()  
+            # Context should be a tensor
+
+            context = tuple(context) + (past_key_values,)
+
             
         if output_attentions:
             return (context, weights)
@@ -300,6 +305,10 @@ class TransformerBlock(nn.Module):
 
         self.is_decoder = config.is_decoder
         self.attention = MultiHeadSelfAttention(config)
+        self.add_cross_attention = config.add_cross_attention
+        if self.add_cross_attention:
+            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            self.crossattention = BertAttention(config)
         self.sa_layer_norm = nn.LayerNorm(normalized_shape=config.dim, eps=1e-12)
 
         self.ffn = FFN(config)
@@ -376,8 +385,6 @@ class TransformerBlock(nn.Module):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         import pdb 
- 
-        # 5. Set name in form
         pdb.set_trace()  
 
         sa_output = self.sa_layer_norm(sa_output + x)  # (bs, seq_length, dim)
@@ -395,6 +402,7 @@ class TransformerBlock(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config                
         self.n_layers = config.n_layers
 
         layer = TransformerBlock(config)
@@ -405,6 +413,7 @@ class Transformer(nn.Module):
         x,
         attn_mask=None,
         head_mask=None,
+        position_ids=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         past_key_values=None,
@@ -428,6 +437,7 @@ class Transformer(nn.Module):
         """
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
+        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
 
         hidden_state = x
         for i, layer_module in enumerate(self.layer):
@@ -435,7 +445,13 @@ class Transformer(nn.Module):
                 all_hidden_states = all_hidden_states + (hidden_state,)
 
             layer_outputs = layer_module(
-                x=hidden_state, attn_mask=attn_mask, head_mask=head_mask[i], output_attentions=output_attentions
+                x=hidden_state, 
+                attn_mask=attn_mask, 
+                head_mask=head_mask[i], 
+                encoder_hidden_states = encoder_hidden_states,
+                encoder_attention_mask = encoder_attention_mask,
+                past_key_values = past_key_values[i] if past_key_values is not None else None,
+                output_attentions=output_attentions
             )
             hidden_state = layer_outputs[-1]
 
@@ -443,6 +459,9 @@ class Transformer(nn.Module):
                 assert len(layer_outputs) == 2
                 attentions = layer_outputs[0]
                 all_attentions = all_attentions + (attentions,)
+                if self.config.add_cross_attention:
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[1],)
+
             else:
                 assert len(layer_outputs) == 1
 
@@ -451,9 +470,21 @@ class Transformer(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_state,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_state, all_hidden_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=all_attentions
+            return tuple(
+                v 
+                for v in [
+                    hidden_state, 
+                    all_hidden_states, 
+                    all_attentions,
+                    all_cross_attentions,
+                ]
+                if v is not None
+            )
+        return BaseModelOutputWithPastAndCrossAttentions(
+            last_hidden_state=hidden_state, 
+            hidden_states=all_hidden_states, 
+            attentions=all_attentions,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -616,7 +647,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
         checkpoint="distilbert-base-uncased",
-        output_type=BaseModelOutput,
+        output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
     @add_code_sample_docstrings(tokenizer_class=_TOKENIZER_FOR_DOC, checkpoint="distilbert-base-uncased")
@@ -624,6 +655,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         encoder_hidden_states=None,
@@ -668,6 +700,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         return self.transformer(
             x=inputs_embeds,
             attn_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -701,10 +734,11 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         self.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(DISTILBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
+        position_ids=None,
         attention_mask=None,
         head_mask=None,
         encoder_hidden_states=None,
@@ -753,8 +787,12 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -775,11 +813,13 @@ class DistilBertForCausalLM(DistilBertPreTrainedModel):
             output = (prediction_scores,) + outputs[1:]
             return ((lm_loss,) + output) if lm_loss is not None else output
 
-        return CausalLMOutput(
+        return CausalLMOutputWithCrossAttentions(
             loss=lm_loss,
             logits=prediction_scores,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            cross_attentions=outputs.cross_attentions,
         )
 
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
@@ -826,6 +866,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -844,6 +885,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         dlbrt_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -902,6 +944,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -920,6 +963,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -983,6 +1027,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         start_positions=None,
@@ -1006,6 +1051,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         distilbert_output = self.distilbert(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1079,6 +1125,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -1096,6 +1143,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,
@@ -1160,6 +1208,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         head_mask=None,
         inputs_embeds=None,
         labels=None,
@@ -1205,10 +1254,13 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             if inputs_embeds is not None
             else None
         )
+        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
+
 
         outputs = self.distilbert(
             input_ids,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
             output_attentions=output_attentions,

@@ -232,6 +232,8 @@ if is_torch_available():
             encoder_hidden_states,
             encoder_attention_mask,
         ):
+            # import pdb 
+            # pdb.set_trace()
             config.add_cross_attention = True
             model = DistilBertForCausalLM(config=config)
             model.to(torch_device)
@@ -413,6 +415,8 @@ class DistilBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_for_causal_lm_decoder(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
+        # import pdb 
+        # pdb.set_trace()  
         self.model_tester.create_and_check_model_for_causal_lm_as_decoder(*config_and_inputs)
 
     def test_for_question_answering(self):
