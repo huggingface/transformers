@@ -39,14 +39,15 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     MBartTokenizer,
-    SchedulerType,
+    DataCollatorForSeq2Seq,
     default_data_collator,
-    get_scheduler,
     set_seed,
-    DataCollatorForSeq2Seq
+    SchedulerType,
+    get_scheduler
 )
 import datasets
 from datasets import load_dataset, load_metric
+
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 # Parsing input arguments
 def parse_args():
+
     parser = argparse.ArgumentParser(
         description="Finetune a transformers model on a text classification task")
     parser.add_argument(
@@ -76,6 +78,7 @@ def parse_args():
         type=str,
         default=None,
         help= "The configuration name of the dataset to use (via the datasets library).",
+
     )
     parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
@@ -111,6 +114,7 @@ def parse_args():
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
     parser.add_argument(
+
         "--ignore_pad_token_for_loss", type=bool, default=True, help="Whether to ignore the tokens corresponding to "
          "padded labels in the loss computation or not."
     )
@@ -219,6 +223,7 @@ def parse_args():
     args = parser.parse_args()
 
     # Sanity checks
+
     if  args.dataset_name is None and args.train_file is None and args.validation_file is None:
         raise ValueError("Need either a task name or a training/validation file.")
 
@@ -232,6 +237,7 @@ def parse_args():
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
     return args
+
 
 def main():
     # Parse the arguments
@@ -321,8 +327,7 @@ def main():
 
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        assert (
-                args.target_lang is not None and args.source_lang is not None
+        assert (args.target_lang is not None and args.source_lang is not None
         ), "mBart requires --target_lang and --source_lang"
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[args.target_lang]
@@ -509,6 +514,7 @@ def main():
                     attention_mask=batch["attention_mask"],
                     **gen_kwargs,
                 )
+
                 generated_tokens = accelerator.pad_across_processes(generated_tokens, dim=1,
                                                                     pad_index=tokenizer.pad_token_id)
                 labels = batch["labels"]
@@ -545,4 +551,6 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()
+
