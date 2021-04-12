@@ -294,7 +294,8 @@ class MecabTokenizer:
             text = unicodedata.normalize("NFKC", text)
 
         if self.do_zenkaku:
-            text = mojimoji.han_to_zen(text)
+            # replace zenkaku space with hankaku space
+            text = mojimoji.han_to_zen(text).replace('\u3000', ' ')
 
         never_split = self.never_split + (never_split if never_split is not None else [])
         tokens = []
