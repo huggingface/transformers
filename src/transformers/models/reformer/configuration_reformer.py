@@ -134,8 +134,8 @@ class ReformerConfig(PretrainedConfig):
         pad_token_id (:obj:`int`, `optional`, defaults to 0):
             The token id for the padding token.
         vocab_size (:obj:`int`, `optional`, defaults to 320):\
-            Vocabulary size of the Reformer model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.ReformerModel`.
+            Vocabulary size of the Reformer model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.ReformerModel`.
         tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
