@@ -282,7 +282,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         ],
         annotations = Union[List[Dict], List[List[Dict]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
