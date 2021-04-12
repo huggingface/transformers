@@ -127,7 +127,6 @@ class RobertaJapaneseTokenizer(XLMRobertaTokenizer):
             mecab_kwargs=mecab_kwargs,
             **kwargs,
         )
-        # ^^ We call the grandparent's init, not the parent's.
 
         self.do_word_tokenize = do_word_tokenize
         self.word_tokenizer_type = word_tokenizer_type
