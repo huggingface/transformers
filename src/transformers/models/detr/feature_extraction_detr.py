@@ -28,6 +28,39 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
+def get_as_tensor(tensor_type):
+    # First: set as_tensor
+    # Convert to TensorType
+    if not isinstance(tensor_type, TensorType):
+        tensor_type = TensorType(tensor_type)
+
+    # Get a function reference for the correct framework
+    if tensor_type == TensorType.TENSORFLOW:
+        if not is_tf_available():
+            raise ImportError(
+                "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
+            )
+        import tensorflow as tf
+
+        as_tensor = tf.constant
+    elif tensor_type == TensorType.PYTORCH:
+        if not is_torch_available():
+            raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
+        import torch
+
+        as_tensor = torch.tensor
+    elif tensor_type == TensorType.JAX:
+        if not is_flax_available():
+            raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
+        import jax.numpy as jnp  # noqa: F811
+
+        as_tensor = jnp.array
+    else:
+        as_tensor = np.asarray
+
+    return as_tensor
+
+
 class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a DETR feature extractor.
@@ -111,38 +144,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     masks = np.zeros((0, height, width), dtype=np.uint8)
 
         return masks
-        
-    def get_as_tensor(tensor_type):
-        # First: set as_tensor
-        # Convert to TensorType
-        if not isinstance(tensor_type, TensorType):
-            tensor_type = TensorType(tensor_type)
-
-        # Get a function reference for the correct framework
-        if tensor_type == TensorType.TENSORFLOW:
-            if not is_tf_available():
-                raise ImportError(
-                    "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-                )
-            import tensorflow as tf
-
-            as_tensor = tf.constant
-        elif tensor_type == TensorType.PYTORCH:
-            if not is_torch_available():
-                raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
-            import torch
-
-            as_tensor = torch.tensor
-        elif tensor_type == TensorType.JAX:
-            if not is_flax_available():
-                raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
-            import jax.numpy as jnp  # noqa: F811
-
-            as_tensor = jnp.array
-        else:
-            as_tensor = np.asarray
-
-        return as_tensor
     
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
     # with added support for several TensorTypes
