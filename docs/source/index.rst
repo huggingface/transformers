@@ -415,6 +415,7 @@ TensorFlow and/or Flax.
 
     main_classes/callback
     main_classes/configuration
+    main_classes/data_collator
     main_classes/logging
     main_classes/model
     main_classes/optimizer_schedules
