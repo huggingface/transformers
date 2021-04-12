@@ -29,12 +29,12 @@
 
 import math
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss, LayerNorm
+from torch import nn
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -276,96 +276,27 @@ FSMT_INPUTS_DOCSTRING = r"""
 """
 
 
-def invert_mask(attention_mask):
-    """Turns 1->0, 0->1, False->True, True-> False"""
-    assert attention_mask.dim() == 2
-    return attention_mask.eq(0)
-
-
-def triu_onnx(x, diagonal=0):
-    l = x.shape[0]
-    arange = torch.arange(l, device=x.device)
-    mask = arange.expand(l, l)
-    arange = arange.unsqueeze(-1)
-    if diagonal:
-        arange = arange + diagonal
-    mask = mask >= arange
-    return x.masked_fill(mask == 0, 0)
-
-
-def _prepare_fsmt_decoder_inputs(
-    config,
-    input_ids,
-    decoder_input_ids=None,
-    decoder_padding_mask=None,
-    causal_mask_dtype=torch.float32,
-):
-    """
-    Prepare masks that ignore padding tokens in the decoder and a causal mask for the decoder if none are provided.
-    This mimics the default behavior in fairseq. To override it pass in masks. Note: this is not called during
-    generation
-    """
-    pad_token_id = config.pad_token_id
-    if decoder_input_ids is None:
-        decoder_input_ids = shift_tokens_right(input_ids, pad_token_id)
-    bsz, tgt_len = decoder_input_ids.size()
-    if decoder_padding_mask is None:
-        decoder_padding_mask = make_padding_mask(decoder_input_ids, pad_token_id)
-    else:
-        decoder_padding_mask = invert_mask(decoder_padding_mask)
-    causal_mask = triu_onnx(fill_with_neg_inf(torch.zeros(tgt_len, tgt_len)), 1).to(
-        dtype=causal_mask_dtype, device=decoder_input_ids.device
-    )
-    return decoder_input_ids, decoder_padding_mask, causal_mask
-
-
-def _make_linear_from_emb(emb):
-    vocab_size, emb_size = emb.weight.shape
-    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data
-    return lin_layer
-
-
-# Helper Functions, mostly for making masks
-def _check_shapes(shape_1, shape2):
-    if shape_1 != shape2:
-        raise AssertionError(f"shape mismatch: {shape_1} != {shape2}")
-
-
-def _reorder_buffer(attn_cache, new_order):
-    for k, input_buffer_k in attn_cache.items():
-        if input_buffer_k is not None:
-            attn_cache[k] = input_buffer_k.index_select(0, new_order)
-    return attn_cache
-
-
-def fill_with_neg_inf(t):
-    """FP16-compatible function that fills a input_ids with -inf."""
-    return t.float().fill_(float("-inf")).type_as(t)
-
-
-# Public API
-def _get_shape(t):
-    return getattr(t, "shape", None)
-
-
+# Copied from transformers.models.mbart.modeling_mbart.shift_tokens_right
 def shift_tokens_right(input_ids, pad_token_id):
-    """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
+    """
+    Shift input ids one token to the right, and wrap the last non pad token (the <LID> token) Note that MBart does not
+    have a single `decoder_start_token_id` in contrast to other Bart-like models.
+    """
     prev_output_tokens = input_ids.clone()
-    index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
-    prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
-    prev_output_tokens[:, 1:] = input_ids[:, :-1]
+
+    assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
+    # replace possible -100 values in labels by `pad_token_id`
+    prev_output_tokens.masked_fill_(prev_output_tokens == -100, pad_token_id)
+
+    index_of_eos = (prev_output_tokens.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
+    decoder_start_tokens = prev_output_tokens.gather(1, index_of_eos).squeeze()
+    prev_output_tokens[:, 1:] = prev_output_tokens[:, :-1].clone()
+    prev_output_tokens[:, 0] = decoder_start_tokens
+
     return prev_output_tokens
 
 
-def make_padding_mask(input_ids, padding_idx=1):
-    """True for pad tokens"""
-    padding_mask = input_ids.eq(padding_idx)
-    if not padding_mask.any():
-        padding_mask = None
-    return padding_mask
-
-
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -381,6 +312,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -395,9 +327,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-# Helper Modules
-
-
 class SinusoidalPositionalEmbedding(nn.Embedding):
     """
     This module produces sinusoidal positional embeddings of any length.
@@ -409,7 +338,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
     These embeddings get automatically extended in forward if more positions is needed.
     """
 
-    def __init__(self, num_positions, embedding_dim, padding_idx):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int):
         self.make_weight(num_positions, embedding_dim, padding_idx)
 
     def make_weight(self, num_positions, embedding_dim, padding_idx):
@@ -425,7 +354,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         self.weight.requires_grad = False
 
     @staticmethod
-    def get_embedding(num_embeddings, embedding_dim, padding_idx):
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int):
         """
         Build sinusoidal embeddings.
 
@@ -445,7 +374,7 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         return emb
 
     @staticmethod
-    def make_positions(tensor, padding_idx: int, past_key_values_length: int = 0):
+    def make_positions(tensor: torch.FloatTensor, padding_idx: int, past_key_values_length: int = 0):
         """
         Replace non-padding symbols with their position numbers.
 
@@ -459,14 +388,39 @@ class SinusoidalPositionalEmbedding(nn.Embedding):
         incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
         return incremental_indices.long() + padding_idx
 
-    def forward(self, input, past_key_values_length=0):
+    def make_position_from_inputs_embeds(self, inputs_embeds: torch.FloatTensor):
+        """
+        We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
+
+        Args:
+            inputs_embeds: torch.Tensor
+
+        Returns: torch.Tensor
+        """
+        input_shape = inputs_embeds.size()[:-1]
+        sequence_length = input_shape[1]
+
+        position_ids = torch.arange(
+            self.padding_idx + 1, sequence_length + self.padding_idx + 1, dtype=torch.long, device=inputs_embeds.device
+        )
+        return position_ids.unsqueeze(0).expand(input_shape).contiguous()
+
+    def forward(
+        self, input_ids: torch.Tensor = None, inputs_embeds: torch.Tensor = None, past_key_values_length: int = 0
+    ):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input.shape[:2]
-        max_pos = self.padding_idx + 1 + seq_len
+        if input_ids is not None:
+            bsz, seq_len = input_ids.shape[:2]
+            positions = self.make_positions(input_ids, self.padding_idx, past_key_values_length)
+        else:
+            bsz, seq_len = inputs_embeds.size()[:-1]
+            positions = self.make_position_from_inputs_embeds(inputs_embeds)
+
+        max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
         if max_pos > self.weight.size(0):
             # expand embeddings if needed
             self.make_weight(max_pos, self.embedding_dim, self.padding_idx)
-        positions = self.make_positions(input, self.padding_idx, past_key_values_length)
+
         return super().forward(positions)
 
 
@@ -831,26 +785,29 @@ class PretrainedFSMTModel(PreTrainedModel):
 class FSMTEncoder(PretrainedFSMTModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
-    :class:`EncoderLayer`.
+    :class:`FSMTEncoderLayer`.
 
     Args:
         config: FSMTConfig
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens):
+    def __init__(self, config: FSMTConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
-
-        embed_dim = embed_tokens.embedding_dim
-        self.padding_idx = embed_tokens.padding_idx
+        embed_dim = config.d_model
+        self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
+
+        if embed_tokens is None:
+            self.embed_tokens = nn.Embedding(config.src_vocab_size, config.d_model, config.pad_token_id)
+        else:
+            self.embed_tokens = embed_tokens
+
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
         )
-
-        self.embed_tokens = embed_tokens
 
         self.layers = nn.ModuleList([FSMTEncoderLayer(config) for _ in range(config.encoder_layers)])
 
@@ -921,7 +878,7 @@ class FSMTEncoder(PretrainedFSMTModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        embed_pos = self.embed_positions(input_ids)
+        embed_pos = self.embed_positions(input_ids, inputs_embeds)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -986,22 +943,25 @@ class FSMTEncoder(PretrainedFSMTModel):
 
 class FSMTDecoder(PretrainedFSMTModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`DecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`FSMTDecoderLayer`
 
     Args:
         config: FSMTConfig
         embed_tokens (torch.nn.Embedding): output embedding
     """
 
-    def __init__(self, config: FSMTConfig, embed_tokens: nn.Embedding):
+    def __init__(self, config: FSMTConfig, embed_tokens: Optional[nn.Embedding] = None):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = embed_tokens.padding_idx
+        embed_dim = config.d_model
+        self.padding_idx = config.pad_token_id
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = embed_tokens
-        embed_dim = embed_tokens.embedding_dim
+        if embed_tokens is None:
+            self.embed_tokens = nn.Embedding(config.tgt_vocab_size, config.d_model, config.pad_token_id)
+        else:
+            self.embed_tokens = embed_tokens
 
         self.embed_positions = SinusoidalPositionalEmbedding(
             config.max_position_embeddings + self.padding_idx + 1, embed_dim, self.padding_idx
@@ -1034,7 +994,6 @@ class FSMTDecoder(PretrainedFSMTModel):
 
         return combined_attention_mask
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder.forward with Bart->FSMT
     def forward(
         self,
         input_ids=None,
@@ -1119,7 +1078,7 @@ class FSMTDecoder(PretrainedFSMTModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         # retrieve input_ids and inputs_embeds
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
@@ -1147,7 +1106,7 @@ class FSMTDecoder(PretrainedFSMTModel):
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
         # embed positions
-        positions = self.embed_positions(input_ids)
+        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
 
@@ -1292,20 +1251,6 @@ class FSMTModel(PretrainedFSMTModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # # make masks if user doesn't supply
-        # if not use_cache:
-        #     decoder_input_ids, decoder_padding_mask, causal_mask = _prepare_fsmt_decoder_inputs(
-        #         self.config,
-        #         input_ids,
-        #         decoder_input_ids=decoder_input_ids,
-        #         decoder_padding_mask=decoder_attention_mask,
-        #         causal_mask_dtype=self.decoder.embed_tokens.weight.dtype,
-        #     )
-        # else:
-        #     decoder_padding_mask, causal_mask = None, None
-
-        # assert decoder_input_ids is not None
-
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1351,6 +1296,12 @@ class FSMTModel(PretrainedFSMTModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+    def get_encoder(self):
+        return self.encoder
+
+    def get_decoder(self):
+        return self.decoder
 
     def get_input_embeddings(self):
         return self.encoder.embed_tokens
@@ -1473,7 +1424,7 @@ class FSMTForConditionalGeneration(PretrainedFSMTModel):
     ):
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
-        
+
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
             "encoder_outputs": encoder_outputs,
