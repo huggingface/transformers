@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch ViT model. """
+""" Testing suite for the PyTorch DeiT model. """
 
 
 import inspect
@@ -28,17 +28,23 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import ViTConfig, ViTForImageClassification, ViTModel
-    from transformers.models.vit.modeling_vit import VIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
+    from transformers import (
+        MODEL_MAPPING,
+        DeiTConfig,
+        DeiTForImageClassification,
+        DeiTForImageClassificationWithTeacher,
+        DeiTModel,
+    )
+    from transformers.models.deit.modeling_deit import DEIT_PRETRAINED_MODEL_ARCHIVE_LIST, to_2tuple
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import DeiTFeatureExtractor
 
 
-class ViTModelTester:
+class DeiTModelTester:
     def __init__(
         self,
         parent,
@@ -85,7 +91,7 @@ class ViTModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
 
-        config = ViTConfig(
+        config = DeiTConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -103,19 +109,19 @@ class ViTModelTester:
         return config, pixel_values, labels
 
     def create_and_check_model(self, config, pixel_values, labels):
-        model = ViTModel(config=config)
+        model = DeiTModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        # expected sequence length = num_patches + 2 (we add 2 for the [CLS] and distillation tokens)
         image_size = to_2tuple(self.image_size)
         patch_size = to_2tuple(self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 2, self.hidden_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
-        model = ViTForImageClassification(config)
+        model = DeiTForImageClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(pixel_values, labels=labels)
@@ -133,16 +139,17 @@ class ViTModelTester:
 
 
 @require_torch
-class ViTModelTest(ModelTesterMixin, unittest.TestCase):
+class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as ViT does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as DeiT does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
     all_model_classes = (
         (
-            ViTModel,
-            ViTForImageClassification,
+            DeiTModel,
+            DeiTForImageClassification,
+            DeiTForImageClassificationWithTeacher,
         )
         if is_torch_available()
         else ()
@@ -154,14 +161,14 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ViTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ViTConfig, has_text_modality=False, hidden_size=37)
+        self.model_tester = DeiTModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=DeiTConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
     def test_inputs_embeds(self):
-        # ViT does not use inputs_embeds
+        # DeiT does not use inputs_embeds
         pass
 
     def test_model_common_attributes(self):
@@ -193,11 +200,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
 
-        # in ViT, the seq_len equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in DeiT, the seq_len equals the number of patches + 2 (we add 2 for the [CLS] and distillation tokens)
         image_size = to_2tuple(self.model_tester.image_size)
         patch_size = to_2tuple(self.model_tester.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        seq_len = num_patches + 1
+        seq_len = num_patches + 2
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
         chunk_length = getattr(self.model_tester, "chunk_length", None)
@@ -286,11 +293,11 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
             )
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            # ViT has a different seq_length
+            # DeiT has a different seq_length
             image_size = to_2tuple(self.model_tester.image_size)
             patch_size = to_2tuple(self.model_tester.patch_size)
             num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-            seq_length = num_patches + 1
+            seq_length = num_patches + 2
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -309,14 +316,45 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    # special case for DeiTForImageClassificationWithTeacher model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "DeiTForImageClassificationWithTeacher":
+                del inputs_dict["labels"]
+
+        return inputs_dict
+
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            # DeiTForImageClassificationWithTeacher supports inference-only
+            if (
+                model_class in MODEL_MAPPING.values()
+                or model_class.__name__ == "DeiTForImageClassificationWithTeacher"
+            ):
+                continue
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+            loss.backward()
+
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_classification(*config_and_inputs)
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in VIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ViTModel.from_pretrained(model_name)
+        for model_name in DEIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = DeiTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -327,14 +365,20 @@ def prepare_img():
 
 
 @require_vision
-class ViTModelIntegrationTest(unittest.TestCase):
+class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("google/vit-base-patch16-224") if is_vision_available() else None
+        return (
+            DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = ViTForImageClassification.from_pretrained("google/vit-base-patch16-224").to(torch_device)
+        model = DeiTForImageClassificationWithTeacher.from_pretrained("facebook/deit-base-distilled-patch16-224").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -347,6 +391,6 @@ class ViTModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
+        expected_slice = torch.tensor([-1.0266, 0.1912, -1.2861]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

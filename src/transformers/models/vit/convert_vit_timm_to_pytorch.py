@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ViT checkpoints from the timm library."""
+"""Convert ViT and non-distilled DeiT checkpoints from the timm library."""
 
 
 import argparse
@@ -23,7 +23,7 @@ from PIL import Image
 
 import requests
 import timm
-from transformers import ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
+from transformers import DeiTFeatureExtractor, ViTConfig, ViTFeatureExtractor, ViTForImageClassification, ViTModel
 from transformers.utils import logging
 from transformers.utils.imagenet_classes import id2label
 
@@ -151,23 +151,37 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         config.patch_size = int(vit_name[-6:-4])
         config.image_size = int(vit_name[-3:])
     # size of the architecture
-    if vit_name[4:].startswith("small"):
-        config.hidden_size = 768
-        config.intermediate_size = 2304
-        config.num_hidden_layers = 8
-        config.num_attention_heads = 8
-    if vit_name[4:].startswith("base"):
-        pass
-    elif vit_name[4:].startswith("large"):
-        config.hidden_size = 1024
-        config.intermediate_size = 4096
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
-    elif vit_name[4:].startswith("huge"):
-        config.hidden_size = 1280
-        config.intermediate_size = 5120
-        config.num_hidden_layers = 32
-        config.num_attention_heads = 16
+    if "deit" in vit_name:
+        if vit_name[9:].startswith("tiny"):
+            config.hidden_size = 192
+            config.intermediate_size = 768
+            config.num_hidden_layers = 12
+            config.num_attention_heads = 3
+        elif vit_name[9:].startswith("small"):
+            config.hidden_size = 384
+            config.intermediate_size = 1536
+            config.num_hidden_layers = 12
+            config.num_attention_heads = 6
+        else:
+            pass
+    else:
+        if vit_name[4:].startswith("small"):
+            config.hidden_size = 768
+            config.intermediate_size = 2304
+            config.num_hidden_layers = 8
+            config.num_attention_heads = 8
+        elif vit_name[4:].startswith("base"):
+            pass
+        elif vit_name[4:].startswith("large"):
+            config.hidden_size = 1024
+            config.intermediate_size = 4096
+            config.num_hidden_layers = 24
+            config.num_attention_heads = 16
+        elif vit_name[4:].startswith("huge"):
+            config.hidden_size = 1280
+            config.intermediate_size = 5120
+            config.num_hidden_layers = 32
+            config.num_attention_heads = 16
 
     # load original model from timm
     timm_model = timm.create_model(vit_name, pretrained=True)
@@ -189,8 +203,11 @@ def convert_vit_checkpoint(vit_name, pytorch_dump_folder_path):
         model = ViTForImageClassification(config).eval()
     model.load_state_dict(state_dict)
 
-    # Check outputs on an image, prepared by ViTFeatureExtractor
-    feature_extractor = ViTFeatureExtractor(size=config.image_size)
+    # Check outputs on an image, prepared by ViTFeatureExtractor/DeiTFeatureExtractor
+    if "deit" in vit_name:
+        feature_extractor = DeiTFeatureExtractor(size=config.image_size)
+    else:
+        feature_extractor = ViTFeatureExtractor(size=config.image_size)
     encoding = feature_extractor(images=prepare_img(), return_tensors="pt")
     pixel_values = encoding["pixel_values"]
     outputs = model(pixel_values)

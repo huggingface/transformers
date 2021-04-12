@@ -30,10 +30,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTFeatureExtractor
+    from transformers import DeiTFeatureExtractor
 
 
-class ViTFeatureExtractionTester(unittest.TestCase):
+class DeiTFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -43,7 +43,9 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         min_resolution=30,
         max_resolution=400,
         do_resize=True,
-        size=18,
+        size=20,
+        do_center_crop=True,
+        crop_size=18,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -56,17 +58,21 @@ class ViTFeatureExtractionTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.do_center_crop = do_center_crop
+        self.crop_size = crop_size
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
 
     def prepare_feat_extract_dict(self):
         return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
+            "do_center_crop": self.do_center_crop,
+            "crop_size": self.crop_size,
+            "do_normalize": self.do_normalize,
+            "image_mean": self.image_mean,
+            "image_std": self.image_std,
         }
 
     def prepare_inputs(self, equal_resolution=False, numpify=False, torchify=False):
@@ -102,12 +108,12 @@ class ViTFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ViTFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = DeiTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ViTFeatureExtractionTester(self)
+        self.feature_extract_tester = DeiTFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -115,11 +121,13 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
 
     def test_feat_extract_properties(self):
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
-        self.assertTrue(hasattr(feature_extractor, "image_mean"))
-        self.assertTrue(hasattr(feature_extractor, "image_std"))
-        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "do_center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "center_crop"))
+        self.assertTrue(hasattr(feature_extractor, "do_normalize"))
+        self.assertTrue(hasattr(feature_extractor, "image_mean"))
+        self.assertTrue(hasattr(feature_extractor, "image_std"))
 
     def test_batch_feature(self):
         pass
@@ -139,8 +147,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
             ),
         )
 
@@ -151,8 +159,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
             ),
         )
 
@@ -171,8 +179,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
             ),
         )
 
@@ -183,8 +191,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
             ),
         )
 
@@ -203,8 +211,8 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 1,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
             ),
         )
 
@@ -215,7 +223,7 @@ class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCa
             (
                 self.feature_extract_tester.batch_size,
                 self.feature_extract_tester.num_channels,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
+                self.feature_extract_tester.crop_size,
+                self.feature_extract_tester.crop_size,
             ),
         )

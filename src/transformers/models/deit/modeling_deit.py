@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2021 Facebook AI Research (FAIR), Ross Wightman, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,11 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ViT model. """
+""" PyTorch DeiT model. """
 
 
 import collections.abc
 import math
+from dataclasses import dataclass
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -24,26 +26,29 @@ from torch import nn
 from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
+from ...file_utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import logging
-from .configuration_vit import ViTConfig
+from .configuration_deit import DeiTConfig
 
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "ViTConfig"
+_CONFIG_FOR_DOC = "DeiTConfig"
 
-VIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "nielsr/vit-base-patch16-224",
-    # See all ViT models at https://huggingface.co/models?filter=vit
+DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
+    "facebook/deit-base-distilled-patch16-224",
+    # See all DeiT models at https://huggingface.co/models?filter=deit
 ]
 
 
-# Inspired by
-# https://github.com/rwightman/pytorch-image-models/blob/b9bd960a032c75ca6b808ddeed76bee5f3ed4972/timm/models/layers/helpers.py
-# From PyTorch internals
+# Copied from transformers.models.vit.modeling_vit.to_2tuple
 def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
@@ -54,9 +59,9 @@ def to_2tuple(x):
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
 
 
-class ViTEmbeddings(nn.Module):
+class DeiTEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings.
+    Construct the CLS token, distillation token, position and patch embeddings.
 
     """
 
@@ -64,6 +69,7 @@ class ViTEmbeddings(nn.Module):
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = PatchEmbeddings(
             image_size=config.image_size,
             patch_size=config.patch_size,
@@ -71,7 +77,7 @@ class ViTEmbeddings(nn.Module):
             embed_dim=config.hidden_size,
         )
         num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values):
@@ -79,14 +85,14 @@ class ViTEmbeddings(nn.Module):
         embeddings = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+        distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, distillation_tokens, embeddings), dim=1)
         embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
         return embeddings
 
 
-# Based on timm implementation, which can be found here:
-# https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+# Copied from transformers.models.vit.modeling_vit.PatchEmbeddings
 class PatchEmbeddings(nn.Module):
     """
     Image to Patch Embedding.
@@ -115,7 +121,8 @@ class PatchEmbeddings(nn.Module):
         return x
 
 
-class ViTSelfAttention(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DeiT
+class DeiTSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -173,9 +180,10 @@ class ViTSelfAttention(nn.Module):
         return outputs
 
 
-class ViTSelfOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->DeiT
+class DeiTSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in DeiTLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
@@ -192,11 +200,12 @@ class ViTSelfOutput(nn.Module):
         return hidden_states
 
 
-class ViTAttention(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DeiT
+class DeiTAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.attention = ViTSelfAttention(config)
-        self.output = ViTSelfOutput(config)
+        self.attention = DeiTSelfAttention(config)
+        self.output = DeiTSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -226,7 +235,8 @@ class ViTAttention(nn.Module):
         return outputs
 
 
-class ViTIntermediate(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViT->DeiT
+class DeiTIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -243,7 +253,8 @@ class ViTIntermediate(nn.Module):
         return hidden_states
 
 
-class ViTOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->DeiT
+class DeiTOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -258,22 +269,23 @@ class ViTOutput(nn.Module):
         return hidden_states
 
 
-class ViTLayer(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->DeiT
+class DeiTLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ViTAttention(config)
-        self.intermediate = ViTIntermediate(config)
-        self.output = ViTOutput(config)
+        self.attention = DeiTAttention(config)
+        self.intermediate = DeiTIntermediate(config)
+        self.output = DeiTOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, head_mask=None, output_attentions=False):
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViT, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in DeiT, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -283,7 +295,7 @@ class ViTLayer(nn.Module):
         # first residual connection
         hidden_states = attention_output + hidden_states
 
-        # in ViT, layernorm is also applied after self-attention
+        # in DeiT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
         # TODO feedforward chunking not working for now
@@ -306,11 +318,12 @@ class ViTLayer(nn.Module):
         return layer_output
 
 
-class ViTEncoder(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->DeiT
+class DeiTEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([DeiTLayer(config) for _ in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -362,14 +375,15 @@ class ViTEncoder(nn.Module):
         )
 
 
-class ViTPreTrainedModel(PreTrainedModel):
+# Copied from transformers.models.vit.modeling_vit.ViTPreTrainedModel with ViT->DeiT all-casing
+class DeiTPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViTConfig
-    base_model_prefix = "vit"
+    config_class = DeiTConfig
+    base_model_prefix = "deit"
 
     def _init_weights(self, module):
         """ Initialize the weights """
@@ -388,23 +402,23 @@ class ViTPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-VIT_START_DOCSTRING = r"""
+DEIT_START_DOCSTRING = r"""
     This model is a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`_ subclass. Use
     it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config (:class:`~transformers.ViTConfig`): Model configuration class with all the parameters of the model.
+        config (:class:`~transformers.DeiTConfig`): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
             weights.
 """
 
-VIT_INPUTS_DOCSTRING = r"""
+DEIT_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it. Pixel values can be obtained using
-            :class:`~transformers.ViTFeatureExtractor`. See :meth:`transformers.ViTFeatureExtractor.__call__` for
+            :class:`~transformers.DeiTFeatureExtractor`. See :meth:`transformers.DeiTFeatureExtractor.__call__` for
             details.
 
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
@@ -425,19 +439,19 @@ VIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ViT Model transformer outputting raw hidden-states without any specific head on top.",
-    VIT_START_DOCSTRING,
+    "The bare DeiT Model transformer outputting raw hidden-states without any specific head on top.",
+    DEIT_START_DOCSTRING,
 )
-class ViTModel(ViTPreTrainedModel):
+class DeiTModel(DeiTPreTrainedModel):
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ViTEmbeddings(config)
-        self.encoder = ViTEncoder(config)
+        self.embeddings = DeiTEmbeddings(config)
+        self.encoder = DeiTEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTPooler(config) if add_pooling_layer else None
+        self.pooler = DeiTPooler(config) if add_pooling_layer else None
 
         self.init_weights()
 
@@ -452,7 +466,7 @@ class ViTModel(ViTPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -467,15 +481,15 @@ class ViTModel(ViTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, ViTModel
+            >>> from transformers import DeiTFeatureExtractor, DeiTModel
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224-in21k')
-            >>> model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k')
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTModel.from_pretrained('facebook/deit-base-distilled-patch16-224', add_pooling_layer=False)
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -521,7 +535,8 @@ class ViTModel(ViTPreTrainedModel):
         )
 
 
-class ViTPooler(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->DeiT
+class DeiTPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -538,24 +553,24 @@ class ViTPooler(nn.Module):
 
 @add_start_docstrings(
     """
-    ViT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
     the [CLS] token) e.g. for ImageNet.
     """,
-    VIT_START_DOCSTRING,
+    DEIT_START_DOCSTRING,
 )
-class ViTForImageClassification(ViTPreTrainedModel):
+class DeiTForImageClassification(DeiTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.vit = ViTModel(config, add_pooling_layer=False)
+        self.deit = DeiTModel(config, add_pooling_layer=False)
 
         # Classifier head
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -576,15 +591,17 @@ class ViTForImageClassification(ViTPreTrainedModel):
 
         Examples::
 
-            >>> from transformers import ViTFeatureExtractor, ViTForImageClassification
+            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
             >>> from PIL import Image
             >>> import requests
 
             >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
             >>> image = Image.open(requests.get(url, stream=True).raw)
 
-            >>> feature_extractor = ViTFeatureExtractor.from_pretrained('google/vit-base-patch16-224')
-            >>> model = ViTForImageClassification.from_pretrained('google/vit-base-patch16-224')
+            >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
+            >>> # so the head will be randomly initialized, hence the predictions will be random
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTForImageClassification.from_pretrained('facebook/deit-base-distilled-patch16-224')
 
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
@@ -595,7 +612,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.vit(
+        outputs = self.deit(
             pixel_values,
             head_mask=head_mask,
             output_attentions=output_attentions,
@@ -606,6 +623,7 @@ class ViTForImageClassification(ViTPreTrainedModel):
         sequence_output = outputs[0]
 
         logits = self.classifier(sequence_output[:, 0, :])
+        # we don't use the distillation token
 
         loss = None
         if labels is not None:
@@ -624,6 +642,129 @@ class ViTForImageClassification(ViTPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@dataclass
+class DeiTForImageClassificationWithTeacherOutput(ModelOutput):
+    """
+    Output type of :class:`~transformers.DeiTForImageClassificationWithTeacher`.
+
+    Args:
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Prediction scores as the average of the cls_logits and distillation logits.
+        cls_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Prediction scores of the classification head (i.e. the linear layer on top of the final hidden state of the
+            class token).
+        distillation_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, config.num_labels)`):
+            Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
+            distillation token).
+        hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
+            of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
+            each layer plus the initial embedding outputs.
+        attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
+            Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
+            sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
+            weighted average in the self-attention heads.
+    """
+
+    logits: torch.FloatTensor = None
+    cls_logits: torch.FloatTensor = None
+    distillation_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@add_start_docstrings(
+    """
+    DeiT Model transformer with image classification heads on top (a linear layer on top of the final hidden state of
+    the [CLS] token and a linear layer on top of the final hidden state of the distillation token) e.g. for ImageNet.
+
+    .. warning::
+
+           This model supports inference-only. Fine-tuning with distillation (i.e. with a teacher) is not yet
+           supported.
+    """,
+    DEIT_START_DOCSTRING,
+)
+class DeiTForImageClassificationWithTeacher(DeiTPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.deit = DeiTModel(config, add_pooling_layer=False)
+
+        # Classifier heads
+        self.cls_classifier = (
+            nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+        self.distillation_classifier = (
+            nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+        )
+
+        self.init_weights()
+
+    @add_start_docstrings_to_model_forward(DEIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=DeiTForImageClassificationWithTeacherOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values=None,
+        head_mask=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        """
+        Returns:
+
+        Examples::
+
+            >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassificationWithTeacher
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = DeiTFeatureExtractor.from_pretrained('facebook/deit-base-distilled-patch16-224')
+            >>> model = DeiTForImageClassificationWithTeacher.from_pretrained('facebook/deit-base-distilled-patch16-224')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> logits = outputs.logits
+            >>> # model predicts one of the 1000 ImageNet classes
+            >>> predicted_class_idx = logits.argmax(-1).item()
+            >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.deit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        cls_logits = self.cls_classifier(sequence_output[:, 0, :])
+        distillation_logits = self.distillation_classifier(sequence_output[:, 1, :])
+
+        # during inference, return the average of both classifier predictions
+        logits = (cls_logits + distillation_logits) / 2
+
+        if not return_dict:
+            output = (logits, cls_logits, distillation_logits) + outputs[2:]
+            return output
+
+        return DeiTForImageClassificationWithTeacherOutput(
+            logits=logits,
+            cls_logits=cls_logits,
+            distillation_logits=distillation_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
