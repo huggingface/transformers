@@ -362,7 +362,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [self._resize(image=image, target=None, size=self.size, max_size=self.max_size)[0] for image in images]
+                images = [self._resize(image=image, target=None, size=self.size, as_tensor=as_tensor, max_size=self.max_size)[0] for image in images]
                 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
