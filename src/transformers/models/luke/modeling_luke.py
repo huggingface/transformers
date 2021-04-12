@@ -62,8 +62,7 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
             Sequence of entity hidden-states at the output of the last layer of the model.
         pooler_output (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, hidden_size)`):
             Last layer hidden-state of the first token of the sequence (classification token) further processed by a
-            Linear layer and a Tanh activation function. The Linear layer weights are trained from the next sentence
-            prediction (classification) objective during pretraining.
+            Linear layer and a Tanh activation function.
         hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
@@ -71,7 +70,7 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
-            of each layer plus the initial embedding outputs.
+            of each layer plus the initial entity embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length + entity_length, sequence_length + entity_length)`. Attentions weights after the attention
@@ -102,7 +101,7 @@ class BaseLukeModelOutput(BaseModelOutput):
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
-            of each layer plus the initial embedding outputs.
+            of each layer plus the initial entity embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`.
@@ -134,7 +133,7 @@ class EntityClassificationOutput(ModelOutput):
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
-            of each layer plus the initial embedding outputs.
+            of each layer plus the initial entity embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
@@ -167,7 +166,7 @@ class EntityPairClassificationOutput(ModelOutput):
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
-            of each layer plus the initial embedding outputs.
+            of each layer plus the initial entity embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
@@ -200,7 +199,7 @@ class EntitySpanClassificationOutput(ModelOutput):
         entity_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, entity_length, hidden_size)`. Entity hidden-states of the model at the output
-            of each layer plus the initial embedding outputs.
+            of each layer plus the initial entity embedding outputs.
         attentions (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_attentions=True`` is passed or when ``config.output_attentions=True``):
             Tuple of :obj:`torch.FloatTensor` (one for each layer) of shape :obj:`(batch_size, num_heads,
             sequence_length, sequence_length)`. Attentions weights after the attention softmax, used to compute the
@@ -774,14 +773,14 @@ LUKE_INPUTS_DOCSTRING = r"""
 
             `What are position IDs? <../glossary.html#position-ids>`_
 
-        entity_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
+        entity_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)`):
             Indices of entity tokens in the entity vocabulary.
 
             Indices can be obtained using :class:`~transformers.LukeTokenizer`. See
             :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
             details.
 
-        entity_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
+        entity_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, entity_length)`, `optional`):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in ``[0, 1]``:
 
 
@@ -789,7 +788,7 @@ LUKE_INPUTS_DOCSTRING = r"""
             - 1 for entity tokens that are **not masked**,
             - 0 for entity tokens that are **masked**.
 
-        entity_token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
+        entity_token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)`, `optional`):
             Segment token indices to indicate first and second portions of the entity token inputs. Indices are
             selected in ``[0, 1]``:
 
@@ -891,23 +890,23 @@ class LukeModel(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeModel
 
-            >>> tokenizer = LukeTokenizer.from_pretrained('studio-ousia/luke-base')
-            >>> model = LukeModel.from_pretrained('studio-ousia/luke-base')
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
+            >>> model = LukeModel.from_pretrained("studio-ousia/luke-base")
 
-            # Compute the contextualized entity representation for "Beyoncé" from the <mask> entity token.
+            # Compute the contextualized entity representation corresponding to the entity mention "Beyoncé" using the [MASK] entity token.
             >>> text = "Beyoncé lives in New York."
-            >>> entities = ["<mask>"]
-            >>> entity_spans = [(0, 7)]
+            >>> entities = ["[MASK]"]
+            >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
 
             >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
             >>> outputs = model(**encoding)
             >>> word_last_hidden_state = outputs.word_last_hidden_state
             >>> entity_last_hidden_state = outputs.entity_last_hidden_state
 
-            # Input Wikipedia entities to enrich the contextualized representation.
+            # Input Wikipedia entities to obtain enriched contextualized representations.
             >>> text = "Beyoncé lives in New York."
-            >>> entities = ["Beyoncé", "New York City"]
-            >>> entity_spans = [(0, 7), (17, 25)]
+            >>> entities = ["Beyoncé", "New York City"]  # Wikipedia entity titles corresponding to the entity mentions "Beyoncé" and "New York"
+            >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
 
             >>> encoding = tokenizer(text, entities=entities, entity_spans=entity_spans, add_prefix_space=True, return_tensors="pt")
             >>> outputs = model(**encoding)
@@ -1037,7 +1036,7 @@ def create_position_ids_from_input_ids(input_ids, padding_idx):
 
 @add_start_docstrings(
     """
-    The LUKE model with a classification head on top (a linear layer on top of the hidden state of the <mask> entity
+    The LUKE model with a classification head on top (a linear layer on top of the hidden state of the first entity
     token) for entity classification tasks, such as Open Entity.
     """,
     LUKE_START_DOCSTRING,
@@ -1087,11 +1086,11 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntityClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained('studio-ousia/luke-base', task="entity_classification")
-            >>> model = LukeForEntityClassification.from_pretrained('studio-ousia/luke-base')
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
+            >>> model = LukeForEntityClassification.from_pretrained("studio-ousia/luke-base")
 
             >>> text = "Beyoncé lives in New York."
-            >>> entity_spans = [(0, 7)]
+            >>> entity_spans = [(0, 7)]  # character-based entity span corresponding to "Beyoncé"
             >>> inputs = tokenizer(text, entity_spans=entity_spans, task="entity_classification", return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
@@ -1145,8 +1144,8 @@ class LukeForEntityClassification(LukePreTrainedModel):
 
 @add_start_docstrings(
     """
-    The LUKE Model with a classification head on top (a linear layer on top of the hidden states of the two <mask>
-    entity tokens) for entity pair classification tasks, such as TACRED.
+    The LUKE Model with a classification head on top (a linear layer on top of the hidden states of the two entity
+    tokens) for entity pair classification tasks, such as TACRED.
     """,
     LUKE_START_DOCSTRING,
 )
@@ -1196,7 +1195,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             >>> from transformers import LukeTokenizer, LukeForEntityPairClassification
 
             >>> text = "Beyoncé lives in New York."
-            >>> entity_spans = [(0, 7), (17, 25)]
+            >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
             >>> inputs = tokenizer(text, entity_spans=entity_spans, task="entity_pair_classification", return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits
@@ -1309,12 +1308,12 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
 
             >>> from transformers import LukeTokenizer, LukeForEntitySpanClassification
 
-            >>> tokenizer = LukeTokenizer.from_pretrained('studio-ousia/luke-base')
-            >>> model = LukeForEntitySpanClassification.from_pretrained('studio-ousia/luke-base')
+            >>> tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base")
+            >>> model = LukeForEntitySpanClassification.from_pretrained("studio-ousia/luke-base")
 
             >>> text = "Beyoncé lives in New York."
-            >>> entities = ["<mask>", "<mask>"]
-            >>> entity_spans = [(0, 7), (17, 25)]
+            >>> entities = ["[MASK]", "[MASK]"]
+            >>> entity_spans = [(0, 7), (17, 25)]  # character-based entity spans corresponding to "Beyoncé" and "New York"
             >>> inputs = tokenizer(text, entities=entities, entity_spans=entity_spans, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> logits = outputs.logits

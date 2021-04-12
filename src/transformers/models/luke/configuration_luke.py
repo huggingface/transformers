@@ -43,8 +43,9 @@ class LukeConfig(RobertaConfig):
         entity_emb_size (:obj:`int`, `optional`, defaults to 256):
             The number of dimensions of the entity embedding.
         use_entity_aware_attention (:obj:`bool`, defaults to :obj:`True`):
-            Whether or not the model should use entity-aware self-attention mechanism proposed in the original paper
-            <https://arxiv.org/abs/2010.01057>.
+            Whether or not the model should use the entity-aware self-attention mechanism proposed in
+            `LUKE: Deep Contextualized Entity Representations with Entity-aware Self-attention (Yamada et al.)
+            <https://arxiv.org/abs/2010.01057>`__.
 
     Examples::
         >>> from transformers import LukeConfig, LukeModel
