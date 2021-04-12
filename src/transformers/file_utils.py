@@ -194,7 +194,7 @@ if (
     and "PYTORCH_TRANSFORMERS_CACHE" not in os.environ
     and "TRANSFORMERS_CACHE" not in os.environ
 ):
-    logger.warn(
+    logger.warning(
         "In Transformers v4.0.0, the default path to cache downloaded models changed from "
         "'~/.cache/torch/transformers' to '~/.cache/huggingface/transformers'. Since you don't seem to have overridden "
         "and '~/.cache/torch/transformers' is a directory that exists, we're moving it to "
@@ -397,6 +397,11 @@ def is_torchaudio_available():
     return _torchaudio_available
 
 
+def is_speech_available():
+    # For now this depends on torchaudio but the exact dependency might evolve in the future.
+    return _torchaudio_available
+
+
 def torch_only_method(fn):
     def wrapper(*args, **kwargs):
         if not _torch_available:
@@ -514,82 +519,45 @@ explained here: https://pandas.pydata.org/pandas-docs/stable/getting_started/ins
 
 
 # docstyle-ignore
+SPEECH_IMPORT_ERROR = """
+{0} requires the torchaudio library but it was not found in your environment. You can install it with pip:
+`pip install torchaudio`
+"""
+
+
+# docstyle-ignore
 VISION_IMPORT_ERROR = """
 {0} requires the PIL library but it was not found in your environment. You can install it with pip:
 `pip install pillow`
 """
 
 
-def requires_datasets(obj):
+BACKENDS_MAPPING = OrderedDict(
+    [
+        ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
+        ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
+        ("flax", (is_flax_available, FLAX_IMPORT_ERROR)),
+        ("pandas", (is_pandas_available, PANDAS_IMPORT_ERROR)),
+        ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
+        ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),
+        ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
+        ("sklearn", (is_sklearn_available, SKLEARN_IMPORT_ERROR)),
+        ("speech", (is_speech_available, SPEECH_IMPORT_ERROR)),
+        ("tf", (is_tf_available, TENSORFLOW_IMPORT_ERROR)),
+        ("tokenziers", (is_tokenizers_available, TOKENIZERS_IMPORT_ERROR)),
+        ("torch", (is_torch_available, PYTORCH_IMPORT_ERROR)),
+        ("vision", (is_vision_available, VISION_IMPORT_ERROR)),
+    ]
+)
+
+
+def requires_backends(obj, backends):
+    if not isinstance(backends, (list, tuple)):
+        backends = [backends]
+
     name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_datasets_available():
-        raise ImportError(DATASETS_IMPORT_ERROR.format(name))
-
-
-def requires_faiss(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_faiss_available():
-        raise ImportError(FAISS_IMPORT_ERROR.format(name))
-
-
-def requires_pytorch(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_torch_available():
-        raise ImportError(PYTORCH_IMPORT_ERROR.format(name))
-
-
-def requires_sklearn(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_sklearn_available():
-        raise ImportError(SKLEARN_IMPORT_ERROR.format(name))
-
-
-def requires_tf(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_tf_available():
-        raise ImportError(TENSORFLOW_IMPORT_ERROR.format(name))
-
-
-def requires_flax(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_flax_available():
-        raise ImportError(FLAX_IMPORT_ERROR.format(name))
-
-
-def requires_tokenizers(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_tokenizers_available():
-        raise ImportError(TOKENIZERS_IMPORT_ERROR.format(name))
-
-
-def requires_sentencepiece(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_sentencepiece_available():
-        raise ImportError(SENTENCEPIECE_IMPORT_ERROR.format(name))
-
-
-def requires_protobuf(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_protobuf_available():
-        raise ImportError(PROTOBUF_IMPORT_ERROR.format(name))
-
-
-def requires_pandas(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_pandas_available():
-        raise ImportError(PANDAS_IMPORT_ERROR.format(name))
-
-
-def requires_scatter(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_scatter_available():
-        raise ImportError(SCATTER_IMPORT_ERROR.format(name))
-
-
-def requires_vision(obj):
-    name = obj.__name__ if hasattr(obj, "__name__") else obj.__class__.__name__
-    if not is_vision_available():
-        raise ImportError(VISION_IMPORT_ERROR.format(name))
+    if not all(BACKENDS_MAPPING[backend][0]() for backend in backends):
+        raise ImportError("".join([BACKENDS_MAPPING[backend][1].format(name) for backend in backends]))
 
 
 def add_start_docstrings(*docstr):

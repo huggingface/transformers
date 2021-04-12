@@ -145,7 +145,7 @@ jobs:
                   key: v0.4-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
+            - run: python -m pytest -n 4 --dist=loadfile -s --make-reports=tests_torch ./tests/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -277,7 +277,7 @@ jobs:
                       - v0.4-custom_tokenizers-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece]
+            - run: pip install .[ja,testing,sentencepiece,jieba]
             - run: python -m unidic download
             - save_cache:
                   key: v0.4-custom_tokenizers-{{ checksum "setup.py" }}
@@ -348,7 +348,7 @@ jobs:
                       - v0.4-{{ checksum "setup.py" }}
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
-            - run: pip install ."[all, docs]"
+            - run: pip install ."[docs]"
             - save_cache:
                   key: v0.4-build_doc-{{ checksum "setup.py" }}
                   paths:
@@ -370,7 +370,7 @@ jobs:
                   keys:
                       - v0.4-deploy_doc-{{ checksum "setup.py" }}
                       - v0.4-{{ checksum "setup.py" }}
-            - run: pip install ."[all,docs]"
+            - run: pip install ."[docs]"
             - save_cache:
                   key: v0.4-deploy_doc-{{ checksum "setup.py" }}
                   paths:

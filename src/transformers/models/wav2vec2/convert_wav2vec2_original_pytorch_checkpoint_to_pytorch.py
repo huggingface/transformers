@@ -111,7 +111,7 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
         if not is_used:
             unused_weights.append(name)
 
-    logger.warn(f"Unused weights: {unused_weights}")
+    logger.warning(f"Unused weights: {unused_weights}")
 
 
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):

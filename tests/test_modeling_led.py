@@ -21,6 +21,7 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.file_utils import cached_property
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
@@ -412,7 +413,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             if "labels" in inputs_dict:
                 correct_outlen += 1  # loss is added to beginning
             # Question Answering model returns start_logits and end_logits
-            if model_class in MODEL_FOR_QUESTION_ANSWERING_MAPPING.values():
+            if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
                 correct_outlen += 1  # start_logits and end_logits instead of only 1 output
             if "past_key_values" in outputs:
                 correct_outlen += 1  # past_key_values have been returned
