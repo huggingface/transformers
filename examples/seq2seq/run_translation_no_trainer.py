@@ -24,15 +24,12 @@ import math
 import os
 import random
 import numpy as np
-import datasets
-from datasets import load_dataset, load_metric
+
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
 import torch
-
-import transformers
-import accelerate
 from accelerate import Accelerator
+import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
@@ -40,10 +37,7 @@ from transformers import (
     AutoModelForSeq2SeqLM,
     AdamW,
     AutoConfig,
-    AutoModel,
     AutoTokenizer,
-    DataCollatorWithPadding,
-    PretrainedConfig,
     MBartTokenizer,
     SchedulerType,
     default_data_collator,
@@ -51,6 +45,8 @@ from transformers import (
     set_seed,
     DataCollatorForSeq2Seq
 )
+import datasets
+from datasets import load_dataset, load_metric
 
 
 logger = logging.getLogger(__name__)
@@ -58,9 +54,10 @@ logger = logging.getLogger(__name__)
 MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
-
+# Parsing input arguments
 def parse_args():
-    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(
+        description="Finetune a transformers model on a text classification task")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -86,35 +83,36 @@ def parse_args():
 
 
     parser.add_argument(
-        "--num_beams", type=int, default=None, help="Number of beams to use for evaluation. This argument will be passed to ``model.generate``, "
-            "which is used during ``evaluate`` and ``predict``."
+        "--num_beams", type=int, default=None, help="Number of beams to use for evaluation. This argument will be "
+             "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``."
     )
 
     parser.add_argument(
-        "--max_source_length", type=int, default=1024, help="The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+        "--max_source_length", type=int, default=1024, help="The maximum total input sequence length after "
+              "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded."
     )
     parser.add_argument(
-        "--max_target_length", type=int, default=128, help="The maximum total sequence length for target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+        "--max_target_length", type=int, default=128, help="The maximum total sequence length for target text after "
+             "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
             "during ``evaluate`` and ``predict``."
     )
     parser.add_argument(
-        "--val_max_target_length", type=int, default=None, help="The maximum total sequence length for validation target text after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded. Will default to `max_target_length`."
-            "This argument is also used to override the ``max_length`` param of ``model.generate``, which is used "
-            "during ``evaluate`` and ``predict``."
+        "--val_max_target_length", type=int, default=None, help="The maximum total sequence length for validation "
+            "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
+            "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
+             "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
     )
     parser.add_argument(
-        "--pad_to_max_length", type=bool, default=False, help="Whether to pad all samples to model maximum sentence length. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch. More "
+        "--pad_to_max_length", type=bool, default=False, help="Whether to pad all samples to model maximum sentence "
+             "length. If False, will pad the samples dynamically when batching to the maximum length in the batch. More"
             "efficient on GPU but very bad for TPU."
     )
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
     parser.add_argument(
-        "--ignore_pad_token_for_loss", type=bool, default=True, help="Whether to ignore the tokens corresponding to padded labels in the loss computation or not."
+        "--ignore_pad_token_for_loss", type=bool, default=True, help="Whether to ignore the tokens corresponding to "
+         "padded labels in the loss computation or not."
     )
     parser.add_argument(
         "--source_lang", type=str, default=None, help="Source language id for translation."
@@ -123,7 +121,8 @@ def parse_args():
         "--target_lang", type=str, default=None, help="Target language id for translation."
     )
     parser.add_argument(
-        "--source_prefix", type=str, default=None, help="A prefix to add before every source text (useful for T5 models)."
+        "--source_prefix", type=str, default=None, help="A prefix to add before every source text "
+        "(useful for T5 models)."
     )
     parser.add_argument(
         "--preprocessing_num_workers", type=int, default=None,
@@ -222,25 +221,25 @@ def parse_args():
     # Sanity checks
     if  args.dataset_name is None and args.train_file is None and args.validation_file is None:
         raise ValueError("Need either a task name or a training/validation file.")
-    else:
-        if args.train_file is not None:
-            extension = args.train_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-        if args.validation_file is not None:
-            extension = args.validation_file.split(".")[-1]
-            assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+
+    if args.train_file is not None:
+        extension = args.train_file.split(".")[-1]
+        assert extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+    if args.validation_file is not None:
+        extension = args.validation_file.split(".")[-1]
+        assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
 
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
-
     return args
 
-
 def main():
+    # Parse the arguments
     args = parse_args()
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     accelerator = Accelerator()
+
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -338,7 +337,6 @@ def main():
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     column_names = raw_datasets["train"].column_names
-    text_column_name = "text" if "text" in column_names else column_names[0]
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
@@ -389,7 +387,6 @@ def main():
     )
 
     train_dataset = processed_datasets["train"]
-
     eval_dataset = processed_datasets["validation"]
 
     # Log a few random samples from the training set:
@@ -549,5 +546,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
