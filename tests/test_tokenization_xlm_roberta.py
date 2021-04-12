@@ -120,12 +120,12 @@ class XLMRobertaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
     def test_subword_regularization_tokenizer(self):
+        # Subword regularization is only available for the slow tokenizer.
         tokenizer = XLMRobertaTokenizer(SAMPLE_VOCAB, keep_accents=True, enable_sampling=True, alpha=0.1, nbest=-1)
 
-        # Subword regularization are regularization augments training
-        # data with subword sampling. This has a random component.
-        # We test if the tokenizer generates different results when
-        # subword regularization is enabled.
+        # Subword regularization augments training data with subword sampling.
+        # This has a random component. We test if the tokenizer generates different
+        # results when subword regularization is enabled.
         tokens_list = []
         for _ in range(5):
             tokens_list.append(tokenizer.tokenize("This is a test for subword regularization."))
