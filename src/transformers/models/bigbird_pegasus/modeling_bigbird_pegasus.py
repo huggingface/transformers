@@ -1373,13 +1373,12 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         layer_head_mask: torch.Tensor,
-        output_attentions: bool = False,
-        # block_sparse config
         band_mask=None,
         from_mask=None,
         to_mask=None,
         from_blocked_mask=None,
         to_blocked_mask=None,
+        output_attentions: bool = False,
     ):
         """
         Args:
@@ -1915,24 +1914,24 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                         attention_mask,
                         (head_mask[idx] if head_mask is not None else None),
                         # block_sparse config
-                        band_mask=band_mask,
-                        from_mask=from_mask,
-                        to_mask=to_mask,
-                        from_blocked_mask=blocked_encoder_mask,
-                        to_blocked_mask=blocked_encoder_mask,
+                        band_mask,
+                        from_mask,
+                        to_mask,
+                        blocked_encoder_mask,
+                        blocked_encoder_mask,
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                        output_attentions=output_attentions,
                         # block_sparse config
                         band_mask=band_mask,
                         from_mask=from_mask,
                         to_mask=to_mask,
                         from_blocked_mask=blocked_encoder_mask,
                         to_blocked_mask=blocked_encoder_mask,
+                        output_attentions=output_attentions,
                     )
                     # TODO:
                     if idx == 0:

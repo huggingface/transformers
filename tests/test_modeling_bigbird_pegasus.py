@@ -64,28 +64,33 @@ def prepare_bigbird_pegasus_inputs_dict(
         "decoder_attention_mask": attention_mask,
     }
 
+# bigbird fast tests will have problem of attention type switching
 
 @require_torch
 class BigBirdPegasusModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
-        seq_length=7,
+        batch_size=7,
+        seq_length=256,
         is_training=True,
         use_labels=False,
         vocab_size=99,
-        hidden_size=16,
+        hidden_size=32,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=4,
-        hidden_act="gelu",
+        intermediate_size=31,
+        hidden_act="gelu_fast",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=260,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
+        attention_type="original_full",
+        use_bias=True,
+        block_size=16,
+        num_random_blocks=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -104,6 +109,11 @@ class BigBirdPegasusModelTester:
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+
+        self.attention_type = attention_type
+        self.use_bias = use_bias
+        self.block_size = block_size
+        self.num_random_blocks = num_random_blocks
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -129,6 +139,10 @@ class BigBirdPegasusModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            attention_type=self.attention_type,
+            use_bias=self.use_bias,
+            block_size=self.block_size,
+            num_random_blocks=self.num_random_blocks,
         )
         inputs_dict = prepare_bigbird_pegasus_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
@@ -200,6 +214,48 @@ class BigBirdPegasusModelTester:
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
 
+    def create_and_check_model(self, config, inputs_dict):
+        model = BigBirdPegasusModel(config=config).to(torch_device).eval()
+        input_ids = inputs_dict["input_ids"]
+        decoder_input_ids = inputs_dict['decoder_input_ids']
+        result = model(input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    # def create_and_check_for_auto_padding(
+    #     self,
+    #     config,
+    #     input_ids,
+    #     token_type_ids,
+    #     input_mask,
+    #     sequence_labels,
+    #     token_labels,
+    #     choice_labels,
+    # ):
+    #     model = BigBirdModel(config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids)
+    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    # def create_and_check_for_change_to_full_attn(
+    #     self,
+    #     config,
+    #     input_ids,
+    #     token_type_ids,
+    #     input_mask,
+    #     sequence_labels,
+    #     token_labels,
+    #     choice_labels,
+    # ):
+    #     model = BigBirdModel(config)
+    #     model.to(torch_device)
+    #     model.eval()
+    #     result = model(input_ids)
+    #     self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+    #     # the config should not be changed
+    #     self.parent.assertTrue(model.config.attention_type == "block_sparse")
+
+
 
 @require_torch
 class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
@@ -213,6 +269,10 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+
+    # torchscript should be possible, but takes prohibitively long to test.
+    # Also torchscript is not an important feature to have in the beginning.
+    # test_torchscript = False
 
     def setUp(self):
         self.model_tester = BigBirdPegasusModelTester(self)
@@ -238,6 +298,12 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
+
+    def test_model_various_attn_type(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        for type in ["original_full", "block_sparse"]:
+            config_and_inputs[0].attention_type = type
+            self.model_tester.create_and_check_model(*config_and_inputs)
 
     # BigBirdPegasusForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
@@ -279,6 +345,16 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    # def test_auto_padding(self):
+    #     self.model_tester.seq_length = 241
+    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
+    #     self.model_tester.create_and_check_for_auto_padding(*config_and_inputs)
+
+    # def test_for_change_to_full_attn(self):
+    #     self.model_tester.seq_length = 9
+    #     config_and_inputs = self.model_tester.prepare_config_and_inputs()
+    #     self.model_tester.create_and_check_for_change_to_full_attn(*config_and_inputs)
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -299,12 +375,8 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
         raise AssertionError(msg)
 
 
-def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
-
-
 TOLERANCE = 1e-4
-
+MODEL_ID = 'vasudevgupta/bigbird-pegasus-large-pubmed'
 
 @require_torch
 @require_sentencepiece
@@ -313,43 +385,114 @@ TOLERANCE = 1e-4
 class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return BigBirdPegasusTokenizer.from_pretrained('bigbird-pegasus-base')
+        return BigBirdPegasusTokenizer.from_pretrained(MODEL_ID)
 
-    def test_inference_no_head(self):
-        model = BigBirdPegasusModel.from_pretrained('bigbird-pegasus-base').to(torch_device)
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
-        inputs_dict = prepare_bigbird_pegasus_inputs_dict(model.config, input_ids, decoder_input_ids)
-        with torch.no_grad():
-            output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((1, 11, 1024))
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+    def _get_dummy_input_ids(self):
+        # fmt: off
+        ids = torch.tensor(
+            [[685, 560, 630, 193, 836, 764, 708, 360, 10, 724, 278, 755, 805, 600, 71, 473, 601, 397, 315, 706, 487, 552, 88, 175, 601, 850, 678, 538, 846, 73, 778, 917, 116, 977, 756, 710, 1023, 848, 432, 449, 851, 100, 985, 178, 756, 798, 660, 148, 911, 424, 289, 962, 266, 698, 640, 545, 544, 715, 245, 152, 676, 511, 460, 883, 184, 29, 803, 129, 129, 933, 54, 902, 551, 489, 757, 274, 336, 389, 618, 43, 443, 544, 889, 258, 322, 1000, 938, 58, 292, 871, 120, 780, 431, 83, 92, 897, 399, 612, 566, 909, 634, 939, 85, 204, 325, 775, 965, 48, 640, 1013, 132, 973, 869, 181, 1001, 847, 144, 661, 228, 955, 792, 720, 910, 374, 854, 561, 306, 582, 170, 676, 449, 96, 198, 607, 257, 882, 691, 293, 931, 817, 862, 388, 611, 555, 974, 369, 1000, 918, 202, 384, 513, 907, 371, 556, 955, 384, 24, 700, 131, 378, 99, 575, 932, 735, 124, 964, 595, 943, 740, 149, 210, 563, 412, 783, 42, 59, 706, 37, 779, 87, 44, 873, 12, 771, 308, 81, 33, 183, 129, 807, 276, 175, 555, 372, 185, 445, 489, 590, 287, 281, 638, 771, 516, 95, 227, 876, 270, 881, 297, 329, 20, 608, 841, 411, 451, 249, 181, 324, 1005, 830, 783, 865, 261, 964, 750, 140, 1021, 599, 462, 890, 622, 844, 697, 529, 153, 926, 150, 111, 26, 465, 957, 890, 887, 118, 446, 596, 674, 873, 929, 229, 508, 764, 122, 327, 470, 288, 526, 840, 697, 153, 592, 42, 275, 553, 439, 208, 780, 167, 112, 350, 1018, 130, 736, 887, 813, 217, 382, 25, 68, 979, 1008, 772, 235, 717, 999, 292, 727, 1023, 702, 710, 728, 556, 33, 12, 617, 213, 139, 695, 1004, 422, 638, 669, 624, 489, 771, 540, 980, 218, 664, 822, 308, 175, 149, 950, 542, 580, 548, 808, 394, 74, 298, 920, 900, 815, 731, 947, 877, 772, 800, 778, 395, 540, 430, 200, 424, 62, 342, 866, 45, 803, 931, 89, 34, 646, 233, 768, 37, 769, 460, 291, 198, 895, 950, 255, 81, 447, 137, 190, 130, 210, 369, 292, 377, 348, 169, 885, 805, 177, 538, 324, 872, 509, 804, 115, 799, 30, 754, 290, 147, 274, 222, 341, 510, 515, 70, 358, 909, 557, 886, 766, 323, 624, 92, 342, 424, 552, 972, 663, 415, 658, 711, 968, 275, 861, 44, 84, 434, 810, 94, 175, 406, 202, 858, 499, 481, 988, 330, 541, 1004, 210, 618, 955, 897, 983, 576, 17, 107, 165, 607, 537, 629, 192, 196, 308, 137, 953, 860, 94, 892, 751, 88, 161, 148, 585, 456, 88, 14, 315, 594, 121, 885, 952, 833, 716, 733, 933, 282, 801, 427, 783, 471, 285, 277, 979, 325, 535, 228, 891, 596, 648, 969, 574, 654, 518, 257, 137, 208, 464, 950, 140, 5, 424, 349, 942, 283, 587, 821, 1007, 434, 220, 820, 740, 874, 787, 374, 291, 564, 671, 438, 827, 940, 824, 509, 1021, 787, 942, 856, 450, 327, 491, 54, 817, 95, 60, 337, 667, 637, 164, 571, 946, 107, 202, 301, 782, 890, 839, 551, 680, 649, 14, 1017, 904, 721, 1017, 535, 505, 848, 986, 777, 740, 775, 210, 456, 469, 474, 963, 573, 401, 57, 883, 750, 664, 281, 5, 613, 1005, 306, 344, 543, 567, 154, 789, 354, 358, 698, 408, 412, 30, 930, 372, 822, 632, 948, 855, 503, 8, 618, 1010, 138, 695, 897, 852, 377, 933, 722, 149, 886, 1009, 260, 127, 811, 578, 533, 805, 325, 977, 113, 944, 651, 238, 361, 991, 860, 556, 64, 928, 917, 455, 266, 445, 604, 624, 420, 340, 845, 275, 370, 843, 227, 226, 940, 644, 909, 229, 827, 898, 370, 129, 808, 25, 699, 293, 356, 838, 135, 4, 227, 890, 681, 445, 418, 285, 837, 27, 737, 249, 366, 948, 202, 438, 198, 930, 648, 638, 607, 73, 247, 853, 136, 708, 214, 476, 621, 324, 103, 853, 328, 596, 224, 257, 646, 348, 108, 927, 970, 980, 520, 150, 998, 477, 393, 684, 559, 1, 361, 692, 551, 90, 75, 500, 739, 636, 344, 97, 852, 283, 719, 33, 116, 455, 866, 429, 828, 826, 691, 174, 746, 133, 442, 94, 348, 402, 420, 707, 405, 942, 186, 976, 376, 677, 874, 703, 517, 498, 499, 206, 415, 366, 856, 739, 420, 586, 219, 952, 539, 375, 23, 461, 720, 355, 603, 52, 999, 815, 721, 574, 445, 816, 1019, 105, 641, 395, 972, 910, 328, 607, 519, 686, 246, 415, 528, 170, 167, 310, 940, 595, 392, 221, 834, 682, 835, 115, 861, 335, 742, 220, 247, 101, 416, 222, 179, 509, 175, 606, 627, 674, 781, 737, 746, 849, 67, 457, 1012, 126, 139, 625, 731, 156, 697, 121, 322, 449, 710, 857, 291, 976, 4, 701, 239, 678, 172, 724, 857, 583, 661, 903, 797, 628, 903, 835, 605, 989, 615, 870, 380, 710, 110, 330, 101, 695, 846, 918, 508, 672, 594, 36, 238, 244, 251, 393, 767, 282, 22, 430, 230, 983, 401, 154, 1007, 120, 678, 896, 386, 390, 711, 397, 347, 587, 1020, 951, 79, 831, 585, 200, 814, 134, 560, 700, 171, 452, 139, 755, 314, 476, 346, 388, 126, 719, 851, 198, 699, 901, 18, 710, 448, 351, 665, 644, 326, 425, 165, 571, 178, 440, 665, 674, 915, 866, 463, 754, 136, 950, 748, 47, 497, 1013, 640, 930, 338, 158, 525, 631, 815, 887, 289, 803, 116, 600, 637, 410, 175, 499, 876, 565, 1002, 623, 577, 333, 887, 586, 147, 773, 776, 644, 49, 77, 294, 117, 494, 561, 110, 979, 180, 562, 72, 859, 434, 1007, 286, 516, 75, 597, 491, 322, 888, 533, 209, 43, 499, 29, 411, 856, 181, 305, 963, 615, 778, 259, 373, 877, 746, 858, 381, 886, 613, 91, 69, 618, 523, 13, 617, 226, 422, 168, 929, 379, 290, 923, 100, 218, 307, 345, 211, 789, 735, 669, 585, 275, 410, 921, 552, 235, 636, 285, 665, 659, 708, 173, 724, 302, 823, 1, 139, 708, 903, 732, 868, 442, 967, 916, 163, 51, 243, 871]],  # noqa: E231
+            dtype=torch.long,
+            device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        # fmt: on
+        return ids
 
-    def test_inference_head(self):
-        model = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-base').to(torch_device)
-
-        # change to intended input
-        input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        decoder_input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
-        inputs_dict = prepare_bigbird_pegasus_inputs_dict(model.config, input_ids, decoder_input_ids)
-        with torch.no_grad():
-            output = model(**inputs_dict)[0]
-        expected_shape = torch.Size((1, 11, model.config.vocab_size))
-        self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
-        expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+    def _get_dummy_target_ids(self):
+        # fmt: off
+        ids = torch.tensor(
+            [[13,  6,  1,  4, 12,  4,  8, 10,  4,  6,  3,  5,  8,  7,  9,  9]],  # noqa: E231
+            dtype=torch.long,
+            device=torch_device,
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        # fmt: on
+        return ids
+
+    def test_inference_block_sparse(self):
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3)
+        model.to(torch_device)
+
+        input_ids = self._get_dummy_input_ids()
+        target_ids = self._get_dummy_target_ids()
+
+        outputs = model(input_ids, labels=target_ids)
+        prediction_logits = outputs.logits
+
+        self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
+
+        expected_prediction_logits_slice = torch.tensor(
+            [
+                [2.7850e+00,  2.1340e+00,  6.9243e+00, -1.6229e+00,  1.3514e+00,
+                1.6717e+00,  3.7153e+00,  4.0460e+00,  7.7103e+00,  2.0608e+00,
+                2.0849e+00,  2.6425e-01,  1.3922e+00,  3.2817e+00,  6.7929e+00,
+                5.1377e+00, -8.8223e-01,  8.0610e+00,  3.5040e+00, -6.7016e-01,
+                3.1645e+00,  5.9968e+00,  7.1979e+00,  4.6750e+00, -1.7048e+00,
+                3.6679e+00,  6.0426e+00,  2.2554e+00],
+                [2.8886e+00,  2.1618e+00,  7.3298e+00, -1.6505e+00,  1.4547e+00,
+                1.5609e+00,  4.0607e+00,  4.0344e+00,  7.9283e+00,  2.0122e+00,
+                2.2935e+00,  6.4506e-01,  1.3994e+00,  2.8479e+00,  6.8885e+00,
+                5.2957e+00, -1.0617e+00,  7.5960e+00,  3.5451e+00, -2.8749e-01,
+                3.0484e+00,  5.8572e+00,  7.0605e+00,  4.7069e+00, -1.7569e+00,
+                3.5513e+00,  5.7782e+00,  2.2574e+00],
+                [3.0022e+00,  2.1422e+00,  7.5003e+00, -1.8414e+00,  1.5542e+00,
+                1.5280e+00,  4.2919e+00,  4.2379e+00,  8.0021e+00,  2.0778e+00,
+                2.3393e+00,  7.7081e-01,  1.4541e+00,  2.8147e+00,  6.9367e+00,
+                5.5263e+00, -9.2410e-01,  7.3092e+00,  3.5381e+00,  7.4557e-03,
+                3.0441e+00,  5.8372e+00,  7.0485e+00,  4.8198e+00, -1.7150e+00,
+                3.5200e+00,  5.7461e+00,  2.2033e+00],
+                [3.0866e+00,  2.1803e+00,  7.5962e+00, -1.9698e+00,  1.6234e+00,
+                1.4729e+00,  4.2370e+00,  4.2311e+00,  8.0083e+00,  2.1442e+00,
+                2.2766e+00,  7.9028e-01,  1.3316e+00,  2.8024e+00,  6.8416e+00,
+                5.7381e+00, -9.5507e-01,  7.1824e+00,  3.6925e+00, -2.2659e-02,
+                2.9421e+00,  6.0023e+00,  7.0864e+00,  4.9817e+00, -1.6959e+00,
+                3.4832e+00,  5.6923e+00,  2.2286e+00]
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
+        )
+
+    def test_inference_full_attn(self):
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="original_full")
+        model.to(torch_device)
+
+        input_ids = self._get_dummy_input_ids()
+        target_ids = self._get_dummy_target_ids()
+        
+        outputs = model(input_ids, labels=target_ids)
+        prediction_logits = outputs.logits
+
+        self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
+
+        expected_prediction_logits_slice = torch.tensor(
+            [
+                [ 3.7736,  0.6459,  5.9393, -2.0550,  1.3957,  1.6994,  1.7002,  4.3194,
+                6.7270,  0.8877,  2.7457,  0.3128, -0.3091,  3.7636,  6.4191,  3.2155,
+                -0.9953,  7.4407,  3.8938,  0.4070,  3.7436,  3.7248,  5.6073,  3.8378,
+                -1.9400,  5.2315,  4.6829,  2.0397],
+                [ 3.8075,  0.5993,  5.9881, -1.9268,  1.7395,  1.9801,  1.4785,  4.4040,
+                6.9427,  0.6825,  2.8742,  0.7088, -0.6241,  3.3309,  6.5836,  3.2848,
+                -1.1375,  7.2144,  4.1101,  0.8657,  3.9520,  3.5079,  5.4696,  3.9301,
+                -2.2243,  5.2562,  4.6510,  1.9688],
+                [ 3.9393,  0.5811,  6.1118, -1.9829,  1.9584,  2.0622,  1.6118,  4.5815,
+                7.1832,  0.6703,  2.9474,  0.8766, -0.7241,  3.3090,  6.7720,  3.4544,
+                -1.0948,  7.0197,  4.2286,  1.1543,  4.0334,  3.4939,  5.5613,  4.1545,
+                -2.2169,  5.4238,  4.7881,  1.9614],
+                [ 4.0004,  0.5768,  6.1671, -2.1092,  2.0556,  2.0222,  1.5487,  4.5812,
+                7.2975,  0.7099,  3.0134,  0.9069, -0.8406,  3.2854,  6.7560,  3.5334,
+                -1.2231,  6.8766,  4.3854,  1.1062,  3.9816,  3.6632,  5.6403,  4.3885,
+                -2.2414,  5.4234,  4.7948,  1.9947]
+            ],
+            device=torch_device,
+        )
+        self.assertTrue(
+            torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
+        )
 
     def test_seq_to_seq_generation(self):
-        hf = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-base').to(torch_device)
-        tok = BigBirdPegasusTokenizer.from_pretrained('bigbird-pegasus-base')
+
+        hf = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID).to(torch_device)
+        tok = BigBirdPegasusTokenizer.from_pretrained(MODEL_ID)
 
         batch_input = [
             # string 1,
@@ -392,8 +535,8 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         self,
         parent,
         vocab_size=99,
-        batch_size=13,
-        d_model=16,
+        batch_size=7,
+        d_model=32,
         decoder_seq_length=7,
         is_training=True,
         is_decoder=True,
@@ -411,6 +554,10 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         bos_token_id=1,
         eos_token_id=2,
         scope=None,
+        attention_type="original_full",
+        use_bias=True,
+        block_size=16,
+        num_random_blocks=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -443,6 +590,11 @@ class BigBirdPegasusStandaloneDecoderModelTester:
         self.base_model_out_len = 2
         self.decoder_attention_idx = 1
 
+        self.attention_type = attention_type
+        self.use_bias = use_bias
+        self.block_size = block_size
+        self.num_random_blocks = num_random_blocks
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
 
@@ -468,6 +620,10 @@ class BigBirdPegasusStandaloneDecoderModelTester:
             decoder_start_token_id=self.decoder_start_token_id,
             max_position_embeddings=self.max_position_embeddings,
             is_encoder_decoder=self.is_encoder_decoder,
+            attention_type=self.attention_type,
+            use_bias=self.use_bias,
+            block_size=self.block_size,
+            num_random_blocks=self.num_random_blocks,
         )
 
         return (
