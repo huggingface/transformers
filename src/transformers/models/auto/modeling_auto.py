@@ -19,6 +19,8 @@ import warnings
 from collections import OrderedDict
 
 from ...utils import logging
+
+# Add modeling imports here
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -95,6 +97,7 @@ from ..deberta_v2.modeling_deberta_v2 import (
     DebertaV2ForTokenClassification,
     DebertaV2Model,
 )
+from ..deit.modeling_deit import DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTModel
 from ..distilbert.modeling_distilbert import (
     DistilBertForMaskedLM,
     DistilBertForMultipleChoice,
@@ -134,8 +137,6 @@ from ..funnel.modeling_funnel import (
     FunnelModel,
 )
 from ..gpt2.modeling_gpt2 import GPT2ForSequenceClassification, GPT2LMHeadModel, GPT2Model
-
-# Add modeling imports here
 from ..gpt_neo.modeling_gpt_neo import GPTNeoForCausalLM, GPTNeoModel
 from ..ibert.modeling_ibert import (
     IBertForMaskedLM,
@@ -293,6 +294,7 @@ from .configuration_auto import (
     CTRLConfig,
     DebertaConfig,
     DebertaV2Config,
+    DeiTConfig,
     DistilBertConfig,
     DPRConfig,
     ElectraConfig,
@@ -340,6 +342,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING = OrderedDict(
     [
         # Base model mapping
+        (DeiTConfig, DeiTModel),
         (GPTNeoConfig, GPTNeoModel),
         (BigBirdConfig, BigBirdModel),
         (Speech2TextConfig, Speech2TextModel),
@@ -512,6 +515,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = OrderedDict(
     [
         # Model for Image Classification mapping
         (ViTConfig, ViTForImageClassification),
+        (DeiTConfig, (DeiTForImageClassification, DeiTForImageClassificationWithTeacher)),
     ]
 )
 
