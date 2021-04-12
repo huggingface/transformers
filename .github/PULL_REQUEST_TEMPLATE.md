@@ -30,7 +30,7 @@ Fixes # (issue)
 ## Who can review?
 
 Anyone in the community is free to review the PR once the tests have passed. Feel free to tag
-members/contributors which may be interested in your PR.
+members/contributors who may be interested in your PR.
 
 <!-- Your PR will be replied to more quickly if you can figure out the right person to tag with @
 
