@@ -378,7 +378,6 @@ doc_styler = DocstringStyler()
 def _reindent_code_blocks(text):
     """Checks indent in code blocks is of four"""
     lines = text.split("\n")
-    in_code_block = False
     idx = 0
     while idx < len(lines):
         # Detect if the line is the start of a new code-block.
