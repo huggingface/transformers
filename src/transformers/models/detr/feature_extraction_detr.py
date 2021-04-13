@@ -153,6 +153,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
         as_tensor, tensor_type = get_as_tensor(tensor_type)
 
+        print(tensor_type)
+        
         w, h = image.size
 
         image_id = target["image_id"]
