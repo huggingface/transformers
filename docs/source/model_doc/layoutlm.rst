@@ -56,7 +56,7 @@ Tips:
 
 .. code-block::
 
-   def normalize_bbox(bbox, width, height):
+    def normalize_bbox(bbox, width, height):
         return [
             int(1000 * (bbox[0] / width)),
             int(1000 * (bbox[1] / height)),
@@ -69,11 +69,11 @@ occurs. Those can be obtained using the Python Image Library (PIL) library for e
 
 .. code-block::
 
-   from PIL import Image
+    from PIL import Image
 
-   image = Image.open("name_of_your_document - can be a png file, pdf, etc.")
+    image = Image.open("name_of_your_document - can be a png file, pdf, etc.")
 
-   width, height = image.size
+    width, height = image.size
 
 - For a demo which shows how to fine-tune :class:`LayoutLMForTokenClassification` on the `FUNSD dataset
   <https://guillaumejaume.github.io/FUNSD/>`__ (a collection of annotated forms), see `this notebook

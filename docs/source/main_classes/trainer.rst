@@ -710,18 +710,18 @@ shell from a cell. For example, to use ``run_translation.py`` you would launch i
 
 .. code-block::
 
-   !git clone https://github.com/huggingface/transformers
-   !cd transformers; deepspeed examples/seq2seq/run_translation.py ...
+    !git clone https://github.com/huggingface/transformers
+    !cd transformers; deepspeed examples/seq2seq/run_translation.py ...
 
 or with ``%%bash`` magic, where you can write a multi-line code for the shell program to run:
 
 .. code-block::
 
-   %%bash
+    %%bash
 
-   git clone https://github.com/huggingface/transformers
-   cd transformers
-   deepspeed examples/seq2seq/run_translation.py ...
+    git clone https://github.com/huggingface/transformers
+    cd transformers
+    deepspeed examples/seq2seq/run_translation.py ...
 
 In such case you don't need any of the code presented at the beginning of this section.
 

@@ -378,23 +378,26 @@ doc_styler = DocstringStyler()
 def _reindent_code_blocks(text):
     """Checks indent in code blocks is of four"""
     lines = text.split("\n")
-    in_code_block = False
     idx = 0
     while idx < len(lines):
         # Detect if the line is the start of a new code-block.
-        if _re_code_block.search(lines[idx]) is not None:
+        if _re_code_block.search(lines[idx]) is not None or _re_code_block_explicit.search(lines[idx]) is not None:
+            # Loop until the next indented line.
             while len(get_indent(lines[idx])) == 0:
                 idx += 1
             indent = len(get_indent(lines[idx]))
+            # Loop until we are out of the code block and make the minimum indent be 4.
             while indent > 0 and idx < len(lines):
                 if len(lines[idx]) > 0 and indent < 4:
                     lines[idx] = " " * 4 + lines[idx][indent:]
                 idx += 1
-                if len(lines[idx]) > 0:
-                    indent = len(get_indent(lines[idx])) if idx < len(lines) else 0
+                if idx >= len(lines):  # To get out of the loop
+                    indent = 0
+                elif len(lines[idx]) > 0:  # We ignore empty lines
+                    indent = len(get_indent(lines[idx]))
         else:
             idx += 1
-    
+
     return "\n".join(lines)
 
 
