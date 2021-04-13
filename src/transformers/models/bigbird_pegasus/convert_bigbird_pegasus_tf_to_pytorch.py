@@ -20,7 +20,7 @@ import tensorflow as tf
 import torch
 from tqdm import tqdm
 
-from transformers import BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration, BigBirdPegasusTokenizer
+from transformers import BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration
 
 
 INIT_COMMON = [
@@ -39,31 +39,39 @@ END_COMMON = [
     ("intermediate.dense", "fc1"),
 ]
 
-DECODER_PATTERNS = INIT_COMMON + [
-    # self-attn
-    ("attention.self.LayerNorm", "self_attn_layer_norm"),
-    ("attention.output.dense", "self_attn.out_proj"),
-    ("attention.self", "self_attn"),
-    # cross-attn
-    ("attention.encdec.LayerNorm", "encoder_attn_layer_norm"),
-    ("attention.encdec_output.dense", "encoder_attn.out_proj"),
-    ("attention.encdec", "encoder_attn"),
-    ("key", "k_proj"),
-    ("value", "v_proj"),
-    ("query", "q_proj"),
-    ("decoder.LayerNorm", "decoder.layernorm_embedding"),
-] + END_COMMON
+DECODER_PATTERNS = (
+    INIT_COMMON
+    + [
+        # self-attn
+        ("attention.self.LayerNorm", "self_attn_layer_norm"),
+        ("attention.output.dense", "self_attn.out_proj"),
+        ("attention.self", "self_attn"),
+        # cross-attn
+        ("attention.encdec.LayerNorm", "encoder_attn_layer_norm"),
+        ("attention.encdec_output.dense", "encoder_attn.out_proj"),
+        ("attention.encdec", "encoder_attn"),
+        ("key", "k_proj"),
+        ("value", "v_proj"),
+        ("query", "q_proj"),
+        ("decoder.LayerNorm", "decoder.layernorm_embedding"),
+    ]
+    + END_COMMON
+)
 
-REMAINING_PATTERNS = INIT_COMMON + [
-    # embedding
-    ("embeddings.word_embeddings", "shared.weight"),
-    ("embeddings.position_embeddings", "embed_positions.weight"),
-    # self-attn
-    ("attention.self.LayerNorm", "self_attn_layer_norm"),
-    ("attention.output.dense", "self_attn.output"),
-    ("attention.self", "self_attn.self"),
-    ("encoder.LayerNorm", "encoder.layernorm_embedding"),
-] + END_COMMON
+REMAINING_PATTERNS = (
+    INIT_COMMON
+    + [
+        # embedding
+        ("embeddings.word_embeddings", "shared.weight"),
+        ("embeddings.position_embeddings", "embed_positions.weight"),
+        # self-attn
+        ("attention.self.LayerNorm", "self_attn_layer_norm"),
+        ("attention.output.dense", "self_attn.output"),
+        ("attention.self", "self_attn.self"),
+        ("encoder.LayerNorm", "encoder.layernorm_embedding"),
+    ]
+    + END_COMMON
+)
 
 
 def rename_state_dict_key(k, patterns):
@@ -89,7 +97,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         # print(k, " -> ", new_k)
         if new_k not in sd:
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
-        if any([True if i in k else False for i in ['dense', 'query', 'key', 'value']]):
+        if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         assert v.shape == sd[new_k].shape, f"{new_k}, {k}, {v.shape}, {sd[new_k].shape}"
@@ -100,7 +108,7 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
         # print(k, " -> ", new_k)
         if new_k not in sd and k != "pegasus/embeddings/position_embeddings":
             raise ValueError(f"could not find new key {new_k} in state dict. (converted from {k})")
-        if any([True if i in k else False for i in ['dense', 'query', 'key', 'value']]):
+        if any([True if i in k else False for i in ["dense", "query", "key", "value"]]):
             v = v.T
         mapping[new_k] = torch.from_numpy(v)
         if k != "pegasus/embeddings/position_embeddings":
@@ -112,7 +120,15 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
     mapping["model.decoder.embed_positions.weight"] = mapping.pop("model.embed_positions.weight")
     missing, extra = torch_model.load_state_dict(mapping, strict=False)
     unexpected_missing = [
-        k for k in missing if k not in ['final_logits_bias', 'model.encoder.embed_tokens.weight', 'model.decoder.embed_tokens.weight', 'lm_head.weight']
+        k
+        for k in missing
+        if k
+        not in [
+            "final_logits_bias",
+            "model.encoder.embed_tokens.weight",
+            "model.decoder.embed_tokens.weight",
+            "lm_head.weight",
+        ]
     ]
     assert unexpected_missing == [], f"no matches found for the following torch keys {unexpected_missing}"
     assert extra == [], f"no matches found for the following tf keys {extra}"

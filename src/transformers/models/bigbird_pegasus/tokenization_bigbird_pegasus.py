@@ -15,9 +15,11 @@
 """Tokenization classes for BigBirdPegasus."""
 
 
+from typing import List, Optional
+
 from ...utils import logging
 from ..big_bird.tokenization_big_bird import BigBirdTokenizer
-from typing import List, Optional
+
 
 logger = logging.get_logger(__name__)
 
@@ -42,9 +44,9 @@ class BigBirdPegasusTokenizer(BigBirdTokenizer):
     r"""
     Construct a BigBirdPegasus tokenizer.
 
-    :class:`~transformers.BigBirdPegasusTokenizer` is identical to :class:`~transformers.BigBirdTokenizer`. Refer to superclass
-    :class:`~transformers.BigBirdTokenizer` for usage examples and documentation concerning the initialization
-    parameters and other methods.
+    :class:`~transformers.BigBirdPegasusTokenizer` is identical to :class:`~transformers.BigBirdTokenizer`. Refer to
+    superclass :class:`~transformers.BigBirdTokenizer` for usage examples and documentation concerning the
+    initialization parameters and other methods.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
@@ -56,8 +58,8 @@ class BigBirdPegasusTokenizer(BigBirdTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Build model inputs from a sequence or a pair of sequence for summarization tasks by concatenating and
-        adding special tokens. A Big Bird sequence has the following format:
+        Build model inputs from a sequence or a pair of sequence for summarization tasks by concatenating and adding
+        special tokens. A Big Bird sequence has the following format:
 
         - single sequence: ``X``
         - pair of sequences: ``[CLS] A [SEP] B [SEP]``

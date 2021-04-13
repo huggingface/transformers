@@ -2,15 +2,6 @@
 from ..file_utils import requires_tokenizers
 
 
-class BigBirdPegasusTokenizerFast:
-    def __init__(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_tokenizers(self)
-
-
 class AlbertTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
@@ -39,6 +30,15 @@ class BarthezTokenizerFast:
 
 
 class BertTokenizerFast:
+    def __init__(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_tokenizers(self)
+
+
+class BigBirdPegasusTokenizerFast:
     def __init__(self, *args, **kwargs):
         requires_tokenizers(self)
 

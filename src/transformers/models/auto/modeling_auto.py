@@ -21,15 +21,6 @@ from collections import OrderedDict
 from ...configuration_utils import PretrainedConfig
 from ...file_utils import add_start_docstrings
 from ...utils import logging
-
-# Add modeling imports here
-from ..bigbird_pegasus.modeling_bigbird_pegasus import (
-    BigBirdPegasusForConditionalGeneration,
-    BigBirdPegasusForCausalLM,
-    BigBirdPegasusForQuestionAnswering,
-    BigBirdPegasusForSequenceClassification,
-    BigBirdPegasusModel,
-)
 from ..albert.modeling_albert import (
     AlbertForMaskedLM,
     AlbertForMultipleChoice,
@@ -67,6 +58,15 @@ from ..big_bird.modeling_big_bird import (
     BigBirdForSequenceClassification,
     BigBirdForTokenClassification,
     BigBirdModel,
+)
+
+# Add modeling imports here
+from ..bigbird_pegasus.modeling_bigbird_pegasus import (
+    BigBirdPegasusForCausalLM,
+    BigBirdPegasusForConditionalGeneration,
+    BigBirdPegasusForQuestionAnswering,
+    BigBirdPegasusForSequenceClassification,
+    BigBirdPegasusModel,
 )
 from ..blenderbot.modeling_blenderbot import BlenderbotForCausalLM, BlenderbotForConditionalGeneration, BlenderbotModel
 from ..blenderbot_small.modeling_blenderbot_small import (
@@ -275,13 +275,13 @@ from ..xlnet.modeling_xlnet import (
     XLNetModel,
 )
 from .configuration_auto import (
-    BigBirdPegasusConfig,
     AlbertConfig,
     AutoConfig,
     BartConfig,
     BertConfig,
     BertGenerationConfig,
     BigBirdConfig,
+    BigBirdPegasusConfig,
     BlenderbotConfig,
     BlenderbotSmallConfig,
     CamembertConfig,
@@ -424,7 +424,6 @@ MODEL_FOR_PRETRAINING_MAPPING = OrderedDict(
 MODEL_WITH_LM_HEAD_MAPPING = OrderedDict(
     [
         # Model with LM heads mapping
-
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (BigBirdConfig, BigBirdForMaskedLM),
         (Speech2TextConfig, Speech2TextForConditionalGeneration),
@@ -531,7 +530,6 @@ MODEL_FOR_MASKED_LM_MAPPING = OrderedDict(
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = OrderedDict(
     [
         # Model for Seq2Seq Causal LM mapping
-
         (BigBirdPegasusConfig, BigBirdPegasusForConditionalGeneration),
         (M2M100Config, M2M100ForConditionalGeneration),
         (LEDConfig, LEDForConditionalGeneration),

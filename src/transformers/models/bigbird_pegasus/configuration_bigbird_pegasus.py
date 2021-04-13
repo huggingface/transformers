@@ -30,20 +30,19 @@ BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class BigBirdPegasusConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a :class:`~transformers.BigBirdPegasusModel`.
-    It is used to instantiate an BigBirdPegasus model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BigBirdPegasus `google/bigbird-pegasus-large-arxiv <https://huggingface.co/google/bigbird-pegasus-large-arxiv>`__ architecture.
+    This is the configuration class to store the configuration of a :class:`~transformers.BigBirdPegasusModel`. It is
+    used to instantiate an BigBirdPegasus model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the BigBirdPegasus
+    `google/bigbird-pegasus-large-arxiv <https://huggingface.co/google/bigbird-pegasus-large-arxiv>`__ architecture.
 
-    Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
-    to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
-    for more information.
+    Configuration objects inherit from :class:`~transformers.PretrainedConfig` and can be used to control the model
+    outputs. Read the documentation from :class:`~transformers.PretrainedConfig` for more information.
 
 
     Args:
         vocab_size (:obj:`int`, `optional`, defaults to 96103):
-            Vocabulary size of the BigBirdPegasus model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdPegasusModel`.
+            Vocabulary size of the BigBirdPegasus model. Defines the number of different tokens that can be represented
+            by the :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdPegasusModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimension of the layers and the pooler layer.
         encoder_layers (:obj:`int`, `optional`, defaults to 16):
@@ -84,7 +83,8 @@ class BigBirdPegasusConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         attention_type (:obj:`str`, `optional`, defaults to :obj:`"block_sparse"`)
             Whether to use block sparse attention (with n complexity) as introduced in paper or original attention
-            layer (with n^2 complexity) in encoder. Possible values are :obj:`"original_full"` and :obj:`"block_sparse"`.
+            layer (with n^2 complexity) in encoder. Possible values are :obj:`"original_full"` and
+            :obj:`"block_sparse"`.
         use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
             Whether to use bias in query, key, value.
         block_size (:obj:`int`, `optional`, defaults to 64)
@@ -110,6 +110,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
     """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
+
     def __init__(
         self,
         vocab_size=96103,
@@ -137,7 +138,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        attention_type='block_sparse', # only for encoder
+        attention_type="block_sparse",  # only for encoder
         block_size=64,
         num_random_blocks=3,
         use_bias=True,
@@ -149,7 +150,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
-            **kwargs
+            **kwargs,
         )
 
         self.vocab_size = vocab_size

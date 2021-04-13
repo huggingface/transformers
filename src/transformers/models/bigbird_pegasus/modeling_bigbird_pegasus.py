@@ -15,9 +15,8 @@
 """ PyTorch BigBirdPegasus model. """
 
 
-import math
-import os
 import copy
+import math
 import random
 from typing import Optional, Tuple
 
@@ -38,11 +37,11 @@ from ...file_utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
-    CausalLMOutputWithCrossAttentions
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -94,9 +93,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
-def _expand_mask(
-    mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None
-):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -125,6 +122,7 @@ class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         )
         return super().forward(positions)
+
 
 # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdSelfAttention with BigBird->BigBirdPegasus
 class BigBirdPegasusSelfAttention(nn.Module):
@@ -229,6 +227,7 @@ class BigBirdPegasusSelfAttention(nn.Module):
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
+
 
 # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdBlockSparseAttention with BigBird->BigBirdPegasus
 class BigBirdPegasusBlockSparseAttention(nn.Module):
@@ -1186,7 +1185,7 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 past_key_value,
                 output_attentions,
             )
-            self.self_o = self_outputs[0] # TODO
+            self.self_o = self_outputs[0]  # TODO
         else:
             assert (
                 encoder_hidden_states is None
@@ -1195,8 +1194,8 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 hidden_states, band_mask, from_mask, to_mask, from_blocked_mask, to_blocked_mask, output_attentions
             )
 
-        attention_output = self.output(self_outputs[0])#, hidden_states)
-        self.so_o = attention_output # TODO
+        attention_output = self.output(self_outputs[0])  # , hidden_states)
+        self.so_o = attention_output  # TODO
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         # print("Attention_outputs", attention_output)
@@ -1385,9 +1384,9 @@ class BigBirdPegasusEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states) # +
+        hidden_states = self.self_attn_layer_norm(hidden_states)  # +
 
-        self.before_attn_o = hidden_states # TODO
+        self.before_attn_o = hidden_states  # TODO
 
         self_attention_outputs = self.self_attn(
             hidden_states=hidden_states,
@@ -1408,20 +1407,20 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         # hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        self.after_attn_o = hidden_states # TODO
+        self.after_attn_o = hidden_states  # TODO
 
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states) # +
-        self.before_inter_o = hidden_states # TODO
+        hidden_states = self.final_layer_norm(hidden_states)  # +
+        self.before_inter_o = hidden_states  # TODO
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         # hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        self.after_inter_o = hidden_states # TODO
+        self.after_inter_o = hidden_states  # TODO
 
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         # hidden_states = self.final_layer_norm(hidden_states)
-        self.output_o = hidden_states # TODO
+        self.output_o = hidden_states  # TODO
 
         if hidden_states.dtype == torch.float16 and (
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
@@ -1499,7 +1498,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         # add present self-attn cache to positions 1,2 of present_key_value tuple
-        hidden_states = self.self_attn_layer_norm(hidden_states) # +
+        hidden_states = self.self_attn_layer_norm(hidden_states)  # +
         hidden_states, self_attn_weights, present_key_value = self.self_attn(
             hidden_states=hidden_states,
             past_key_value=self_attn_past_key_value,
@@ -1519,7 +1518,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
             cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            hidden_states = self.encoder_attn_layer_norm(hidden_states) # +
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)  # +
             hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
@@ -1537,7 +1536,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.final_layer_norm(hidden_states) # +
+        hidden_states = self.final_layer_norm(hidden_states)  # +
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         # hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
@@ -1554,6 +1553,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
 
 # Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->BigBirdPegasus
 class BigBirdPegasusClassificationHead(nn.Module):
@@ -1608,7 +1608,8 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
 
 BIGBIRD_PEGASUS_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings etc.)
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings
+    etc.)
 
     This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
@@ -1616,10 +1617,9 @@ BIGBIRD_PEGASUS_START_DOCSTRING = r"""
 
     Parameters:
         config (:class:`~transformers.BigBirdPegasusConfig`):
-            Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model
-            weights.
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            :meth:`~transformers.PreTrainedModel.from_pretrained` method to load the model weights.
 """
 
 BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
@@ -1663,9 +1663,9 @@ BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
 
-            If you want to change padding behavior, you should read :func:`modeling_bigbird_pegasus._prepare_decoder_inputs` and
-            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
-            information on the default strategy.
+            If you want to change padding behavior, you should read
+            :func:`modeling_bigbird_pegasus._prepare_decoder_inputs` and modify to your needs. See diagram 1 in `the
+            paper <https://arxiv.org/abs/1910.13461>`__ for more information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
@@ -1812,6 +1812,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 `What are attention masks? <../glossary.html#attention-mask>`__
             head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
                 Mask to nullify selected heads of the attention modules. Mask values selected in ``[0, 1]``:
+
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the heas is **masked**.
 
@@ -1855,7 +1856,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         # TODO: check if its in embedding
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        self.embed_o = hidden_states # TODO
+        self.embed_o = hidden_states  # TODO
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=hidden_states.device)
@@ -1899,6 +1900,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                             return module(*inputs, output_attentions)
 
                         return custom_forward
+
                     # TODO: fix it
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
@@ -1938,21 +1940,20 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         hidden_states = self.layernorm_embedding(hidden_states)
-    
+
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        
+
         self.encoder_o = hidden_states
 
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-    
-    @staticmethod # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
+    @staticmethod  # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
@@ -2035,7 +2036,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
 class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a :class:`BigBirdPegasusDecoderLayer`
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
+    :class:`BigBirdPegasusDecoderLayer`
 
     Args:
         config: BigBirdPegasusConfig
@@ -2190,7 +2192,9 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
-        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds, past_key_values_length)
+        attention_mask = self._prepare_decoder_attention_mask(
+            attention_mask, input_shape, inputs_embeds, past_key_values_length
+        )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -2203,7 +2207,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         hidden_states = inputs_embeds + positions
         # hidden_states = self.layernorm_embedding(hidden_states)
 
-        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training) # TODO: check
+        hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)  # TODO: check
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -2230,7 +2234,9 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn("`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`...")
+                    logger.warn(
+                        "`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`..."
+                    )
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -2299,7 +2305,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 @add_start_docstrings(
     "The bare BigBirdPegasus Model outputting raw hidden-states without any specific head on top.",
     BIGBIRD_PEGASUS_START_DOCSTRING,
-) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModel with Pegasus->BigBirdPegasus
+)  # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModel with Pegasus->BigBirdPegasus
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
@@ -2407,8 +2413,9 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The BigBirdPegasus Model with a language modeling head. Can be used for summarization.", BIGBIRD_PEGASUS_START_DOCSTRING
-) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModelForConditionalGeneration with Pegasus->BigBirdPegasus
+    "The BigBirdPegasus Model with a language modeling head. Can be used for summarization.",
+    BIGBIRD_PEGASUS_START_DOCSTRING,
+)  # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModelForConditionalGeneration with Pegasus->BigBirdPegasus
 class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [
@@ -2501,7 +2508,9 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 
         if labels is not None:
             if decoder_input_ids is None:
-                decoder_input_ids = shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.model(
             input_ids,
@@ -2576,11 +2585,11 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BigBirdPegasus model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
-    tasks.
+    BigBirdPegasus model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g.
+    for GLUE tasks.
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
-) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusForSequenceClassification with Pegasus->BigBirdPegasus
+)  # Copied from transformers.models.pegasus.modeling_pegasus.PegasusForSequenceClassification with Pegasus->BigBirdPegasus
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     def __init__(self, config: BigBirdPegasusConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -2678,11 +2687,11 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 
 @add_start_docstrings(
     """
-    BigBirdPegasus Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    BigBirdPegasus Model with a span classification head on top for extractive question-answering tasks like SQuAD (a
+    linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
-) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModelForQuestionAnswering with Pegasus->BigBirdPegasus
+)  # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModelForQuestionAnswering with Pegasus->BigBirdPegasus
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2790,6 +2799,7 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
+
 # Copied from transformers.models.pegasus.modeling_pegasus.PegasusDecoderWrapper with Pegasus->BigBirdPegasus
 class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     """
@@ -2803,6 +2813,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
+
 
 # Copied from transformers.models.pegasus.modeling_pegasus.PegasusForCausalLM with Pegasus->BigBirdPegasus
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):

@@ -2,50 +2,6 @@
 from ..file_utils import requires_pytorch
 
 
-BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class BigBirdPegasusForConditionalGeneration:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class BigBirdPegasusForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class BigBirdPegasusForQuestionAnswering:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class BigBirdPegasusForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
-class BigBirdPegasusModel:
-    def __init__(self, *args, **kwargs):
-        requires_pytorch(self)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requires_pytorch(self)
-
-
 class PyTorchBenchmark:
     def __init__(self, *args, **kwargs):
         requires_pytorch(self)
@@ -740,6 +696,50 @@ class BigBirdPreTrainedModel:
 
 def load_tf_weights_in_big_bird(*args, **kwargs):
     requires_pytorch(load_tf_weights_in_big_bird)
+
+
+BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class BigBirdPegasusForCausalLM:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdPegasusForConditionalGeneration:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdPegasusForQuestionAnswering:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdPegasusForSequenceClassification:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class BigBirdPegasusModel:
+    def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_pytorch(self)
 
 
 BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST = None

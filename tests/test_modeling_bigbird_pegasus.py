@@ -33,9 +33,9 @@ if is_torch_available():
 
     from transformers import (
         BigBirdPegasusConfig,
+        BigBirdPegasusForCausalLM,
         BigBirdPegasusForConditionalGeneration,
         BigBirdPegasusForQuestionAnswering,
-        BigBirdPegasusForCausalLM,
         BigBirdPegasusForSequenceClassification,
         BigBirdPegasusModel,
         BigBirdPegasusTokenizer,
@@ -64,7 +64,9 @@ def prepare_bigbird_pegasus_inputs_dict(
         "decoder_attention_mask": attention_mask,
     }
 
+
 # bigbird fast tests will have problem of attention type switching
+
 
 @require_torch
 class BigBirdPegasusModelTester:
@@ -170,7 +172,9 @@ class BigBirdPegasusModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -217,7 +221,7 @@ class BigBirdPegasusModelTester:
     def create_and_check_model(self, config, inputs_dict):
         model = BigBirdPegasusModel(config=config).to(torch_device).eval()
         input_ids = inputs_dict["input_ids"]
-        decoder_input_ids = inputs_dict['decoder_input_ids']
+        decoder_input_ids = inputs_dict["decoder_input_ids"]
         result = model(input_ids, decoder_input_ids=decoder_input_ids, use_cache=True)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
@@ -256,11 +260,15 @@ class BigBirdPegasusModelTester:
     #     self.parent.assertTrue(model.config.attention_type == "block_sparse")
 
 
-
 @require_torch
 class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (BigBirdPegasusModel, BigBirdPegasusForConditionalGeneration, BigBirdPegasusForSequenceClassification, BigBirdPegasusForQuestionAnswering)
+        (
+            BigBirdPegasusModel,
+            BigBirdPegasusForConditionalGeneration,
+            BigBirdPegasusForSequenceClassification,
+            BigBirdPegasusForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -309,7 +317,11 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (BigBirdPegasusModel, BigBirdPegasusForConditionalGeneration, BigBirdPegasusForQuestionAnswering):
+        for model_class in (
+            BigBirdPegasusModel,
+            BigBirdPegasusForConditionalGeneration,
+            BigBirdPegasusForQuestionAnswering,
+        ):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -376,7 +388,8 @@ def assert_tensors_close(a, b, atol=1e-12, prefix=""):
 
 
 TOLERANCE = 1e-4
-MODEL_ID = 'vasudevgupta/bigbird-pegasus-large-pubmed'
+MODEL_ID = "vasudevgupta/bigbird-pegasus-large-pubmed"
+
 
 @require_torch
 @require_sentencepiece
@@ -400,7 +413,7 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
     def _get_dummy_target_ids(self):
         # fmt: off
         ids = torch.tensor(
-            [[13,  6,  1,  4, 12,  4,  8, 10,  4,  6,  3,  5,  8,  7,  9,  9]],  # noqa: E231
+            [[13, 6, 1, 4, 12, 4, 8, 10, 4, 6, 3, 5, 8, 7, 9, 9]],  # noqa: E231
             dtype=torch.long,
             device=torch_device,
         )
@@ -408,7 +421,9 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         return ids
 
     def test_inference_block_sparse(self):
-        model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3)
+        model = BigBirdPegasusForConditionalGeneration.from_pretrained(
+            MODEL_ID, attention_type="block_sparse", block_size=16, num_random_blocks=3
+        )
         model.to(torch_device)
 
         input_ids = self._get_dummy_input_ids()
@@ -418,36 +433,12 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         prediction_logits = outputs.logits
 
         self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
-
+        # fmt: off
         expected_prediction_logits_slice = torch.tensor(
-            [
-                [2.7850e+00,  2.1340e+00,  6.9243e+00, -1.6229e+00,  1.3514e+00,
-                1.6717e+00,  3.7153e+00,  4.0460e+00,  7.7103e+00,  2.0608e+00,
-                2.0849e+00,  2.6425e-01,  1.3922e+00,  3.2817e+00,  6.7929e+00,
-                5.1377e+00, -8.8223e-01,  8.0610e+00,  3.5040e+00, -6.7016e-01,
-                3.1645e+00,  5.9968e+00,  7.1979e+00,  4.6750e+00, -1.7048e+00,
-                3.6679e+00,  6.0426e+00,  2.2554e+00],
-                [2.8886e+00,  2.1618e+00,  7.3298e+00, -1.6505e+00,  1.4547e+00,
-                1.5609e+00,  4.0607e+00,  4.0344e+00,  7.9283e+00,  2.0122e+00,
-                2.2935e+00,  6.4506e-01,  1.3994e+00,  2.8479e+00,  6.8885e+00,
-                5.2957e+00, -1.0617e+00,  7.5960e+00,  3.5451e+00, -2.8749e-01,
-                3.0484e+00,  5.8572e+00,  7.0605e+00,  4.7069e+00, -1.7569e+00,
-                3.5513e+00,  5.7782e+00,  2.2574e+00],
-                [3.0022e+00,  2.1422e+00,  7.5003e+00, -1.8414e+00,  1.5542e+00,
-                1.5280e+00,  4.2919e+00,  4.2379e+00,  8.0021e+00,  2.0778e+00,
-                2.3393e+00,  7.7081e-01,  1.4541e+00,  2.8147e+00,  6.9367e+00,
-                5.5263e+00, -9.2410e-01,  7.3092e+00,  3.5381e+00,  7.4557e-03,
-                3.0441e+00,  5.8372e+00,  7.0485e+00,  4.8198e+00, -1.7150e+00,
-                3.5200e+00,  5.7461e+00,  2.2033e+00],
-                [3.0866e+00,  2.1803e+00,  7.5962e+00, -1.9698e+00,  1.6234e+00,
-                1.4729e+00,  4.2370e+00,  4.2311e+00,  8.0083e+00,  2.1442e+00,
-                2.2766e+00,  7.9028e-01,  1.3316e+00,  2.8024e+00,  6.8416e+00,
-                5.7381e+00, -9.5507e-01,  7.1824e+00,  3.6925e+00, -2.2659e-02,
-                2.9421e+00,  6.0023e+00,  7.0864e+00,  4.9817e+00, -1.6959e+00,
-                3.4832e+00,  5.6923e+00,  2.2286e+00]
-            ],
+            [[2.785, 2.134, 6.9243, -1.6229, 1.3514, 1.6717, 3.7153, 4.046, 7.7103, 2.0608, 2.0849, 0.26425, 1.3922, 3.2817, 6.7929, 5.1377, -0.88223, 8.061, 3.504, -0.67016, 3.1645, 5.9968, 7.1979, 4.675, -1.7048, 3.6679, 6.0426, 2.2554], [2.8886, 2.1618, 7.3298, -1.6505, 1.4547, 1.5609, 4.0607, 4.0344, 7.9283, 2.0122, 2.2935, 0.64506, 1.3994, 2.8479, 6.8885, 5.2957, -1.0617, 7.596, 3.5451, -0.28749, 3.0484, 5.8572, 7.0605, 4.7069, -1.7569, 3.5513, 5.7782, 2.2574], [3.0022, 2.1422, 7.5003, -1.8414, 1.5542, 1.528, 4.2919, 4.2379, 8.0021, 2.0778, 2.3393, 0.77081, 1.4541, 2.8147, 6.9367, 5.5263, -0.9241, 7.3092, 3.5381, 0.0074557, 3.0441, 5.8372, 7.0485, 4.8198, -1.715, 3.52, 5.7461, 2.2033], [3.0866, 2.1803, 7.5962, -1.9698, 1.6234, 1.4729, 4.237, 4.2311, 8.0083, 2.1442, 2.2766, 0.79028, 1.3316, 2.8024, 6.8416, 5.7381, -0.95507, 7.1824, 3.6925, -0.022659, 2.9421, 6.0023, 7.0864, 4.9817, -1.6959, 3.4832, 5.6923, 2.2286]],  # noqa: E231
             device=torch_device,
         )
+        # fmt: on
         self.assertTrue(
             torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
         )
@@ -458,33 +449,17 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
         input_ids = self._get_dummy_input_ids()
         target_ids = self._get_dummy_target_ids()
-        
+
         outputs = model(input_ids, labels=target_ids)
         prediction_logits = outputs.logits
 
         self.assertEqual(prediction_logits.shape, torch.Size((1, 16, 96103)))
-
+        # fmt: off
         expected_prediction_logits_slice = torch.tensor(
-            [
-                [ 3.7736,  0.6459,  5.9393, -2.0550,  1.3957,  1.6994,  1.7002,  4.3194,
-                6.7270,  0.8877,  2.7457,  0.3128, -0.3091,  3.7636,  6.4191,  3.2155,
-                -0.9953,  7.4407,  3.8938,  0.4070,  3.7436,  3.7248,  5.6073,  3.8378,
-                -1.9400,  5.2315,  4.6829,  2.0397],
-                [ 3.8075,  0.5993,  5.9881, -1.9268,  1.7395,  1.9801,  1.4785,  4.4040,
-                6.9427,  0.6825,  2.8742,  0.7088, -0.6241,  3.3309,  6.5836,  3.2848,
-                -1.1375,  7.2144,  4.1101,  0.8657,  3.9520,  3.5079,  5.4696,  3.9301,
-                -2.2243,  5.2562,  4.6510,  1.9688],
-                [ 3.9393,  0.5811,  6.1118, -1.9829,  1.9584,  2.0622,  1.6118,  4.5815,
-                7.1832,  0.6703,  2.9474,  0.8766, -0.7241,  3.3090,  6.7720,  3.4544,
-                -1.0948,  7.0197,  4.2286,  1.1543,  4.0334,  3.4939,  5.5613,  4.1545,
-                -2.2169,  5.4238,  4.7881,  1.9614],
-                [ 4.0004,  0.5768,  6.1671, -2.1092,  2.0556,  2.0222,  1.5487,  4.5812,
-                7.2975,  0.7099,  3.0134,  0.9069, -0.8406,  3.2854,  6.7560,  3.5334,
-                -1.2231,  6.8766,  4.3854,  1.1062,  3.9816,  3.6632,  5.6403,  4.3885,
-                -2.2414,  5.4234,  4.7948,  1.9947]
-            ],
+            [[3.7736, 0.6459, 5.9393, -2.055, 1.3957, 1.6994, 1.7002, 4.3194, 6.727, 0.8877, 2.7457, 0.3128, -0.3091, 3.7636, 6.4191, 3.2155, -0.9953, 7.4407, 3.8938, 0.407, 3.7436, 3.7248, 5.6073, 3.8378, -1.94, 5.2315, 4.6829, 2.0397], [3.8075, 0.5993, 5.9881, -1.9268, 1.7395, 1.9801, 1.4785, 4.404, 6.9427, 0.6825, 2.8742, 0.7088, -0.6241, 3.3309, 6.5836, 3.2848, -1.1375, 7.2144, 4.1101, 0.8657, 3.952, 3.5079, 5.4696, 3.9301, -2.2243, 5.2562, 4.651, 1.9688], [3.9393, 0.5811, 6.1118, -1.9829, 1.9584, 2.0622, 1.6118, 4.5815, 7.1832, 0.6703, 2.9474, 0.8766, -0.7241, 3.309, 6.772, 3.4544, -1.0948, 7.0197, 4.2286, 1.1543, 4.0334, 3.4939, 5.5613, 4.1545, -2.2169, 5.4238, 4.7881, 1.9614], [4.0004, 0.5768, 6.1671, -2.1092, 2.0556, 2.0222, 1.5487, 4.5812, 7.2975, 0.7099, 3.0134, 0.9069, -0.8406, 3.2854, 6.756, 3.5334, -1.2231, 6.8766, 4.3854, 1.1062, 3.9816, 3.6632, 5.6403, 4.3885, -2.2414, 5.4234, 4.7948, 1.9947]],  # noqa: E231
             device=torch_device,
         )
+        # fmt: on
         self.assertTrue(
             torch.allclose(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, atol=1e-4)
         )

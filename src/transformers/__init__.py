@@ -128,7 +128,6 @@ _import_structure = {
         "load_tf2_weights_in_pytorch_model",
     ],
     # Models
-    "models.bigbird_pegasus": ["BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdPegasusConfig", "BigBirdPegasusTokenizer"],
     "models": [],
     "models.albert": ["ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "AlbertConfig"],
     "models.auto": [
@@ -152,6 +151,11 @@ _import_structure = {
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
     "models.big_bird": ["BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP", "BigBirdConfig", "BigBirdTokenizer"],
+    "models.bigbird_pegasus": [
+        "BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BigBirdPegasusConfig",
+        "BigBirdPegasusTokenizer",
+    ],
     "models.blenderbot": ["BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP", "BlenderbotConfig", "BlenderbotTokenizer"],
     "models.blenderbot_small": [
         "BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -410,16 +414,6 @@ if is_torch_available():
     _import_structure["modeling_utils"] = ["Conv1D", "PreTrainedModel", "apply_chunking_to_forward", "prune_layer"]
     # PyTorch models structure
 
-    _import_structure["models.bigbird_pegasus"].extend(
-        [
-            "BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "BigBirdPegasusForCausalLM",
-            "BigBirdPegasusForConditionalGeneration",
-            "BigBirdPegasusForQuestionAnswering",
-            "BigBirdPegasusForSequenceClassification",
-            "BigBirdPegasusModel",
-        ]
-    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -512,6 +506,16 @@ if is_torch_available():
             "BigBirdModel",
             "BigBirdPreTrainedModel",
             "load_tf_weights_in_big_bird",
+        ]
+    )
+    _import_structure["models.bigbird_pegasus"].extend(
+        [
+            "BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "BigBirdPegasusForCausalLM",
+            "BigBirdPegasusForConditionalGeneration",
+            "BigBirdPegasusForQuestionAnswering",
+            "BigBirdPegasusForSequenceClassification",
+            "BigBirdPegasusModel",
         ]
     )
     _import_structure["models.blenderbot"].extend(
@@ -1387,7 +1391,6 @@ if TYPE_CHECKING:
         load_tf2_weights_in_pytorch_model,
     )
     from .models.albert import ALBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, AlbertConfig
-    from .models.bigbird_pegasus import BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdPegasusConfig, BigBirdPegasusTokenizer
     from .models.auto import (
         ALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CONFIG_MAPPING,
@@ -1408,6 +1411,11 @@ if TYPE_CHECKING:
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
     from .models.big_bird import BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP, BigBirdConfig, BigBirdTokenizer
+    from .models.bigbird_pegasus import (
+        BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BigBirdPegasusConfig,
+        BigBirdPegasusTokenizer,
+    )
     from .models.blenderbot import BLENDERBOT_PRETRAINED_CONFIG_ARCHIVE_MAP, BlenderbotConfig, BlenderbotTokenizer
     from .models.blenderbot_small import (
         BLENDERBOT_SMALL_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1553,11 +1561,11 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_objects import *
 
     if is_tokenizers_available():
-        from .models.bigbird_pegasus import BigBirdPegasusTokenizerFast
         from .models.albert import AlbertTokenizerFast
         from .models.bart import BartTokenizerFast
         from .models.barthez import BarthezTokenizerFast
         from .models.bert import BertTokenizerFast
+        from .models.bigbird_pegasus import BigBirdPegasusTokenizerFast
         from .models.camembert import CamembertTokenizerFast
         from .models.convbert import ConvBertTokenizerFast
         from .models.distilbert import DistilBertTokenizerFast
@@ -1597,15 +1605,6 @@ if TYPE_CHECKING:
 
     # Modeling
     if is_torch_available():
-
-        from .models.bigbird_pegasus import (
-            BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            BigBirdPegasusForConditionalGeneration,
-            BigBirdPegasusForCausalLM,
-            BigBirdPegasusForQuestionAnswering,
-            BigBirdPegasusForSequenceClassification,
-            BigBirdPegasusModel,
-        )
 
         # Benchmarks
         from .benchmark.benchmark import PyTorchBenchmark
@@ -1733,6 +1732,14 @@ if TYPE_CHECKING:
             BigBirdModel,
             BigBirdPreTrainedModel,
             load_tf_weights_in_big_bird,
+        )
+        from .models.bigbird_pegasus import (
+            BIGBIRD_PEGASUS_PRETRAINED_MODEL_ARCHIVE_LIST,
+            BigBirdPegasusForCausalLM,
+            BigBirdPegasusForConditionalGeneration,
+            BigBirdPegasusForQuestionAnswering,
+            BigBirdPegasusForSequenceClassification,
+            BigBirdPegasusModel,
         )
         from .models.blenderbot import (
             BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST,
