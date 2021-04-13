@@ -103,7 +103,7 @@ class GPT2Config(PretrainedConfig):
 
             The dropout ratio to be used after the projection and activation.
         scale_attn_weights (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Scale attention weights by diving by sqrt(hidden_size).
+            Scale attention weights by dividing by sqrt(hidden_size).
         gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether or not to use gradient checkpointing to save memory at the expense of slower backward pass.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
