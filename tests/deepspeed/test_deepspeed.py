@@ -595,9 +595,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
-        # for now testing with just 2 gpus max
-        num_gpus = max(2, get_gpu_count()) if distributed else 1
-        launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+        launcher = self.get_launcher(distributed)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -633,9 +631,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         distributed = True
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/language-modeling/run_clm.py"]
-        # for now testing with just 2 gpus max
-        num_gpus = max(2, get_gpu_count()) if distributed else 1
-        launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
+        launcher = self.get_launcher(distributed)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -643,3 +639,8 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         return output_dir
+
+    def get_launcher(self, distributed=False):
+        # for now testing with just 2 gpus max
+        num_gpus = max(2, get_gpu_count()) if distributed else 1
+        return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
