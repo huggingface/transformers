@@ -805,7 +805,7 @@ class TrainingArguments:
         """
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
-        return not (self.deepspeed or is_sagemaker_mp_enabled())
+        return not (self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled())
 
     def to_dict(self):
         """
