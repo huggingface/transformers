@@ -949,6 +949,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
+        .. note::
+
+            Use the special `"offline-mode" <https://huggingface.co/transformers/installation.html#offline-mode>`__ to
+            use this method in a firewalled environment.
+
         Examples::
 
             >>> from transformers import BertConfig, BertModel
