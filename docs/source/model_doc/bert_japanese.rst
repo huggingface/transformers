@@ -20,7 +20,7 @@ The BERT models trained on Japanese text.
 
 There are models with two different tokenization methods:
 
-- Tokenize with MeCab and WordPiece and this requires some extra dependencies, `fugashi
+- Tokenize with MeCab and WordPiece. This requires some extra dependencies, `fugashi
   <https://github.com/polm/fugashi>`__ which is a wrapper around `MeCab <https://taku910.github.io/mecab/>`__.
 - Tokenize into characters.
 
@@ -29,14 +29,13 @@ from source) to install dependencies.
 
 See `details on cl-tohoku repository <https://github.com/cl-tohoku/bert-japanese>`__.
 
-Example of use:
+Example of using a model with MeCab and WordPiece tokenization:
 
 .. code-block::
 
   import torch
   from transformers import AutoModel, AutoTokenizer 
 
-  # Example 1: Tokenize with MeCab and WordPiece
   bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese")
   tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
   # Input Japanese Text
@@ -49,7 +48,10 @@ Example of use:
 
   outputs = bertjapanese(**inputs)
 
-  # Example 2: Tokenize into characters
+Example of using a model with Character tokenization:
+
+.. code-block::
+
   bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char")
   tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
 
