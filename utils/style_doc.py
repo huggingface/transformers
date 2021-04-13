@@ -49,7 +49,7 @@ _re_indent = re.compile(r"^(\s*)\S")
 _re_table = re.compile(r"(\+-+)+\+\s*$")
 # Matches a code block in rst `:: `.
 _re_code_block = re.compile(r"^\s*::\s*$")
-_re_code_block_explicit = re.compile(r"^\.\.\s+code\-block::\s*$")
+_re_code_block_explicit = re.compile(r"^\.\.\s+code\-block::")
 # Matches any block of the form `.. something::` or `.. something:: bla`.
 _re_ignore = re.compile(r"^\s*\.\.\s+(.*?)\s*::\s*\S*\s*$")
 # Matches comment introduction in rst.

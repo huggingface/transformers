@@ -47,9 +47,9 @@ Here is an example of the conversion process for a pre-trained ``BERT-Base Uncas
 
 .. code-block:: shell
 
-   export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
+    export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
 
-   transformers-cli convert --model_type bert \
+    transformers-cli convert --model_type bert \
      --tf_checkpoint $BERT_BASE_DIR/bert_model.ckpt \
      --config $BERT_BASE_DIR/bert_config.json \
      --pytorch_dump_output $BERT_BASE_DIR/pytorch_model.bin
@@ -72,9 +72,9 @@ Here is an example of the conversion process for the pre-trained ``ALBERT Base``
 
 .. code-block:: shell
 
-   export ALBERT_BASE_DIR=/path/to/albert/albert_base
+    export ALBERT_BASE_DIR=/path/to/albert/albert_base
 
-   transformers-cli convert --model_type albert \
+    transformers-cli convert --model_type albert \
      --tf_checkpoint $ALBERT_BASE_DIR/model.ckpt-best \
      --config $ALBERT_BASE_DIR/albert_config.json \
      --pytorch_dump_output $ALBERT_BASE_DIR/pytorch_model.bin
@@ -91,9 +91,9 @@ save as the same format than OpenAI pretrained model (see `here <https://github.
 
 .. code-block:: shell
 
-   export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
+    export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
 
-   transformers-cli convert --model_type gpt \
+    transformers-cli convert --model_type gpt \
      --tf_checkpoint $OPENAI_GPT_CHECKPOINT_FOLDER_PATH \
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
      [--config OPENAI_GPT_CONFIG] \
@@ -108,9 +108,9 @@ Here is an example of the conversion process for a pre-trained OpenAI GPT-2 mode
 
 .. code-block:: shell
 
-   export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
+    export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
 
-   transformers-cli convert --model_type gpt2 \
+    transformers-cli convert --model_type gpt2 \
      --tf_checkpoint $OPENAI_GPT2_CHECKPOINT_PATH \
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
      [--config OPENAI_GPT2_CONFIG] \
@@ -124,9 +124,9 @@ Here is an example of the conversion process for a pre-trained Transformer-XL mo
 
 .. code-block:: shell
 
-   export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
+    export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
 
-   transformers-cli convert --model_type transfo_xl \
+    transformers-cli convert --model_type transfo_xl \
      --tf_checkpoint $TRANSFO_XL_CHECKPOINT_FOLDER_PATH \
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
      [--config TRANSFO_XL_CONFIG] \
@@ -140,10 +140,10 @@ Here is an example of the conversion process for a pre-trained XLNet model:
 
 .. code-block:: shell
 
-   export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
-   export TRANSFO_XL_CONFIG_PATH=/path/to/xlnet/config
+    export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
+    export TRANSFO_XL_CONFIG_PATH=/path/to/xlnet/config
 
-   transformers-cli convert --model_type xlnet \
+    transformers-cli convert --model_type xlnet \
      --tf_checkpoint $TRANSFO_XL_CHECKPOINT_PATH \
      --config $TRANSFO_XL_CONFIG_PATH \
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT \
@@ -157,9 +157,9 @@ Here is an example of the conversion process for a pre-trained XLM model:
 
 .. code-block:: shell
 
-   export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
+    export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
 
-   transformers-cli convert --model_type xlm \
+    transformers-cli convert --model_type xlm \
      --tf_checkpoint $XLM_CHECKPOINT_PATH \
      --pytorch_dump_output $PYTORCH_DUMP_OUTPUT
     [--config XML_CONFIG] \
@@ -173,9 +173,9 @@ Here is an example of the conversion process for a pre-trained T5 model:
 
 .. code-block:: shell
 
-   export T5=/path/to/t5/uncased_L-12_H-768_A-12
+    export T5=/path/to/t5/uncased_L-12_H-768_A-12
 
-   transformers-cli convert --model_type t5 \
+    transformers-cli convert --model_type t5 \
      --tf_checkpoint $T5/t5_model.ckpt \
      --config $T5/t5_config.json \
      --pytorch_dump_output $T5/pytorch_model.bin

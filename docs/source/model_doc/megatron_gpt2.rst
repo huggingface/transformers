@@ -51,8 +51,8 @@ Alternatively, you can directly download the checkpoints using::
 
 .. code-block:: bash
 
-  wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_lm_345m/versions/v0.0/zip -O
-  megatron_gpt2_345m_v0_0.zip
+    wget --content-disposition https://api.ngc.nvidia.com/v2/models/nvidia/megatron_lm_345m/versions/v0.0/zip -O
+    megatron_gpt2_345m_v0_0.zip
 
 Once you have obtained the checkpoint from NVIDIA GPU Cloud (NGC), you have to convert it to a format that will easily
 be loaded by Hugging Face Transformers GPT2 implementation.
@@ -62,7 +62,7 @@ The following command allows you to do the conversion. We assume that the folder
 
 .. code-block:: bash
 
-  python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py megatron_gpt2_345m_v0_0.zip
+    python3 $PATH_TO_TRANSFORMERS/models/megatron_gpt2/convert_megatron_gpt2_checkpoint.py megatron_gpt2_345m_v0_0.zip
 
 The original code can be found `here <https://github.com/NVIDIA/Megatron-LM>`__. That repository contains a multi-GPU
 and multi-node implementation of the Megatron Language models. In particular, it contains a hybrid model parallel
