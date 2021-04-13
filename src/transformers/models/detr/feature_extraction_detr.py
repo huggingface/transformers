@@ -168,6 +168,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if tensor_type == TensorType.TENSORFLOW:
             boxes = as_tensor(boxes, dtype=tf.float32)
             boxes = tf.reshape(boxes, [-1, 4])
+            dtype_int = tf.int64
             # TODO since TF does not support item assignment
             raise NotImplementedError("TF does not support item assignment")
         elif tensor_type == TensorType.PYTORCH:
@@ -175,16 +176,19 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             boxes[:, 2:] += boxes[:, :2]
             boxes[:, 0::2].clamp_(min=0, max=w)
             boxes[:, 1::2].clamp_(min=0, max=h)
+            dtype_int = torch.int64
         elif tensor_type == TensorType.JAX:
             boxes = as_tensor(boxes, dtype=jnp.float32).reshape(-1, 4)
             boxes[:, 2:] += boxes[:, :2]
             boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
             boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=h)
+            dtype_int = jnp.int64
         else:
             boxes = as_tensor(boxes, dtype=np.float32).reshape(-1, 4)
             boxes[:, 2:] += boxes[:, :2]
             boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
             boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=h)
+            dtype_int = np.int64
 
         classes = [obj["category_id"] for obj in anno]
         classes = as_tensor(classes, dtype=dtype_int)
