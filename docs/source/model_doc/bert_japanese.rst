@@ -48,6 +48,6 @@ MecabTokenizer
 CharacterTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. autoclass:: transformers.MecabTokenizer
+.. autoclass:: transformers.CharacterTokenizer
     :members:
     
