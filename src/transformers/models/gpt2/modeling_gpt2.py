@@ -141,7 +141,7 @@ class GPT2Attention(nn.Module):
         self.split_size = self.embed_dim
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
+                f"`embed_dim` must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
             )
 
         self.scale_attn_weights = config.scale_attn_weights
@@ -229,9 +229,12 @@ class GPT2Attention(nn.Module):
         output_attentions=False,
     ):
         if encoder_hidden_states is not None:
-            assert hasattr(
-                self, "q_attn"
-            ), "If class is used as cross attention, the weights `q_attn` have to be defined. Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
+            if not hasattr(self, "q_attn"):
+                raise ValueError(
+                    "If class is used as cross attention, the weights `q_attn` have to be defined. "
+                    "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
+                )
+
             query = self.q_attn(hidden_states)
             key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
@@ -326,9 +329,11 @@ class GPT2Block(nn.Module):
 
         if encoder_hidden_states is not None:
             # add one self-attention block for cross-attention
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+            if not hasattr(self, "crossattention"):
+                raise ValueError(
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with "
+                    "cross-attention layers by setting `config.add_cross_attention=True`"
+                )
             residual = hidden_states
             hidden_states = self.ln_cross_attn(hidden_states)
             cross_attn_outputs = self.crossattention(
