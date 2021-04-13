@@ -49,6 +49,7 @@ _re_indent = re.compile(r"^(\s*)\S")
 _re_table = re.compile(r"(\+-+)+\+\s*$")
 # Matches a code block in rst `:: `.
 _re_code_block = re.compile(r"^\s*::\s*$")
+_re_code_block_explicit = re.compile(r"^\.\.\s+code\-block::\s*$")
 # Matches any block of the form `.. something::` or `.. something:: bla`.
 _re_ignore = re.compile(r"^\s*\.\.\s+(.*?)\s*::\s*\S*\s*$")
 # Matches comment introduction in rst.
@@ -374,6 +375,28 @@ rst_styler = CodeStyler()
 doc_styler = DocstringStyler()
 
 
+def _reindent_code_blocks(text):
+    """Checks indent in code blocks is of four"""
+    lines = text.split("\n")
+    in_code_block = False
+    idx = 0
+    while idx < len(lines):
+        # Detect if the line is the start of a new code-block.
+        if _re_code_block.search(lines[idx]) is not None or _re_code_block_explicit.search(lines[idx]) is not None:
+            while len(get_indent(lines[idx])) == 0:
+                idx += 1
+            indent = len(get_indent(lines[idx]))
+            while indent > 0 and idx < len(lines):
+                if indent < 4:
+                    lines[idx] = " " * 4 + lines[idx][indent:]
+                idx += 1
+                indent = len(get_indent(lines[idx])) if idx < len(lines) else 0
+        else:
+            idx += 1
+    
+    return "\n".join(lines)
+
+
 def _add_new_lines_before_list(text):
     """Add a new empty line before a list begins."""
     lines = text.split("\n")
@@ -412,8 +435,10 @@ def style_rst_file(doc_file, max_len=119, check_only=False):
     with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
         doc = f.read()
 
+    # Make sure code blocks are indented at 4
+    clean_doc = _reindent_code_blocks(doc)
     # Add missing new lines before lists
-    clean_doc = _add_new_lines_before_list(doc)
+    clean_doc = _add_new_lines_before_list(clean_doc)
     # Style
     clean_doc = rst_styler.style(clean_doc, max_len=max_len)
 
