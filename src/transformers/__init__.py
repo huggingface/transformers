@@ -163,9 +163,11 @@ _import_structure = {
     ],
     "models.camembert": ["CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CamembertConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
+    "models.cpm": ["CpmTokenizer"],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.deberta": ["DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaConfig", "DebertaTokenizer"],
     "models.deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "models.deit": ["DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeiTConfig"],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -191,6 +193,7 @@ _import_structure = {
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
     "models.mbart": ["MBartConfig"],
+    "models.megatron_bert": ["MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MegatronBertConfig"],
     "models.mmbt": ["MMBTConfig"],
     "models.mobilebert": ["MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MobileBertConfig", "MobileBertTokenizer"],
     "models.mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetTokenizer"],
@@ -339,9 +342,6 @@ if is_tokenizers_available():
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
     _import_structure["tokenization_utils_fast"] = ["PreTrainedTokenizerFast"]
 
-    if is_sentencepiece_available():
-        _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
-
 else:
     from .utils import dummy_tokenizers_objects
 
@@ -349,12 +349,18 @@ else:
         name for name in dir(dummy_tokenizers_objects) if not name.startswith("_")
     ]
 
+if is_sentencepiece_available() and is_tokenizers_available():
+    _import_structure["convert_slow_tokenizer"] = ["SLOW_TO_FAST_CONVERTERS", "convert_slow_tokenizer"]
+else:
+    from .utils import dummy_sentencepiece_and_tokenizers_objects
+
+    _import_structure["utils.dummy_sentencepiece_and_tokenizers_objects"] = [
+        name for name in dir(dummy_sentencepiece_and_tokenizers_objects) if not name.startswith("_")
+    ]
+
 # Speech-specific objects
 if is_speech_available():
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
-
-    if is_sentencepiece_available():
-        _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
 
 else:
     from .utils import dummy_speech_objects
@@ -363,9 +369,19 @@ else:
         name for name in dir(dummy_speech_objects) if not name.startswith("_")
     ]
 
+if is_sentencepiece_available() and is_speech_available():
+    _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+else:
+    from .utils import dummy_sentencepiece_and_speech_objects
+
+    _import_structure["utils.dummy_sentencepiece_and_speech_objects"] = [
+        name for name in dir(dummy_sentencepiece_and_speech_objects) if not name.startswith("_")
+    ]
+
 # Vision-specific objects
 if is_vision_available():
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
 else:
     from .utils import dummy_vision_objects
@@ -442,6 +458,7 @@ if is_torch_available():
             "load_tf_weights_in_albert",
         ]
     )
+
     _import_structure["models.auto"].extend(
         [
             "MODEL_FOR_CAUSAL_LM_MAPPING",
@@ -594,6 +611,15 @@ if is_torch_available():
             "DebertaV2ForTokenClassification",
             "DebertaV2Model",
             "DebertaV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.deit"].extend(
+        [
+            "DEIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DeiTForImageClassification",
+            "DeiTForImageClassificationWithTeacher",
+            "DeiTModel",
+            "DeiTPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -751,6 +777,20 @@ if is_torch_available():
             "MBartForQuestionAnswering",
             "MBartForSequenceClassification",
             "MBartModel",
+        ]
+    )
+    _import_structure["models.megatron_bert"].extend(
+        [
+            "MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MegatronBertForCausalLM",
+            "MegatronBertForMaskedLM",
+            "MegatronBertForMultipleChoice",
+            "MegatronBertForNextSentencePrediction",
+            "MegatronBertForPreTraining",
+            "MegatronBertForQuestionAnswering",
+            "MegatronBertForSequenceClassification",
+            "MegatronBertForTokenClassification",
+            "MegatronBertModel",
         ]
     )
     _import_structure["models.mmbt"].extend(["MMBTForClassification", "MMBTModel", "ModalEmbeddings"])
@@ -1474,9 +1514,11 @@ if TYPE_CHECKING:
     )
     from .models.camembert import CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, CamembertConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
+    from .models.cpm import CpmTokenizer
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.deberta import DEBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaConfig, DebertaTokenizer
     from .models.deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -1502,6 +1544,7 @@ if TYPE_CHECKING:
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
     from .models.mbart import MBartConfig
+    from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
     from .models.mmbt import MMBTConfig
     from .models.mobilebert import MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MobileBertConfig, MobileBertTokenizer
     from .models.mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetTokenizer
@@ -1641,23 +1684,28 @@ if TYPE_CHECKING:
         from .models.xlnet import XLNetTokenizerFast
         from .tokenization_utils_fast import PreTrainedTokenizerFast
 
-        if is_sentencepiece_available():
-            from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
-
     else:
         from .utils.dummy_tokenizers_objects import *
+
+    if is_sentencepiece_available() and is_tokenizers_available():
+        from .convert_slow_tokenizer import SLOW_TO_FAST_CONVERTERS, convert_slow_tokenizer
+    else:
+        from .utils.dummies_sentencepiece_and_tokenizers_objects import *
 
     if is_speech_available():
         from .models.speech_to_text import Speech2TextFeatureExtractor
 
-        if is_sentencepiece_available():
-            from .models.speech_to_text import Speech2TextProcessor
-
     else:
         from .utils.dummy_speech_objects import *
 
+    if is_speech_available() and is_sentencepiece_available():
+        from .models.speech_to_text import Speech2TextProcessor
+    else:
+        from .utils.dummy_sentencepiece_and_speech_objects import *
+
     if is_vision_available():
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.deit import DeiTFeatureExtractor
         from .models.vit import ViTFeatureExtractor
     else:
         from .utils.dummy_vision_objects import *
@@ -1858,6 +1906,13 @@ if TYPE_CHECKING:
             DebertaV2Model,
             DebertaV2PreTrainedModel,
         )
+        from .models.deit import (
+            DEIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DeiTForImageClassification,
+            DeiTForImageClassificationWithTeacher,
+            DeiTModel,
+            DeiTPreTrainedModel,
+        )
         from .models.distilbert import (
             DISTILBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             DistilBertForMaskedLM,
@@ -1982,6 +2037,18 @@ if TYPE_CHECKING:
             MBartForQuestionAnswering,
             MBartForSequenceClassification,
             MBartModel,
+        )
+        from .models.megatron_bert import (
+            MEGATRON_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MegatronBertForCausalLM,
+            MegatronBertForMaskedLM,
+            MegatronBertForMultipleChoice,
+            MegatronBertForNextSentencePrediction,
+            MegatronBertForPreTraining,
+            MegatronBertForQuestionAnswering,
+            MegatronBertForSequenceClassification,
+            MegatronBertForTokenClassification,
+            MegatronBertModel,
         )
         from .models.mmbt import MMBTForClassification, MMBTModel, ModalEmbeddings
         from .models.mobilebert import (

@@ -44,7 +44,7 @@ class ReformerConfig(PretrainedConfig):
 
             For more information on LSHSelfAttention layer, see `LSH Self Attention
             <reformer.html#lsh-self-attention>`__. For more information on LocalSelfAttention layer, see `Local Self
-            Attention <reformer.html#local-sensitive-hashing-self-attention>`__.
+            Attention <reformer.html#local-self-attention>`__.
         axial_pos_embds (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not to use axial position embeddings. For more information on how axial position embeddings
             work, see `Axial Position Encodings <reformer.html#axial-positional-encodings>`__.
@@ -52,7 +52,7 @@ class ReformerConfig(PretrainedConfig):
             The standard deviation of the normal_initializer for initializing the weight matrices of the axial
             positional encodings.
         axial_pos_shape (:obj:`List[int]`, `optional`, defaults to :obj:`[64, 64]`):
-            The position dims of the axial position encodings. During training the product of the position dims has to
+            The position dims of the axial position encodings. During training, the product of the position dims has to
             be equal to the sequence length.
 
             For more information on how axial position embeddings work, see `Axial Position Encodings
@@ -88,7 +88,7 @@ class ReformerConfig(PretrainedConfig):
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         is_decoder (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether ot not to use a causal mask in addition to the :obj:`attention_mask` passed to
+            Whether or not to use a causal mask in addition to the :obj:`attention_mask` passed to
             :class:`~transformers.ReformerModel`. When using the Reformer for causal language modeling, this argument
             should be set to :obj:`True`.
         layer_norm_eps (:obj:`float`, `optional`, defaults to 1e-12):
@@ -134,8 +134,8 @@ class ReformerConfig(PretrainedConfig):
         pad_token_id (:obj:`int`, `optional`, defaults to 0):
             The token id for the padding token.
         vocab_size (:obj:`int`, `optional`, defaults to 320):\
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.ReformerModel`.
+            Vocabulary size of the Reformer model. Defines the number of different tokens that can be represented by
+            the :obj:`inputs_ids` passed when calling :class:`~transformers.ReformerModel`.
         tie_word_embeddings (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether to tie input and output embeddings.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):

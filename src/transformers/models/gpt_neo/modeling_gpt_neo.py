@@ -112,6 +112,10 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
         if name[-1] == "w" and name[-2] in ["out_proj", "k_proj", "q_proj", "v_proj", "c_proj", "c_fc"]:
             array = array.transpose()
 
+        if name == ["wte"]:
+            # if vocab is padded, then trim off the padding embeddings
+            array = array[: config.vocab_size]
+
         try:
             assert (
                 pointer.shape == array.shape
@@ -819,7 +823,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )
