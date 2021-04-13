@@ -138,6 +138,7 @@ class GPT2Attention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = self.embed_dim // self.num_heads
+        self.split_size = self.embed_dim
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_heads})."
@@ -161,17 +162,15 @@ class GPT2Attention(nn.Module):
     def prune_heads(self, heads):
         if len(heads) == 0:
             return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.num_heads, self.embed_dim // self.num_heads, self.pruned_heads
-        )
-        index_attn = torch.cat([index, index + self.embed_dim, index + (2 * self.embed_dim)])
+        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
+        index_attn = torch.cat([index, index + self.split_size, index + (2 * self.split_size)])
 
         # Prune conv1d layers
         self.c_attn = prune_conv1d_layer(self.c_attn, index_attn, dim=1)
         self.c_proj = prune_conv1d_layer(self.c_proj, index, dim=0)
 
         # Update hyper params
-        self.embed_dim = (self.embed_dim // self.num_heads) * (self.num_heads - len(heads))
+        self.split_size = (self.split_size // self.num_heads) * (self.num_heads - len(heads))
         self.num_heads = self.num_heads - len(heads)
         self.pruned_heads = self.pruned_heads.union(heads)
 
@@ -234,10 +233,10 @@ class GPT2Attention(nn.Module):
                 self, "q_attn"
             ), "If class is used as cross attention, the weights `q_attn` have to be defined. Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
             query = self.q_attn(hidden_states)
-            key, value = self.c_attn(encoder_hidden_states).split(self.embed_dim, dim=2)
+            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
         else:
-            query, key, value = self.c_attn(hidden_states).split(self.embed_dim, dim=2)
+            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
         query = self._split_heads(query, self.num_heads, self.head_dim)
         key = self._split_heads(key, self.num_heads, self.head_dim)
@@ -270,8 +269,8 @@ class GPT2MLP(nn.Module):
     def __init__(self, intermediate_size, config):
         super().__init__()
         embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, intermediate_size, bias=False)
-        self.c_proj = nn.Linear(intermediate_size, embed_dim, bias=False)
+        self.c_fc = Conv1D(intermediate_size, embed_dim)
+        self.c_proj = Conv1D(embed_dim, intermediate_size)
         self.act = ACT2FN[config.activation_function]
         self.dropout = nn.Dropout(config.resid_pdrop)
 
