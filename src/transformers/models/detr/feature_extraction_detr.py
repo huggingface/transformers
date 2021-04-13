@@ -105,6 +105,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L33
     # with added support for several TensorTypes
     def convert_coco_poly_to_mask(segmentations, height, width, as_tensor):
+        
         masks = []
         for polygons in segmentations:
             rles = coco_mask.frPyObjects(polygons, height, width)
@@ -112,7 +113,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if len(mask.shape) < 3:
                 mask = mask[..., None]
             # next, convert to appropriate TensorType and apply operations
-            if as_tensor == tf.constant:
+            if tensor_type == TensorType.TENSORFLOW:
                 mask = as_tensor(mask, dtype=tf.uint8)
                 mask = tf.experimental.numpy.any(mask, axis=2)
                 masks.append(mask)
@@ -120,7 +121,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     masks = tf.stack(masks, axis=0)
                 else:
                     masks = tf.zeros((0, height, width), dtype=tf.uint8)
-            elif as_tensor == torch.tensor:
+            elif tensor_type == TensorType.PYTORCH:
                 mask = as_tensor(mask, dtype=torch.uint8)
                 mask = mask.any(dim=2)
                 masks.append(mask)
@@ -128,7 +129,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     masks = torch.stack(masks, dim=0)
                 else:
                     masks = torch.zeros((0, height, width), dtype=torch.uint8)
-            elif as_tensor == jnp.array:
+            elif tensor_type == TensorType.JAX:
                 mask = as_tensor(mask, dtype=jnp.uint8)
                 mask = jnp.any(mask, axis=2)
                 masks.append(mask)
@@ -149,8 +150,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
     # with added support for several TensorTypes
-    def convertCocoToDetrFormat(self, image, target, as_tensor, return_masks=False):
-                
+    def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
+        as_tensor = get_as_tensor(tensor_type)
+
         w, h = image.size
 
         image_id = target["image_id"]
@@ -163,17 +165,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         boxes = [obj["bbox"] for obj in anno]
         # guard against no boxes via resizing
-        if as_tensor == tf.constant:
+        if tensor_type == TensorType.TENSORFLOW:
             boxes = as_tensor(boxes, dtype=tf.float32)
             boxes = tf.reshape(boxes, [-1, 4])
             # TODO since TF does not support item assignment
             raise NotImplementedError("TF does not support item assignment")
-        elif as_tensor == torch.tensor:
+        elif tensor_type == TensorType.PYTORCH:
             boxes = as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
             boxes[:, 2:] += boxes[:, :2]
             boxes[:, 0::2].clamp_(min=0, max=w)
             boxes[:, 1::2].clamp_(min=0, max=h)
-        elif as_tensor == jnp.array:
+        elif tensor_type == TensorType.JAX:
             boxes = as_tensor(boxes, dtype=jnp.float32).reshape(-1, 4)
             boxes[:, 2:] += boxes[:, :2]
             boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
@@ -241,7 +243,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 maxes[index] = max(maxes[index], item)
         return maxes
     
-    def _resize(self, image, target, size, as_tensor, max_size=None):
+    def _resize(self, image, target, size, tensor_type, max_size=None):
+        as_tensor = get_as_tensor(tensor_type)
+        
         # size can be min_size (scalar) or (w, h) tuple
 
         def get_size_with_aspect_ratio(image_size, size, max_size=None):
@@ -370,14 +374,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if annotations is not None:
                 annotations = [annotations]
 
-        as_tensor = get_as_tensor(return_tensors)
         # prepare (COCO annotations as a list of Dict -> DETR target as a Dict)
         if annotations is not None:
             for idx, (image, anno) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
                 target = {'image_id': anno[0]['image_id'], 'annotations': anno}
-                image, target = self.convertCocoToDetrFormat(image, target, as_tensor)
+                image, target = self.convertCocoToDetrFormat(image, target, tensor_type)
                 images[idx] = image
                 annotations[idx] = target
 
@@ -385,11 +388,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._resize(image=image, target=target, size=self.size, as_tensor=as_tensor, max_size=self.max_size)
+                    image, target = self._resize(image=image, target=target, size=self.size, tensor_type=tensor_type, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
             else:
-                images = [self._resize(image=image, target=None, size=self.size, as_tensor=as_tensor, max_size=self.max_size)[0] for image in images]
+                for idx, image in enumerate(images):
+                    images[idx] = self._resize(image=image, target=None, size=self.size, tensor_type=tensor_type, max_size=self.max_size)[0]
                 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
