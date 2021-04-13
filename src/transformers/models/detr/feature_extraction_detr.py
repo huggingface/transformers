@@ -357,6 +357,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         """
         # Input type checking for clearer error
         valid_images = False
+        valid_annotations = False
 
         # Check that images has a valid type
         if isinstance(images, (Image.Image, np.ndarray)) or is_torch_tensor(images):
@@ -375,6 +376,24 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             isinstance(images, (list, tuple))
             and (isinstance(images[0], (Image.Image, np.ndarray)) or is_torch_tensor(images[0]))
         )
+
+        # Check that annotations has a valid type
+        if annotations is not None:
+            if not is_batched:
+                if isinstance(annotations, (list, tuple)) and isinstance(annotations[0], Dict):
+                    valid_annotations = True
+            else:
+                assert len(images) == len(annotations), "There must be as many annotations as there are images"
+                if isinstance(annotations, (list, tuple)):
+                    if len(annotations) == 0 or (isinstance(annotations[0], List) and isinstance(annotations[0][0], Dict)):
+                        valid_annotations = True
+
+        if not valid_images:
+            raise ValueError(
+                """Annotations must of type `List[Dict]` (single image) or `List[List[Dict]]` (batch of images).
+                Each annotation should be in COCO format. 
+                """
+            )    
 
         if not is_batched:
             images = [images]

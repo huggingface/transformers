@@ -1431,7 +1431,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         self.init_weights()
 
-    # copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
@@ -1756,7 +1756,7 @@ class SetCriterion(nn.Module):
         return losses
 
 
-# copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+# inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class MLP(nn.Module):
     """
     Very simple multi-layer perceptron (also called FFN), used to predict the normalized center coordinates, height and
@@ -1778,7 +1778,7 @@ class MLP(nn.Module):
         return x
 
 
-# copied from https://github.com/facebookresearch/detr/blob/master/models/matcher.py
+# inspired by https://github.com/facebookresearch/detr/blob/master/models/matcher.py
 class HungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network For efficiency reasons,
