@@ -24,111 +24,94 @@ from PIL import Image
 import requests
 from transformers import is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor
+from .test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
     import torch
     import torchvision.transforms as T
 
-    from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection, DetrModel
+    from transformers import DetrConfig, DetrForObjectDetection, DetrModel
     from transformers.models.detr.modeling_detr import DetrDecoder, DetrEncoder
 
 
-def prepare_detr_inputs_dict(
-    config,
-    input_ids,
-    decoder_input_ids,
-    attention_mask=None,
-    decoder_attention_mask=None,
-):
-    if attention_mask is None:
-        attention_mask = input_ids.ne(config.pad_token_id)
-    if decoder_attention_mask is None:
-        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    return {
-        "input_ids": input_ids,
-        "decoder_input_ids": decoder_input_ids,
-        "attention_mask": attention_mask,
-        "decoder_attention_mask": attention_mask,
-    }
+if is_vision_available():
+    from PIL import Image
+
+    from transformers import DetrFeatureExtractor
 
 
-# @require_torch
-# class DetrModelTester:
-#     def __init__(
-#         self,
-#         parent,
-#         batch_size=13,
-#         seq_length=7,
-#         is_training=True,
-#         use_labels=False,
-#         vocab_size=99,
-#         hidden_size=16,
-#         num_hidden_layers=2,
-#         num_attention_heads=4,
-#         intermediate_size=4,
-#         hidden_act="gelu",
-#         hidden_dropout_prob=0.1,
-#         attention_probs_dropout_prob=0.1,
-#         max_position_embeddings=20,
-#         eos_token_id=2,
-#         pad_token_id=1,
-#         bos_token_id=0,
-#     ):
-#         self.parent = parent
-#         self.batch_size = batch_size
-#         self.seq_length = seq_length
-#         self.is_training = is_training
-#         self.use_labels = use_labels
-#         self.vocab_size = vocab_size
-#         self.hidden_size = hidden_size
-#         self.num_hidden_layers = num_hidden_layers
-#         self.num_attention_heads = num_attention_heads
-#         self.intermediate_size = intermediate_size
-#         self.hidden_act = hidden_act
-#         self.hidden_dropout_prob = hidden_dropout_prob
-#         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-#         self.max_position_embeddings = max_position_embeddings
-#         self.eos_token_id = eos_token_id
-#         self.pad_token_id = pad_token_id
-#         self.bos_token_id = bos_token_id
+@require_torch
+class DetrModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=13,
+        is_training=True,
+        use_labels=False,
+        hidden_size=16,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        intermediate_size=4,
+        hidden_act="gelu",
+        hidden_dropout_prob=0.1,
+        attention_probs_dropout_prob=0.1,
+        num_queries=10,
+        image_size=800,
+        n_targets=15,
+        n_classes=91,
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.is_training = is_training
+        self.use_labels = use_labels
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_queries = num_queries
+        self.image_size = image_size
+        self.n_classes = n_classes
 
-#     def prepare_config_and_inputs(self):
-#         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-#         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-#             3,
-#         )
-#         input_ids[:, -1] = self.eos_token_id  # Eos Token
+    def prepare_config_and_inputs(self):
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
-#         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        pixel_mask = torch.ones_like(pixel_values)
 
-#         config = DetrConfig(
-#             vocab_size=self.vocab_size,
-#             d_model=self.hidden_size,
-#             encoder_layers=self.num_hidden_layers,
-#             decoder_layers=self.num_hidden_layers,
-#             encoder_attention_heads=self.num_attention_heads,
-#             decoder_attention_heads=self.num_attention_heads,
-#             encoder_ffn_dim=self.intermediate_size,
-#             decoder_ffn_dim=self.intermediate_size,
-#             dropout=self.hidden_dropout_prob,
-#             attention_dropout=self.attention_probs_dropout_prob,
-#             max_position_embeddings=self.max_position_embeddings,
-#             eos_token_id=self.eos_token_id,
-#             bos_token_id=self.bos_token_id,
-#             pad_token_id=self.pad_token_id,
-#         )
-#         inputs_dict = prepare_detr_inputs_dict(config, input_ids, decoder_input_ids)
-#         return config, inputs_dict
+        labels = None
+        if self.use_labels:
+            # labels is a list of Dict (each Dict being the labels for a given example in the batch)
+            labels = []
+            for i in range(self.batch_size):
+                target = {}
+                target['class_labels'] = torch.randint(high=self.n_classes, size=(self.n_targets,))
+                target['boxes'] = torch.rand(self.n_targets, 4)
+                labels.append(target)
 
-#     def prepare_config_and_inputs_for_common(self):
-#         config, inputs_dict = self.prepare_config_and_inputs()
-#         return config, inputs_dict
+        config = DetrConfig(
+            d_model=self.hidden_size,
+            encoder_layers=self.num_hidden_layers,
+            decoder_layers=self.num_hidden_layers,
+            encoder_attention_heads=self.num_attention_heads,
+            decoder_attention_heads=self.num_attention_heads,
+            encoder_ffn_dim=self.intermediate_size,
+            decoder_ffn_dim=self.intermediate_size,
+            dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_probs_dropout_prob,
+        )
+        return config, pixel_values, pixel_mask, labels
+
+    def prepare_config_and_inputs_for_common(self):
+        config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
+        return config, inputs_dict
 
 #     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
 #         model = DetrModel(config=config).get_decoder().to(torch_device).eval()

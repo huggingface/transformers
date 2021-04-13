@@ -78,8 +78,6 @@ class DetrConfig(PretrainedConfig):
         decoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
             The LayerDrop probability for the decoder. See the `LayerDrop paper <see
             https://arxiv.org/abs/1909.11556>`__ for more details.
-        use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
-            Whether or not the model should return the last key/values attentions (not used by all models).
         auxiliary_loss (:obj:`bool`, `optional`, defaults to :obj:`False`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (:obj:`str`, `optional`, defaults to :obj:`sine`):
@@ -138,7 +136,6 @@ class DetrConfig(PretrainedConfig):
         decoder_attention_heads=8,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
-        use_cache=True,
         is_encoder_decoder=True,
         activation_function="relu",
         d_model=256,
@@ -195,7 +192,6 @@ class DetrConfig(PretrainedConfig):
         self.encoder_layerdrop = encoder_layerdrop
         self.decoder_layerdrop = decoder_layerdrop
         self.classifier_dropout = classifier_dropout
-        self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
