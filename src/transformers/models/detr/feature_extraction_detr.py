@@ -214,7 +214,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
         boxes = boxes[keep]
         classes = classes[keep]
-        if self.return_masks:
+        if return_masks:
             masks = masks[keep]
         if keypoints is not None:
             keypoints = keypoints[keep]
@@ -222,7 +222,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target = {}
         target["boxes"] = boxes
         target["class_labels"] = classes
-        if self.return_masks:
+        if return_masks:
             target["masks"] = masks
         target["image_id"] = image_id
         if keypoints is not None:
