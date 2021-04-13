@@ -382,15 +382,16 @@ def _reindent_code_blocks(text):
     idx = 0
     while idx < len(lines):
         # Detect if the line is the start of a new code-block.
-        if _re_code_block.search(lines[idx]) is not None or _re_code_block_explicit.search(lines[idx]) is not None:
+        if _re_code_block.search(lines[idx]) is not None:
             while len(get_indent(lines[idx])) == 0:
                 idx += 1
             indent = len(get_indent(lines[idx]))
             while indent > 0 and idx < len(lines):
-                if indent < 4:
+                if len(lines[idx]) > 0 and indent < 4:
                     lines[idx] = " " * 4 + lines[idx][indent:]
                 idx += 1
-                indent = len(get_indent(lines[idx])) if idx < len(lines) else 0
+                if len(lines[idx]) > 0:
+                    indent = len(get_indent(lines[idx])) if idx < len(lines) else 0
         else:
             idx += 1
     
