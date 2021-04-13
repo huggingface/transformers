@@ -951,7 +951,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         .. note::
 
-            Use the special `"offline-mode" <https://huggingface.co/transformers/installation.html#offline-mode>`__ to
+            Activate the special `"offline-mode" <https://huggingface.co/transformers/installation.html#offline-mode>`__ to
             use this method in a firewalled environment.
 
         Examples::
