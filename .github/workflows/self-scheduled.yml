@@ -249,7 +249,7 @@ jobs:
   run_all_tests_torch_cuda_extensions_gpu:
     runs-on: [self-hosted, docker-gpu, single-gpu]
     container:
-      image: nvcr.io/nvidia/pytorch:20.12-py3
+      image: nvcr.io/nvidia/pytorch:21.03-py3
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
@@ -282,7 +282,7 @@ jobs:
   run_all_tests_torch_cuda_extensions_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
-      image: nvcr.io/nvidia/pytorch:20.12-py3
+      image: nvcr.io/nvidia/pytorch:21.03-py3
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     steps:
       - name: Launcher docker
