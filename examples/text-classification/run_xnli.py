@@ -209,17 +209,19 @@ def main():
     # Downloading and loading xnli dataset from the hub.
     if training_args.do_train:
         if model_args.train_language is None:
-            train_dataset = load_dataset("xnli", model_args.language, split="train")
+            train_dataset = load_dataset("xnli", model_args.language, split="train", cache_dir=model_args.cache_dir)
         else:
-            train_dataset = load_dataset("xnli", model_args.train_language, split="train")
+            train_dataset = load_dataset(
+                "xnli", model_args.train_language, split="train", cache_dir=model_args.cache_dir
+            )
         label_list = train_dataset.features["label"].names
 
     if training_args.do_eval:
-        eval_dataset = load_dataset("xnli", model_args.language, split="validation")
+        eval_dataset = load_dataset("xnli", model_args.language, split="validation", cache_dir=model_args.cache_dir)
         label_list = eval_dataset.features["label"].names
 
     if training_args.do_predict:
-        test_dataset = load_dataset("xnli", model_args.language, split="test")
+        test_dataset = load_dataset("xnli", model_args.language, split="test", cache_dir=model_args.cache_dir)
         label_list = test_dataset.features["label"].names
 
     # Labels
