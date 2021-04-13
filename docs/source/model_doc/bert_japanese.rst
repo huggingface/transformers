@@ -68,7 +68,7 @@ Tips:
 - This implementation is the same as BERT, except for tokenization method. Refer to the :doc:`documentation of BERT
   <bert>` for more usage examples.
 
-BertTokenizer
+BertJapaneseTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 .. autoclass:: transformers.BertJapaneseTokenizer

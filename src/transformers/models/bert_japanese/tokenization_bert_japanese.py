@@ -86,8 +86,8 @@ class BertJapaneseTokenizer(BertTokenizer):
             Type of word tokenizer.
         subword_tokenizer_type (:obj:`str`, `optional`, defaults to :obj:`"wordpiece"`):
             Type of subword tokenizer.
-        mecab_kwargs (:obj:`str`, `optional`, defaults to :obj:`None`):
-            dict passed to `MecabTokenizer` constructor
+        mecab_kwargs (:obj:`str`, `optional`):
+            Dictionary passed to the :obj:`MecabTokenizer` constructor.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
