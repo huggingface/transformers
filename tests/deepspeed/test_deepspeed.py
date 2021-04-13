@@ -118,6 +118,7 @@ class TrainerIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
     def tearDown(self):
         # XXX: Fixme - this is a temporary band-aid since this global variable impacts other tests
         import transformers
+
         transformers.integrations._is_deepspeed_zero3_enabled = None
 
     def get_config_dict(self, stage):
