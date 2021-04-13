@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType
+from ...file_utils import TensorType, is_tf_available, is_torch_available, is_flax_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
@@ -29,7 +29,6 @@ logger = logging.get_logger(__name__)
 
 
 def get_as_tensor(tensor_type):
-    # First: set as_tensor
     # Convert to TensorType
     if not isinstance(tensor_type, TensorType):
         tensor_type = TensorType(tensor_type)
@@ -154,19 +153,36 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         image_id = target["image_id"]
         image_id = as_tensor([image_id])
 
+        # get all COCO annotations for the given image
         anno = target["annotations"]
 
         anno = [obj for obj in anno if 'iscrowd' not in obj or obj['iscrowd'] == 0]
 
         boxes = [obj["bbox"] for obj in anno]
         # guard against no boxes via resizing
-        boxes = as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
-        boxes[:, 2:] += boxes[:, :2]
-        boxes[:, 0::2].clamp_(min=0, max=w)
-        boxes[:, 1::2].clamp_(min=0, max=h)
+        if as_tensor == tf.constant:
+            boxes = as_tensor(boxes, dtype=tf.float32)
+            boxes = tf.reshape(boxes, [-1, 4])
+            # TODO since TF does not support item assignment
+            raise NotImplementedError("TF does not support item assignment")
+        elif as_tensor == torch.tensor:
+            boxes = as_tensor(boxes, dtype=torch.float32).reshape(-1, 4)
+            boxes[:, 2:] += boxes[:, :2]
+            boxes[:, 0::2].clamp_(min=0, max=w)
+            boxes[:, 1::2].clamp_(min=0, max=h)
+        elif as_tensor == jnp.array:
+            boxes = as_tensor(boxes, dtype=jnp.float32).reshape(-1, 4)
+            boxes[:, 2:] += boxes[:, :2]
+            boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
+            boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=h)
+        else:
+            boxes = as_tensor(boxes, dtype=np.float32).reshape(-1, 4)
+            boxes[:, 2:] += boxes[:, :2]
+            boxes[:, 0::2] = boxes[:, 0::2].clip(min=0, max=w)
+            boxes[:, 1::2] = boxes[:, 1::2].clip(min=0, max=h)
 
         classes = [obj["category_id"] for obj in anno]
-        classes = as_tensor(classes, dtype=torch.int64)
+        classes = as_tensor(classes, dtype=dtype_int)
 
         if return_masks:
             segmentations = [obj["segmentation"] for obj in anno]
@@ -175,11 +191,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         keypoints = None
         if anno and "keypoints" in anno[0]:
             keypoints = [obj["keypoints"] for obj in anno]
-            keypoints = as_tensor(keypoints, dtype=torch.float32)
+            keypoints = as_tensor(keypoints, dtype=dtype_float)
             num_keypoints = keypoints.shape[0]
             if num_keypoints:
-                keypoints = keypoints.view(num_keypoints, -1, 3)
+                if as_tensor == tf.constant:
+                    keypoints = tf.reshape(keypoints, [-1,3])
+                elif as_tensor == torch.tensor:
+                    keypoints = keypoints.view(num_keypoints, -1, 3)
+                else:
+                    keypoints = keypoints.reshape((-1,3))
 
+        # TODO add TF support
         keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
         boxes = boxes[keep]
         classes = classes[keep]
@@ -190,7 +212,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         target = {}
         target["boxes"] = boxes
-        target["labels"] = classes
+        target["class_labels"] = classes
         if self.return_masks:
             target["masks"] = masks
         target["image_id"] = image_id
@@ -206,7 +228,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target["orig_size"] = as_tensor([int(h), int(w)])
         target["size"] = as_tensor([int(h), int(w)])
 
-        return image, target, as_tensor
+        return image, target
     
     def _max_by_axis(self, the_list):
         # type: (List[List[int]]) -> List[int]
@@ -346,19 +368,20 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotations = [annotations]
 
         as_tensor = get_as_tensor(return_tensors)
-        # prepare (annotations -> target)
+        # prepare (COCO annotations as a list of Dict -> DETR target as a Dict)
         if annotations is not None:
-            for idx, image, anno in enumerate(zip(images, annotations)):
-                # TODO update image_id
+            for idx, (image, anno) in enumerate(zip(images, annotations)):
+                if not isinstance(image, Image.Image):
+                    image = self.to_pil_image(image)
                 target = {'image_id': anno[0]['image_id'], 'annotations': anno}
-                image, target = self.convertCocoToDetrFormat(image, target, as_tensor, return_tensors=return_tensors)
+                image, target = self.convertCocoToDetrFormat(image, target, as_tensor)
                 images[idx] = image
                 annotations[idx] = target
 
         # transformations (resizing + normalization)
         if self.do_resize and self.size is not None:
             if annotations is not None:
-                for idx, image, target in enumerate(zip(images, annotations)):
+                for idx, (image, target) in enumerate(zip(images, annotations)):
                     image, target = self._resize(image=image, target=target, size=self.size, as_tensor=as_tensor, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
