@@ -16,14 +16,16 @@ BertJapanese
 Overview
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The BERT models trained on Japanese text. 
+The BERT models trained on Japanese text.
 
 There are models with two different tokenization methods:
 
-- Tokenize with MeCab and WordPiece and this requires some extra dependencies, `fugashi <https://github.com/polm/fugashi>`__ which is a wrapper around `MeCab <https://taku910.github.io/mecab/>`__.
+- Tokenize with MeCab and WordPiece and this requires some extra dependencies, `fugashi
+  <https://github.com/polm/fugashi>`__ which is a wrapper around `MeCab <https://taku910.github.io/mecab/>`__.
 - Tokenize into characters.
 
-To use `MecabTokenizer`, you should ``pip install transformers["ja"]`` (or ``pip install -e .["ja"]`` if you install from source) to install dependencies.
+To use `MecabTokenizer`, you should ``pip install transformers["ja"]`` (or ``pip install -e .["ja"]`` if you install
+from source) to install dependencies.
 
 See `details on cl-tohoku repository <https://github.com/cl-tohoku/bert-japanese>`__.
 
@@ -63,7 +65,8 @@ Example of use:
 
 Tips:
 
-- This implementation is the same as BERT, except for tokenization method. Refer to the :doc:`documentation of BERT <bert>` for more usage examples.  
+- This implementation is the same as BERT, except for tokenization method. Refer to the :doc:`documentation of BERT
+  <bert>` for more usage examples.
 
 BertTokenizer
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
