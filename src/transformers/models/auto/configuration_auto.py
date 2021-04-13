@@ -47,6 +47,7 @@ from ..ibert.configuration_ibert import IBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, IBe
 from ..layoutlm.configuration_layoutlm import LAYOUTLM_PRETRAINED_CONFIG_ARCHIVE_MAP, LayoutLMConfig
 from ..led.configuration_led import LED_PRETRAINED_CONFIG_ARCHIVE_MAP, LEDConfig
 from ..longformer.configuration_longformer import LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, LongformerConfig
+from ..luke.configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
 from ..lxmert.configuration_lxmert import LXMERT_PRETRAINED_CONFIG_ARCHIVE_MAP, LxmertConfig
 from ..m2m_100.configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
 from ..marian.configuration_marian import MarianConfig
@@ -86,6 +87,7 @@ ALL_PRETRAINED_CONFIG_ARCHIVE_MAP = dict(
     for pretrained_map in [
         # Add archive maps here
         DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GPT_NEO_PRETRAINED_CONFIG_ARCHIVE_MAP,
         BIG_BIRD_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -138,6 +140,7 @@ CONFIG_MAPPING = OrderedDict(
     [
         # Add configs here
         ("deit", DeiTConfig),
+        ("luke", LukeConfig),
         ("gpt_neo", GPTNeoConfig),
         ("big_bird", BigBirdConfig),
         ("speech_to_text", Speech2TextConfig),
@@ -196,6 +199,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
     [
         # Add full (and cased) model names here
         ("deit", "DeiT"),
+        ("luke", "Luke"),
         ("gpt_neo", "GPT Neo"),
         ("big_bird", "BigBird"),
         ("speech_to_text", "Speech2Text"),
@@ -346,9 +350,11 @@ class AutoConfig:
 
         List options
 
+
         Args:
             pretrained_model_name_or_path (:obj:`str` or :obj:`os.PathLike`):
                 Can be either:
+
 
                     - A string, the `model id` of a pretrained model configuration hosted inside a model repo on
                       huggingface.co. Valid model ids can be located at the root-level, like ``bert-base-uncased``, or
@@ -384,6 +390,7 @@ class AutoConfig:
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
                 by the ``return_unused_kwargs`` keyword parameter.
+
 
         Examples::
 
