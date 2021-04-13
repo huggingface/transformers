@@ -380,7 +380,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
                 target = {'image_id': anno[0]['image_id'], 'annotations': anno}
-                image, target = self.convertCocoToDetrFormat(image, target, tensor_type)
+                image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors)
                 images[idx] = image
                 annotations[idx] = target
 
@@ -388,12 +388,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._resize(image=image, target=target, size=self.size, tensor_type=tensor_type, max_size=self.max_size)
+                    image, target = self._resize(image=image, target=target, size=self.size, tensor_type=return_tensors, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
             else:
                 for idx, image in enumerate(images):
-                    images[idx] = self._resize(image=image, target=None, size=self.size, tensor_type=tensor_type, max_size=self.max_size)[0]
+                    images[idx] = self._resize(image=image, target=None, size=self.size, tensor_type=return_tensors, max_size=self.max_size)[0]
                 
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
