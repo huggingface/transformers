@@ -380,6 +380,16 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
     missing_keys, unexpected_keys = pt_model.load_state_dict(new_pt_params_dict, strict=False)
     missing_keys += missing_keys_pt
 
+    # Some models may have keys that are not in the state by design, removing them before needlessly warning
+    # the user.
+    if pt_model._keys_to_ignore_on_load_missing is not None:
+        for pat in pt_model._keys_to_ignore_on_load_missing:
+            missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
+
+    if pt_model._keys_to_ignore_on_load_unexpected is not None:
+        for pat in pt_model._keys_to_ignore_on_load_unexpected:
+            unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
+
     if len(unexpected_keys) > 0:
         logger.warning(
             f"Some weights of the TF 2.0 model were not used when "
