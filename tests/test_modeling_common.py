@@ -22,10 +22,10 @@ import tempfile
 import unittest
 from typing import List, Tuple
 
-from transformers import is_torch_available
+from transformers import is_torch_available, logging
 from transformers.file_utils import WEIGHTS_NAME
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_torch_multi_gpu, slow, torch_device
+from transformers.testing_utils import CaptureLogger, require_torch, require_torch_multi_gpu, slow, torch_device
 
 
 if is_torch_available():
@@ -1296,6 +1296,7 @@ class ModelUtilsTest(unittest.TestCase):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
         self.assertIsNotNone(model)
 
-        with self.assertRaises(Exception) as context:
+        logger = logging.get_logger("transformers.configuration_utils")
+        with CaptureLogger(logger) as cl:
             BertModel.from_pretrained(TINY_T5)
-        self.assertTrue("You tried to initiate a model of type" in str(context.exception))
+        self.assertTrue("You are using a model of type t5 to instantiate a model of type bert" in cl.out)
