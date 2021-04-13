@@ -43,20 +43,21 @@ def get_as_tensor(tensor_type):
                 "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
             )
         import tensorflow as tf
+        global tf
 
         as_tensor = tf.constant
     elif tensor_type == TensorType.PYTORCH:
         if not is_torch_available():
             raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
         import torch
-
-        print("we are here")
+        global torch
 
         as_tensor = torch.tensor
     elif tensor_type == TensorType.JAX:
         if not is_flax_available():
             raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
         import jax.numpy as jnp  # noqa: F811
+        global jnp
 
         as_tensor = jnp.array
     else:
@@ -154,8 +155,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # with added support for several TensorTypes
     def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
         as_tensor, tensor_type = get_as_tensor(tensor_type)
-
-        print(tensor_type)
         
         w, h = image.size
 
