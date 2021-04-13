@@ -251,7 +251,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return maxes
     
     def _resize(self, image, target, size, tensor_type, max_size=None):
-        as_tensor = get_as_tensor(tensor_type)
+        as_tensor, _ = get_as_tensor(tensor_type)
         
         # size can be min_size (scalar) or (w, h) tuple
 
