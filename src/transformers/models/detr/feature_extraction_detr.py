@@ -60,7 +60,7 @@ def get_as_tensor(tensor_type):
     else:
         as_tensor = np.asarray
 
-    return as_tensor
+    return as_tensor, tensor_type
 
 
 class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
@@ -104,7 +104,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L33
     # with added support for several TensorTypes
-    def convert_coco_poly_to_mask(segmentations, height, width, as_tensor):
+    def convert_coco_poly_to_mask(segmentations, height, width, tensor_type, as_tensor):
         
         masks = []
         for polygons in segmentations:
@@ -151,7 +151,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
     # with added support for several TensorTypes
     def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
-        as_tensor = get_as_tensor(tensor_type)
+        as_tensor, tensor_type = get_as_tensor(tensor_type)
 
         w, h = image.size
 
@@ -195,7 +195,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         if return_masks:
             segmentations = [obj["segmentation"] for obj in anno]
-            masks = convert_coco_poly_to_mask(segmentations, h, w, as_tensor)
+            masks = convert_coco_poly_to_mask(segmentations, h, w, tensor_type, as_tensor)
 
         keypoints = None
         if anno and "keypoints" in anno[0]:
