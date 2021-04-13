@@ -182,7 +182,7 @@ such:
 
 .. code-block::
 
-   >>> # [CLS] SEQUENCE_A [SEP] SEQUENCE_B [SEP]
+    >>> # [CLS] SEQUENCE_A [SEP] SEQUENCE_B [SEP]
 
 We can use our tokenizer to automatically generate such a sentence by passing the two sequences to ``tokenizer`` as two
 arguments (and not a list, like before) like this:

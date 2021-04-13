@@ -388,7 +388,7 @@ Next, you can finally start adding new code to 🤗 Transformers. Go into the cl
 
 ::
 
-   cd transformers
+    cd transformers
 
 In the special case that you are adding a model whose architecture exactly matches the model architecture of an
 existing model you only have to add a conversion script as described in `this section <#write-a-conversion-script>`__.
@@ -417,27 +417,27 @@ You should do the following:
 
 ::
 
-   git checkout -b add_brand_new_bert
+    git checkout -b add_brand_new_bert
 
 2. Commit the automatically generated code:
 
 ::
 
-   git add .
-   git commit
+    git add .
+    git commit
 
 3. Fetch and rebase to current master
 
 ::
 
-   git fetch upstream
-   git rebase upstream/master
+    git fetch upstream
+    git rebase upstream/master
 
 4. Push the changes to your account using:
 
 ::
 
-   git push -u origin a-descriptive-name-for-my-changes
+    git push -u origin a-descriptive-name-for-my-changes
 
 5. Once you are satisfied, go to the webpage of your fork on GitHub. Click on “Pull request”. Make sure to add the
    GitHub handle of some members of the Hugging Face team as reviewers, so that the Hugging Face team gets notified for
@@ -451,8 +451,8 @@ time to time by doing:
 
 ::
 
-   git fetch upstream
-   git merge upstream/master
+    git fetch upstream
+    git merge upstream/master
 
 In general, all questions you might have regarding the model or your implementation should be asked in your PR and
 discussed/solved in the PR. This way, the Hugging Face team will always be notified when you are committing new code or
