@@ -1555,7 +1555,7 @@ class BigBirdPegasusDecoderLayer(nn.Module):
 
         return outputs
 
-
+# Copied from transformers.models.bart.modeling_bart.BartClassificationHead with Bart->BigBirdPegasus
 class BigBirdPegasusClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -2299,7 +2299,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 @add_start_docstrings(
     "The bare BigBirdPegasus Model outputting raw hidden-states without any specific head on top.",
     BIGBIRD_PEGASUS_START_DOCSTRING,
-)
+) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModel with Pegasus->BigBirdPegasus
 class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
@@ -2408,7 +2408,7 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
 
 @add_start_docstrings(
     "The BigBirdPegasus Model with a language modeling head. Can be used for summarization.", BIGBIRD_PEGASUS_START_DOCSTRING
-)
+) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModelForConditionalGeneration with Pegasus->BigBirdPegasus
 class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [
@@ -2580,7 +2580,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
     tasks.
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
-)
+) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusForSequenceClassification with Pegasus->BigBirdPegasus
 class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     def __init__(self, config: BigBirdPegasusConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -2682,7 +2682,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     BIGBIRD_PEGASUS_START_DOCSTRING,
-)
+) # Copied from transformers.models.pegasus.modeling_pegasus.PegasusModelForQuestionAnswering with Pegasus->BigBirdPegasus
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2790,6 +2790,7 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
+# Copied from transformers.models.pegasus.modeling_pegasus.PegasusDecoderWrapper with Pegasus->BigBirdPegasus
 class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
@@ -2803,7 +2804,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
 
-
+# Copied from transformers.models.pegasus.modeling_pegasus.PegasusForCausalLM with Pegasus->BigBirdPegasus
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -2921,8 +2922,8 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
 
             >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForCausalLM
 
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
-            >>> model = BigBirdPegasusForCausalLM.from_pretrained('google/bigbird-pegasus-large-arxiv', add_cross_attention=False)
+            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('facebook/bart-large')
+            >>> model = BigBirdPegasusForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)
