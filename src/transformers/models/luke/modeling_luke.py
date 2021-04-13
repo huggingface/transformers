@@ -213,7 +213,6 @@ class EntitySpanClassificationOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.roberta.modeling_bert.RobertaEmbeddings with Roberta -> Luke
 class LukeEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -277,8 +276,6 @@ class LukeEmbeddings(nn.Module):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
-
-
         Args:
             inputs_embeds: torch.Tensor
 
@@ -333,7 +330,6 @@ class LukeEntityEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Luke
 class LukeSelfAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -457,7 +453,6 @@ class LukeSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->Luke
 class LukeAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -537,7 +532,6 @@ class LukeOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertLayer with Bert->Luke
 class LukeLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -590,7 +584,6 @@ class LukeLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Luke
 class LukeEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -833,7 +826,6 @@ class LukeModel(LukePreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Luke
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -864,7 +856,6 @@ class LukeModel(LukePreTrainedModel):
 
     @add_start_docstrings_to_model_forward(LUKE_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @replace_return_docstrings(output_type=BaseLukeModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids=None,
