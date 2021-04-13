@@ -403,7 +403,6 @@ def main():
     )
 
     train_dataset = processed_datasets["train"]
-    train_dataset = train_dataset.select(range(100))
     eval_dataset = processed_datasets["validation"]
 
     # Log a few random samples from the training set:
