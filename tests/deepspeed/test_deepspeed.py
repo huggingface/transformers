@@ -595,8 +595,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
-        num_gpus = get_gpu_count() if distributed else 1
-        launcher = f"deepspeed --num_gpus {num_gpus}".split()
+        # for now testing with just 2 gpus max
+        num_gpus = max(2, get_gpu_count()) if distributed else 1
+        launcher = f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
