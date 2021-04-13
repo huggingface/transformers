@@ -415,5 +415,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # return as BatchFeature
         data = {"pixel_values": images, "pixel_mask": mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
+        
+        if annotations is not None:
+            encoded_inputs["target"] = annotations
 
         return encoded_inputs
