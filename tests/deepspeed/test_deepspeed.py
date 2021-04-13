@@ -641,6 +641,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         return output_dir
 
     def get_launcher(self, distributed=False):
-        # for now testing with just 2 gpus max
-        num_gpus = max(2, get_gpu_count()) if distributed else 1
+        # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
+        # - it won't be able to handle that
+        # 2. for now testing with just 2 gpus max (since some quality tests may give different
+        # results with mode gpus because we use very little data)
+        num_gpus = min(2, get_gpu_count()) if distributed else 1
         return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
