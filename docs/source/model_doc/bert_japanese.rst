@@ -43,8 +43,8 @@ Example of using a model with MeCab and WordPiece tokenization:
 
   inputs = tokenizer(line, return_tensors="pt")
 
-  # >>> print(tokenizer.decode(inputs['input_ids'][0]))
-  # [CLS] 吾輩 は 猫 で ある 。 [SEP]
+  >>> print(tokenizer.decode(inputs['input_ids'][0]))
+  [CLS] 吾輩 は 猫 で ある 。 [SEP]
 
   outputs = bertjapanese(**inputs)
 
@@ -60,8 +60,8 @@ Example of using a model with Character tokenization:
 
   inputs = tokenizer(line, return_tensors="pt")
 
-  # >>> print(tokenizer.decode(inputs['input_ids'][0]))
-  # [CLS] 吾 輩 は 猫 で あ る 。 [SEP]
+  >>> print(tokenizer.decode(inputs['input_ids'][0]))
+  [CLS] 吾 輩 は 猫 で あ る 。 [SEP]
 
   outputs = bertjapanese(**inputs)
 
