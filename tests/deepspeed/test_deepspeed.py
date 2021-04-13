@@ -628,10 +628,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --block_size 128
             """.split()
 
-        distributed = True
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/language-modeling/run_clm.py"]
-        launcher = self.get_launcher(distributed)
+        launcher = self.get_launcher(distributed=True)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
