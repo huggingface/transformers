@@ -348,6 +348,8 @@ def find_all_documented_objects():
 DEPRECATED_OBJECTS = [
     "AutoModelWithLMHead",
     "BartPretrainedModel",
+    "DataCollator",
+    "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
     "LineByLineTextDataset",
@@ -385,7 +387,9 @@ DEPRECATED_OBJECTS = [
 UNDOCUMENTED_OBJECTS = [
     "AddedToken",  # This is a tokenizers class.
     "BasicTokenizer",  # Internal, should never have been in the main init.
+    "CharacterTokenizer",  # Internal, should never have been in the main init.
     "DPRPretrainedReader",  # Like an Encoder.
+    "MecabTokenizer",  # Internal, should never have been in the main init.
     "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
     "TFDPRPretrainedReader",  # Like an Encoder.
@@ -403,10 +407,6 @@ UNDOCUMENTED_OBJECTS = [
 
 # This list should be empty. Objects in it should get their own doc page.
 SHOULD_HAVE_THEIR_OWN_PAGE = [
-    # bert-japanese
-    "BertJapaneseTokenizer",
-    "CharacterTokenizer",
-    "MecabTokenizer",
     # Benchmarks
     "PyTorchBenchmark",
     "PyTorchBenchmarkArguments",
@@ -447,11 +447,6 @@ def ignore_undocumented(name):
         return True
     # MMBT model does not really work.
     if name.startswith("MMBT"):
-        return True
-
-    # NOT DOCUMENTED BUT NOT ON PURPOSE, SHOULD BE FIXED!
-    # All data collators should be documented
-    if name.startswith("DataCollator") or name.endswith("data_collator"):
         return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True
