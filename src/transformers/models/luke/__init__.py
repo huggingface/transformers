@@ -39,6 +39,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from .configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
+    from .tokenization_luke import LukeTokenizer
 
     if is_torch_available():
         from .modeling_luke import (
