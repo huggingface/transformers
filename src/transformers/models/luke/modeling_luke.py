@@ -1281,17 +1281,18 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
         return_dict=None,
     ):
         r"""
-        entity_start_positions: The start positions of entities in the word token sequence.
+        entity_start_positions:
+            The start positions of entities in the word token sequence.
 
-        entity_end_positions: The end positions of entities in the word token sequence.
+        entity_end_positions:
+            The end positions of entities in the word token sequence.
 
-        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)` or :obj:`(batch_size,
-        entity_length, num_labels), `optional`): Labels for computing the classification loss. If the shape is
-        :obj:`(batch_size, entity_length)`, the cross entropy loss is used for the single-label classification. In this
-        case, labels should contain the indices that should be in :obj:`[0, ..., config.num_labels - 1]`. If the shape
-        is :obj:`(batch_size, entity_length, num_labels)`, the binary cross entropy loss is used for the multi-label
-        classification. In this case, labels should only contain ``[0, 1]``, where 0 and 1 indicate false and true,
-        respectively.
+        labels (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)` or :obj:`(batch_size, entity_length, num_labels), `optional`):
+            Labels for computing the classification loss. If the shape is :obj:`(batch_size, entity_length)`, the cross
+            entropy loss is used for the single-label classification. In this case, labels should contain the indices
+            that should be in :obj:`[0, ..., config.num_labels - 1]`. If the shape is :obj:`(batch_size, entity_length,
+            num_labels)`, the binary cross entropy loss is used for the multi-label classification. In this case,
+            labels should only contain ``[0, 1]``, where 0 and 1 indicate false and true, respectively.
 
         Returns:
 

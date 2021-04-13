@@ -33,6 +33,7 @@ if is_torch_available():
         "LukeForEntityPairClassification",
         "LukeForEntitySpanClassification",
         "LukeModel",
+        "LukePreTrainedModel",
     ]
 
 
@@ -40,7 +41,14 @@ if TYPE_CHECKING:
     from .configuration_luke import LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP, LukeConfig
 
     if is_torch_available():
-        from .modeling_luke import LUKE_PRETRAINED_MODEL_ARCHIVE_LIST, LukeModel
+        from .modeling_luke import (
+            LUKE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            LukeForEntityClassification,
+            LukeForEntityPairClassification,
+            LukeForEntitySpanClassification,
+            LukeModel,
+            LukePreTrainedModel,
+        )
 
 else:
     import importlib
