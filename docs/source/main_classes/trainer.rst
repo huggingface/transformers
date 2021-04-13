@@ -293,33 +293,33 @@ with it, you may want to try one of:
 
 .. code-block:: bash
 
-   pip install fairscale --no-build-isolation .
+    pip install fairscale --no-build-isolation .
 
 or:
 
 .. code-block:: bash
 
-   git clone https://github.com/facebookresearch/fairscale/
-   cd fairscale
-   rm -r dist build
-   python setup.py bdist_wheel
-   pip uninstall -y fairscale
-   pip install dist/fairscale-*.whl
+    git clone https://github.com/facebookresearch/fairscale/
+    cd fairscale
+    rm -r dist build
+    python setup.py bdist_wheel
+    pip uninstall -y fairscale
+    pip install dist/fairscale-*.whl
 
 ``fairscale`` also has issues with building against pytorch-nightly, so if you use it you may have to try one of:
 
 .. code-block:: bash
 
-   pip uninstall -y fairscale; pip install fairscale --pre \
-   -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html \
-   --no-cache --no-build-isolation
+    pip uninstall -y fairscale; pip install fairscale --pre \
+    -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html \
+    --no-cache --no-build-isolation
 
 or:
 
 .. code-block:: bash
 
-   pip install -v --disable-pip-version-check . \
-   -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html --pre
+    pip install -v --disable-pip-version-check . \
+    -f https://download.pytorch.org/whl/nightly/cu110/torch_nightly.html --pre
 
 Of course, adjust the urls to match the cuda version you use.
 
@@ -447,12 +447,12 @@ To make a local build for DeepSpeed:
 
 .. code-block:: bash
 
-   git clone https://github.com/microsoft/DeepSpeed/
-   cd DeepSpeed
-   rm -rf build
-   TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 pip install . \
-   --global-option="build_ext" --global-option="-j8" --no-cache -v \
-   --disable-pip-version-check 2>&1 | tee build.log
+    git clone https://github.com/microsoft/DeepSpeed/
+    cd DeepSpeed
+    rm -rf build
+    TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 pip install . \
+    --global-option="build_ext" --global-option="-j8" --no-cache -v \
+    --disable-pip-version-check 2>&1 | tee build.log
 
 Edit ``TORCH_CUDA_ARCH_LIST`` to insert the code for the architectures of the GPU cards you intend to use.
 
@@ -460,11 +460,11 @@ Or if you need to use the same setup on multiple machines, make a binary wheel:
 
 .. code-block:: bash
 
-   git clone https://github.com/microsoft/DeepSpeed/
-   cd DeepSpeed
-   rm -rf build
-   TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 \
-   python setup.py build_ext -j8 bdist_wheel
+    git clone https://github.com/microsoft/DeepSpeed/
+    cd DeepSpeed
+    rm -rf build
+    TORCH_CUDA_ARCH_LIST="6.1;8.6" DS_BUILD_OPS=1 \
+    python setup.py build_ext -j8 bdist_wheel
 
 it will generate something like ``dist/deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` which now you can install
 as ``pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl`` locally or on any other machine.
@@ -478,20 +478,20 @@ You can check the archs pytorch was built with using:
 
 .. code-block:: bash
 
-   python -c "import torch; print(torch.cuda.get_arch_list())"
+    python -c "import torch; print(torch.cuda.get_arch_list())"
 
 Here is how to find out the arch for one of the installed GPU. For example, for GPU 0:
 
 .. code-block:: bash
 
-   CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
-   print(torch.cuda.get_device_properties(torch.device('cuda')))"
+    CUDA_VISIBLE_DEVICES=0 python -c "import torch; \
+    print(torch.cuda.get_device_properties(torch.device('cuda')))"
 
 If the output is:
 
 .. code-block:: bash
 
-   _CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24268MB, multi_processor_count=82)
+    _CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24268MB, multi_processor_count=82)
 
 then you know that this card's arch is ``8.6``.
 
@@ -591,18 +591,18 @@ with DeepSpeed is to have at least the following configuration in the configurat
 
 .. code-block:: json
 
-  {
-    "zero_optimization": {
-       "stage": 2,
-       "allgather_partitions": true,
-       "allgather_bucket_size": 2e8,
-       "reduce_scatter": true,
-       "reduce_bucket_size": 2e8,
-       "overlap_comm": true,
-       "contiguous_gradients": true,
-       "cpu_offload": true
-    },
-  }
+    {
+      "zero_optimization": {
+         "stage": 2,
+         "allgather_partitions": true,
+         "allgather_bucket_size": 2e8,
+         "reduce_scatter": true,
+         "reduce_bucket_size": 2e8,
+         "overlap_comm": true,
+         "contiguous_gradients": true,
+         "cpu_offload": true
+      },
+    }
 
 which enables ``cpu_offload`` and some other important features. You may experiment with the buffer sizes, you will
 find more details in the discussion below.
@@ -710,18 +710,18 @@ shell from a cell. For example, to use ``run_translation.py`` you would launch i
 
 .. code-block::
 
-   !git clone https://github.com/huggingface/transformers
-   !cd transformers; deepspeed examples/seq2seq/run_translation.py ...
+    !git clone https://github.com/huggingface/transformers
+    !cd transformers; deepspeed examples/seq2seq/run_translation.py ...
 
 or with ``%%bash`` magic, where you can write a multi-line code for the shell program to run:
 
 .. code-block::
 
-   %%bash
+    %%bash
 
-   git clone https://github.com/huggingface/transformers
-   cd transformers
-   deepspeed examples/seq2seq/run_translation.py ...
+    git clone https://github.com/huggingface/transformers
+    cd transformers
+    deepspeed examples/seq2seq/run_translation.py ...
 
 In such case you don't need any of the code presented at the beginning of this section.
 
@@ -743,16 +743,16 @@ repo <https://github.com/microsoft/DeepSpeedExamples>`__:
 
 .. code-block:: bash
 
-  git clone https://github.com/microsoft/DeepSpeedExamples
-  cd DeepSpeedExamples
-  find . -name '*json'
+    git clone https://github.com/microsoft/DeepSpeedExamples
+    cd DeepSpeedExamples
+    find . -name '*json'
 
 Continuing the code from above, let's say you're looking to configure the Lamb optimizer. So you can search through the
 example ``.json`` files with:
 
 .. code-block:: bash
 
-  grep -i Lamb $(find . -name '*json')
+    grep -i Lamb $(find . -name '*json')
 
 Some more examples are to be found in the `main repo <https://github.com/microsoft/DeepSpeed>`__ as well.
 
@@ -1020,49 +1020,49 @@ Here is a full ZeRO-2 all-enabled configuration file ``ds_config_zero2.json``:
 
 .. code-block:: json
 
-   {
-       "fp16": {
-           "enabled": true,
-           "loss_scale": 0,
-           "loss_scale_window": 1000,
-           "initial_scale_power": 16,
-           "hysteresis": 2,
-           "min_loss_scale": 1
-       },
+    {
+        "fp16": {
+            "enabled": true,
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "initial_scale_power": 16,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
 
-       "zero_optimization": {
-           "stage": 2,
-           "allgather_partitions": true,
-           "allgather_bucket_size": 2e8,
-           "overlap_comm": true,
-           "reduce_scatter": true,
-           "reduce_bucket_size": 2e8,
-           "contiguous_gradients": true,
-           "cpu_offload": true
-       },
+        "zero_optimization": {
+            "stage": 2,
+            "allgather_partitions": true,
+            "allgather_bucket_size": 2e8,
+            "overlap_comm": true,
+            "reduce_scatter": true,
+            "reduce_bucket_size": 2e8,
+            "contiguous_gradients": true,
+            "cpu_offload": true
+        },
 
-       "optimizer": {
-           "type": "AdamW",
-           "params": {
-               "lr": 3e-5,
-               "betas": [0.8, 0.999],
-               "eps": 1e-8,
-               "weight_decay": 3e-7
-           }
-       },
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": 3e-5,
+                "betas": [0.8, 0.999],
+                "eps": 1e-8,
+                "weight_decay": 3e-7
+            }
+        },
 
-       "scheduler": {
-           "type": "WarmupLR",
-           "params": {
-               "warmup_min_lr": 0,
-               "warmup_max_lr": 3e-5,
-               "warmup_num_steps": 500
-           }
-       },
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": 0,
+                "warmup_max_lr": 3e-5,
+                "warmup_num_steps": 500
+            }
+        },
 
-       "steps_per_print": 2000,
-       "wall_clock_breakdown": false
-   }
+        "steps_per_print": 2000,
+        "wall_clock_breakdown": false
+    }
 
 
 
@@ -1073,54 +1073,54 @@ Here is a full ZeRO-3 all-enabled configuration file ``ds_config_zero3.json``:
 
 .. code-block:: json
 
-   {
-       "fp16": {
-           "enabled": true,
-           "loss_scale": 0,
-           "loss_scale_window": 1000,
-           "initial_scale_power": 16,
-           "hysteresis": 2,
-           "min_loss_scale": 1
-       },
+    {
+        "fp16": {
+            "enabled": true,
+            "loss_scale": 0,
+            "loss_scale_window": 1000,
+            "initial_scale_power": 16,
+            "hysteresis": 2,
+            "min_loss_scale": 1
+        },
 
-       "zero_optimization": {
-           "stage": 3,
-           "cpu_offload": true,
-           "cpu_offload_params": true,
-           "cpu_offload_use_pin_memory" : true,
-           "overlap_comm": true,
-           "contiguous_gradients": true,
-           "sub_group_size": 1e14,
-           "reduce_bucket_size": 1e6,
-           "stage3_prefetch_bucket_size": 0.94e6,
-           "stage3_param_persistence_threshold": 1e4,
-           "stage3_max_live_parameters": 1e9,
-           "stage3_max_reuse_distance": 1e9,
-           "stage3_gather_fp16_weights_on_model_save": true
-       },
+        "zero_optimization": {
+            "stage": 3,
+            "cpu_offload": true,
+            "cpu_offload_params": true,
+            "cpu_offload_use_pin_memory" : true,
+            "overlap_comm": true,
+            "contiguous_gradients": true,
+            "sub_group_size": 1e14,
+            "reduce_bucket_size": 1e6,
+            "stage3_prefetch_bucket_size": 0.94e6,
+            "stage3_param_persistence_threshold": 1e4,
+            "stage3_max_live_parameters": 1e9,
+            "stage3_max_reuse_distance": 1e9,
+            "stage3_gather_fp16_weights_on_model_save": true
+        },
 
-       "optimizer": {
-           "type": "AdamW",
-           "params": {
-               "lr": 3e-5,
-               "betas": [0.8, 0.999],
-               "eps": 1e-8,
-               "weight_decay": 3e-7
-           }
-       },
+        "optimizer": {
+            "type": "AdamW",
+            "params": {
+                "lr": 3e-5,
+                "betas": [0.8, 0.999],
+                "eps": 1e-8,
+                "weight_decay": 3e-7
+            }
+        },
 
-       "scheduler": {
-           "type": "WarmupLR",
-           "params": {
-               "warmup_min_lr": 0,
-               "warmup_max_lr": 3e-5,
-               "warmup_num_steps": 500
-           }
-       },
+        "scheduler": {
+            "type": "WarmupLR",
+            "params": {
+                "warmup_min_lr": 0,
+                "warmup_max_lr": 3e-5,
+                "warmup_num_steps": 500
+            }
+        },
 
-       "steps_per_print": 2000,
-       "wall_clock_breakdown": false
-   }
+        "steps_per_print": 2000,
+        "wall_clock_breakdown": false
+    }
 
 
 Optimizer and Scheduler
@@ -1367,26 +1367,26 @@ Let's say your checkpoint folder looks like this:
 
 .. code-block:: bash
 
-   $ ls -l output_dir/checkpoint-1/
-   -rw-rw-r-- 1 stas stas 1.4K Mar 27 20:42 config.json
-   drwxrwxr-x 2 stas stas 4.0K Mar 25 19:52 global_step1/
-   -rw-rw-r-- 1 stas stas   12 Mar 27 13:16 latest
-   -rw-rw-r-- 1 stas stas 827K Mar 27 20:42 optimizer.pt
-   -rw-rw-r-- 1 stas stas 231M Mar 27 20:42 pytorch_model.bin
-   -rw-rw-r-- 1 stas stas  623 Mar 27 20:42 scheduler.pt
-   -rw-rw-r-- 1 stas stas 1.8K Mar 27 20:42 special_tokens_map.json
-   -rw-rw-r-- 1 stas stas 774K Mar 27 20:42 spiece.model
-   -rw-rw-r-- 1 stas stas 1.9K Mar 27 20:42 tokenizer_config.json
-   -rw-rw-r-- 1 stas stas  339 Mar 27 20:42 trainer_state.json
-   -rw-rw-r-- 1 stas stas 2.3K Mar 27 20:42 training_args.bin
-   -rwxrw-r-- 1 stas stas 5.5K Mar 27 13:16 zero_to_fp32.py*
+    $ ls -l output_dir/checkpoint-1/
+    -rw-rw-r-- 1 stas stas 1.4K Mar 27 20:42 config.json
+    drwxrwxr-x 2 stas stas 4.0K Mar 25 19:52 global_step1/
+    -rw-rw-r-- 1 stas stas   12 Mar 27 13:16 latest
+    -rw-rw-r-- 1 stas stas 827K Mar 27 20:42 optimizer.pt
+    -rw-rw-r-- 1 stas stas 231M Mar 27 20:42 pytorch_model.bin
+    -rw-rw-r-- 1 stas stas  623 Mar 27 20:42 scheduler.pt
+    -rw-rw-r-- 1 stas stas 1.8K Mar 27 20:42 special_tokens_map.json
+    -rw-rw-r-- 1 stas stas 774K Mar 27 20:42 spiece.model
+    -rw-rw-r-- 1 stas stas 1.9K Mar 27 20:42 tokenizer_config.json
+    -rw-rw-r-- 1 stas stas  339 Mar 27 20:42 trainer_state.json
+    -rw-rw-r-- 1 stas stas 2.3K Mar 27 20:42 training_args.bin
+    -rwxrw-r-- 1 stas stas 5.5K Mar 27 13:16 zero_to_fp32.py*
 
 In this example there is just one DeepSpeed checkpoint sub-folder `global_step1`. Therefore to reconstruct the fp32
 weights just run:
 
 .. code-block:: bash
 
-   python zero_to_fp32.py global_step1 pytorch_model.bin
+    python zero_to_fp32.py global_step1 pytorch_model.bin
 
 The script will automatically handle either ZeRO-2 or ZeRO-3 checkpoint.
 
@@ -1416,18 +1416,18 @@ be seen in the following example:
 
 .. code-block:: python
 
-   class ModuleZ3(torch.nn.Module):
-       def __init__(self, *args):
-           super().__init__(self, *args)
-           self.layer1 = SomeLayer()
-           self.layer2 = OtherLayer()
-           deepspeed.zero.register_external_parameter(self, self.layer1.weight)
+    class ModuleZ3(torch.nn.Module):
+        def __init__(self, *args):
+            super().__init__(self, *args)
+            self.layer1 = SomeLayer()
+            self.layer2 = OtherLayer()
+            deepspeed.zero.register_external_parameter(self, self.layer1.weight)
 
-       def forward(self, input):
-           x = self.layer1(input)
-           # self.layer1.weight is needed in ModuleZ3.forward
-           y = self.layer2(x, self.layer1.weight)
-           return y
+        def forward(self, input):
+            x = self.layer1(input)
+            # self.layer1.weight is needed in ModuleZ3.forward
+            y = self.layer2(x, self.layer1.weight)
+            return y
 
 In general ``transformers`` models don't use this style of referring to other layer's weights so most likely you won't
 need to use it.
@@ -1494,7 +1494,7 @@ Also under ZeRO-3, if you write your own code and run into a model parameter wei
 
 .. code-block:: python
 
-   tensor([1.], device='cuda:0', dtype=torch.float16, requires_grad=True)
+    tensor([1.], device='cuda:0', dtype=torch.float16, requires_grad=True)
 
 stress on ``tensor([1.])``, or if you get an error where it says the parameter is of size ``1``, instead of some much
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.

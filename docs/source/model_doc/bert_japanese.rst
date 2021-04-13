@@ -33,38 +33,38 @@ Example of using a model with MeCab and WordPiece tokenization:
 
 .. code-block::
 
-  >>> import torch
-  >>> from transformers import AutoModel, AutoTokenizer 
+    >>> import torch
+    >>> from transformers import AutoModel, AutoTokenizer 
 
-  >>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese")
-  >>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
+    >>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese")
+    >>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
 
-  >>> ## Input Japanese Text
-  >>> line = "吾輩は猫である。"
+    >>> ## Input Japanese Text
+    >>> line = "吾輩は猫である。"
 
-  >>> inputs = tokenizer(line, return_tensors="pt")
+    >>> inputs = tokenizer(line, return_tensors="pt")
 
-  >>> print(tokenizer.decode(inputs['input_ids'][0]))
-  [CLS] 吾輩 は 猫 で ある 。 [SEP]
+    >>> print(tokenizer.decode(inputs['input_ids'][0]))
+    [CLS] 吾輩 は 猫 で ある 。 [SEP]
 
-  >>> outputs = bertjapanese(**inputs)
+    >>> outputs = bertjapanese(**inputs)
 
 Example of using a model with Character tokenization:
 
 .. code-block::
 
-  >>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char")
-  >>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
+    >>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese-char")
+    >>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese-char")
 
-  >>> ## Input Japanese Text
-  >>> line = "吾輩は猫である。"
+    >>> ## Input Japanese Text
+    >>> line = "吾輩は猫である。"
 
-  >>> inputs = tokenizer(line, return_tensors="pt")
+    >>> inputs = tokenizer(line, return_tensors="pt")
 
-  >>> print(tokenizer.decode(inputs['input_ids'][0]))
-  [CLS] 吾 輩 は 猫 で あ る 。 [SEP]
+    >>> print(tokenizer.decode(inputs['input_ids'][0]))
+    [CLS] 吾 輩 は 猫 で あ る 。 [SEP]
 
-  >>> outputs = bertjapanese(**inputs)
+    >>> outputs = bertjapanese(**inputs)
 
 Tips:
 
