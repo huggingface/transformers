@@ -20,4 +20,11 @@ This document is to help find solutions for common problems.
 
 ## Firewalled environments
 
-Some cloud and intranet setups have their GPU instances firewalled to the outside world, so if your script is trying to download model weights or datasets it will first hang and then timeout. One possible solution in this situation is to use the ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode).
+Some cloud and intranet setups have their GPU instances firewalled to the outside world, so if your script is trying to download model weights or datasets it will first hang and then timeout with an error message like:
+
+```
+ValueError: Connection error, and we cannot find the requested files in the cached path.
+Please try again or make sure your Internet connection is on.
+```
+
+One possible solution in this situation is to use the ["offline-mode"](https://huggingface.co/transformers/installation.html#offline-mode).
