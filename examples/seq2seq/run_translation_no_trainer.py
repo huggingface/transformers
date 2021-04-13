@@ -23,31 +23,31 @@ import logging
 import math
 import os
 import random
-import numpy as np
 
+import datasets
+import numpy as np
+import torch
+from datasets import load_dataset, load_metric
 from torch.utils.data.dataloader import DataLoader
 from tqdm.auto import tqdm
-import torch
-from accelerate import Accelerator
+
 import transformers
+from accelerate import Accelerator
 from transformers import (
     CONFIG_MAPPING,
     MODEL_MAPPING,
-    MBartTokenizerFast,
-    AutoModelForSeq2SeqLM,
     AdamW,
     AutoConfig,
+    AutoModelForSeq2SeqLM,
     AutoTokenizer,
-    MBartTokenizer,
     DataCollatorForSeq2Seq,
-    default_data_collator,
-    set_seed,
+    MBartTokenizer,
+    MBartTokenizerFast,
     SchedulerType,
-    get_scheduler
+    default_data_collator,
+    get_scheduler,
+    set_seed,
 )
-import datasets
-from datasets import load_dataset, load_metric
-
 
 
 logger = logging.getLogger(__name__)
@@ -58,8 +58,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 # Parsing input arguments
 def parse_args():
 
-    parser = argparse.ArgumentParser(
-        description="Finetune a transformers model on a text classification task")
+    parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
         "--dataset_name",
         type=str,
@@ -77,64 +76,77 @@ def parse_args():
         "--dataset_config_name",
         type=str,
         default=None,
-        help= "The configuration name of the dataset to use (via the datasets library).",
-
+        help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--train_file", type=str, default=None, help="A csv or a json file containing the training data."
     )
 
-
     parser.add_argument(
-        "--num_beams", type=int, default=None, help="Number of beams to use for evaluation. This argument will be "
-             "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        "--num_beams",
+        type=int,
+        default=None,
+        help="Number of beams to use for evaluation. This argument will be "
+        "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``.",
     )
 
     parser.add_argument(
-        "--max_source_length", type=int, default=1024, help="The maximum total input sequence length after "
-              "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded."
+        "--max_source_length",
+        type=int,
+        default=1024,
+        help="The maximum total input sequence length after "
+        "tokenization.Sequences longer than this will be truncated, sequences shorter will be padded.",
     )
     parser.add_argument(
-        "--max_target_length", type=int, default=128, help="The maximum total sequence length for target text after "
-             "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
-            "during ``evaluate`` and ``predict``."
+        "--max_target_length",
+        type=int,
+        default=128,
+        help="The maximum total sequence length for target text after "
+        "tokenization. Sequences longer than this will be truncated, sequences shorter will be padded."
+        "during ``evaluate`` and ``predict``.",
     )
     parser.add_argument(
-        "--val_max_target_length", type=int, default=None, help="The maximum total sequence length for validation "
-            "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
-            "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
-             "param of ``model.generate``, which is used during ``evaluate`` and ``predict``."
+        "--val_max_target_length",
+        type=int,
+        default=None,
+        help="The maximum total sequence length for validation "
+        "target text after tokenization.Sequences longer than this will be truncated, sequences shorter will be "
+        "padded. Will default to `max_target_length`.This argument is also used to override the ``max_length`` "
+        "param of ``model.generate``, which is used during ``evaluate`` and ``predict``.",
     )
     parser.add_argument(
-        "--pad_to_max_length", type=bool, default=False, help="Whether to pad all samples to model maximum sentence "
-             "length. If False, will pad the samples dynamically when batching to the maximum length in the batch. More"
-            "efficient on GPU but very bad for TPU."
+        "--pad_to_max_length",
+        type=bool,
+        default=False,
+        help="Whether to pad all samples to model maximum sentence "
+        "length. If False, will pad the samples dynamically when batching to the maximum length in the batch. More"
+        "efficient on GPU but very bad for TPU.",
     )
     parser.add_argument(
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
     parser.add_argument(
-
-        "--ignore_pad_token_for_loss", type=bool, default=True, help="Whether to ignore the tokens corresponding to "
-         "padded labels in the loss computation or not."
+        "--ignore_pad_token_for_loss",
+        type=bool,
+        default=True,
+        help="Whether to ignore the tokens corresponding to " "padded labels in the loss computation or not.",
+    )
+    parser.add_argument("--source_lang", type=str, default=None, help="Source language id for translation.")
+    parser.add_argument("--target_lang", type=str, default=None, help="Target language id for translation.")
+    parser.add_argument(
+        "--source_prefix",
+        type=str,
+        default=None,
+        help="A prefix to add before every source text " "(useful for T5 models).",
     )
     parser.add_argument(
-        "--source_lang", type=str, default=None, help="Source language id for translation."
+        "--preprocessing_num_workers",
+        type=int,
+        default=None,
+        help="The number of processes to use for the preprocessing.",
     )
     parser.add_argument(
-        "--target_lang", type=str, default=None, help="Target language id for translation."
-    )
-    parser.add_argument(
-        "--source_prefix", type=str, default=None, help="A prefix to add before every source text "
-        "(useful for T5 models)."
-    )
-    parser.add_argument(
-        "--preprocessing_num_workers", type=int, default=None,
-        help="The number of processes to use for the preprocessing."
-    )
-    parser.add_argument(
-        "--overwrite_cache", type=bool, default=None,
-        help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", type=bool, default=None, help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--max_length",
@@ -224,7 +236,7 @@ def parse_args():
 
     # Sanity checks
 
-    if  args.dataset_name is None and args.train_file is None and args.validation_file is None:
+    if args.dataset_name is None and args.train_file is None and args.validation_file is None:
         raise ValueError("Need either a task name or a training/validation file.")
 
     if args.train_file is not None:
@@ -327,7 +339,8 @@ def main():
 
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        assert (args.target_lang is not None and args.source_lang is not None
+        assert (
+            args.target_lang is not None and args.source_lang is not None
         ), "mBart requires --target_lang and --source_lang"
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[args.target_lang]
@@ -361,7 +374,6 @@ def main():
     max_target_length = args.max_target_length
     padding = "max_length" if args.pad_to_max_length else False
 
-
     def preprocess_function(examples):
         inputs = [ex[source_lang] for ex in examples["translation"]]
         targets = [ex[target_lang] for ex in examples["translation"]]
@@ -382,7 +394,6 @@ def main():
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
 
-
     processed_datasets = raw_datasets.map(
         preprocess_function,
         batched=True,
@@ -392,6 +403,7 @@ def main():
     )
 
     train_dataset = processed_datasets["train"]
+    train_dataset = train_dataset.select(range(100))
     eval_dataset = processed_datasets["validation"]
 
     # Log a few random samples from the training set:
@@ -457,7 +469,6 @@ def main():
         num_training_steps=args.max_train_steps,
     )
 
-
     metric = load_metric("sacrebleu")
 
     def postprocess_text(preds, labels):
@@ -465,7 +476,6 @@ def main():
         labels = [[label.strip()] for label in labels]
 
         return preds, labels
-
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -509,14 +519,15 @@ def main():
         }
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
-                generated_tokens = model.generate(
+                generated_tokens = accelerator.unwrap_model(model).generate(
                     batch["input_ids"],
                     attention_mask=batch["attention_mask"],
                     **gen_kwargs,
                 )
 
-                generated_tokens = accelerator.pad_across_processes(generated_tokens, dim=1,
-                                                                    pad_index=tokenizer.pad_token_id)
+                generated_tokens = accelerator.pad_across_processes(
+                    generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
+                )
                 labels = batch["labels"]
                 if not args.pad_to_max_length:
                     # If we did not pad to max length, we need to pad the labels too
@@ -534,15 +545,9 @@ def main():
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
-                metric.add_batch(
-                    predictions=accelerator.gather(decoded_preds),
-                    references=accelerator.gather(decoded_labels),
-                )
+                metric.add_batch(predictions=decoded_preds, references=decoded_labels)
         eval_metric = metric.compute()
-        logger.info(f"epoch {epoch}: {eval_metric}")
-
-
-
+        logger.info({"bleu": eval_metric["score"]})
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
@@ -553,4 +558,3 @@ def main():
 if __name__ == "__main__":
 
     main()
-
