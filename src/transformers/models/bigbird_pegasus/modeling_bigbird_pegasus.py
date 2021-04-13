@@ -189,13 +189,6 @@ class BigBirdPegasusSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
-        # TODO
-        self.qi = hidden_states
-        self.qo = query_layer
-        self.ko = key_layer
-        self.vo = value_layer
-        # 
-
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -1615,8 +1608,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
 
 BIGBIRD_PEGASUS_START_DOCSTRING = r"""
     This model inherits from :class:`~transformers.PreTrainedModel`. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings etc.)
 
     This model is also a PyTorch `torch.nn.Module <https://pytorch.org/docs/stable/nn.html#torch.nn.Module>`__
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
@@ -1635,17 +1627,17 @@ BIGBIRD_PEGASUS_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForConditionalGeneration, BigBirdPegasusConfig
 
-        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-base')
-        >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('bigbird-pegasus-base')
+        >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-large-arxiv')
+        >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('bigbird-pegasus-large-arxiv')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+        >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=4096, return_tensors='pt', truncation=True)
 
         >>> # Generate Summary
         >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5, early_stopping=True)
         >>> print([tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=False) for g in summary_ids])
 """
-
+# TODO: remove head mask from docs
 BIGBIRD_PEGASUS_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, sequence_length)`):
@@ -1959,8 +1951,8 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
-    # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
-    @staticmethod
+    
+    @staticmethod # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
 
         batch_size, seq_length = attention_mask.size()
@@ -2492,10 +2484,10 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel):
         Conditional generation example::
 
             >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForConditionalGeneration
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('bigbird-pegasus-base')
+            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
             >>> TXT = "My friends are <mask> but they eat too many carbs."
 
-            >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('bigbird-pegasus-base')
+            >>> model = BigBirdPegasusForConditionalGeneration.from_pretrained('google/bigbird-pegasus-large-arxiv')
             >>> input_ids = tokenizer([TXT], return_tensors='pt')['input_ids']
             >>> logits = model(input_ids).logits
 
@@ -2929,8 +2921,8 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel):
 
             >>> from transformers import BigBirdPegasusTokenizer, BigBirdPegasusForCausalLM
 
-            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('facebook/bart-large')
-            >>> model = BigBirdPegasusForCausalLM.from_pretrained('facebook/bart-large', add_cross_attention=False)
+            >>> tokenizer = BigBirdPegasusTokenizer.from_pretrained('google/bigbird-pegasus-large-arxiv')
+            >>> model = BigBirdPegasusForCausalLM.from_pretrained('google/bigbird-pegasus-large-arxiv', add_cross_attention=False)
             >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
             >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
             >>> outputs = model(**inputs)

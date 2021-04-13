@@ -110,8 +110,6 @@ def convert_bigbird_pegasus(tf_weights: dict, config_update: dict) -> BigBirdPeg
     # mapping["shared.weight"][cfg.pad_token_id] = torch.zeros_like(mapping["shared.weight"][cfg.pad_token_id + 1])
     mapping["model.encoder.embed_positions.weight"] = mapping["model.embed_positions.weight"]
     mapping["model.decoder.embed_positions.weight"] = mapping.pop("model.embed_positions.weight")
-    # empty_biases = {k: torch.zeros_like(v) for k, v in sd.items() if k.endswith("bias") and k not in mapping}
-    # mapping.update(**empty_biases)
     missing, extra = torch_model.load_state_dict(mapping, strict=False)
     unexpected_missing = [
         k for k in missing if k not in ['final_logits_bias', 'model.encoder.embed_tokens.weight', 'model.decoder.embed_tokens.weight', 'lm_head.weight']
@@ -135,21 +133,9 @@ def get_tf_weights_as_numpy(path) -> Dict:
 
 
 def convert_bigbird_pegasus_ckpt_to_pytorch(ckpt_path: str, save_dir: str, config_update: dict):
-    # save tokenizer first
-    # dataset = Path(ckpt_path).parent.name
-    # desired_max_model_length = task_specific_params[f"summarization_{dataset}"]["max_position_embeddings"]
-    # tok = BigBirdPegasusTokenizer.from_pretrained("sshleifer/pegasus", model_max_length=desired_max_model_length)
-    # assert tok.model_max_length == desired_max_model_length
-    # tok.save_pretrained(save_dir)
-
-    # convert model
     tf_weights = get_tf_weights_as_numpy(ckpt_path)
     torch_model = convert_bigbird_pegasus(tf_weights, config_update)
     torch_model.save_pretrained(save_dir)
-    # sd = torch_model.state_dict()
-    # sd.pop("model.decoder.embed_positions.weight")
-    # sd.pop("model.encoder.embed_positions.weight")
-    # torch.save(sd, os.path.join(save_dir, "pytorch_model.bin"))
 
 
 if __name__ == "__main__":
@@ -160,8 +146,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config_update = {}
     convert_bigbird_pegasus_ckpt_to_pytorch(args.tf_ckpt_path, args.save_dir, config_update=config_update)
-
-
-# TODO:
-# _ = [print(a[0], a[1]) for a in tf.train.list_variables("src/tf_ckpt/bigbird-pegasus-large-arxiv/model.ckpt-0")]
-# python3 src/transformers/models/bigbird_pegasus/convert_bigbird_pegasus_tf_to_pytorch.py --tf_ckpt_path src/tf_ckpt/bigbird-pegasus-large-arxiv/model.ckpt-0 --save_dir src/google/bigbird-pegasus-large-arxiv

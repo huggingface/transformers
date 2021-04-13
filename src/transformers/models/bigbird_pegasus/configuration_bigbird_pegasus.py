@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 BIGBIRD_PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "bigbird-pegasus-base": "https://huggingface.co/bigbird-pegasus-base/resolve/main/config.json",
+    "google/bigbird-pegasus-large-arxiv": "https://huggingface.co/google/bigbird-pegasus-large-arxiv/resolve/main/config.json",
+    "google/bigbird-pegasus-large-pubmed": "https://huggingface.co/google/bigbird-pegasus-large-pubmed/resolve/main/config.json",
+    "google/bigbird-pegasus-large-bigpatent": "https://huggingface.co/google/bigbird-pegasus-large-bigpatent/resolve/main/config.json",
     # See all BigBirdPegasus models at https://huggingface.co/models?filter=bigbird_pegasus
 }
 
@@ -31,7 +33,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a :class:`~transformers.BigBirdPegasusModel`.
     It is used to instantiate an BigBirdPegasus model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the BigBirdPegasus `bigbird-pegasus-base <https://huggingface.co/bigbird-pegasus-base>`__ architecture.
+    the BigBirdPegasus `google/bigbird-pegasus-large-arxiv <https://huggingface.co/google/bigbird-pegasus-large-arxiv>`__ architecture.
 
     Configuration objects inherit from  :class:`~transformers.PretrainedConfig` and can be used
     to control the model outputs. Read the documentation from  :class:`~transformers.PretrainedConfig`
@@ -39,15 +41,14 @@ class BigBirdPegasusConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (:obj:`int`, `optional`, defaults to 50265):
+        vocab_size (:obj:`int`, `optional`, defaults to 96103):
             Vocabulary size of the BigBirdPegasus model. Defines the number of different tokens that can be represented by the
-            :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdPegasusModel` or
-            :class:`~transformers.TFBigBirdPegasusModel`.
+            :obj:`inputs_ids` passed when calling :class:`~transformers.BigBirdPegasusModel`.
         d_model (:obj:`int`, `optional`, defaults to 1024):
             Dimension of the layers and the pooler layer.
-        encoder_layers (:obj:`int`, `optional`, defaults to 12):
+        encoder_layers (:obj:`int`, `optional`, defaults to 16):
             Number of encoder layers.
-        decoder_layers (:obj:`int`, `optional`, defaults to 12):
+        decoder_layers (:obj:`int`, `optional`, defaults to 16):
             Number of decoder layers.
         encoder_attention_heads (:obj:`int`, `optional`, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -57,9 +58,9 @@ class BigBirdPegasusConfig(PretrainedConfig):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         encoder_ffn_dim (:obj:`int`, `optional`, defaults to 4096):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu"`):
+        activation_function (:obj:`str` or :obj:`function`, `optional`, defaults to :obj:`"gelu_fast"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string,
-            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"` and :obj:`"gelu_new"` are supported.
+            :obj:`"gelu"`, :obj:`"relu"`, :obj:`"silu"`, :obj:`"gelu_fast"` and :obj:`"gelu_new"` are supported.
         dropout (:obj:`float`, `optional`, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (:obj:`float`, `optional`, defaults to 0.0):
@@ -68,9 +69,9 @@ class BigBirdPegasusConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (:obj:`float`, `optional`, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (:obj:`int`, `optional`, defaults to 1024):
+        max_position_embeddings (:obj:`int`, `optional`, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
+            just in case (e.g., 1024 or 2048 or 4096).
         init_std (:obj:`float`, `optional`, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop: (:obj:`float`, `optional`, defaults to 0.0):
@@ -81,6 +82,19 @@ class BigBirdPegasusConfig(PretrainedConfig):
             https://arxiv.org/abs/1909.11556>`__ for more details.
         use_cache (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        attention_type (:obj:`str`, `optional`, defaults to :obj:`"block_sparse"`)
+            Whether to use block sparse attention (with n complexity) as introduced in paper or original attention
+            layer (with n^2 complexity) in encoder. Possible values are :obj:`"original_full"` and :obj:`"block_sparse"`.
+        use_bias (:obj:`bool`, `optional`, defaults to :obj:`True`)
+            Whether to use bias in query, key, value.
+        block_size (:obj:`int`, `optional`, defaults to 64)
+            Size of each block. Useful only when :obj:`attention_type == "block_sparse"`.
+        num_random_blocks (:obj:`int`, `optional`, defaults to 3)
+            Each query is going to attend these many number of random blocks. Useful only when :obj:`attention_type ==
+            "block_sparse"`.
+        gradient_checkpointing (:obj:`bool`, `optional`, defaults to :obj:`False`):
+            If True, use gradient checkpointing to save memory at the expense of slower backward pass.
+
         Example::
 
         >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
@@ -177,11 +191,3 @@ class BigBirdPegasusConfig(PretrainedConfig):
     @property
     def attention_probs_dropout_prob(self) -> float:
         return self.attention_dropout
-
-# tie_word_embeddings = True
-# tie_encoder_decoder = True
-
-
-# num_attention_heads
-# hidden_size
-# 
