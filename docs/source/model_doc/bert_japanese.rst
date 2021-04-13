@@ -38,7 +38,7 @@ Example of using a model with MeCab and WordPiece tokenization:
 
   >>> bertjapanese = AutoModel.from_pretrained("cl-tohoku/bert-base-japanese")
   >>> tokenizer = AutoTokenizer.from_pretrained("cl-tohoku/bert-base-japanese")
-  
+
   >>> ## Input Japanese Text
   >>> line = "吾輩は猫である。"
 
