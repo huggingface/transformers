@@ -50,6 +50,8 @@ def get_as_tensor(tensor_type):
             raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
         import torch
 
+        print("we are here")
+
         as_tensor = torch.tensor
     elif tensor_type == TensorType.JAX:
         if not is_flax_available():
