@@ -48,7 +48,7 @@ Examples of use:
     >>> encoded_input = tokenizer.encode("Kto ma lepszą sztukę, ma lepszy rząd – to jasne.", return_tensors='pt')
     >>> outputs = model(encoded_input)
 
-    >>> ## HerBERT can also be loaded using AutoTokenizer and AutoModel:
+    >>> # HerBERT can also be loaded using AutoTokenizer and AutoModel:
     >>> import torch
     >>> from transformers import AutoModel, AutoTokenizer
 
