@@ -90,7 +90,7 @@ class Speech2TextConfig(PretrainedConfig):
             An integer defining the number of output channels of each convolution layers except the final one in the
             conv module.
         input_feat_per_channel (:obj:`int`, `optional`, defaults to 80):
-            An integer specifying the size of feature vector. This is also the dimentions of log-mel filter-bank
+            An integer specifying the size of feature vector. This is also the dimensions of log-mel filter-bank
             features.
         input_channels (:obj:`int`, `optional`, defaults to 1):
             An integer specifying number of input channels of the input feature vector.
