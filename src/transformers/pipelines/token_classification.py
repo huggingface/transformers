@@ -30,6 +30,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
 
+        model_batch_size = kwargs.get("model_batch_size", 1)
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
             batch_size = len(inputs)
@@ -45,7 +46,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
                 offset_mapping = [offset_mapping]
             if len(offset_mapping) != batch_size:
                 raise ValueError("offset_mapping should have the same batch size as the input")
-        return inputs, offset_mapping
+        return inputs, offset_mapping, model_batch_size
 
 
 @add_end_docstrings(
@@ -140,44 +141,45 @@ class TokenClassificationPipeline(Pipeline):
               Only exists if the offsets are available within the tokenizer
         """
 
-        _inputs, offset_mappings = self._args_parser(inputs, **kwargs)
+        _inputs, offset_mappings, model_batch_size = self._args_parser(inputs, **kwargs)
+
 
         answers = []
 
-        for i, sentence in enumerate(_inputs):
+        with self.device_placement():
 
-            # Manage correct placement of the tensors
-            with self.device_placement():
+            batch_tokenized = self.tokenizer.batch_encode_plus(
+                _inputs,
+                return_attention_mask=False,
+                return_tensors=self.framework,
+                truncation=True,
+                return_special_tokens_mask=True,
+                return_offsets_mapping=self.tokenizer.is_fast,
+            )
+            if self.tokenizer.is_fast:
+                offset_mappings = batch_tokenized.pop("offset_mapping").cpu().numpy()
 
-                tokens = self.tokenizer(
-                    sentence,
-                    return_attention_mask=False,
-                    return_tensors=self.framework,
-                    truncation=True,
-                    return_special_tokens_mask=True,
-                    return_offsets_mapping=self.tokenizer.is_fast,
-                )
-                if self.tokenizer.is_fast:
-                    offset_mapping = tokens.pop("offset_mapping").cpu().numpy()[0]
-                elif offset_mappings:
-                    offset_mapping = offset_mappings[i]
-                else:
-                    offset_mapping = None
+            batch_special_tokens_mask = batch_tokenized.pop("special_tokens_mask").cpu().numpy()
 
-                special_tokens_mask = tokens.pop("special_tokens_mask").cpu().numpy()[0]
+            if self.framework == "tf":
+                batch_entities = self.model(**batch_tokenized, batch_size=model_batch_size)[0].cpu().numpy()
+                batch_input_ids = batch_tokenized["input_ids"].cpu().numpy()
+            else:
+                with torch.no_grad():
+                    batch_tokenized = self.ensure_tensor_on_device(**batch_tokenized)
+                    batch_entities = self.model(**batch_tokenized)[0].cpu().numpy()
+                    batch_input_ids = batch_tokenized["input_ids"].cpu().numpy()
 
-                # Forward
-                if self.framework == "tf":
-                    entities = self.model(tokens.data)[0][0].numpy()
-                    input_ids = tokens["input_ids"].numpy()[0]
-                else:
-                    with torch.no_grad():
-                        tokens = self.ensure_tensor_on_device(**tokens)
-                        entities = self.model(**tokens)[0][0].cpu().numpy()
-                        input_ids = tokens["input_ids"].cpu().numpy()[0]
+        if not offset_mappings:
+            offset_mappings = [None] * len(_inputs)
 
+        for i, entities in enumerate(batch_entities):
             score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
             labels_idx = score.argmax(axis=-1)
+            offset_mapping = offset_mappings[i]
+            sentence = _inputs[i]
+            input_ids = batch_input_ids[i]
+            special_tokens_mask = batch_special_tokens_mask[i]
 
             entities = []
             # Filter to labels not in `self.ignore_labels`
@@ -189,7 +191,7 @@ class TokenClassificationPipeline(Pipeline):
             ]
 
             for idx, label_idx in filtered_labels_idx:
-                if offset_mapping is not None:
+                if offset_mappings is not None:
                     start_ind, end_ind = offset_mapping[idx]
                     word_ref = sentence[start_ind:end_ind]
                     word = self.tokenizer.convert_ids_to_tokens([int(input_ids[idx])])[0]
