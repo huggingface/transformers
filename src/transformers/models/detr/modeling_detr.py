@@ -1317,10 +1317,8 @@ class DetrModel(DetrPreTrainedModel):
     # )
     def forward(
         self,
-        # samples: NestedTensor=None,
         pixel_values,
         pixel_mask=None,
-        decoder_input_ids=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         inputs_embeds=None,
@@ -1426,6 +1424,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         self.model = DetrModel(config)
 
         # Object detection heads
+        # We add one for the "no object" class
         self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels + 1)
         self.bbox_predictor = MLP(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
 
@@ -1448,10 +1447,8 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     # )
     def forward(
         self,
-        # samples: NestedTensor=None,
         pixel_values,
-        pixel_mask,
-        decoder_input_ids=None,
+        pixel_mask=None,
         decoder_attention_mask=None,
         encoder_outputs=None,
         inputs_embeds=None,
@@ -1474,8 +1471,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         # First, sent images through DETR base model to obtain encoder + decoder outputs
         outputs = self.model(
             pixel_values,
-            pixel_mask,
-            decoder_input_ids=decoder_input_ids,
+            pixel_mask=pixel_mask,
             decoder_attention_mask=decoder_attention_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
@@ -1485,10 +1481,12 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             return_dict=return_dict,
         )
 
+        sequence_output = outputs[0]
+        
         # class logits + predicted bounding boxes
-        # to do: make this as efficient as the original implementation
-        pred_logits = self.class_labels_classifier(outputs.last_hidden_state)
-        pred_boxes = self.bbox_predictor(outputs.last_hidden_state).sigmoid()
+        # TODO make this as efficient as the original implementation
+        pred_logits = self.class_labels_classifier(sequence_output)
+        pred_boxes = self.bbox_predictor(sequence_output).sigmoid()
 
         loss, auxiliary_outputs = None, None
         if labels is not None:
@@ -1549,9 +1547,9 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         if not return_dict:
             # to be verified
             if auxiliary_outputs is not None:
-                output = (pred_logits, pred_boxes) + auxiliary_outputs + decoder_outputs + encoder_outputs
+                output = (pred_logits, pred_boxes) + auxiliary_outputs + outputs
             else:
-                output = (pred_logits, pred_boxes) + decoder_outputs + encoder_outputs
+                output = (pred_logits, pred_boxes) + outputs
             return ((loss,) + output) if loss is not None else output
 
         return DetrObjectDetectionOutput(
@@ -1568,7 +1566,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         )
 
 
-# copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class SetCriterion(nn.Module):
     """
     This class computes the loss for DETRForObjectDetection. The process happens in two steps: 1) we compute hungarian
@@ -1756,7 +1754,7 @@ class SetCriterion(nn.Module):
         return losses
 
 
-# inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class MLP(nn.Module):
     """
     Very simple multi-layer perceptron (also called FFN), used to predict the normalized center coordinates, height and
@@ -1778,7 +1776,7 @@ class MLP(nn.Module):
         return x
 
 
-# inspired by https://github.com/facebookresearch/detr/blob/master/models/matcher.py
+# taken from https://github.com/facebookresearch/detr/blob/master/models/matcher.py
 class HungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network For efficiency reasons,
@@ -1853,7 +1851,7 @@ class HungarianMatcher(nn.Module):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-# below: functies copied from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+# below: functies taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 
 
 def box_cxcywh_to_xyxy(x):

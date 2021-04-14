@@ -78,7 +78,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`.
+            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size is a 
+            sequence like (w, h), output size will be matched to this. If size is an int, smaller edge of the image will be 
+            matched to this number. i.e, if height > width, then image will be rescaled to (size * height / width, size). 
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
@@ -255,6 +257,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         
         # size can be min_size (scalar) or (w, h) tuple
 
+        if not isinstance(image, Image.Image):
+            image = self.to_pil_image(image)
+
         def get_size_with_aspect_ratio(image_size, size, max_size=None):
             w, h = image_size
             if max_size is not None:
@@ -282,7 +287,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 # size returned must be (w, h) since we use PIL to resize images
                 # so we revert the tuple 
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
-
+        
         size = get_size(image.size, size, max_size)
         rescaled_image = self.resize(image, size=size)
 

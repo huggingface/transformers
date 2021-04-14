@@ -186,7 +186,7 @@ def convert_detr_checkpoint(task, backbone, dilation, pytorch_dump_folder_path):
         assert torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4)
 
     elif task == "object_detection":
-        # coco has 91 labels
+        # coco has actually only 80 classes, but max_obj_id is 90, and as the first index is zero we have 91 label ids
         config.num_labels = 91
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

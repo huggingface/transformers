@@ -19,6 +19,7 @@ import copy
 import tempfile
 import unittest
 import inspect
+import math
 
 from PIL import Image
 
@@ -38,7 +39,7 @@ if is_torch_available():
 
     from transformers import DetrConfig, DetrForObjectDetection, DetrModel
     from transformers.models.detr.modeling_detr import DetrDecoder, DetrEncoder
-    from transformers import MODEL_MAPPING
+    from transformers import MODEL_MAPPING, MODEL_FOR_OBJECT_DETECTION_MAPPING
 
 
 if is_vision_available():
@@ -66,7 +67,7 @@ class DetrModelTester:
         num_channels=3,
         image_size=200,
         n_targets=8,
-        n_classes=91,
+        num_labels=91,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -83,7 +84,11 @@ class DetrModelTester:
         self.num_channels = num_channels
         self.image_size = image_size
         self.n_targets = n_targets
-        self.n_classes = n_classes
+        self.num_labels = num_labels
+
+        # we can also set the expected seq length for both encoder and decoder
+        self.encoder_seq_length = math.ceil(self.image_size/32)**2
+        self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -96,7 +101,7 @@ class DetrModelTester:
             labels = []
             for i in range(self.batch_size):
                 target = {}
-                target['class_labels'] = torch.randint(high=self.n_classes, size=(self.n_targets,))
+                target['class_labels'] = torch.randint(high=self.num_labels, size=(self.n_targets,))
                 target['boxes'] = torch.rand(self.n_targets, 4)
                 labels.append(target)
 
@@ -110,13 +115,42 @@ class DetrModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
+            num_queries=self.num_queries,
+            num_labels=self.num_labels
         )
         return config, pixel_values, pixel_mask, labels
 
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
-        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask, "labels": labels}
+        inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
         return config, inputs_dict
+
+    def create_and_check_detr_model(self, config, pixel_values, pixel_mask, labels):
+        model = DetrModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
+
+    def create_and_check_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
+        model = DetrForObjectDetection(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
+        result = model(pixel_values)
+
+        self.parent.assertEqual(result.pred_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
+
+        result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
+
+        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.pred_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
 @require_torch
@@ -131,6 +165,22 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_missing_keys = False
 
+    # special case for DetrForObjectDetection model
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
+
+        if return_labels:
+            if model_class.__name__ == "DetrForObjectDetection":
+                labels = []
+                for i in range(self.model_tester.batch_size):
+                    target = {}
+                    target['class_labels'] = torch.randint(high=self.model_tester.num_labels, size=(self.model_tester.n_targets,))
+                    target['boxes'] = torch.rand(self.model_tester.n_targets, 4)
+                    labels.append(target)
+                inputs_dict["labels"] = labels
+                
+        return inputs_dict
+    
     def setUp(self):
         self.model_tester = DetrModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DetrConfig, has_text_modality=False)
@@ -138,6 +188,14 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_detr_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_detr_model(*config_and_inputs)
+
+    def test_detr_object_detection_head_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
+    
     def test_inputs_embeds(self):
         # DETR does not use inputs_embeds
         pass
@@ -184,11 +242,11 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 expected_arg_names.extend(
                     ["head_mask", "decoder_head_mask", "encoder_outputs"]
                     if "head_mask" and "decoder_head_mask" in arg_names
-                    else ["encoder_outputs"]
+                    else []
                 )
                 self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
             else:
-                expected_arg_names = ["pixel_values"]
+                expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
     
     def test_save_load_strict(self):
@@ -200,10 +258,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
-
-    def test_encoder_decoder_model_standalone(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
-        self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
