@@ -394,7 +394,7 @@ TensorFlow and/or Flax.
 
     pretrained_models
     examples
-    troubleshoot
+    troubleshooting
     custom_datasets
     notebooks
     sagemaker
