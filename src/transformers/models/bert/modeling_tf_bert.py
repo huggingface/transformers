@@ -130,7 +130,7 @@ class TFBertPreTrainingLoss:
 
 class WordEmbeddings(tf.keras.layers.Layer):
     def __init__(self, name, shape, initializer, embedding_name, **kwargs):
-        super().__init__(name, **kwargs)
+        super().__init__(name=None, **kwargs)
         self.shape = shape
         self.initializer = initializer
         self.embedding_name = embedding_name
@@ -167,7 +167,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         self.word_embeddings = WordEmbeddings(
             name="word_embeddings",
-            embedding_name="weight",
+            embedding_name="embeddings",
             shape=[self.vocab_size, self.hidden_size],
             initializer=get_initializer(self.initializer_range),
         )
