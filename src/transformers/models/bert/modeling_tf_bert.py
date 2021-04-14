@@ -128,6 +128,17 @@ class TFBertPreTrainingLoss:
 
         return masked_lm_loss + next_sentence_loss
 
+class WeightLayer(tf.keras.layers.Layer):
+    def __init__(self, name, shape, initializer, **kwargs):
+        super().__init__(name, **kwargs)
+        self.weight = self.add_weight(
+            name=name,
+            shape=shape,
+            initializer=initializer,
+        )
+
+    def call(self, inputs, **kwargs):
+        return tf.gather(params=self.weight, indices=inputs)
 
 class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -145,12 +156,12 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
     def build(self, input_shape: tf.TensorShape):
-        with tf.name_scope("word_embeddings"):
-            self.weight = self.add_weight(
-                name="weight",
-                shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(self.initializer_range),
-            )
+        #with tf.name_scope("word_embeddings"):
+        self.word_embeddings = WeightLayer(
+            name="weight",
+            shape=[self.vocab_size, self.hidden_size],
+            initializer=get_initializer(self.initializer_range),
+        )
 
 
         # self.token_type_embeddings = self.add_weight(
@@ -195,7 +206,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+            inputs_embeds = tf.gather(params=self.word_embeddings.weight, indices=input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
 
@@ -531,7 +542,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
-        self.input_embeddings.weight = value
+        self.input_embeddings.word_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
@@ -545,7 +556,7 @@ class TFBertLMPredictionHead(tf.keras.layers.Layer):
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
@@ -597,7 +608,7 @@ class TFBertMainLayer(tf.keras.layers.Layer):
         return self.embeddings
 
     def set_input_embeddings(self, value: tf.Variable):
-        self.embeddings.weight = value
+        self.embeddings.word_embeddings.weight = value
         self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
