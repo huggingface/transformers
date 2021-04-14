@@ -178,6 +178,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         #     initializer=get_initializer(self.initializer_range),
         # )
         self.token_type_embeddings = tf.keras.layers.Embedding(
+            name="token_type_embeddings",
             input_dim=self.type_vocab_size,
             output_dim=self.hidden_size,
             embeddings_initializer=get_initializer(self.initializer_range)
@@ -185,6 +186,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         #with tf.name_scope("position_embeddings"):
         self.position_embeddings = tf.keras.layers.Embedding(
+            name="position_embeddings",
             input_dim=self.max_position_embeddings,
             output_dim= self.hidden_size,
             embeddings_initializer=get_initializer(self.initializer_range)
