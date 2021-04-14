@@ -595,8 +595,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
 
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/seq2seq/run_translation.py"]
-        num_gpus = get_gpu_count() if distributed else 1
-        launcher = f"deepspeed --num_gpus {num_gpus}".split()
+        launcher = self.get_launcher(distributed)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -629,11 +628,9 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
             --block_size 128
             """.split()
 
-        distributed = True
         ds_args = f"--deepspeed {self.test_file_dir_str}/ds_config_{stage}.json".split()
         script = [f"{self.examples_dir_str}/language-modeling/run_clm.py"]
-        num_gpus = get_gpu_count() if distributed else 1
-        launcher = f"deepspeed --num_gpus {num_gpus}".split()
+        launcher = self.get_launcher(distributed=True)
 
         cmd = launcher + script + args + ds_args
         # keep for quick debug
@@ -641,3 +638,11 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         execute_subprocess_async(cmd, env=self.get_env())
 
         return output_dir
+
+    def get_launcher(self, distributed=False):
+        # 1. explicitly set --num_nodes=1 just in case these tests end up run on a multi-node setup
+        # - it won't be able to handle that
+        # 2. for now testing with just 2 gpus max (since some quality tests may give different
+        # results with mode gpus because we use very little data)
+        num_gpus = min(2, get_gpu_count()) if distributed else 1
+        return f"deepspeed --num_nodes 1 --num_gpus {num_gpus}".split()
