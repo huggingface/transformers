@@ -305,7 +305,8 @@ class SpmConverter(Converter):
         from .utils import sentencepiece_model_pb2 as model_pb2
 
         m = model_pb2.ModelProto()
-        m.ParseFromString(open(self.original_tokenizer.vocab_file, "rb").read())
+        with open(self.original_tokenizer.vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
         self.proto = m
 
     def vocab(self, proto):
