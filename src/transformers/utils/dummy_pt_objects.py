@@ -1123,10 +1123,6 @@ DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class DeiTForImageClassification:
-DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
-
-
-class DetrForObjectDetection:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
@@ -1146,6 +1142,22 @@ class DeiTModel:
 
 
 class DeiTPreTrainedModel:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+    @classmethod
+    def from_pretrained(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+DETR_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DetrForObjectDetection:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class DetrModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])

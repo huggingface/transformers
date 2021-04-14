@@ -14,13 +14,13 @@
 # limitations under the License.
 """Feature extractor class for DETR."""
 
-from typing import List, Optional, Union, Dict
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 from PIL import Image
 
 from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
-from ...file_utils import TensorType, is_tf_available, is_torch_available, is_flax_available
+from ...file_utils import TensorType, is_flax_available, is_tf_available, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
 
@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 def get_as_tensor(tensor_type):
     if not tensor_type:
         return np.asarray
-    
+
     # Convert to TensorType
     if not isinstance(tensor_type, TensorType):
         tensor_type = TensorType(tensor_type)
@@ -39,10 +39,9 @@ def get_as_tensor(tensor_type):
     # Get a function reference for the correct framework
     if tensor_type == TensorType.TENSORFLOW:
         if not is_tf_available():
-            raise ImportError(
-                "Unable to convert output to TensorFlow tensors format, TensorFlow is not installed."
-            )
+            raise ImportError("Unable to convert output to TensorFlow tensors format, TensorFlow is not installed.")
         import tensorflow as tf
+
         global tf
 
         as_tensor = tf.constant
@@ -50,6 +49,7 @@ def get_as_tensor(tensor_type):
         if not is_torch_available():
             raise ImportError("Unable to convert output to PyTorch tensors format, PyTorch is not installed.")
         import torch
+
         global torch
 
         as_tensor = torch.tensor
@@ -57,6 +57,7 @@ def get_as_tensor(tensor_type):
         if not is_flax_available():
             raise ImportError("Unable to convert output to JAX tensors format, JAX is not installed.")
         import jax.numpy as jnp  # noqa: F811
+
         global jnp
 
         as_tensor = jnp.array
@@ -78,9 +79,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         do_resize (:obj:`bool`, `optional`, defaults to :obj:`True`):
             Whether to resize the input to a certain :obj:`size`.
         size (:obj:`int`, `optional`, defaults to 800):
-            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size is a 
-            sequence like (w, h), output size will be matched to this. If size is an int, smaller edge of the image will be 
-            matched to this number. i.e, if height > width, then image will be rescaled to (size * height / width, size). 
+            Resize the input to the given size. Only has an effect if :obj:`do_resize` is set to :obj:`True`. If size
+            is a sequence like (w, h), output size will be matched to this. If size is an int, smaller edge of the
+            image will be matched to this number. i.e, if height > width, then image will be rescaled to (size * height
+            / width, size).
         max_size (:obj:`int`, `optional`, defaults to :obj:`1333`):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if
             :obj:`do_resize` is set to :obj:`True`.
@@ -104,13 +106,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.size = size
         self.max_size = max_size
         self.do_normalize = do_normalize
-        self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406] 
-        self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225] 
+        self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]
+        self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]
 
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L33
     # with added support for several TensorTypes
     def convert_coco_poly_to_mask(segmentations, height, width, tensor_type, as_tensor):
-        
+
         masks = []
         for polygons in segmentations:
             rles = coco_mask.frPyObjects(polygons, height, width)
@@ -152,12 +154,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     masks = np.zeros((0, height, width), dtype=np.uint8)
 
         return masks
-    
+
     # inspired by https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/datasets/coco.py#L50
     # with added support for several TensorTypes
     def convertCocoToDetrFormat(self, image, target, tensor_type, return_masks=False):
         as_tensor, tensor_type = get_as_tensor(tensor_type)
-        
+
         w, h = image.size
 
         image_id = target["image_id"]
@@ -166,7 +168,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         # get all COCO annotations for the given image
         anno = target["annotations"]
 
-        anno = [obj for obj in anno if 'iscrowd' not in obj or obj['iscrowd'] == 0]
+        anno = [obj for obj in anno if "iscrowd" not in obj or obj["iscrowd"] == 0]
 
         boxes = [obj["bbox"] for obj in anno]
         # guard against no boxes via resizing
@@ -209,11 +211,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             num_keypoints = keypoints.shape[0]
             if num_keypoints:
                 if as_tensor == tf.constant:
-                    keypoints = tf.reshape(keypoints, [-1,3])
+                    keypoints = tf.reshape(keypoints, [-1, 3])
                 elif as_tensor == torch.tensor:
                     keypoints = keypoints.view(num_keypoints, -1, 3)
                 else:
-                    keypoints = keypoints.reshape((-1,3))
+                    keypoints = keypoints.reshape((-1, 3))
 
         # TODO add TF support
         keep = (boxes[:, 3] > boxes[:, 1]) & (boxes[:, 2] > boxes[:, 0])
@@ -243,7 +245,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target["size"] = as_tensor([int(h), int(w)])
 
         return image, target
-    
+
     def _max_by_axis(self, the_list):
         # type: (List[List[int]]) -> List[int]
         maxes = the_list[0]
@@ -251,10 +253,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for index, item in enumerate(sublist):
                 maxes[index] = max(maxes[index], item)
         return maxes
-    
+
     def _resize(self, image, target, size, tensor_type, max_size=None):
         as_tensor, _ = get_as_tensor(tensor_type)
-        
+
         # size can be min_size (scalar) or (w, h) tuple
 
         if not isinstance(image, Image.Image):
@@ -285,9 +287,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 return size
             else:
                 # size returned must be (w, h) since we use PIL to resize images
-                # so we revert the tuple 
+                # so we revert the tuple
                 return get_size_with_aspect_ratio(image_size, size, max_size)[::-1]
-        
+
         size = get_size(image.size, size, max_size)
         rescaled_image = self.resize(image, size=size)
 
@@ -312,11 +314,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         target["size"] = as_tensor([h, w])
 
         if "masks" in target:
-            target['masks'] = interpolate(
-                target['masks'][:, None].float(), size, mode="nearest")[:, 0] > 0.5
+            target["masks"] = interpolate(target["masks"][:, None].float(), size, mode="nearest")[:, 0] > 0.5
 
         return rescaled_image, target
-    
+
     def __call__(
         self,
         images: Union[
@@ -342,9 +343,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 number of channels, H and W are image height and width.
 
             annotations (:obj:`List[Dict]`, :obj:`List[List[Dict]]`):
-                The corresponding annotations in COCO format. Each image can have one or more annotations. Each annotation 
-                is a Python dictionary, with the following keys: segmentation, area, iscrowd, image_id, bbox, category_id, id. 
-            
+                The corresponding annotations in COCO format. Each image can have one or more annotations. Each
+                annotation is a Python dictionary, with the following keys: segmentation, area, iscrowd, image_id,
+                bbox, category_id, id.
+
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
@@ -390,15 +392,18 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 assert len(images) == len(annotations), "There must be as many annotations as there are images"
                 if isinstance(annotations, (list, tuple)):
-                    if len(annotations) == 0 or (isinstance(annotations[0], List) and isinstance(annotations[0][0], Dict)):
+                    if len(annotations) == 0 or (
+                        isinstance(annotations[0], List) and isinstance(annotations[0][0], Dict)
+                    ):
                         valid_annotations = True
 
         if not valid_images:
             raise ValueError(
-                """Annotations must of type `List[Dict]` (single image) or `List[List[Dict]]` (batch of images).
-                Each annotation should be in COCO format. 
                 """
-            )    
+                Annotations must of type `List[Dict]` (single image) or `List[List[Dict]]` (batch of images). Each
+                annotation should be in COCO format.
+                """
+            )
 
         if not is_batched:
             images = [images]
@@ -410,7 +415,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             for idx, (image, anno) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
-                target = {'image_id': anno[0]['image_id'], 'annotations': anno}
+                target = {"image_id": anno[0]["image_id"], "annotations": anno}
                 image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors)
                 images[idx] = image
                 annotations[idx] = target
@@ -419,13 +424,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._resize(image=image, target=target, size=self.size, tensor_type=return_tensors, max_size=self.max_size)
+                    image, target = self._resize(
+                        image=image, target=target, size=self.size, tensor_type=return_tensors, max_size=self.max_size
+                    )
                     images[idx] = image
                     annotations[idx] = target
             else:
                 for idx, image in enumerate(images):
-                    images[idx] = self._resize(image=image, target=None, size=self.size, tensor_type=return_tensors, max_size=self.max_size)[0]
-                
+                    images[idx] = self._resize(
+                        image=image, target=None, size=self.size, tensor_type=return_tensors, max_size=self.max_size
+                    )[0]
+
         if self.do_normalize:
             images = [self.normalize(image=image, mean=self.image_mean, std=self.image_std) for image in images]
 
@@ -438,11 +447,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         for img, pad_img, m in zip(images, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]] = np.copy(img)
             mask[: img.shape[1], : img.shape[2]] = True
-        
+
         # return as BatchFeature
         data = {"pixel_values": images, "pixel_mask": mask}
         encoded_inputs = BatchFeature(data=data, tensor_type=return_tensors)
-        
+
         if annotations is not None:
             encoded_inputs["target"] = annotations
 

@@ -428,7 +428,7 @@ class ModelTesterMixin:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 # Object Detection model returns pred_logits and pred_boxes instead of last_hidden_state
                 if model_class in get_values(MODEL_FOR_OBJECT_DETECTION_MAPPING):
-                    correct_outlen += 1  
+                    correct_outlen += 1
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
 

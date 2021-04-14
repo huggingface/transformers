@@ -15,19 +15,17 @@
 """ Testing suite for the PyTorch DETR model. """
 
 
-import copy
-import tempfile
-import unittest
 import inspect
 import math
+import tempfile
+import unittest
 
 from PIL import Image
 
-import requests
 from transformers import is_torch_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.models.auto import get_values
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from .test_configuration_common import ConfigTester
 from .test_generation_utils import GenerationTesterMixin
@@ -37,9 +35,12 @@ from .test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import DetrConfig, DetrForObjectDetection, DetrModel
-    from transformers.models.detr.modeling_detr import DetrDecoder, DetrEncoder
-    from transformers import MODEL_MAPPING, MODEL_FOR_OBJECT_DETECTION_MAPPING
+    from transformers import (
+        MODEL_MAPPING,
+        DetrConfig,
+        DetrForObjectDetection,
+        DetrModel,
+    )
 
 
 if is_vision_available():
@@ -87,7 +88,7 @@ class DetrModelTester:
         self.num_labels = num_labels
 
         # we can also set the expected seq length for both encoder and decoder
-        self.encoder_seq_length = math.ceil(self.image_size/32)**2
+        self.encoder_seq_length = math.ceil(self.image_size / 32) ** 2
         self.decoder_seq_length = self.num_queries
 
     def prepare_config_and_inputs(self):
@@ -101,8 +102,8 @@ class DetrModelTester:
             labels = []
             for i in range(self.batch_size):
                 target = {}
-                target['class_labels'] = torch.randint(high=self.num_labels, size=(self.n_targets,))
-                target['boxes'] = torch.rand(self.n_targets, 4)
+                target["class_labels"] = torch.randint(high=self.num_labels, size=(self.n_targets,))
+                target["boxes"] = torch.rand(self.n_targets, 4)
                 labels.append(target)
 
         config = DetrConfig(
@@ -116,7 +117,7 @@ class DetrModelTester:
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
             num_queries=self.num_queries,
-            num_labels=self.num_labels
+            num_labels=self.num_labels,
         )
         return config, pixel_values, pixel_mask, labels
 
@@ -133,7 +134,9 @@ class DetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size)
+        )
 
     def create_and_check_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
         model = DetrForObjectDetection(config=config)
@@ -156,7 +159,10 @@ class DetrModelTester:
 @require_torch
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (DetrModel, DetrForObjectDetection,)
+        (
+            DetrModel,
+            DetrForObjectDetection,
+        )
         if is_torch_available()
         else ()
     )
@@ -174,13 +180,15 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
-                    target['class_labels'] = torch.randint(high=self.model_tester.num_labels, size=(self.model_tester.n_targets,))
-                    target['boxes'] = torch.rand(self.model_tester.n_targets, 4)
+                    target["class_labels"] = torch.randint(
+                        high=self.model_tester.num_labels, size=(self.model_tester.n_targets,)
+                    )
+                    target["boxes"] = torch.rand(self.model_tester.n_targets, 4)
                     labels.append(target)
                 inputs_dict["labels"] = labels
-                
+
         return inputs_dict
-    
+
     def setUp(self):
         self.model_tester = DetrModelTester(self)
         self.config_tester = ConfigTester(self, config_class=DetrConfig, has_text_modality=False)
@@ -195,10 +203,19 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_detr_object_detection_head_model(*config_and_inputs)
-    
+
     def test_inputs_embeds(self):
         # DETR does not use inputs_embeds
         pass
+
+    def test_model_common_attributes(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
+            x = model.get_output_embeddings()
+            self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
     def test_generate_without_input_ids(self):
         # DETR is not a generative model
@@ -224,7 +241,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
-    
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -248,7 +265,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
-    
+
     def test_save_load_strict(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         for model_class in self.all_model_classes:
@@ -308,7 +325,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
         encoding = feature_extractor(images=image, return_tensors="pt").to(torch_device)
-        
+
         with torch.no_grad():
             outputs = model(**encoding)
 

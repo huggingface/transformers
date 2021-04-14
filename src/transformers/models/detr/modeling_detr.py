@@ -18,14 +18,12 @@
 import math
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple
 
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
 import torchvision
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss
 from torchvision.models._utils import IntermediateLayerGetter
 from torchvision.ops.boxes import box_area
 
@@ -39,11 +37,7 @@ from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ...modeling_outputs import (  
-    BaseModelOutput,
-    BaseModelOutputWithCrossAttentions,
-    Seq2SeqModelOutput,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from .configuration_detr import DetrConfig
@@ -862,8 +856,8 @@ DETR_INPUTS_DOCSTRING = r"""
             vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, target_sequence_length, hidden_size)`, `optional`):
             Optionally, instead of passing :obj:`decoder_input_ids` you can choose to directly pass an embedded
-            representation. This is useful if you want more control over how to convert
-            :obj:`decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
+            representation. This is useful if you want more control over how to convert :obj:`decoder_input_ids`
+            indices into associated vectors than the model's internal embedding lookup matrix.
 
             If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset, :obj:`decoder_inputs_embeds`
             takes the value of :obj:`inputs_embeds`.
@@ -1482,7 +1476,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        
+
         # class logits + predicted bounding boxes
         # TODO make this as efficient as the original implementation
         pred_logits = self.class_labels_classifier(sequence_output)
