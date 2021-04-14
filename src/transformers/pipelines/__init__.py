@@ -273,9 +273,11 @@ def pipeline(
 
             - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
             - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
+              :class:`~transformers.TextClassificationPipeline`.
             - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
-            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
+              :class:`~transformers.TokenClassificationPipeline`.
             - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
