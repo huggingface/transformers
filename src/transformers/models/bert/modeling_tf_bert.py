@@ -167,7 +167,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
         self.word_embeddings = WordEmbeddings(
             name="word_embeddings",
-            embedding_name="embeddings",
+            embedding_name="weight",
             shape=[self.vocab_size, self.hidden_size],
             initializer=get_initializer(self.initializer_range),
         )
