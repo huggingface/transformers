@@ -441,6 +441,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING = OrderedDict(
         (CamembertConfig, CamembertForCausalLM),
         (XLMRobertaConfig, XLMRobertaForCausalLM),
         (RobertaConfig, RobertaForCausalLM),
+        (DistilBertConfig, DistilBertForCausalLM),
         (BertConfig, BertLMHeadModel),
         (OpenAIGPTConfig, OpenAIGPTLMHeadModel),
         (GPT2Config, GPT2LMHeadModel),
