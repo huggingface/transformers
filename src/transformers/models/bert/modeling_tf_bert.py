@@ -131,10 +131,15 @@ class TFBertPreTrainingLoss:
 class WeightLayer(tf.keras.layers.Layer):
     def __init__(self, name, shape, initializer, embedding_name, **kwargs):
         super().__init__(name, **kwargs)
+        self.shape = shape
+        self.initializer = initializer
+        self.embedding_name = embedding_name
+
+    def build(self, input_shape):
         self.weight = self.add_weight(
-            name=embedding_name,
-            shape=shape,
-            initializer=initializer,
+            name=self.embedding_name,
+            shape=self.shape,
+            initializer=self.initializer,
         )
 
     def call(self, inputs, **kwargs):
@@ -155,17 +160,17 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
+
+
+    def build(self, input_shape: tf.TensorShape):
+        #with tf.name_scope("word_embeddings"):
+
         self.word_embeddings = WeightLayer(
             name="word_embeddings",
             embedding_name="weight",
             shape=[self.vocab_size, self.hidden_size],
             initializer=get_initializer(self.initializer_range),
         )
-
-    def build(self, input_shape: tf.TensorShape):
-        #with tf.name_scope("word_embeddings"):
-
-
 
         # self.token_type_embeddings = self.add_weight(
         #     name="token_type_embeddings",
