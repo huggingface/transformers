@@ -579,23 +579,26 @@ class DistributedLengthGroupedSampler(DistributedSampler):
 class IterableDatasetShard(IterableDataset):
     """
     Wraps a PyTorch :obj:`IterableDataset` to generate samples for one of the processes only. Instances of this class
-    will always yield a number of samples that is a round multiple of the actual batch size (which is 
-    :obj:`batch_size x num_processes`). Depending on the value of the :obj:`drop_last` attribute, it will either stop the iteration at the first
-    batch that would be too small or loop with indices from the beginning.
-    
-    On two processes with an iterable dataset yielding of :obj:`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` with a batch 
+    will always yield a number of samples that is a round multiple of the actual batch size (which is :obj:`batch_size
+    x num_processes`). Depending on the value of the :obj:`drop_last` attribute, it will either stop the iteration at
+    the first batch that would be too small or loop with indices from the beginning.
+
+    On two processes with an iterable dataset yielding of :obj:`[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]` with a batch
     size of 2:
-    
-    - the shard on process 0 will yield :obj:`[0, 1, 4, 5, 8, 9]` so will see batches :obj:`[0, 1]`, :obj:`[4, 5]`, :obj:`[8, 9]`
-    - the shard on process 1 will yield :obj:`[2, 3, 6, 7, 10, 11]` so will see batches :obj:`[2, 3]`, :obj:`[6, 7]`, :obj:`[10, 11]`
-    
+
+    - the shard on process 0 will yield :obj:`[0, 1, 4, 5, 8, 9]` so will see batches :obj:`[0, 1]`, :obj:`[4, 5]`,
+      :obj:`[8, 9]`
+    - the shard on process 1 will yield :obj:`[2, 3, 6, 7, 10, 11]` so will see batches :obj:`[2, 3]`, :obj:`[6, 7]`,
+      :obj:`[10, 11]`
+
     .. warning:
 
         If your IterableDataset implements some randomization that needs to be applied the same way on all processes
-        (for instance, a shuffling), you should use a :obj:`torch.Generator` in a :obj:`generator` attribute of the :obj:`dataset` to generate
-        your random numbers and call the :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch` method
-        of this object. It will set the seed of this :obj:`generator` to :obj:`seed + epoch` on all processes before starting the iteration. Alternatively,
-        you can also subclass this class and override the :meth:`__iter__ method with your custom logic.
+        (for instance, a shuffling), you should use a :obj:`torch.Generator` in a :obj:`generator` attribute of the
+        :obj:`dataset` to generate your random numbers and call the
+        :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch` method of this object. It will set the
+        seed of this :obj:`generator` to :obj:`seed + epoch` on all processes before starting the iteration.
+        Alternatively, you can also subclass this class and override the :meth:`__iter__ method with your custom logic.
 
     Args:
         dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
@@ -610,7 +613,8 @@ class IterableDatasetShard(IterableDataset):
         process_index (:obj:`int`, `optional`, defaults to 0):
             The index of the current process.
         seed (:obj:`int`, `optional`, defaults to 0):
-            A random seed that will be used for the random number generation in :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch`.
+            A random seed that will be used for the random number generation in
+            :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch`.
     """
 
     def __init__(
@@ -629,7 +633,7 @@ class IterableDatasetShard(IterableDataset):
         self.process_index = process_index
         self.seed = seed
         self.epoch = 0
-        
+
     def set_epoch(self, epoch):
         self.epoch = epoch
 
