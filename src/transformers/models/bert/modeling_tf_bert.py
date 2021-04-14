@@ -129,10 +129,10 @@ class TFBertPreTrainingLoss:
         return masked_lm_loss + next_sentence_loss
 
 class WeightLayer(tf.keras.layers.Layer):
-    def __init__(self, name, shape, initializer, **kwargs):
+    def __init__(self, name, shape, initializer, embedding_name, **kwargs):
         super().__init__(name, **kwargs)
         self.weight = self.add_weight(
-            name=name,
+            name=embedding_name,
             shape=shape,
             initializer=initializer,
         )
@@ -158,7 +158,8 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
         #with tf.name_scope("word_embeddings"):
         self.word_embeddings = WeightLayer(
-            name="weight",
+            name="word_embeddings",
+            embedding_name="weight",
             shape=[self.vocab_size, self.hidden_size],
             initializer=get_initializer(self.initializer_range),
         )
