@@ -409,23 +409,27 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
     def test_simple(self):
         string = "This is a simple input"
 
-        inputs, offset_mapping = self.args_parser(string)
+        inputs, offset_mapping, model_batch_size = self.args_parser(string)
         self.assertEqual(inputs, [string])
         self.assertEqual(offset_mapping, None)
+        self.assertEqual(model_batch_size, 1)
 
-        inputs, offset_mapping = self.args_parser([string, string])
+        inputs, offset_mapping, model_batch_size = self.args_parser([string, string])
         self.assertEqual(inputs, [string, string])
         self.assertEqual(offset_mapping, None)
+        self.assertEqual(model_batch_size, 1)
 
-        inputs, offset_mapping = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)])
+        inputs, offset_mapping, model_batch_size = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)], model_batch_size=32)
         self.assertEqual(inputs, [string])
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
+        self.assertEqual(model_batch_size, 32)
 
-        inputs, offset_mapping = self.args_parser(
-            [string, string], offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]]
+        inputs, offset_mapping, model_batch_size = self.args_parser(
+            [string, string], offset_mapping=[[(0, 1), (1, 2)], [(0, 2), (2, 3)]], model_batch_size=64
         )
         self.assertEqual(inputs, [string, string])
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)], [(0, 2), (2, 3)]])
+        self.assertEqual(model_batch_size, 64)
 
     def test_errors(self):
         string = "This is a simple input"
