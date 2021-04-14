@@ -81,6 +81,7 @@ from .trainer_pt_utils import (
     DistributedLengthGroupedSampler,
     DistributedSamplerWithLoop,
     DistributedTensorGatherer,
+    IterableDatasetShard,
     LabelSmoother,
     LengthGroupedSampler,
     SequentialDistributedSampler,
@@ -493,9 +494,7 @@ class Trainer:
         dataset.set_format(type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"])
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
-        if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
-            self.train_dataset, collections.abc.Sized
-        ):
+        if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
 
         # Build the sampler.
@@ -553,6 +552,26 @@ class Trainer:
         """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
+
+        if isinstance(self.train_dataset, torch.utils.data.dataset.IterableDataset):
+            if self.args.world_size > 1:
+                train_dataset = IterableDatasetShard(
+                    self.train_dataset,
+                    batch_size=self.args.train_batch_size,
+                    drop_last=self.args.dataloader_drop_last,
+                    num_processes=self.args.world_size,
+                    process_index=self.args.process_index,
+                )
+            else:
+                train_dataset = self.train_dataset
+            return DataLoader(
+                train_dataset,
+                batch_size=self.args.train_batch_size,
+                collate_fn=self.data_collator,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+
         train_sampler = self._get_train_sampler()
 
         return DataLoader(
