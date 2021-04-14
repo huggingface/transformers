@@ -598,7 +598,8 @@ class IterableDatasetShard(IterableDataset):
         :obj:`dataset` to generate your random numbers and call the
         :meth:`~transformers.trainer_pt_utils.IterableDatasetShard.set_epoch` method of this object. It will set the
         seed of this :obj:`generator` to :obj:`seed + epoch` on all processes before starting the iteration.
-        Alternatively, you can also subclass this class and override the :meth:`__iter__` method with your custom logic.
+        Alternatively, you can also subclass this class and override the :meth:`__iter__` method with your custom
+        logic.
 
     Args:
         dataset (:obj:`torch.utils.data.dataset.IterableDataset`):
