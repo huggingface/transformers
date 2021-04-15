@@ -145,7 +145,6 @@ class DetrConfig(PretrainedConfig):
         init_std=0.02,
         classifier_dropout=0.0,
         scale_embedding=False,
-        gradient_checkpointing=False,
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
@@ -185,7 +184,6 @@ class DetrConfig(PretrainedConfig):
         self.decoder_layerdrop = decoder_layerdrop
         self.classifier_dropout = classifier_dropout
         self.num_hidden_layers = encoder_layers
-        self.gradient_checkpointing = gradient_checkpointing
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
