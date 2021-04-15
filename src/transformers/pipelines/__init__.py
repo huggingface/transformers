@@ -93,6 +93,10 @@ logger = logging.get_logger(__name__)
 
 
 # Register all the supported tasks here
+TASK_ALIASES = {
+    "sentiment-analysis": "text-classification",
+    "ner": "token-classification",
+}
 SUPPORTED_TASKS = {
     "feature-extraction": {
         "impl": FeatureExtractionPipeline,
@@ -100,7 +104,7 @@ SUPPORTED_TASKS = {
         "pt": AutoModel if is_torch_available() else None,
         "default": {"model": {"pt": "distilbert-base-cased", "tf": "distilbert-base-cased"}},
     },
-    "sentiment-analysis": {
+    "text-classification": {
         "impl": TextClassificationPipeline,
         "tf": TFAutoModelForSequenceClassification if is_tf_available() else None,
         "pt": AutoModelForSequenceClassification if is_torch_available() else None,
@@ -111,7 +115,7 @@ SUPPORTED_TASKS = {
             },
         },
     },
-    "ner": {
+    "token-classification": {
         "impl": TokenClassificationPipeline,
         "tf": TFAutoModelForTokenClassification if is_tf_available() else None,
         "pt": AutoModelForTokenClassification if is_torch_available() else None,
@@ -206,8 +210,10 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
             - :obj:`"feature-extraction"`
-            - :obj:`"sentiment-analysis"`
-            - :obj:`"ner"`
+            - :obj:`"text-classification"`
+            - :obj:`"sentiment-analysis"` (alias of :obj:`"text-classification")
+            - :obj:`"token-classification"`
+            - :obj:`"ner"` (alias of :obj:`"token-classification")
             - :obj:`"question-answering"`
             - :obj:`"fill-mask"`
             - :obj:`"summarization"`
@@ -222,6 +228,8 @@ def check_task(task: str) -> Tuple[Dict, Any]:
 
 
     """
+    if task in TASK_ALIASES:
+        task = TASK_ALIASES[task]
     if task in SUPPORTED_TASKS:
         targeted_task = SUPPORTED_TASKS[task]
         return targeted_task, None
@@ -264,8 +272,12 @@ def pipeline(
             The task defining which pipeline will be returned. Currently accepted tasks are:
 
             - :obj:`"feature-extraction"`: will return a :class:`~transformers.FeatureExtractionPipeline`.
-            - :obj:`"sentiment-analysis"`: will return a :class:`~transformers.TextClassificationPipeline`.
-            - :obj:`"ner"`: will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"text-classification"`: will return a :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"sentiment-analysis"`: (alias of :obj:`"text-classification") will return a
+              :class:`~transformers.TextClassificationPipeline`.
+            - :obj:`"token-classification"`: will return a :class:`~transformers.TokenClassificationPipeline`.
+            - :obj:`"ner"` (alias of :obj:`"token-classification"): will return a
+              :class:`~transformers.TokenClassificationPipeline`.
             - :obj:`"question-answering"`: will return a :class:`~transformers.QuestionAnsweringPipeline`.
             - :obj:`"fill-mask"`: will return a :class:`~transformers.FillMaskPipeline`.
             - :obj:`"summarization"`: will return a :class:`~transformers.SummarizationPipeline`.
