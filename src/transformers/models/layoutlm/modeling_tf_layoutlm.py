@@ -21,6 +21,7 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
+from .configuration_layoutlm import LayoutLMConfig
 from ..bert.modeling_tf_bert import WordEmbeddings
 from ...activations_tf import get_tf_activation
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
@@ -43,8 +44,6 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
-from .configuration_layoutlm import LayoutLMConfig
-
 
 logger = logging.get_logger(__name__)
 

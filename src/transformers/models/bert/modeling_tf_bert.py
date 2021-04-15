@@ -23,6 +23,7 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
+from .configuration_bert import BertConfig
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -59,8 +60,6 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
-from .configuration_bert import BertConfig
-
 
 logger = logging.get_logger(__name__)
 
