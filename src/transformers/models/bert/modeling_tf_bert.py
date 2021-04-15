@@ -160,10 +160,14 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-
+    @property
+    def weight(self):
+        if hasattr(self, "word_embeddings"):
+            return self.word_embeddings.weight
+        else:
+            return None
 
     def build(self, input_shape: tf.TensorShape):
-        #with tf.name_scope("word_embeddings"):
 
         self.word_embeddings = WordEmbeddings(
             name="word_embeddings",
@@ -189,7 +193,9 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             name="position_embeddings",
             input_dim=self.max_position_embeddings,
             output_dim= self.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range)
+            embeddings_initializer=get_initializer(
+                self.initializer_range
+            )
         )
         # self.add_weight(
         #     name="position_embeddings",
