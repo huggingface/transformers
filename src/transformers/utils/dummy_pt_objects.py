@@ -1104,6 +1104,11 @@ class DistilBertForCausalLM:
 
 class DistilBertForMaskedLM:
     def __init__(self, *args, **kwargs):
+        requires_pytorch(self)
+
+
+class DistilBertForMaskedLM:
+    def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
     @classmethod
