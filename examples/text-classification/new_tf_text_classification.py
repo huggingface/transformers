@@ -59,7 +59,7 @@ class DataSequence(tf.keras.utils.Sequence):
                      if key not in non_label_column_names
                      and key != 'label'}
         data_lengths = {len(array) for array in self.data.values()}
-        assert len(data_lengths) == 1  # Assert that all arrays have the same length
+        assert len(data_lengths) == 1, "Error message"  # Assert that all arrays have the same length
         self.data_length = data_lengths.pop()
         self.num_batches = ceil(self.data_length / batch_size)
         if labels:
