@@ -42,6 +42,7 @@ from transformers import (
 )
 from transformers.trainer_utils import is_main_process
 from transformers.utils import check_min_version
+from transformers.file_utils import TF2_WEIGHTS_NAME, CONFIG_NAME
 
 logger = logging.getLogger(__name__)
 
@@ -238,7 +239,7 @@ def main():
     # Detecting last checkpoint.
     checkpoint = None
     if len(os.listdir(training_args.output_dir)) > 0 and not training_args.overwrite_output_dir:
-        if (output_dir / 'config.json').is_file() and (output_dir / 'tf_model.h5').is_file():
+        if (output_dir / CONFIG_NAME).is_file() and (output_dir / TF2_WEIGHTS_NAME).is_file():
             checkpoint = output_dir
             logger.info(
                 f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
