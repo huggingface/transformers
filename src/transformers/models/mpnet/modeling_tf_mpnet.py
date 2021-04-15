@@ -476,7 +476,7 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.set_input_embeddings
     def set_input_embeddings(self, value: tf.Variable):
-        self.embeddings.weight = value
+        self.embeddings.word_embeddings.weight = value
         self.embeddings.vocab_size = shape_list(value)[0]
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads

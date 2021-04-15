@@ -515,7 +515,7 @@ class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
         return self.input_embeddings
 
     def set_output_embeddings(self, value: tf.Variable):
-        self.input_embeddings.weight = value
+        self.input_embeddings.word_embeddings.weight = value
         self.input_embeddings.vocab_size = shape_list(value)[0]
 
     def get_bias(self) -> Dict[str, tf.Variable]:
@@ -529,7 +529,7 @@ class TFLayoutLMLMPredictionHead(tf.keras.layers.Layer):
         hidden_states = self.transform(hidden_states=hidden_states)
         seq_length = shape_list(hidden_states)[1]
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, self.hidden_size])
-        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.weight, transpose_b=True)
+        hidden_states = tf.matmul(a=hidden_states, b=self.input_embeddings.word_embeddings.weight, transpose_b=True)
         hidden_states = tf.reshape(tensor=hidden_states, shape=[-1, seq_length, self.vocab_size])
         hidden_states = tf.nn.bias_add(value=hidden_states, bias=self.bias)
 
