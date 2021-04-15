@@ -227,7 +227,7 @@ class TensorFlowBenchmark(Benchmark):
 
                 return min(runtimes) / 10.0
             except ResourceExhaustedError as e:
-                self.print_fn("Doesn't fit on GPU. {}".format(e))
+                self.print_fn(f"Doesn't fit on GPU. {e}")
 
     def _measure_memory(self, func: Callable[[], None]) -> [Memory, MemorySummary]:
         logger.info(
@@ -290,5 +290,5 @@ class TensorFlowBenchmark(Benchmark):
 
                 return memory, summary
             except ResourceExhaustedError as e:
-                self.print_fn("Doesn't fit on GPU. {}".format(e))
+                self.print_fn(f"Doesn't fit on GPU. {e}")
                 return "N/A", None

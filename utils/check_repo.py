@@ -19,6 +19,8 @@ import os
 import re
 from pathlib import Path
 
+from transformers.models.auto import get_values
+
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
 # python utils/check_repo.py
@@ -30,6 +32,10 @@ PATH_TO_DOC = "docs/source"
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = [
     # models to ignore for not tested
+    "M2M100Encoder",  # Building part of bigger (tested) model.
+    "M2M100Decoder",  # Building part of bigger (tested) model.
+    "Speech2TextEncoder",  # Building part of bigger (tested) model.
+    "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
     "LEDDecoder",  # Building part of bigger (tested) model.
     "BartDecoderWrapper",  # Building part of bigger (tested) model.
@@ -41,6 +47,10 @@ IGNORE_NON_TESTED = [
     "BlenderbotDecoderWrapper",  # Building part of bigger (tested) model.
     "MBartEncoder",  # Building part of bigger (tested) model.
     "MBartDecoderWrapper",  # Building part of bigger (tested) model.
+    "MegatronBertLMHeadModel",  # Building part of bigger (tested) model.
+    "MegatronBertEncoder",  # Building part of bigger (tested) model.
+    "MegatronBertDecoder",  # Building part of bigger (tested) model.
+    "MegatronBertDecoderWrapper",  # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
@@ -75,53 +85,24 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = [
     # models to ignore for model xxx mapping
-    "LEDEncoder",
-    "LEDDecoder",
-    "BartDecoder",
-    "BartDecoderWrapper",
-    "BartEncoder",
-    "BlenderbotSmallEncoder",
-    "BlenderbotSmallDecoder",
-    "BlenderbotSmallDecoderWrapper",
-    "BlenderbotEncoder",
-    "BlenderbotDecoder",
-    "BlenderbotDecoderWrapper",
-    "DPRContextEncoder",
-    "DPREncoder",
     "DPRReader",
     "DPRSpanPredictor",
     "FlaubertForQuestionAnswering",
-    "FunnelBaseModel",
     "GPT2DoubleHeadsModel",
-    "MT5EncoderModel",
-    "MBartEncoder",
-    "MBartDecoder",
-    "MBartDecoderWrapper",
     "OpenAIGPTDoubleHeadsModel",
-    "PegasusEncoder",
-    "PegasusDecoder",
-    "PegasusDecoderWrapper",
-    "ProphetNetDecoder",
-    "ProphetNetEncoder",
-    "ProphetNetDecoderWrapper",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
     "T5Stack",
-    "T5EncoderModel",
-    "TFDPRContextEncoder",
-    "TFDPREncoder",
     "TFDPRReader",
     "TFDPRSpanPredictor",
-    "TFFunnelBaseModel",
     "TFGPT2DoubleHeadsModel",
-    "TFMT5EncoderModel",
     "TFOpenAIGPTDoubleHeadsModel",
-    "TFT5EncoderModel",
+    "TFRagModel",
+    "TFRagSequenceForGeneration",
+    "TFRagTokenForGeneration",
     "Wav2Vec2ForCTC",
     "XLMForQuestionAnswering",
-    "XLMProphetNetDecoder",
-    "XLMProphetNetEncoder",
     "XLNetForQuestionAnswering",
     "SeparableConv1D",
 ]
@@ -172,7 +153,7 @@ def get_model_modules():
 def get_models(module):
     """ Get the objects in module that are models."""
     models = []
-    model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel)
+    model_classes = (transformers.PreTrainedModel, transformers.TFPreTrainedModel, transformers.FlaxPreTrainedModel)
     for attr_name in dir(module):
         if "Pretrained" in attr_name or "PreTrained" in attr_name:
             continue
@@ -268,11 +249,25 @@ def get_all_auto_configured_models():
     result = set()  # To avoid duplicates we concatenate all model classes in a set.
     for attr_name in dir(transformers.models.auto.modeling_auto):
         if attr_name.startswith("MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.models.auto.modeling_auto, attr_name).values())
+            result = result | set(get_values(getattr(transformers.models.auto.modeling_auto, attr_name)))
     for attr_name in dir(transformers.models.auto.modeling_tf_auto):
         if attr_name.startswith("TF_MODEL_") and attr_name.endswith("MAPPING"):
-            result = result | set(getattr(transformers.models.auto.modeling_tf_auto, attr_name).values())
+            result = result | set(get_values(getattr(transformers.models.auto.modeling_tf_auto, attr_name)))
+    for attr_name in dir(transformers.models.auto.modeling_flax_auto):
+        if attr_name.startswith("FLAX_MODEL_") and attr_name.endswith("MAPPING"):
+            result = result | set(get_values(getattr(transformers.models.auto.modeling_flax_auto, attr_name)))
     return [cls.__name__ for cls in result]
+
+
+def ignore_unautoclassed(model_name):
+    """Rules to determine if `name` should be in an auto class."""
+    # Special white list
+    if model_name in IGNORE_NON_AUTO_CONFIGURED:
+        return True
+    # Encoder and Decoder should be ignored
+    if "Encoder" in model_name or "Decoder" in model_name:
+        return True
+    return False
 
 
 def check_models_are_auto_configured(module, all_auto_models):
@@ -280,7 +275,7 @@ def check_models_are_auto_configured(module, all_auto_models):
     defined_models = get_models(module)
     failures = []
     for model_name, _ in defined_models:
-        if model_name not in all_auto_models and model_name not in IGNORE_NON_AUTO_CONFIGURED:
+        if model_name not in all_auto_models and not ignore_unautoclassed(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not present in any of the auto mapping. "
                 "If that is intended behavior, add its name to `IGNORE_NON_AUTO_CONFIGURED` in the file "
@@ -353,6 +348,8 @@ def find_all_documented_objects():
 DEPRECATED_OBJECTS = [
     "AutoModelWithLMHead",
     "BartPretrainedModel",
+    "DataCollator",
+    "DataCollatorForSOP",
     "GlueDataset",
     "GlueDataTrainingArguments",
     "LineByLineTextDataset",
@@ -390,7 +387,9 @@ DEPRECATED_OBJECTS = [
 UNDOCUMENTED_OBJECTS = [
     "AddedToken",  # This is a tokenizers class.
     "BasicTokenizer",  # Internal, should never have been in the main init.
+    "CharacterTokenizer",  # Internal, should never have been in the main init.
     "DPRPretrainedReader",  # Like an Encoder.
+    "MecabTokenizer",  # Internal, should never have been in the main init.
     "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
     "TFDPRPretrainedReader",  # Like an Encoder.
@@ -403,14 +402,11 @@ UNDOCUMENTED_OBJECTS = [
     "convert_tf_weight_name_to_pt_weight_name",  # Internal used to convert model weights
     "logger",  # Internal logger
     "logging",  # External module
+    "requires_backends",  # Internal function
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
 SHOULD_HAVE_THEIR_OWN_PAGE = [
-    # bert-japanese
-    "BertJapaneseTokenizer",
-    "CharacterTokenizer",
-    "MecabTokenizer",
     # Benchmarks
     "PyTorchBenchmark",
     "PyTorchBenchmarkArguments",
@@ -451,11 +447,6 @@ def ignore_undocumented(name):
         return True
     # MMBT model does not really work.
     if name.startswith("MMBT"):
-        return True
-
-    # NOT DOCUMENTED BUT NOT ON PURPOSE, SHOULD BE FIXED!
-    # All data collators should be documented
-    if name.startswith("DataCollator") or name.endswith("data_collator"):
         return True
     if name in SHOULD_HAVE_THEIR_OWN_PAGE:
         return True

@@ -47,6 +47,7 @@ from .configuration_led import LEDConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
 _TOKENIZER_FOR_DOC = "LEDTokenizer"
 
@@ -126,8 +127,8 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads}"
             )
 
         self.num_heads = config.num_attention_heads
@@ -1823,9 +1824,8 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
 
         paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
@@ -2228,7 +2228,7 @@ class TFLEDModel(TFLEDPreTrainedModel):
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/led-base-16384",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLEDSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

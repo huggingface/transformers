@@ -57,6 +57,7 @@ from .configuration_fsmt import FSMTConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "facebook/wmt19-ru-en"
 _CONFIG_FOR_DOC = "FSMTConfig"
 _TOKENIZER_FOR_DOC = "FSMTTokenizer"
 
@@ -233,13 +234,20 @@ FSMT_INPUTS_DOCSTRING = r"""
 
             `What are attention masks? <../glossary.html#attention-mask>`__
         decoder_input_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the input_ids right, following the paper.
+            Indices of decoder input sequence tokens in the vocabulary.
+
+            Indices can be obtained using :class:`~transformers.FSMTTokenizer`. See
+            :meth:`transformers.PreTrainedTokenizer.encode` and :meth:`transformers.PreTrainedTokenizer.__call__` for
+            details.
+
+            `What are input IDs? <../glossary.html#input-ids>`__
+
+            FSMT uses the :obj:`eos_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
+            :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
+            :obj:`past_key_values`).
         decoder_attention_mask (:obj:`torch.BoolTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default. If you want to change padding behavior, you should read
-            :func:`modeling_fstm._prepare_fstm_decoder_inputs` and modify. See diagram 1 in the paper for more info on
-            the default strategy
+            also be used by default.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
@@ -356,7 +364,7 @@ def _make_linear_from_emb(emb):
 # Helper Functions, mostly for making masks
 def _check_shapes(shape_1, shape2):
     if shape_1 != shape2:
-        raise AssertionError("shape mismatch: {} != {}".format(shape_1, shape2))
+        raise AssertionError(f"shape mismatch: {shape_1} != {shape2}")
 
 
 def shift_tokens_right(input_ids, pad_token_id):
@@ -989,7 +997,7 @@ class FSMTModel(PretrainedFSMTModel):
     @add_start_docstrings_to_model_forward(FSMT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/wmt19-ru-en",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

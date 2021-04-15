@@ -53,6 +53,7 @@ from .configuration_pegasus import PegasusConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/pegasus-large"
 _CONFIG_FOR_DOC = "PegasusConfig"
 _TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
@@ -596,10 +597,6 @@ PEGASUS_INPUTS_DOCSTRING = r"""
             Pegasus uses the :obj:`pad_token_id` as the starting token for :obj:`decoder_input_ids` generation. If
             :obj:`past_key_values` is used, optionally only the last :obj:`decoder_input_ids` have to be input (see
             :obj:`past_key_values`).
-
-            For translation and summarization training, :obj:`decoder_input_ids` should be provided. If no
-            :obj:`decoder_input_ids` is provided, the model will create this tensor by shifting the :obj:`input_ids` to
-            the right for denoising pre-training following the paper.
         decoder_attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
         head_mask (:obj:`tf.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
@@ -1216,7 +1213,7 @@ class TFPegasusModel(TFPegasusPreTrainedModel):
     @add_start_docstrings_to_model_forward(PEGASUS_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/pegasus-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSeq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

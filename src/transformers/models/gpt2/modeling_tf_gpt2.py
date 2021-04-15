@@ -51,6 +51,7 @@ from .configuration_gpt2 import GPT2Config
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "gpt2"
 _CONFIG_FOR_DOC = "GPT2Config"
 _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 
@@ -232,7 +233,7 @@ class TFGPT2MainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.hidden_size, initializer_range=config.initializer_range, name="wte"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
+        self.h = [TFBlock(config.n_ctx, config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
         self.ln_f = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_epsilon, name="ln_f")
 
     def build(self, input_shape):
@@ -587,7 +588,7 @@ class TFGPT2Model(TFGPT2PreTrainedModel):
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="gpt2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -679,7 +680,7 @@ class TFGPT2LMHeadModel(TFGPT2PreTrainedModel, TFCausalLanguageModelingLoss):
     @add_start_docstrings_to_model_forward(GPT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="gpt2",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )

@@ -46,6 +46,7 @@ from .configuration_longformer import LongformerConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
@@ -645,8 +646,8 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads}"
             )
 
         self.num_heads = config.num_attention_heads
@@ -1517,9 +1518,7 @@ class TFLongformerEncoder(tf.keras.layers.Layer):
 
         self.output_hidden_states = config.output_hidden_states
         self.output_attentions = config.output_attentions
-        self.layer = [
-            TFLongformerLayer(config, i, name="layer_._{}".format(i)) for i in range(config.num_hidden_layers)
-        ]
+        self.layer = [TFLongformerLayer(config, i, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
     def call(
         self,
@@ -1779,9 +1778,8 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
 
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
 
         paddings = tf.convert_to_tensor([[0, 0], [0, padding_len]])
@@ -2081,7 +2079,7 @@ class TFLongformerForMaskedLM(TFLongformerPreTrainedModel, TFMaskedLanguageModel
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2358,7 +2356,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2484,7 +2482,7 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2637,7 +2635,7 @@ class TFLongformerForTokenClassification(TFLongformerPreTrainedModel, TFTokenCla
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFLongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )

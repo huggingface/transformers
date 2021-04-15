@@ -52,6 +52,7 @@ from .configuration_flaubert import FlaubertConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "flaubert/flaubert_base_cased"
 _CONFIG_FOR_DOC = "FlaubertConfig"
 _TOKENIZER_FOR_DOC = "FlaubertTokenizer"
 
@@ -236,7 +237,7 @@ class TFFlaubertModel(TFFlaubertPreTrainedModel):
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="jplu/tf-flaubert-small-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -336,7 +337,7 @@ class TFFlaubertMultiHeadAttention(tf.keras.layers.Layer):
         else:
             klen = shape_list(kv)[1]
 
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         dim_per_head = self.dim // self.n_heads
         mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
 
@@ -449,21 +450,19 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         for i in range(self.n_layers):
             self.attentions.append(
-                TFFlaubertMultiHeadAttention(self.n_heads, self.dim, config=config, name="attentions_._{}".format(i))
+                TFFlaubertMultiHeadAttention(self.n_heads, self.dim, config=config, name=f"attentions_._{i}")
             )
             self.layer_norm1.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1_._{}".format(i))
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
             )
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
             self.ffns.append(
-                TFFlaubertTransformerFFN(
-                    self.dim, self.hidden_dim, self.dim, config=config, name="ffns_._{}".format(i)
-                )
+                TFFlaubertTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name=f"ffns_._{i}")
             )
             self.layer_norm2.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2_._{}".format(i))
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
             )
 
     def build(self, input_shape):
@@ -822,7 +821,7 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="jplu/tf-flaubert-small-cased",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFFlaubertWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -931,6 +930,8 @@ class TFFlaubertForQuestionAnsweringSimple(TFXLMForQuestionAnsweringSimple):
     FLAUBERT_START_DOCSTRING,
 )
 class TFFlaubertForTokenClassification(TFXLMForTokenClassification):
+    config_class = FlaubertConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")
@@ -944,6 +945,8 @@ class TFFlaubertForTokenClassification(TFXLMForTokenClassification):
     FLAUBERT_START_DOCSTRING,
 )
 class TFFlaubertForMultipleChoice(TFXLMForMultipleChoice):
+    config_class = FlaubertConfig
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFFlaubertMainLayer(config, name="transformer")

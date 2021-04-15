@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...file_utils import _BaseLazyModule, is_tokenizers_available, is_torch_available
+from ...file_utils import _BaseLazyModule, is_torch_available
 
 
 _import_structure = {
@@ -34,6 +34,7 @@ if is_torch_available():
         "IBertForSequenceClassification",
         "IBertForTokenClassification",
         "IBertModel",
+        "IBertPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
@@ -48,6 +49,7 @@ if TYPE_CHECKING:
             IBertForSequenceClassification,
             IBertForTokenClassification,
             IBertModel,
+            IBertPreTrainedModel,
         )
 
 else:

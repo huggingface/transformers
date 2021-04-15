@@ -37,6 +37,17 @@ VOCAB_FILES_NAMES = {
     "tokenizer_config_file": "tokenizer_config.json",
 }
 
+PRETRAINED_VOCAB_FILES_MAP = {
+    "vocab_file": {
+        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
+    },
+    "tokenizer_config_file": {
+        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+    },
+}
+
+# Wav2Vec2 has no max input length
+PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/wav2vec2-base-960h": sys.maxsize}
 
 WAV2VEC2_KWARGS_DOCSTRING = r"""
             padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
@@ -98,16 +109,8 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = {
-        "vocab_file": {
-            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json"
-        },
-        "tokenizer_config_file": {
-            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
-        },
-    }
-    # Wav2Vec2 has no max input length
-    max_model_input_sizes = {"facebook/wav2vec2-base-960h": sys.maxsize}
+    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
     def __init__(
@@ -142,7 +145,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
     @property
     def word_delimiter_token(self) -> str:
         """
-        :obj:`str`: Padding token. Log an error if used while not having been set.
+        :obj:`str`: Word delimiter token. Log an error if used while not having been set.
         """
         if self._word_delimiter_token is None and self.verbose:
             logger.error("Using word_delimiter_token, but it is not set yet.")
@@ -257,7 +260,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
@@ -486,6 +489,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         token_ids: List[int],
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool = True,
+        **kwargs
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -510,7 +514,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
-            logger.error("Vocabulary path ({}) should be a directory".format(save_directory))
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
         vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

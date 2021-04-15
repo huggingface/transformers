@@ -20,7 +20,8 @@ from typing import List, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature, PreTrainedFeatureExtractor
+from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
+from ...feature_extraction_utils import BatchFeature
 from ...file_utils import PaddingStrategy, TensorType
 from ...utils import logging
 
@@ -28,12 +29,13 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
+class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Wav2Vec2 feature extractor.
 
-    This feature extractor inherits from :class:`~transformers.Wav2Vec2FeatureExtractor` which contains most of the
-    main methods. Users should refer to this superclass for more information regarding those methods.
+    This feature extractor inherits from
+    :class:`~transformers.feature_extraction_sequence_utils.SequenceFeatureExtractor` which contains most of the main
+    methods. Users should refer to this superclass for more information regarding those methods.
 
     Args:
         feature_size (:obj:`int`, defaults to 1):
@@ -47,7 +49,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
             improve the performance for some models, *e.g.*, `wav2vec2-lv60
             <https://huggingface.co/models?search=lv60>`__.
         return_attention_mask (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not :meth:`~transformers.Wav2Vec2Tokenizer.__call__` should return :obj:`attention_mask`.
+            Whether or not :meth:`~transformers.Wav2Vec2FeatureExtractor.__call__` should return :obj:`attention_mask`.
 
             .. note::
 
@@ -89,6 +91,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
         padding: Union[bool, str, PaddingStrategy] = False,
         max_length: Optional[int] = None,
         pad_to_multiple_of: Optional[int] = None,
+        return_attention_mask: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         **kwargs
@@ -100,7 +103,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
             raw_speech (:obj:`np.ndarray`, :obj:`List[float]`, :obj:`List[np.ndarray]`, :obj:`List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`True`):
+            padding (:obj:`bool`, :obj:`str` or :class:`~transformers.file_utils.PaddingStrategy`, `optional`, defaults to :obj:`False`):
                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
                 index) among:
 
@@ -185,7 +188,7 @@ class Wav2Vec2FeatureExtractor(PreTrainedFeatureExtractor):
             padding=padding,
             max_length=max_length,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=self.return_attention_mask,
+            return_attention_mask=return_attention_mask,
             return_tensors=return_tensors,
         )
 

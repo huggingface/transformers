@@ -39,6 +39,7 @@ from .modeling_transfo_xl_utilities import ProjectedAdaptiveLogSoftmax
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "transfo-xl-wt103"
 _CONFIG_FOR_DOC = "TransfoXLConfig"
 _TOKENIZER_FOR_DOC = "TransfoXLTokenizer"
 
@@ -66,7 +67,7 @@ def build_tf_to_pytorch_map(model, config):
         for i, (out_l, proj_l, tie_proj) in enumerate(
             zip(model.crit.out_layers, model.crit.out_projs, config.tie_projs)
         ):
-            layer_str = "transformer/adaptive_softmax/cutoff_%d/" % i
+            layer_str = f"transformer/adaptive_softmax/cutoff_{i}/"
             if config.tie_word_embeddings:
                 tf_to_pt_map.update({layer_str + "b": out_l.bias})
             else:
@@ -80,12 +81,12 @@ def build_tf_to_pytorch_map(model, config):
 
     # Embeddings
     for i, (embed_l, proj_l) in enumerate(zip(model.word_emb.emb_layers, model.word_emb.emb_projs)):
-        layer_str = "transformer/adaptive_embed/cutoff_%d/" % i
+        layer_str = f"transformer/adaptive_embed/cutoff_{i}/"
         tf_to_pt_map.update({layer_str + "lookup_table": embed_l.weight, layer_str + "proj_W": proj_l})
 
     # Transformer blocks
     for i, b in enumerate(model.layers):
-        layer_str = "transformer/layer_%d/" % i
+        layer_str = f"transformer/layer_{i}/"
         tf_to_pt_map.update(
             {
                 layer_str + "rel_attn/LayerNorm/gamma": b.dec_attn.layer_norm.weight,
@@ -134,7 +135,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
     init_vars = tf.train.list_variables(tf_path)
     tf_weights = {}
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         tf_weights[name] = array
 
@@ -155,7 +156,7 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
                 except AssertionError as e:
                     e.args += (p_i.shape, arr_i.shape)
                     raise
-                logger.info("Initialize PyTorch weight {} for layer {}".format(name, i))
+                logger.info(f"Initialize PyTorch weight {name} for layer {i}")
                 p_i.data = torch.from_numpy(arr_i)
         else:
             try:
@@ -165,13 +166,13 @@ def load_tf_weights_in_transfo_xl(model, config, tf_path):
             except AssertionError as e:
                 e.args += (pointer.shape, array.shape)
                 raise
-            logger.info("Initialize PyTorch weight {}".format(name))
+            logger.info(f"Initialize PyTorch weight {name}")
             pointer.data = torch.from_numpy(array)
         tf_weights.pop(name, None)
         tf_weights.pop(name + "/Adam", None)
         tf_weights.pop(name + "/Adam_1", None)
 
-    logger.info("Weights not copied to PyTorch model: {}".format(", ".join(tf_weights.keys())))
+    logger.info(f"Weights not copied to PyTorch model: {', '.join(tf_weights.keys())}")
     return model
 
 
@@ -872,7 +873,7 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1053,7 +1054,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1140,8 +1141,8 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     @staticmethod
     def _reorder_cache(mems: List[torch.Tensor], beam_idx: torch.Tensor) -> List[torch.Tensor]:
         """
-        This function is used to re-order the :obj:`mems` cache if :meth:`~transformers.PretrainedModel.beam_search` or
-        :meth:`~transformers.PretrainedModel.beam_sample` is called. This is required to match :obj:`mems` with the
+        This function is used to re-order the :obj:`mems` cache if :meth:`~transformers.PreTrainedModel.beam_search` or
+        :meth:`~transformers.PreTrainedModel.beam_sample` is called. This is required to match :obj:`mems` with the
         correct beam_idx at every generation step.
         """
         return [layer_past.index_select(1, beam_idx.to(layer_past.device)) for layer_past in mems]
@@ -1175,7 +1176,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
     @add_start_docstrings_to_model_forward(TRANSFO_XL_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="transfo-xl-wt103",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TransfoXLSequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )

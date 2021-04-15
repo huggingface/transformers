@@ -160,18 +160,16 @@ def main():
         level=logging.INFO,
     )
     logger.info(
-        "n_replicas: %s, distributed training: %s, 16-bits training: %s",
-        training_args.n_replicas,
-        bool(training_args.n_replicas > 1),
-        training_args.fp16,
+        f"n_replicas: {training_args.n_replicas}, distributed training: {bool(training_args.n_replicas > 1)}, "
+        f"16-bits training: {training_args.fp16}",
     )
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     try:
         num_labels = glue_tasks_num_labels["mnli" if data_args.task_name == "mnli-mm" else data_args.task_name]
         output_mode = glue_output_modes[data_args.task_name]
     except KeyError:
-        raise ValueError("Task not found: %s" % (data_args.task_name))
+        raise ValueError(f"Task not found: {data_args.task_name}")
 
     # Load pretrained model and tokenizer
     #
@@ -247,10 +245,18 @@ def main():
     results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
+
         result = trainer.evaluate()
-        trainer.log_metrics("eval", result)
-        trainer.save_metrics("eval", result)
-        results.update(result)
+        output_eval_file = os.path.join(training_args.output_dir, "eval_results.txt")
+
+        with open(output_eval_file, "w") as writer:
+            logger.info("***** Eval results *****")
+
+            for key, value in result.items():
+                logger.info(f"  {key} = {value}")
+                writer.write(f"{key} = {value}\n")
+
+            results.update(result)
 
     return results
 

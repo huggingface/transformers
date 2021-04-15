@@ -45,6 +45,7 @@ from .configuration_reformer import ReformerConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "google/reformer-crime-and-punishment"
 _CONFIG_FOR_DOC = "ReformerConfig"
 _TOKENIZER_FOR_DOC = "ReformerTokenizer"
 
@@ -89,9 +90,8 @@ def _get_least_common_mult_chunk_len(config):
         return np.lcm(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
     else:
         raise NotImplementedError(
-            "Only attn layer types 'lsh' and 'local' exist, but `config.attn_layers`: {}. Select attn layer types from ['lsh', 'local'] only.".format(
-                config.attn_layers
-            )
+            f"Only attn layer types 'lsh' and 'local' exist, but `config.attn_layers`: {config.attn_layers}. Select "
+            "attn layer types from ['lsh', 'local'] only."
         )
 
 
@@ -106,9 +106,8 @@ def _get_min_chunk_len(config):
         return min(config.lsh_attn_chunk_length, config.local_attn_chunk_length)
     else:
         raise NotImplementedError(
-            "Only attn layer types 'lsh' and 'local' exist, but `config.attn_layers`: {}. Select attn layer types from ['lsh', 'local'] only.".format(
-                config.attn_layers
-            )
+            f"Only attn layer types 'lsh' and 'local' exist, but `config.attn_layers`: {config.attn_layers}. Select "
+            "attn layer types from ['lsh', 'local'] only."
         )
 
 
@@ -126,11 +125,11 @@ class AxialPositionEmbeddings(nn.Module):
         self.least_common_mult_chunk_length = _get_least_common_mult_chunk_len(config)
         self.weights = nn.ParameterList()
 
-        assert (
-            sum(self.axial_pos_embds_dim) == config.hidden_size
-        ), "Make sure that config.axial_pos_embds factors: {} sum to config.hidden_size: {}".format(
-            self.axial_pos_embds_dim, config.hidden_size
-        )
+        if sum(self.axial_pos_embds_dim) != config.hidden_size:
+            raise ValueError(
+                f"Make sure that config.axial_pos_embds factors: {self.axial_pos_embds_dim} sum to "
+                f"config.hidden_size: {config.hidden_size}"
+            )
 
         # create weights
         for axis, axial_pos_embd_dim in enumerate(self.axial_pos_embds_dim):
@@ -152,11 +151,14 @@ class AxialPositionEmbeddings(nn.Module):
         ]
 
         if self.training is True:
-            assert (
-                reduce(mul, self.axial_pos_shape) == sequence_length
-            ), "If training, make sure that config.axial_pos_shape factors: {} multiply to sequence length. Got prod({}) != sequence_length: {}. You might want to consider padding your sequence length to {} or changing config.axial_pos_shape.".format(
-                self.axial_pos_shape, self.axial_pos_shape, sequence_length, reduce(mul, self.axial_pos_shape)
-            )
+            if reduce(mul, self.axial_pos_shape) != sequence_length:
+                raise ValueError(
+                    f"If training, make sure that config.axial_pos_shape factors: {self.axial_pos_shape} multiply to "
+                    f"sequence length. Got prod({self.axial_pos_shape}) != sequence_length: {sequence_length}. "
+                    f"You might want to consider padding your sequence length to {reduce(mul, self.axial_pos_shape)} "
+                    "or changing config.axial_pos_shape."
+                )
+
             if self.dropout > 0:
                 weights = torch.cat(broadcasted_weights, dim=-1)
                 # permute weights so that 2D correctly drops dims 1 and 2
@@ -176,13 +178,12 @@ class AxialPositionEmbeddings(nn.Module):
                 )
 
         else:
-            assert (
-                reduce(mul, self.axial_pos_shape) >= sequence_length
-            ), "Make sure that config.axial_pos_shape factors: {} multiply at least to max(sequence_length, least_common_mult_chunk_length): max({}, {})".format(
-                self.axial_pos_shape,
-                sequence_length,
-                self.least_common_mult_chunk_length,
-            )
+            if reduce(mul, self.axial_pos_shape) < sequence_length:
+                raise ValueError(
+                    f"Make sure that config.axial_pos_shape factors: {self.axial_pos_shape} multiply at least to "
+                    f"max(sequence_length, least_common_mult_chunk_length): max({sequence_length}, "
+                    f"{self.least_common_mult_chunk_length})."
+                )
 
             # compute how many columns are needed
             max_position_id = position_ids.max().item()
@@ -251,11 +252,11 @@ class ReformerEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        assert (
-            position_ids.shape[-1] <= self.max_position_embeddings
-        ), "Sequence Length: {} has to be larger equal than config.max_position_embeddings: {}".format(
-            position_ids.shape[-1], self.max_position_embeddings
-        )
+        if position_ids.shape[-1] > self.max_position_embeddings:
+            raise ValueError(
+                f"Sequence Length: {position_ids.shape[-1]} has to be larger equal than "
+                f"config.max_position_embeddings {self.max_position_embeddings}."
+            )
 
         # dropout
         embeddings = nn.functional.dropout(inputs_embeds, p=self.dropout, training=self.training)
@@ -321,7 +322,7 @@ class EfficientAttentionMixin:
         elif len(vectors.shape) == 3:
             return torch.reshape(vectors, split_dim_shape)
         else:
-            raise ValueError("Input vector rank should be one of [3, 4], but is: {}".format(len(vectors.shape)))
+            raise ValueError(f"Input vector rank should be one of [3, 4], but is: {len(vectors.shape)}")
 
 
 class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
@@ -450,14 +451,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
         assert (
             query_key_vectors.shape[-1] == self.attention_head_size
-        ), "last dim of query_key_vectors is {} but should be {}.".format(
-            query_key_vectors.shape[-1], self.attention_head_size
-        )
+        ), f"last dim of query_key_vectors is {query_key_vectors.shape[-1]} but should be {self.attention_head_size}."
         assert (
             value_vectors.shape[-1] == self.attention_head_size
-        ), "last dim of value_vectors is {} but should be {}.".format(
-            value_vectors.shape[-1], self.attention_head_size
-        )
+        ), f"last dim of value_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
 
         do_standard_self_attention = (sequence_length <= self.chunk_length) or (
             use_cache and past_buckets_states[1] is not None
@@ -478,7 +475,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
 
             assert (
                 int(buckets.shape[-1]) == num_hashes * sequence_length
-            ), "last dim of buckets is {}, but should be {}".format(buckets.shape[-1], num_hashes * sequence_length)
+            ), f"last dim of buckets is {buckets.shape[-1]}, but should be {num_hashes * sequence_length}"
 
             sorted_bucket_idx, undo_sorted_bucket_idx = self._get_sorted_bucket_idx_and_undo_sorted_bucket_idx(
                 sequence_length, buckets, num_hashes
@@ -615,16 +612,16 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if isinstance(self.num_buckets, int):
             assert (
                 self.num_buckets % 2 == 0
-            ), "There should be an even number of bucktes, but `self.num_bucktes`: {}".format(self.num_buckets)
+            ), f"There should be an even number of bucktes, but `self.num_bucktes`: {self.num_buckets}"
             rotation_size = self.num_buckets
             num_buckets = self.num_buckets
         else:
             # Factorize the hash if self.num_buckets is a list or tuple
             rotation_size, num_buckets = 0, 1
             for bucket_factor in self.num_buckets:
-                assert bucket_factor % 2 == 0, "The number of buckets should be even, but `num_bucket`: {}".format(
-                    bucket_factor
-                )
+                assert (
+                    bucket_factor % 2 == 0
+                ), f"The number of buckets should be even, but `num_bucket`: {bucket_factor}"
                 rotation_size = rotation_size + bucket_factor
                 num_buckets = num_buckets * bucket_factor
 
@@ -713,7 +710,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         if num_buckets > num_buckets_limit:
             num_buckets = [2 ** (num_buckets_pow_2 // 2), 2 ** (num_buckets_pow_2 - num_buckets_pow_2 // 2)]
 
-        logger.warning("config.num_buckets is not set. Setting config.num_buckets to {}...".format(num_buckets))
+        logger.warning(f"config.num_buckets is not set. Setting config.num_buckets to {num_buckets}...")
 
         # set num buckets in config to be properly saved
         self.config.num_buckets = num_buckets
@@ -1084,19 +1081,13 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
 
         assert (
             query_vectors.shape[-1] == self.attention_head_size
-        ), "last dim of query_key_vectors is {} but should be {}.".format(
-            query_vectors.shape[-1], self.attention_head_size
-        )
+        ), f"last dim of query_key_vectors is {query_vectors.shape[-1]} but should be {self.attention_head_size}."
         assert (
             key_vectors.shape[-1] == self.attention_head_size
-        ), "last dim of query_key_vectors is {} but should be {}.".format(
-            key_vectors.shape[-1], self.attention_head_size
-        )
+        ), f"last dim of query_key_vectors is {key_vectors.shape[-1]} but should be {self.attention_head_size}."
         assert (
             value_vectors.shape[-1] == self.attention_head_size
-        ), "last dim of query_key_vectors is {} but should be {}.".format(
-            value_vectors.shape[-1], self.attention_head_size
-        )
+        ), f"last dim of query_key_vectors is {value_vectors.shape[-1]} but should be {self.attention_head_size}."
 
         if self.chunk_length is None:
             assert (
@@ -1279,9 +1270,8 @@ class ReformerAttention(nn.Module):
                 self.self_attention = LocalSelfAttention(config)
         else:
             raise NotImplementedError(
-                "Only attn layer types 'lsh' and 'local' exist, but got `config.attn_layers`: {}. Select attn layer types from ['lsh', 'local'] only.".format(
-                    self.attn_layers
-                )
+                f"Only attn layer types 'lsh' and 'local' exist, but got `config.attn_layers`: {self.attn_layers}. "
+                "Select attn layer types from ['lsh', 'local'] only."
             )
         self.output = ReformerSelfOutput(config)
 
@@ -1791,16 +1781,17 @@ class ReformerPreTrainedModel(PreTrainedModel):
                 torch.nn.init.normal_(weight, std=self.config.axial_norm_std)
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 @dataclass
@@ -1996,7 +1987,7 @@ class ReformerModel(ReformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/reformer-crime-and-punishment",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=ReformerModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2034,7 +2025,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
         assert (
             len(input_shape) == 2
-        ), "`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {}".format(input_shape)
+        ), f"`input_ids` have be of shape `[batch_size, sequence_length]`, but got shape: {input_shape}"
 
         if past_buckets_states is not None:
             assert not self.training, "`past_buckets_states` can only be used for inference, not for training`."
@@ -2060,9 +2051,9 @@ class ReformerModel(ReformerPreTrainedModel):
 
             if self.training is True:
                 raise ValueError(
-                    "If training, sequence Length {} has to be a multiple of least common multiple chunk_length {}. Please consider padding the input to a length of {}.".format(
-                        input_shape[-1], least_common_mult_chunk_length, input_shape[-1] + padding_length
-                    )
+                    f"If training, sequence length {input_shape[-1]} has to be a multiple of least common multiple "
+                    f"chunk_length {least_common_mult_chunk_length}. Please consider padding the input to a length "
+                    f"of {input_shape[-1] + padding_length}."
                 )
 
             # pad input
@@ -2132,9 +2123,8 @@ class ReformerModel(ReformerPreTrainedModel):
         device=None,
     ):
         logger.info(
-            "Input ids are automatically padded from {} to {} to be a multiple of `config.chunk_length`: {}".format(
-                input_shape[-1], input_shape[-1] + padding_length, padded_seq_length
-            )
+            f"Input ids are automatically padded from {input_shape[-1]} to {input_shape[-1] + padding_length} to be a "
+            f"multiple of `config.chunk_length`: {padded_seq_length}"
         )
 
         padded_input_ids = torch.full(
@@ -2203,7 +2193,7 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/reformer-crime-and-punishment",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=CausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2318,7 +2308,7 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/reformer-crime-and-punishment",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2398,7 +2388,7 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/reformer-crime-and-punishment",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2500,7 +2490,7 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(REFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="google/reformer-crime-and-punishment",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

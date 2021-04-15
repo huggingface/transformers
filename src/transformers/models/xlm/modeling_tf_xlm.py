@@ -58,6 +58,7 @@ from .configuration_xlm import XLMConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "xlm-mlm-en-2048"
 _CONFIG_FOR_DOC = "XLMConfig"
 _TOKENIZER_FOR_DOC = "XLMTokenizer"
 
@@ -145,7 +146,7 @@ class TFXLMMultiHeadAttention(tf.keras.layers.Layer):
         else:
             klen = shape_list(kv)[1]
 
-        # assert dim == self.dim, 'Dimensions do not match: %s input vs %s configured' % (dim, self.dim)
+        # assert dim == self.dim, f'Dimensions do not match: {dim} input vs {self.dim} configured'
         dim_per_head = self.dim // self.n_heads
         mask_reshape = (bs, 1, qlen, klen) if len(shape_list(mask)) == 3 else (bs, 1, 1, klen)
 
@@ -288,19 +289,19 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
         for i in range(self.n_layers):
             self.attentions.append(
-                TFXLMMultiHeadAttention(self.n_heads, self.dim, config=config, name="attentions_._{}".format(i))
+                TFXLMMultiHeadAttention(self.n_heads, self.dim, config=config, name=f"attentions_._{i}")
             )
             self.layer_norm1.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm1_._{}".format(i))
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm1_._{i}")
             )
             # if self.is_decoder:
             #     self.layer_norm15.append(nn.LayerNorm(self.dim, eps=config.layer_norm_eps))
             #     self.encoder_attn.append(MultiHeadAttention(self.n_heads, self.dim, dropout=self.attention_dropout))
             self.ffns.append(
-                TFXLMTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name="ffns_._{}".format(i))
+                TFXLMTransformerFFN(self.dim, self.hidden_dim, self.dim, config=config, name=f"ffns_._{i}")
             )
             self.layer_norm2.append(
-                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm2_._{}".format(i))
+                tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name=f"layer_norm2_._{i}")
             )
 
         if hasattr(config, "pruned_heads"):
@@ -703,7 +704,7 @@ class TFXLMModel(TFXLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -856,7 +857,7 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFXLMWithLMHeadModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -946,7 +947,7 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1072,7 +1073,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1139,7 +1140,7 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         )
 
         if inputs["lengths"] is not None:
-            logger.warn(
+            logger.warning(
                 "The `lengths` parameter cannot be used with the XLM multiple choice models. Please use the "
                 "attention mask instead.",
             )
@@ -1222,7 +1223,7 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1327,7 +1328,7 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
     @add_start_docstrings_to_model_forward(XLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="xlm-mlm-en-2048",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

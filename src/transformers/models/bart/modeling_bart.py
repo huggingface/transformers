@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+from torch.nn import CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -49,6 +49,7 @@ from .configuration_bart import BartConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "facebook/bart-large"
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 
@@ -319,7 +320,9 @@ class BartEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -474,6 +477,7 @@ class BartClassificationHead(nn.Module):
 class BartPretrainedModel(PreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
+    _keys_to_ignore_on_load_unexpected = [r"encoder\.version", r"decoder\.version"]
 
     def _init_weights(self, module):
         std = self.config.init_std
@@ -526,8 +530,8 @@ BART_GENERATION_EXAMPLE = r"""
 
         >>> from transformers import BartTokenizer, BartForConditionalGeneration, BartConfig
 
-        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large')
-        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large')
+        >>> model = BartForConditionalGeneration.from_pretrained('facebook/bart-large-cnn')
+        >>> tokenizer = BartTokenizer.from_pretrained('facebook/bart-large-cnn')
 
         >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
         >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
@@ -1007,7 +1011,7 @@ class BartDecoder(BartPretrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )
@@ -1107,7 +1111,7 @@ class BartModel(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1197,12 +1201,7 @@ class BartModel(BartPretrainedModel):
 )
 class BartForConditionalGeneration(BartPretrainedModel):
     base_model_prefix = "model"
-    _keys_to_ignore_on_load_missing = [
-        r"final_logits_bias",
-        r"encoder\.version",
-        r"decoder\.version",
-        r"lm_head\.weight",
-    ]
+    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head\.weight"]
 
     def __init__(self, config: BartConfig):
         super().__init__(config)
@@ -1375,7 +1374,7 @@ class BartForSequenceClassification(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1438,8 +1437,13 @@ class BartForSequenceClassification(BartPretrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
+            if self.config.num_labels == 1:
+                # regression
+                loss_fct = MSELoss()
+                loss = loss_fct(logits.view(-1), labels.view(-1))
+            else:
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.config.num_labels), labels.view(-1))
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1480,7 +1484,7 @@ class BartForQuestionAnswering(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="facebook/bart-large",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

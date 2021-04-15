@@ -47,6 +47,7 @@ from .configuration_openai import OpenAIGPTConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "openai-gpt"
 _CONFIG_FOR_DOC = "OpenAIGPTConfig"
 _TOKENIZER_FOR_DOC = "OpenAIGPTTokenizer"
 
@@ -209,7 +210,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             config.vocab_size, config.n_embd, initializer_range=config.initializer_range, name="tokens_embed"
         )
         self.drop = tf.keras.layers.Dropout(config.embd_pdrop)
-        self.h = [TFBlock(config.n_ctx, config, scale=True, name="h_._{}".format(i)) for i in range(config.n_layer)]
+        self.h = [TFBlock(config.n_ctx, config, scale=True, name=f"h_._{i}") for i in range(config.n_layer)]
 
     def build(self, input_shape):
         with tf.name_scope("positions_embed"):
@@ -522,7 +523,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="openai-gpt",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFBaseModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -598,7 +599,7 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="openai-gpt",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -857,7 +858,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
     @add_start_docstrings_to_model_forward(OPENAI_GPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="openai-gpt",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )

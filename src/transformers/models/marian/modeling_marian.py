@@ -337,7 +337,9 @@ class MarianEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
@@ -565,10 +567,6 @@ MARIAN_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
             also be used by default.
-
-            If you want to change padding behavior, you should read :func:`modeling_marian._prepare_decoder_inputs` and
-            modify to your needs. See diagram 1 in `the paper <https://arxiv.org/abs/1910.13461>`__ for more
-            information on the default strategy.
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
 
@@ -979,7 +977,7 @@ class MarianDecoder(MarianPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )

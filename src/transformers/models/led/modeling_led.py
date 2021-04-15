@@ -49,6 +49,7 @@ from .configuration_led import LEDConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/led-base-16384"
 _CONFIG_FOR_DOC = "LEDConfig"
 _TOKENIZER_FOR_DOC = "LEDTokenizer"
 
@@ -130,8 +131,8 @@ class LEDEncoderSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
@@ -925,7 +926,9 @@ class LEDEncoderLayer(nn.Module):
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
+        if hidden_states.dtype == torch.float16 and (
+            torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
+        ):
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
             hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
         return (hidden_states,) + attn_outputs[1:]
@@ -1670,9 +1673,8 @@ class LEDEncoder(LEDPreTrainedModel):
         padding_len = (attention_window - seq_len % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
@@ -2068,7 +2070,7 @@ class LEDDecoder(LEDPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )
@@ -2166,7 +2168,7 @@ class LEDModel(LEDPreTrainedModel):
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/led-base-16384",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2449,7 +2451,7 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/led-base-16384",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2557,7 +2559,7 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
     @add_start_docstrings_to_model_forward(LED_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/led-base-16384",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

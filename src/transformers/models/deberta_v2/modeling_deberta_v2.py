@@ -450,10 +450,11 @@ class DebertaV2Encoder(nn.Module):
         else:
             next_kv = hidden_states
         rel_embeddings = self.get_rel_embedding()
+        output_states = next_kv
         for i, layer_module in enumerate(self.layer):
 
             if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+                all_hidden_states = all_hidden_states + (output_states,)
 
             output_states = layer_module(
                 next_kv,
@@ -560,8 +561,8 @@ class DisentangledSelfAttention(torch.nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_attention_heads = config.num_attention_heads
         _attention_head_size = config.hidden_size // config.num_attention_heads
@@ -572,7 +573,7 @@ class DisentangledSelfAttention(torch.nn.Module):
         self.value_proj = nn.Linear(config.hidden_size, self.all_head_size, bias=True)
 
         self.share_att_key = getattr(config, "share_att_key", False)
-        self.pos_att_type = config.pos_att_type
+        self.pos_att_type = config.pos_att_type if config.pos_att_type is not None else []
         self.relative_attention = getattr(config, "relative_attention", False)
 
         if self.relative_attention:
@@ -885,13 +886,17 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
         self._register_load_state_dict_pre_hook(self._pre_load_hook)
 
     def _init_weights(self, module):
-        """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        """Initialize the weights."""
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
     def _pre_load_hook(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs):
         """

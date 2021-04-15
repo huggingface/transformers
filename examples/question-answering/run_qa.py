@@ -41,8 +41,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
+from transformers.utils import check_min_version
 from utils_qa import postprocess_qa_predictions
 
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.6.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +100,10 @@ class DataTrainingArguments:
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
+    test_file: Optional[str] = field(
+        default=None,
+        metadata={"help": "An optional input test data file to evaluate the perplexity on (a text file)."},
+    )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
@@ -116,6 +124,27 @@ class DataTrainingArguments:
             "help": "Whether to pad all samples to `max_seq_length`. "
             "If False, will pad the samples dynamically when batching to the maximum length in the batch (which can "
             "be faster on GPU but will be slower on TPU)."
+        },
+    )
+    max_train_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
+            "value if set."
+        },
+    )
+    max_val_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
+            "value if set."
+        },
+    )
+    max_test_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes or quicker training, truncate the number of test examples to this "
+            "value if set."
         },
     )
     version_2_with_negative: bool = field(
@@ -146,8 +175,13 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
+        if (
+            self.dataset_name is None
+            and self.train_file is None
+            and self.validation_file is None
+            and self.test_file is None
+        ):
+            raise ValueError("Need either a dataset name or a training/validation file/test_file.")
         else:
             if self.train_file is not None:
                 extension = self.train_file.split(".")[-1]
@@ -155,6 +189,9 @@ class DataTrainingArguments:
             if self.validation_file is not None:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
+            if self.test_file is not None:
+                extension = self.test_file.split(".")[-1]
+                assert extension in ["csv", "json"], "`test_file` should be a csv or a json file."
 
 
 def main():
@@ -203,7 +240,7 @@ def main():
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -219,15 +256,20 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
     else:
         data_files = {}
         if data_args.train_file is not None:
             data_files["train"] = data_args.train_file
+            extension = data_args.train_file.split(".")[-1]
+
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
-        datasets = load_dataset(extension, data_files=data_files, field="data")
+            extension = data_args.validation_file.split(".")[-1]
+        if data_args.test_file is not None:
+            data_files["test"] = data_args.test_file
+            extension = data_args.test_file.split(".")[-1]
+        datasets = load_dataset(extension, data_files=data_files, field="data", cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -270,8 +312,10 @@ def main():
     # Preprocessing is slighlty different for training and evaluation.
     if training_args.do_train:
         column_names = datasets["train"].column_names
-    else:
+    elif training_args.do_eval:
         column_names = datasets["validation"].column_names
+    else:
+        column_names = datasets["test"].column_names
     question_column_name = "question" if "question" in column_names else column_names[0]
     context_column_name = "context" if "context" in column_names else column_names[1]
     answer_column_name = "answers" if "answers" in column_names else column_names[2]
@@ -280,7 +324,7 @@ def main():
     pad_on_right = tokenizer.padding_side == "right"
 
     if data_args.max_seq_length > tokenizer.model_max_length:
-        logger.warn(
+        logger.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
         )
@@ -360,13 +404,23 @@ def main():
         return tokenized_examples
 
     if training_args.do_train:
-        train_dataset = datasets["train"].map(
+        if "train" not in datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = datasets["train"]
+        if data_args.max_train_samples is not None:
+            # We will select sample from whole data if agument is specified
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        # Create train feature from dataset
+        train_dataset = train_dataset.map(
             prepare_train_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_train_samples is not None:
+            # Number of samples might increase during Feature Creation, We select only specified max samples
+            train_dataset = train_dataset.select(range(data_args.max_train_samples))
 
     # Validation preprocessing
     def prepare_validation_features(examples):
@@ -411,13 +465,42 @@ def main():
         return tokenized_examples
 
     if training_args.do_eval:
-        validation_dataset = datasets["validation"].map(
+        if "validation" not in datasets:
+            raise ValueError("--do_eval requires a validation dataset")
+        eval_examples = datasets["validation"]
+        if data_args.max_val_samples is not None:
+            # We will select sample from whole data
+            eval_examples = eval_examples.select(range(data_args.max_val_samples))
+        # Validation Feature Creation
+        eval_dataset = eval_examples.map(
             prepare_validation_features,
             batched=True,
             num_proc=data_args.preprocessing_num_workers,
             remove_columns=column_names,
             load_from_cache_file=not data_args.overwrite_cache,
         )
+        if data_args.max_val_samples is not None:
+            # During Feature creation dataset samples might increase, we will select required samples again
+            eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
+
+    if training_args.do_predict:
+        if "test" not in datasets:
+            raise ValueError("--do_predict requires a test dataset")
+        test_examples = datasets["test"]
+        if data_args.max_test_samples is not None:
+            # We will select sample from whole data
+            test_examples = test_examples.select(range(data_args.max_test_samples))
+        # Test Feature Creation
+        test_dataset = test_examples.map(
+            prepare_validation_features,
+            batched=True,
+            num_proc=data_args.preprocessing_num_workers,
+            remove_columns=column_names,
+            load_from_cache_file=not data_args.overwrite_cache,
+        )
+        if data_args.max_test_samples is not None:
+            # During Feature creation dataset samples might increase, we will select required samples again
+            test_dataset = test_dataset.select(range(data_args.max_test_samples))
 
     # Data collator
     # We have already padded to max length if the corresponding flag is True, otherwise we need to pad in the data
@@ -429,7 +512,7 @@ def main():
     )
 
     # Post-processing:
-    def post_processing_function(examples, features, predictions):
+    def post_processing_function(examples, features, predictions, stage="eval"):
         # Post-processing: we match the start logits and end logits to answers in the original context.
         predictions = postprocess_qa_predictions(
             examples=examples,
@@ -441,6 +524,7 @@ def main():
             null_score_diff_threshold=data_args.null_score_diff_threshold,
             output_dir=training_args.output_dir,
             is_world_process_zero=trainer.is_world_process_zero(),
+            prefix=stage,
         )
         # Format the result to the format the metric expects.
         if data_args.version_2_with_negative:
@@ -449,7 +533,8 @@ def main():
             ]
         else:
             formatted_predictions = [{"id": k, "prediction_text": v} for k, v in predictions.items()]
-        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in datasets["validation"]]
+
+        references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
     metric = load_metric("squad_v2" if data_args.version_2_with_negative else "squad")
@@ -462,8 +547,8 @@ def main():
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
-        eval_dataset=validation_dataset if training_args.do_eval else None,
-        eval_examples=datasets["validation"] if training_args.do_eval else None,
+        eval_dataset=eval_dataset if training_args.do_eval else None,
+        eval_examples=eval_examples if training_args.do_eval else None,
         tokenizer=tokenizer,
         data_collator=data_collator,
         post_process_function=post_processing_function,
@@ -482,20 +567,37 @@ def main():
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
+        max_train_samples = (
+            data_args.max_train_samples if data_args.max_train_samples is not None else len(train_dataset)
+        )
+        metrics["train_samples"] = min(max_train_samples, len(train_dataset))
+
         trainer.log_metrics("train", metrics)
         trainer.save_metrics("train", metrics)
         trainer.save_state()
 
     # Evaluation
-    results = {}
     if training_args.do_eval:
         logger.info("*** Evaluate ***")
-        results = trainer.evaluate()
+        metrics = trainer.evaluate()
 
-        trainer.log_metrics("eval", results)
-        trainer.save_metrics("eval", results)
+        max_val_samples = data_args.max_val_samples if data_args.max_val_samples is not None else len(eval_dataset)
+        metrics["eval_samples"] = min(max_val_samples, len(eval_dataset))
 
-    return results
+        trainer.log_metrics("eval", metrics)
+        trainer.save_metrics("eval", metrics)
+
+    # Prediction
+    if training_args.do_predict:
+        logger.info("*** Predict ***")
+        results = trainer.predict(test_dataset, test_examples)
+        metrics = results.metrics
+
+        max_test_samples = data_args.max_test_samples if data_args.max_test_samples is not None else len(test_dataset)
+        metrics["test_samples"] = min(max_test_samples, len(test_dataset))
+
+        trainer.log_metrics("test", metrics)
+        trainer.save_metrics("test", metrics)
 
 
 def _mp_fn(index):

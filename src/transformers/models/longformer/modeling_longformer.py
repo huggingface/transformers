@@ -44,6 +44,7 @@ from .configuration_longformer import LongformerConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "allenai/longformer-base-4096"
 _CONFIG_FOR_DOC = "LongformerConfig"
 _TOKENIZER_FOR_DOC = "LongformerTokenizer"
 
@@ -520,8 +521,8 @@ class LongformerSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0:
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
         self.num_heads = config.num_attention_heads
         self.head_dim = int(config.hidden_size / config.num_attention_heads)
@@ -1363,15 +1364,19 @@ class LongformerPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """ Initialize the weights """
-        if isinstance(module, (nn.Linear, nn.Embedding)):
+        if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
 
 
 LONGFORMER_START_DOCSTRING = r"""
@@ -1537,9 +1542,8 @@ class LongformerModel(LongformerPreTrainedModel):
         padding_len = (attention_window - seq_len % attention_window) % attention_window
         if padding_len > 0:
             logger.info(
-                "Input ids are automatically padded from {} to {} to be a multiple of `config.attention_window`: {}".format(
-                    seq_len, seq_len + padding_len, attention_window
-                )
+                f"Input ids are automatically padded from {seq_len} to {seq_len + padding_len} to be a multiple of "
+                f"`config.attention_window`: {attention_window}"
             )
             if input_ids is not None:
                 input_ids = F.pad(input_ids, (0, padding_len), value=pad_token_id)
@@ -1781,6 +1785,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -1807,7 +1812,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1873,6 +1878,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -2055,7 +2061,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2121,6 +2127,7 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            global_attentions=outputs.global_attentions,
         )
 
 
@@ -2146,7 +2153,7 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
     )
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="allenai/longformer-base-4096",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=LongformerMultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

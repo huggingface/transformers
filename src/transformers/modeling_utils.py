@@ -36,11 +36,12 @@ from .file_utils import (
     ModelOutput,
     cached_path,
     hf_bucket_url,
+    is_offline_mode,
     is_remote_url,
-    is_torch_tpu_available,
     replace_return_docstrings,
 )
 from .generation_utils import GenerationMixin
+from .integrations import is_deepspeed_zero3_enabled
 from .utils import logging
 
 
@@ -211,9 +212,7 @@ class ModuleUtilsMixin:
             encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -1e9
         else:
             raise ValueError(
-                "{} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`".format(
-                    self.dtype
-                )
+                f"{self.dtype} not recognized. `dtype` should be set to either `torch.float32` or `torch.float16`"
             )
 
         return encoder_extended_attention_mask
@@ -266,9 +265,7 @@ class ModuleUtilsMixin:
                 extended_attention_mask = attention_mask[:, None, None, :]
         else:
             raise ValueError(
-                "Wrong shape for input_ids (shape {}) or attention_mask (shape {})".format(
-                    input_shape, attention_mask.shape
-                )
+                f"Wrong shape for input_ids (shape {input_shape}) or attention_mask (shape {attention_mask.shape})"
             )
 
         # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
@@ -439,11 +436,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         super().__init__()
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
-                "Parameter config in `{}(config)` should be an instance of class `PretrainedConfig`. "
-                "To create a model from a pretrained model use "
-                "`model = {}.from_pretrained(PRETRAINED_MODEL_NAME)`".format(
-                    self.__class__.__name__, self.__class__.__name__
-                )
+                f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
+                "`PretrainedConfig`. To create a model from a pretrained model use "
+                f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         # Save config and origin of the pretrained weights if given in model
         self.config = config
@@ -666,7 +661,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         if new_num_tokens is None:
             return old_embeddings
 
-        old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=None):
+                old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+        else:
+            old_num_tokens, old_embedding_dim = old_embeddings.weight.size()
+
         if old_num_tokens == new_num_tokens:
             return old_embeddings
 
@@ -683,8 +685,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         self._init_weights(new_embeddings)
 
         # Copy token embeddings from the previous weights
-        num_tokens_to_copy = min(old_num_tokens, new_num_tokens)
-        new_embeddings.weight.data[:num_tokens_to_copy, :] = old_embeddings.weight.data[:num_tokens_to_copy, :]
+
+        # numbers of tokens to copy
+        n = min(old_num_tokens, new_num_tokens)
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(old_embeddings.weight, modifier_rank=0):
+                if torch.distributed.get_rank() == 0:
+                    new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
+        else:
+            new_embeddings.weight.data[:n, :] = old_embeddings.weight.data[:n, :]
 
         return new_embeddings
 
@@ -781,7 +792,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         self.base_model._prune_heads(heads_to_prune)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike]):
+    def save_pretrained(
+        self,
+        save_directory: Union[str, os.PathLike],
+        save_config: bool = True,
+        state_dict: Optional[dict] = None,
+        save_function: Callable = torch.save,
+    ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         `:func:`~transformers.PreTrainedModel.from_pretrained`` class method.
@@ -789,19 +806,36 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         Arguments:
             save_directory (:obj:`str` or :obj:`os.PathLike`):
                 Directory to which to save. Will be created if it doesn't exist.
+            save_config (:obj:`bool`, `optional`, defaults to :obj:`True`):
+                Whether or not to save the config of the model. Useful when in distributed training like TPUs and need
+                to call this function on all processes. In this case, set :obj:`save_config=True` only on the main
+                process to avoid race conditions.
+            state_dict (nested dictionary of :obj:`torch.Tensor`):
+                The state dictionary of the model to save. Will default to :obj:`self.state_dict()`, but can be used to
+                only save parts of the model or if special precautions need to be taken when recovering the state
+                dictionary of a model (like when using model parallelism).
+            save_function (:obj:`Callable`):
+                The function to use to save the state dictionary. Useful on distributed training like TPUs when one
+                need to replace :obj:`torch.save` by another method.
         """
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
 
         # Only save the model itself if we are using distributed training
-        model_to_save = self.module if hasattr(self, "module") else self
+        model_to_save = unwrap_model(self)
 
         # Attach architecture to the config
         model_to_save.config.architectures = [model_to_save.__class__.__name__]
 
-        state_dict = model_to_save.state_dict()
+        # Save the config
+        if save_config:
+            model_to_save.config.save_pretrained(save_directory)
+
+        # Save the model
+        if state_dict is None:
+            state_dict = model_to_save.state_dict()
 
         # Handle the case where some state_dict keys shouldn't be saved
         if self._keys_to_ignore_on_save is not None:
@@ -809,20 +843,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, WEIGHTS_NAME)
+        save_function(state_dict, output_model_file)
 
-        if getattr(self.config, "xla_device", False) and is_torch_tpu_available():
-            import torch_xla.core.xla_model as xm
-
-            if xm.is_master_ordinal():
-                # Save configuration file
-                model_to_save.config.save_pretrained(save_directory)
-            # xm.save takes care of saving only from master
-            xm.save(state_dict, output_model_file)
-        else:
-            model_to_save.config.save_pretrained(save_directory)
-            torch.save(state_dict, output_model_file)
-
-        logger.info("Model weights saved in {}".format(output_model_file))
+        logger.info(f"Model weights saved in {output_model_file}")
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
@@ -926,6 +949,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
 
             Passing :obj:`use_auth_token=True` is required when you want to use a private model.
 
+        .. note::
+
+            Activate the special `"offline-mode"
+            <https://huggingface.co/transformers/installation.html#offline-mode>`__ to use this method in a firewalled
+            environment.
+
         Examples::
 
             >>> from transformers import BertConfig, BertModel
@@ -952,6 +981,16 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         mirror = kwargs.pop("mirror", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "model", "framework": "pytorch", "from_auto_class": from_auto_class}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
+
+        if is_offline_mode() and not local_files_only:
+            logger.info("Offline mode: forcing local_files_only=True")
+            local_files_only = True
 
         # Load config if we don't provide a configuration
         if not isinstance(config, PretrainedConfig):
@@ -967,6 +1006,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
                 revision=revision,
+                _from_auto=from_auto_class,
+                _from_pipeline=from_pipeline,
                 **kwargs,
             )
         else:
@@ -987,19 +1028,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
                 else:
                     raise EnvironmentError(
-                        "Error no file named {} found in directory {} or `from_tf` set to False".format(
-                            [WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + ".index"],
-                            pretrained_model_name_or_path,
-                        )
+                        f"Error no file named {[WEIGHTS_NAME, TF2_WEIGHTS_NAME, TF_WEIGHTS_NAME + '.index']} found in "
+                        f"directory {pretrained_model_name_or_path} or `from_tf` set to False."
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert (
-                    from_tf
-                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
-                    pretrained_model_name_or_path + ".index"
-                )
+                if not from_tf:
+                    raise ValueError(
+                        f"We found a TensorFlow checkpoint at {pretrained_model_name_or_path + '.index'}, please set "
+                        "from_tf to True to load from this checkpoint."
+                    )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
                 archive_file = hf_bucket_url(
@@ -1019,6 +1058,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     resume_download=resume_download,
                     local_files_only=local_files_only,
                     use_auth_token=use_auth_token,
+                    user_agent=user_agent,
                 )
             except EnvironmentError as err:
                 logger.error(err)
@@ -1030,16 +1070,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 raise EnvironmentError(msg)
 
             if resolved_archive_file == archive_file:
-                logger.info("loading weights file {}".format(archive_file))
+                logger.info(f"loading weights file {archive_file}")
             else:
-                logger.info("loading weights file {} from cache at {}".format(archive_file, resolved_archive_file))
+                logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
 
         config.name_or_path = pretrained_model_name_or_path
 
         # Instantiate model.
-        model = cls(config, *model_args, **model_kwargs)
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
+            # this immediately partitions the model to avoid the overhead in time and memory copying it on CPU or each GPU first
+            with deepspeed.zero.Init():
+                model = cls(config, *model_args, **model_kwargs)
+        else:
+            model = cls(config, *model_args, **model_kwargs)
 
         if state_dict is None and not from_tf:
             try:
@@ -1097,15 +1146,19 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
             # so we need to apply the function recursively.
             def load(module: nn.Module, prefix=""):
                 local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                module._load_from_state_dict(
-                    state_dict,
-                    prefix,
-                    local_metadata,
-                    True,
-                    missing_keys,
-                    unexpected_keys,
-                    error_msgs,
-                )
+                args = (state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys, error_msgs)
+                if is_deepspeed_zero3_enabled():
+                    import deepspeed
+
+                    # because zero3 puts placeholders in model params, this context
+                    # manager gathers (unpartitions) the params of the current layer, then loads from
+                    # the state dict and then re-partitions them again
+                    with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
+                        if torch.distributed.get_rank() == 0:
+                            module._load_from_state_dict(*args)
+                else:
+                    module._load_from_state_dict(*args)
+
                 for name, child in module._modules.items():
                     if child is not None:
                         load(child, prefix + name + ".")
@@ -1162,11 +1215,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                     f"you can already use {model.__class__.__name__} for predictions without further training."
                 )
             if len(error_msgs) > 0:
-                raise RuntimeError(
-                    "Error(s) in loading state_dict for {}:\n\t{}".format(
-                        model.__class__.__name__, "\n\t".join(error_msgs)
-                    )
-                )
+                error_msg = "\n\t".join(error_msgs)
+                raise RuntimeError(f"Error(s) in loading state_dict for {model.__class__.__name__}:\n\t{error_msg}")
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
 
@@ -1180,12 +1230,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin):
                 "error_msgs": error_msgs,
             }
             return model, loading_info
-
-        if hasattr(config, "xla_device") and config.xla_device and is_torch_tpu_available():
-            import torch_xla.core.xla_model as xm
-
-            model = xm.send_cpu_data_to_device(model, xm.xla_device())
-            model.to(xm.xla_device())
 
         return model
 
@@ -1634,6 +1678,20 @@ class SequenceSummary(nn.Module):
         return output
 
 
+def unwrap_model(model: torch.nn.Module) -> torch.nn.Module:
+    """
+    Recursively unwraps a model from potential containers (as used in distributed training).
+
+    Args:
+        model (:obj:`torch.nn.Module`): The model to unwrap.
+    """
+    # since there could be multiple levels of wrapping, unwrap recursively
+    if hasattr(model, "module"):
+        return unwrap_model(model.module)
+    else:
+        return model
+
+
 def prune_linear_layer(layer: torch.nn.Linear, index: torch.LongTensor, dim: int = 0) -> torch.nn.Linear:
     """
     Prune a linear layer to keep only entries in index.
@@ -1723,7 +1781,7 @@ def prune_layer(
     elif isinstance(layer, Conv1D):
         return prune_conv1d_layer(layer, index, dim=1 if dim is None else dim)
     else:
-        raise ValueError("Can't prune layer of class {}".format(layer.__class__))
+        raise ValueError(f"Can't prune layer of class {layer.__class__}")
 
 
 def apply_chunking_to_forward(
@@ -1762,7 +1820,7 @@ def apply_chunking_to_forward(
             return apply_chunking_to_forward(self.forward_chunk, self.chunk_size_lm_head, self.seq_len_dim, hidden_states)
     """
 
-    assert len(input_tensors) > 0, "{} has to be a tuple/list of tensors".format(input_tensors)
+    assert len(input_tensors) > 0, f"{input_tensors} has to be a tuple/list of tensors"
     tensor_shape = input_tensors[0].shape[chunk_dim]
     assert all(
         input_tensor.shape[chunk_dim] == tensor_shape for input_tensor in input_tensors
@@ -1770,18 +1828,18 @@ def apply_chunking_to_forward(
 
     # inspect.signature exist since python 3.5 and is a python method -> no problem with backward compatibility
     num_args_in_forward_chunk_fn = len(inspect.signature(forward_fn).parameters)
-    assert num_args_in_forward_chunk_fn == len(
-        input_tensors
-    ), "forward_chunk_fn expects {} arguments, but only {} input tensors are given".format(
-        num_args_in_forward_chunk_fn, len(input_tensors)
-    )
+    if num_args_in_forward_chunk_fn != len(input_tensors):
+        raise ValueError(
+            f"forward_chunk_fn expects {num_args_in_forward_chunk_fn} arguments, but only {len(input_tensors)} input "
+            "tensors are given"
+        )
 
     if chunk_size > 0:
-        assert (
-            input_tensors[0].shape[chunk_dim] % chunk_size == 0
-        ), "The dimension to be chunked {} has to be a multiple of the chunk size {}".format(
-            input_tensors[0].shape[chunk_dim], chunk_size
-        )
+        if input_tensors[0].shape[chunk_dim] % chunk_size != 0:
+            raise ValueError(
+                f"The dimension to be chunked {input_tensors[0].shape[chunk_dim]} has to be a multiple of the chunk "
+                f"size {chunk_size}"
+            )
 
         num_chunks = input_tensors[0].shape[chunk_dim] // chunk_size
 

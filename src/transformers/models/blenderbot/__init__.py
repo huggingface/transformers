@@ -29,10 +29,10 @@ _import_structure = {
 if is_torch_available():
     _import_structure["modeling_blenderbot"] = [
         "BLENDERBOT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "BlenderbotForCausalLM",
         "BlenderbotForConditionalGeneration",
         "BlenderbotModel",
         "BlenderbotPreTrainedModel",
-        "BlenderbotForCausalLM",
     ]
 
 
