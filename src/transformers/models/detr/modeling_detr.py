@@ -1524,17 +1524,17 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             )
             criterion.to(self.device)
             # Third: compute the loss, based on outputs and labels
-            outputs = {}
-            outputs["pred_logits"] = pred_logits
-            outputs["pred_boxes"] = pred_boxes
+            outputs_loss = {}
+            outputs_loss["pred_logits"] = pred_logits
+            outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[6]
                 outputs_class = self.class_labels_classifier(intermediate)
                 outputs_coord = self.bbox_predictor(intermediate).sigmoid()
                 auxiliary_outputs = self._set_aux_loss(outputs_class, outputs_coord)
-                outputs["auxiliary_outputs"] = auxiliary_outputs
+                outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
-            loss_dict = criterion(outputs, labels)
+            loss_dict = criterion(outputs_loss, labels)
             weight_dict = criterion.weight_dict
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
