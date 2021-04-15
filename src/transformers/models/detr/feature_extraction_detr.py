@@ -92,8 +92,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             The sequence of means for each channel, to be used when normalizing images.
         image_std (:obj:`int`, defaults to :obj:`[0.229, 0.224, 0.225]`):
             The sequence of standard deviations for each channel, to be used when normalizing images.
-        padding_value (:obj:`float`, defaults to 0.0):
-            The pixel value to use when padding images.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]

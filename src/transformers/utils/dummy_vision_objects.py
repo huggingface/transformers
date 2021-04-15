@@ -12,6 +12,11 @@ class DeiTFeatureExtractor:
         requires_backends(self, ["vision"])
 
 
+class DetrFeatureExtractor:
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ViTFeatureExtractor:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])

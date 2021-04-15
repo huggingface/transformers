@@ -32,10 +32,9 @@ from scipy.optimize import linear_sum_assignment
 from ...activations import ACT2FN
 from ...file_utils import (
     ModelOutput,
-    add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -94,9 +93,9 @@ class DetrObjectDetectionOutput(ModelOutput):
             values are normalized in [0, 1], relative to the size of each individual image (disregarding possible
             padding). See PostProcess for information on how to retrieve the unnormalized bounding box.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
-            Optional, only returned when auxilary losses are activated (i.e. config.auxiliary_loss is set to True) and
-            labels are provided. It is a list of dictionnaries containing the two above keys (pred_logits and
-            pred_boxes) for each decoder layer.
+            Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to `True`) and
+            labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`pred_logits` and
+            :obj:`pred_boxes`) for each decoder layer.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
             of shape :obj:`(batch_size, sequence_length, hidden_size)`. Hidden-states of the decoder at the output of
@@ -998,27 +997,13 @@ class DetrEncoder(DetrPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                if getattr(self.config, "gradient_checkpointing", False) and self.training:
-
-                    def create_custom_forward(module):
-                        def custom_forward(*inputs):
-                            return module(*inputs, output_attentions)
-
-                        return custom_forward
-
-                    layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer),
-                        hidden_states,
-                        attention_mask,
-                    )
-                else:
-                    # we add position_embeddings as extra input to the encoder_layer
-                    layer_outputs = encoder_layer(
-                        hidden_states,
-                        attention_mask,
-                        position_embeddings=position_embeddings,
-                        output_attentions=output_attentions,
-                    )
+                # we add position_embeddings as extra input to the encoder_layer
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    position_embeddings=position_embeddings,
+                    output_attentions=output_attentions,
+                )
 
                 hidden_states = layer_outputs[0]
 
@@ -1303,12 +1288,7 @@ class DetrModel(DetrPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="facebook/detr-resnet-50",
-    #     output_type=Seq2SeqModelOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1321,6 +1301,24 @@ class DetrModel(DetrPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
+        r"""
+        Returns:
+
+        Examples::
+
+            >>> from transformers import DetrFeatureExtractor, DetrModel
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = DetrFeatureExtractor.from_pretrained('facebook/detr-resnet-50')
+            >>> model = DetrModel.from_pretrained('facebook/detr-resnet-50')
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> last_hidden_states = outputs.last_hidden_state
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1418,13 +1416,12 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         self.model = DetrModel(config)
 
         # Object detection heads
-        # We add one for the "no object" class
-        self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels + 1)
+        self.class_labels_classifier = nn.Linear(config.d_model, config.num_labels + 1) # We add one for the "no object" class
         self.bbox_predictor = MLP(input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3)
 
         self.init_weights()
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
     @torch.jit.unused
     def _set_aux_loss(self, outputs_class, outputs_coord):
         # this is a workaround to make torchscript happy, as torchscript
@@ -1433,12 +1430,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         return [{"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
-    # @add_code_sample_docstrings(
-    #     tokenizer_class=_TOKENIZER_FOR_DOC,
-    #     checkpoint="facebook/detr-resnet-50",
-    #     output_type=DetrObjectDetectionOutput,
-    #     config_class=_CONFIG_FOR_DOC,
-    # )
+    @replace_return_docstrings(output_type=DetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values,
@@ -1459,6 +1451,26 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             class labels themselves should be a :obj:`torch.LongTensor` of len :obj:`(number of bounding boxes in the
             image,)` and the boxes a :obj:`torch.FloatTensor` of shape :obj:`(number of bounding boxes in the image,
             4)`.
+
+        Returns:
+
+        Examples::
+
+            >>> from transformers import DetrFeatureExtractor, DetrForObjectDetection
+            >>> from PIL import Image
+            >>> import requests
+
+            >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+            >>> image = Image.open(requests.get(url, stream=True).raw)
+
+            >>> feature_extractor = DetrFeatureExtractor.from_pretrained('facebook/detr-resnet-50')
+            >>> model = DetrForObjectDetection.from_pretrained('facebook/detr-resnet-50')
+
+            >>> inputs = feature_extractor(images=image, return_tensors="pt")
+            >>> outputs = model(**inputs)
+            >>> # model predicts bounding boxes and corresponding COCO classes
+            >>> logits = outputs.pred_logits
+            >>> bboxes = outputs.pred_boxes
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

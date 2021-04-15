@@ -288,6 +288,7 @@ class DetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_object_detection_head(self):
+        # TODO replace by facebook/detr-resnet-50
         model = DetrForObjectDetection.from_pretrained("nielsr/detr-resnet-50-new").to(torch_device)
         model.eval()
 
