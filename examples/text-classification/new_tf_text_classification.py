@@ -277,10 +277,10 @@ def main():
     # endregion
 
     # region Loading data
-    # For CSV/JSON files, this script will use as labels the column called 'label' and as pair of sentences the
-    # sentences in columns called 'sentence1' and 'sentence2' if such column exists or the first two columns not named
-    # label if at least two columns are provided. Note that these 'sentences' can contain more than one single
-    # literal sentence, when the task requires it.
+    # For CSV/JSON files, this script will use the 'label' field as the label and the 'sentence1' and optionally
+    # 'sentence2' fields as inputs if they exist. If not, the first two fields not named label are used if at least two
+    # columns are provided. Note that the term 'sentence' can be slightly misleading, as they often contain more than
+    # a single grammatical sentence, when the task requires it.
     #
     # If the CSVs/JSONs contain only one non-label column, the script does single sentence classification on this
     # single column. You can easily tweak this behavior (see below)
@@ -316,7 +316,8 @@ def main():
     # endregion
 
     # region Label preprocessing
-    # Trying to have good defaults here, don't hesitate to tweak to your needs.
+    # By default we assume that if your label column looks like a float then you're doing regression,
+    # and if not then you're doing classification. This is something you may want to change!
     is_regression = datasets["train"].features["label"].dtype in ["float32", "float64"]
     if is_regression:
         num_labels = 1
@@ -380,6 +381,8 @@ def main():
     non_label_column_names = [name for name in datasets["train"].column_names if name != "label"]
     if "sentence1" in non_label_column_names and "sentence2" in non_label_column_names:
         sentence1_key, sentence2_key = "sentence1", "sentence2"
+    elif "sentence1" in non_label_column_names:
+        sentence1_key, sentence2_key = "sentence1", None
     else:
         if len(non_label_column_names) >= 2:
             sentence1_key, sentence2_key = non_label_column_names[:2]
@@ -461,7 +464,7 @@ def main():
 
     # region Prediction
     if training_args.do_predict:
-        logger.info("*** Test ***")
+        logger.info("Doing predictions on test dataset...")
 
         test_dataset = DataSequence(
             test_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=False
@@ -471,7 +474,6 @@ def main():
 
         output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
         with open(output_test_file, "w") as writer:
-            logger.info("***** Test results *****")
             writer.write("index\tprediction\n")
             for index, item in enumerate(predictions):
                 if is_regression:
@@ -479,6 +481,7 @@ def main():
                 else:
                     item = label_list[item]
                     writer.write(f"{index}\t{item}\n")
+        logger.info(f"Wrote predictions to {output_test_file}!")
     # endregion
 
 
