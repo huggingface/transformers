@@ -434,7 +434,9 @@ class TokenClassificationArgumentHandlerTestCase(unittest.TestCase):
         self.assertEqual(offset_mapping, None)
         self.assertEqual(model_batch_size, 1)
 
-        inputs, offset_mapping, model_batch_size = self.args_parser(string, offset_mapping=[(0, 1), (1, 2)], model_batch_size=32)
+        inputs, offset_mapping, model_batch_size = self.args_parser(
+            string, offset_mapping=[(0, 1), (1, 2)], model_batch_size=32
+        )
         self.assertEqual(inputs, [string])
         self.assertEqual(offset_mapping, [[(0, 1), (1, 2)]])
         self.assertEqual(model_batch_size, 32)

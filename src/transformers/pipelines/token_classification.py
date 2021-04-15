@@ -1,3 +1,4 @@
+import warnings
 from typing import TYPE_CHECKING, List, Optional, Union
 
 import numpy as np
@@ -7,8 +8,6 @@ from ..modelcard import ModelCard
 from ..models.bert.tokenization_bert import BasicTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
-
-import warnings
 
 
 if TYPE_CHECKING:
