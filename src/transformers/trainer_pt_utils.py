@@ -576,6 +576,55 @@ class DistributedLengthGroupedSampler(DistributedSampler):
         return iter(indices)
 
 
+class ShardSampler(Sampler):
+    """
+    Sampler that shards batches between several processes. Dispatches indices batch by batch: on 2 processes with batch
+    size 4, the first two batches are :obj:`[0, 1, 2, 3, 4, 5, 6, 7]` and :obj:`[8, 9, 10, 11, 12, 13, 14, 15]`, which
+    shard into :obj:`[0, 1, 2, 3]` and :obj:`[8, 9, 10, 11]` for GPU-0 and :obj:`[4, 5, 6, 7]` and :obj:`[12, 13, 14,
+    15]` for GPU-1.
+
+    The sampler thus yields :obj:`[0, 1, 2, 3, 8, 9, 10, 11]` on GPU-0 and :obj:`[4, 5, 6, 7, 12, 13, 14, 15]` on
+    GPU-1.
+    """
+
+    def __init__(
+        self,
+        dataset: Dataset,
+        batch_size: int = 1,
+        drop_last: bool = False,
+        num_processes: int = 1,
+        process_index: int = 0,
+    ):
+        self.dataset = dataset
+        self.batch_size = batch_size
+        self.drop_last = drop_last
+        self.num_processes = num_processes
+        self.process_index = process_index
+
+        self.total_batch_size = total_batch_size = batch_size * num_processes
+
+        num_batches = len(dataset) // total_batch_size if drop_last else math.ceil(len(dataset) / total_batch_size)
+        self.total_num_samples = num_batches * total_batch_size
+
+    def __iter__(self):
+        indices = list(range(len(self.dataset)))
+
+        # Add extra samples to make it evenly divisible. While loop is there in the edge case we have a tiny dataset
+        # and it needs to be done several times.
+        while len(indices) < self.total_num_samples:
+            indices += indices[: (self.total_num_samples - len(indices))]
+
+        result = []
+        for batch_start in range(self.batch_size * self.process_index, self.total_num_samples, self.total_batch_size):
+            result += indices[batch_start : batch_start + self.batch_size]
+
+        return iter(result)
+
+    def __len__(self):
+        # Each shard only sees a fraction of total_num_samples.
+        return self.total_num_samples // self.num_processes
+
+
 class IterableDatasetShard(IterableDataset):
     """
     Wraps a PyTorch :obj:`IterableDataset` to generate samples for one of the processes only. Instances of this class
