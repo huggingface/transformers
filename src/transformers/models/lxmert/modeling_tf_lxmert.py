@@ -235,7 +235,7 @@ class TFLxmertEmbeddings(tf.keras.layers.Layer):
         assert not (input_ids is None and inputs_embeds is None)
 
         if input_ids is not None:
-            inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
+            inputs_embeds = self.word_embeddings(input_ids)
 
         input_shape = shape_list(inputs_embeds)[:-1]
 
