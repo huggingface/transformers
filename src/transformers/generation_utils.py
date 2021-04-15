@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import torch
+import torch.distributed as dist
 from torch.nn import functional as F
 
 from .file_utils import ModelOutput
@@ -27,6 +28,7 @@ from .generation_logits_process import (
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
     HammingDiversityLogitsProcessor,
+    InfNanRemoveLogitsProcessor,
     LogitsProcessorList,
     MinLengthLogitsProcessor,
     NoBadWordsLogitsProcessor,
@@ -376,7 +378,14 @@ class GenerationMixin:
         """
         return logits
 
-    def _prepare_input_ids_for_generation(self, bos_token_id: int) -> torch.LongTensor:
+    def _prepare_input_ids_for_generation(
+        self, bos_token_id: Optional[int], encoder_outputs: Optional[ModelOutput]
+    ) -> torch.LongTensor:
+        if self.config.is_encoder_decoder and encoder_outputs is not None:
+            # make dummy input_ids with value -100, as a sanity check ensuring that they won't be used for encoding
+            shape = encoder_outputs.last_hidden_state.size()[:-1]
+            return torch.ones(shape, dtype=torch.long, device=self.device) * -100
+
         if bos_token_id is None:
             raise ValueError("`bos_token_id` has to be defined when no `input_ids` are provided.")
         return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
@@ -395,12 +404,13 @@ class GenerationMixin:
     def _prepare_encoder_decoder_kwargs_for_generation(
         self, input_ids: torch.LongTensor, model_kwargs
     ) -> Dict[str, Any]:
-        # retrieve encoder hidden states
-        encoder = self.get_encoder()
-        encoder_kwargs = {
-            argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
-        }
-        model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
+        if "encoder_outputs" not in model_kwargs:
+            # retrieve encoder hidden states
+            encoder = self.get_encoder()
+            encoder_kwargs = {
+                argument: value for argument, value in model_kwargs.items() if not argument.startswith("decoder_")
+            }
+            model_kwargs["encoder_outputs"]: ModelOutput = encoder(input_ids, return_dict=True, **encoder_kwargs)
         return model_kwargs
 
     def _prepare_decoder_input_ids_for_generation(
@@ -573,6 +583,7 @@ class GenerationMixin:
         num_beams: int,
         num_beam_groups: int,
         diversity_penalty: float,
+        remove_invalid_values: bool,
     ) -> LogitsProcessorList:
         """
         This class returns a :obj:`~transformers.LogitsProcessorList` list object that contains all relevant
@@ -598,6 +609,9 @@ class GenerationMixin:
         )
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
+        )
+        remove_invalid_values = (
+            remove_invalid_values if remove_invalid_values is not None else self.config.remove_invalid_values
         )
         # instantiate processors list
         processors = LogitsProcessorList()
@@ -631,6 +645,8 @@ class GenerationMixin:
             processors.append(ForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
+        if remove_invalid_values is True:
+            processors.append(InfNanRemoveLogitsProcessor())
         return processors
 
     def _get_stopping_criteria(
@@ -679,6 +695,8 @@ class GenerationMixin:
         return_dict_in_generate: Optional[bool] = None,
         forced_bos_token_id: Optional[int] = None,
         forced_eos_token_id: Optional[int] = None,
+        remove_invalid_values: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -760,9 +778,9 @@ class GenerationMixin:
                 enabled.
             prefix_allowed_tokens_fn: (:obj:`Callable[[int, torch.Tensor], List[int]]`, `optional`):
                 If provided, this function constraints the beam search to allowed tokens only at each step. If not
-                provided no constraint is applied. This function takes 2 arguments :obj:`inputs_ids` and the batch ID
-                :obj:`batch_id`. It has to return a list with the allowed tokens for the next generation step
-                conditioned on the previously generated tokens :obj:`inputs_ids` and the batch ID :obj:`batch_id`. This
+                provided no constraint is applied. This function takes 2 arguments: the batch ID :obj:`batch_id` and
+                :obj:`input_ids`. It has to return a list with the allowed tokens for the next generation step
+                conditioned on the batch ID :obj:`batch_id` and the previously generated tokens :obj:`inputs_ids`. This
                 argument is useful for constrained generation conditioned on the prefix, as described in
                 `Autoregressive Entity Retrieval <https://arxiv.org/abs/2010.00904>`__.
             output_attentions (:obj:`bool`, `optional`, defaults to `False`):
@@ -781,6 +799,11 @@ class GenerationMixin:
                 needs to be the target language token.
             forced_eos_token_id (:obj:`int`, `optional`):
                 The id of the token to force as the last generated token when :obj:`max_length` is reached.
+            remove_invalid_values (:obj:`bool`, `optional`):
+                Whether to remove possible `nan` and `inf` outputs of the model to prevent the generation method to
+                crash. Note that using ``remove_invalid_values`` can slow down generation.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If the
@@ -887,7 +910,7 @@ class GenerationMixin:
 
         if input_ids is None:
             # init `input_ids` with bos_token_id
-            input_ids = self._prepare_input_ids_for_generation(bos_token_id)
+            input_ids = self._prepare_input_ids_for_generation(bos_token_id, model_kwargs.get("encoder_outputs"))
 
         if model_kwargs.get("attention_mask", None) is None:
             # init `attention_mask` depending on `pad_token_id`
@@ -957,6 +980,7 @@ class GenerationMixin:
             num_beams=num_beams,
             num_beam_groups=num_beam_groups,
             diversity_penalty=diversity_penalty,
+            remove_invalid_values=remove_invalid_values,
         )
 
         stopping_criteria = self._get_stopping_criteria(
@@ -980,6 +1004,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1008,6 +1033,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1043,6 +1069,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1082,6 +1109,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1121,6 +1149,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
+                synced_gpus=synced_gpus,
                 **model_kwargs,
             )
 
@@ -1136,12 +1165,11 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, torch.LongTensor]:
         r"""
         Generates sequences for models with a language modeling head using greedy decoding.
-
-
 
         Parameters:
 
@@ -1155,6 +1183,7 @@ class GenerationMixin:
             stopping_criteria (:obj:`StoppingCriteriaList`, `optional`):
                 An instance of :class:`~transformers.StoppingCriteriaList`. List of instances of class derived from
                 :class:`~transformers.StoppingCriteria` used to tell if the generation loop should stop.
+
             max_length (:obj:`int`, `optional`, defaults to 20):
                 The maximum length of the sequence to be generated.
             pad_token_id (:obj:`int`, `optional`):
@@ -1171,6 +1200,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the :obj:`forward` function of the
                 model. If model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1245,7 +1276,19 @@ class GenerationMixin:
             input_ids, max_length
         )
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -1256,6 +1299,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # Store scores, attentions and hidden_states when required
@@ -1282,10 +1330,10 @@ class GenerationMixin:
             # argmax
             next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
-            # add code that transfomers next_tokens to tokens_to_add
+            # add code that transforms next_tokens to tokens_to_add
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
-                next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
@@ -1301,15 +1349,15 @@ class GenerationMixin:
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0:
-                break
-
-            if stopping_criteria(input_ids, scores):
-                break
-
             # increase cur_len
             cur_len = cur_len + 1
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
+            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -1345,6 +1393,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[SampleOutput, torch.LongTensor]:
         r"""
@@ -1382,6 +1431,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1465,8 +1516,20 @@ class GenerationMixin:
             input_ids, max_length
         )
 
+        this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -1477,6 +1540,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # pre-process distribution
@@ -1503,16 +1571,16 @@ class GenerationMixin:
 
             # sample
             probs = F.softmax(next_token_scores, dim=-1)
+
             next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-            # add code that transfomers next_tokens to tokens_to_add
+            # add code that transforms next_tokens to tokens_to_add
             if eos_token_id is not None:
                 assert pad_token_id is not None, "If eos_token_id is defined, make sure that pad_token_id is defined."
-                next_tokens = next_tokens * unfinished_sequences + (pad_token_id) * (1 - unfinished_sequences)
+                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
             # add token and increase length by one
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            cur_len = cur_len + 1
 
             # update sequence length
             if eos_token_id is not None:
@@ -1520,17 +1588,20 @@ class GenerationMixin:
                     sequence_lengths, unfinished_sequences, cur_len, next_tokens == eos_token_id
                 )
 
-            # stop when there is a </s> in each sentence, or if we exceed the maximum length
-            if unfinished_sequences.max() == 0:
-                break
-
-            if stopping_criteria(input_ids, scores):
-                break
-
             # update model kwargs
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
+
+            # increase cur_len
+            cur_len = cur_len + 1
+
+            # stop when there is a </s> in each sentence, or if we exceed the maximum length
+            if unfinished_sequences.max() == 0 or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         if return_dict_in_generate:
             if self.config.is_encoder_decoder:
@@ -1566,6 +1637,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSearchOutput, torch.LongTensor]:
         r"""
@@ -1603,6 +1675,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1705,7 +1779,19 @@ class GenerationMixin:
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -1714,6 +1800,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
@@ -1771,19 +1862,20 @@ class GenerationMixin:
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
 
-            cur_len = cur_len + 1
-
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
-            if beam_scorer.is_done:
-                break
+            # increase cur_len
+            cur_len = cur_len + 1
 
-            if stopping_criteria(input_ids, scores):
-                break
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
@@ -1828,6 +1920,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ) -> Union[BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1869,6 +1962,8 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -1972,7 +2067,19 @@ class GenerationMixin:
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             outputs = self(
@@ -1981,6 +2088,11 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
+
             next_token_logits = outputs.logits[:, -1, :]
 
             # hack: adjust tokens for Marian. For Marian we have to make sure that the `pad_token_id`
@@ -2018,6 +2130,7 @@ class GenerationMixin:
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
             probs = F.softmax(next_token_scores, dim=-1)
+
             next_tokens = torch.multinomial(probs, num_samples=2 * num_beams)
             next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
 
@@ -2041,7 +2154,6 @@ class GenerationMixin:
             beam_idx = beam_outputs["next_beam_indices"]
 
             input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-            cur_len = cur_len + 1
 
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
@@ -2049,11 +2161,14 @@ class GenerationMixin:
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], beam_idx)
 
-            if beam_scorer.is_done:
-                break
+            # increase cur_len
+            cur_len = cur_len + 1
 
-            if stopping_criteria(input_ids, scores):
-                break
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id
@@ -2097,6 +2212,7 @@ class GenerationMixin:
         output_hidden_states: Optional[bool] = None,
         output_scores: Optional[bool] = None,
         return_dict_in_generate: Optional[bool] = None,
+        synced_gpus: Optional[bool] = None,
         **model_kwargs,
     ):
         r"""
@@ -2134,6 +2250,9 @@ class GenerationMixin:
                 Whether or not to return the prediction scores. See ``scores`` under returned tensors for more details.
             return_dict_in_generate (:obj:`bool`, `optional`, defaults to `False`):
                 Whether or not to return a :class:`~transformers.file_utils.ModelOutput` instead of a plain tuple.
+            synced_gpus (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+
             model_kwargs:
                 Additional model specific kwargs that will be forwarded to the :obj:`forward` function of the model. If
                 model is an encoder-decoder model the kwargs should include :obj:`encoder_outputs`.
@@ -2244,7 +2363,19 @@ class GenerationMixin:
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
+        this_peer_finished = False  # used by synced_gpus only
         while cur_len < max_length:
+
+            if synced_gpus:
+                # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
+                # The following logic allows an early break if all peers finished generating their sequence
+                this_peer_finished_flag = torch.tensor(0.0 if this_peer_finished else 1.0).to(input_ids.device)
+                # send 0.0 if we finished, 1.0 otherwise
+                dist.all_reduce(this_peer_finished_flag, op=dist.ReduceOp.SUM)
+                # did all peers finish? the reduced sum will be 0.0 then
+                if this_peer_finished_flag.item() == 0.0:
+                    break
+
             # predicted tokens in cur_len step
             current_tokens = torch.zeros(batch_size * num_beams, dtype=input_ids.dtype, device=device)
 
@@ -2259,6 +2390,10 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
+            if synced_gpus and this_peer_finished:
+                cur_len = cur_len + 1
+                continue  # don't waste resources running the code we don't need
 
             for beam_group_idx in range(num_beam_groups):
                 group_start_idx = beam_group_idx * num_sub_beams
@@ -2350,19 +2485,22 @@ class GenerationMixin:
                         else (outputs.hidden_states,)
                     )
 
+            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
             if model_kwargs["past"] is not None:
                 model_kwargs["past"] = self._reorder_cache(model_kwargs["past"], reordering_indices)
 
-            input_ids = torch.cat([input_ids, current_tokens.unsqueeze(-1)], dim=-1)
+            # increase cur_len
             cur_len = cur_len + 1
-            if beam_scorer.is_done:
-                break
 
-            if stopping_criteria(input_ids, scores):
-                break
+            if beam_scorer.is_done or stopping_criteria(input_ids, scores):
+                if not synced_gpus:
+                    break
+                else:
+                    this_peer_finished = True
 
         sequence_outputs = beam_scorer.finalize(
             input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id

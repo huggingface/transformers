@@ -84,13 +84,13 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
@@ -152,7 +152,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
             or "AdamWeightDecayOptimizer_1" in name
             or "global_step" in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
 
         pointer = model
@@ -174,7 +174,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
                 try:
                     pointer = getattr(pointer, scope_names[0])
                 except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
+                    logger.info(f"Skipping {'/'.join(name)}")
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
@@ -191,7 +191,7 @@ def load_tf_weights_in_albert(model, config, tf_checkpoint_path):
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        print("Initialize PyTorch weight {} from {}".format(name, original_name))
+        print(f"Initialize PyTorch weight {name} from {original_name}")
         pointer.data = torch.from_numpy(array)
 
     return model
@@ -252,8 +252,8 @@ class AlbertAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads}"
             )
 
         self.num_attention_heads = config.num_attention_heads

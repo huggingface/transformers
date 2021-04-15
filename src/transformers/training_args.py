@@ -21,7 +21,8 @@ from typing import Any, Dict, List, Optional
 
 from .file_utils import (
     cached_property,
-    is_sagemaker_distributed_available,
+    is_sagemaker_dp_enabled,
+    is_sagemaker_mp_enabled,
     is_torch_available,
     is_torch_tpu_available,
     torch_required,
@@ -35,6 +36,14 @@ if is_torch_available():
 
 if is_torch_tpu_available():
     import torch_xla.core.xla_model as xm
+
+if is_sagemaker_dp_enabled():
+    import smdistributed.dataparallel.torch.distributed as sm_dist
+
+if is_sagemaker_mp_enabled():
+    import smdistributed.modelparallel.torch as smp
+
+    smp.init()
 
 
 logger = logging.get_logger(__name__)
@@ -240,7 +249,7 @@ class TrainingArguments:
             - :obj:`True` if :obj:`metric_for_best_model` is set to a value that isn't :obj:`"loss"` or
               :obj:`"eval_loss"`.
             - :obj:`False` if :obj:`metric_for_best_model` is not set, or set to :obj:`"loss"` or :obj:`"eval_loss"`.
-        ignore_skip_data (:obj:`bool`, `optional`, defaults to :obj:`False`):
+        ignore_data_skip (:obj:`bool`, `optional`, defaults to :obj:`False`):
             When resuming training, whether or not to skip the epochs and batches to get the data loading at the same
             stage as in the previous training. If set to :obj:`True`, the training will begin faster (as that skipping
             step can take a long time) but will not yield the same results as the interrupted training would have.
@@ -260,9 +269,10 @@ class TrainingArguments:
 
             If a string is passed, it will be split on space. If a bool is passed, it will be converted to an empty
             list for :obj:`False` and :obj:`["simple"]` for :obj:`True`.
-        deepspeed (:obj:`str`, `optional`):
+        deepspeed (:obj:`str` or :obj:`dict`, `optional`):
             Use `Deepspeed <https://github.com/microsoft/deepspeed>`__. This is an experimental feature and its API may
-            evolve in the future. The value is the location of its json config file (usually ``ds_config.json``).
+            evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
+            ``ds_config.json``) or an already loaded json file as a :obj:`dict`"
         label_smoothing_factor (:obj:`float`, `optional`, defaults to 0.0):
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
@@ -271,8 +281,12 @@ class TrainingArguments:
             Whether or not to use the :class:`~transformers.Adafactor` optimizer instead of
             :class:`~transformers.AdamW`.
         group_by_length (:obj:`bool`, `optional`, defaults to :obj:`False`):
-            Whether or not to group together samples of roughly the same legnth in the training dataset (to minimize
+            Whether or not to group together samples of roughly the same length in the training dataset (to minimize
             padding applied and be more efficient). Only useful if applying dynamic padding.
+        length_column_name (:obj:`str`, `optional`, defaults to :obj:`"length"`):
+            Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
+            than computing them on train startup. Ignored unless :obj:`group_by_length` is :obj:`True` and the dataset
+            is an instance of :obj:`Dataset`.
         report_to (:obj:`str` or :obj:`List[str]`, `optional`, defaults to :obj:`"all"`):
             The list of integrations to report the results and logs to. Supported platforms are :obj:`"azure_ml"`,
             :obj:`"comet_ml"`, :obj:`"mlflow"`, :obj:`"tensorboard"` and :obj:`"wandb"`. Use :obj:`"all"` to report to
@@ -478,7 +492,9 @@ class TrainingArguments:
     )
     deepspeed: Optional[str] = field(
         default=None,
-        metadata={"help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json)"},
+        metadata={
+            "help": "Enable deepspeed and pass the path to deepspeed json config file (e.g. ds_config.json) or an already loaded json file as a dict"
+        },
     )
     label_smoothing_factor: float = field(
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
@@ -487,6 +503,10 @@ class TrainingArguments:
     group_by_length: bool = field(
         default=False,
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
+    )
+    length_column_name: Optional[str] = field(
+        default="length",
+        metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
@@ -505,8 +525,18 @@ class TrainingArguments:
         default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
+    mp_parameters: str = field(
+        default="",
+        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
+    )
 
     def __post_init__(self):
+        # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
+        # This needs to happen before any call to self.device or self.n_gpu.
+        env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
+        if env_local_rank != -1 and env_local_rank != self.local_rank:
+            self.local_rank = env_local_rank
+
         # expand paths, if not os.makedirs("~/bar") will make directory
         # in the current directory instead of the actual home
         #  see https://github.com/huggingface/transformers/issues/10628
@@ -523,6 +553,8 @@ class TrainingArguments:
                 "using `EvaluationStrategy` for `evaluation_strategy` is deprecated and will be removed in version 5 of 🤗 Transformers. Use `IntervalStrategy` instead",
                 FutureWarning,
             )
+            # Go back to the underlying string or we won't be able to instantiate `IntervalStrategy` on it.
+            self.evaluation_strategy = self.evaluation_strategy.value
 
         self.evaluation_strategy = IntervalStrategy(self.evaluation_strategy)
         self.logging_strategy = IntervalStrategy(self.logging_strategy)
@@ -630,11 +662,13 @@ class TrainingArguments:
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
-        elif is_sagemaker_distributed_available():
-            import smdistributed.dataparallel.torch.distributed as dist
-
-            dist.init_process_group()
-            self.local_rank = dist.get_local_rank()
+        elif is_sagemaker_mp_enabled():
+            local_rank = smp.local_rank()
+            device = torch.device("cuda", local_rank)
+            self._n_gpu = 1
+        elif is_sagemaker_dp_enabled():
+            sm_dist.init_process_group()
+            self.local_rank = sm_dist.get_local_rank()
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
         elif self.deepspeed:
@@ -716,8 +750,10 @@ class TrainingArguments:
         """
         if is_torch_tpu_available():
             return ParallelMode.TPU
-        elif is_sagemaker_distributed_available():
-            return ParallelMode.SAGEMAKER_DISTRIBUTED
+        elif is_sagemaker_mp_enabled():
+            return ParallelMode.SAGEMAKER_MODEL_PARALLEL
+        elif is_sagemaker_dp_enabled():
+            return ParallelMode.SAGEMAKER_DATA_PARALLEL
         elif self.local_rank != -1:
             return ParallelMode.DISTRIBUTED
         elif self.n_gpu > 1:
@@ -726,18 +762,50 @@ class TrainingArguments:
             return ParallelMode.NOT_PARALLEL
 
     @property
+    @torch_required
+    def world_size(self):
+        """
+        The number of processes used in parallel.
+        """
+        if is_torch_tpu_available():
+            return xm.xrt_world_size()
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_size()
+        elif is_sagemaker_dp_enabled():
+            return sm_dist.get_world_size()
+        elif self.local_rank != -1:
+            return torch.distributed.get_world_size()
+        return 1
+
+    @property
+    @torch_required
+    def process_index(self):
+        """
+        The number of processes used in parallel.
+        """
+        if is_torch_tpu_available():
+            return xm.get_ordinal()
+        elif is_sagemaker_mp_enabled():
+            return smp.dp_rank()
+        elif is_sagemaker_dp_enabled():
+            return sm_dist.get_rank()
+        elif self.local_rank != -1:
+            return torch.distributed.get_rank()
+        return 0
+
+    @property
     def place_model_on_device(self):
         """
         Can be subclassed and overridden for some specific integrations.
         """
-        return True
+        return not is_sagemaker_mp_enabled()
 
     @property
     def _no_sync_in_gradient_accumulation(self):
         """
         Whether or not to use no_sync for the gradients when doing gradient accumulation.
         """
-        return not self.deepspeed
+        return not (self.deepspeed or is_sagemaker_dp_enabled() or is_sagemaker_mp_enabled())
 
     def to_dict(self):
         """
@@ -775,5 +843,6 @@ class ParallelMode(Enum):
     NOT_PARALLEL = "not_parallel"
     NOT_DISTRIBUTED = "not_distributed"
     DISTRIBUTED = "distributed"
-    SAGEMAKER_DISTRIBUTED = "sm_distributed"
+    SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
+    SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"

@@ -54,6 +54,7 @@ from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.c
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "{{cookiecutter.checkpoint_identifier}}"
 _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
@@ -77,13 +78,13 @@ def load_tf_weights_in_{{cookiecutter.lowercase_modelname}}(model, config, tf_ch
         )
         raise
     tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info("Converting TensorFlow checkpoint from {}".format(tf_path))
+    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
     # Load weights from TF model
     init_vars = tf.train.list_variables(tf_path)
     names = []
     arrays = []
     for name, shape in init_vars:
-        logger.info("Loading TF weight {} with shape {}".format(name, shape))
+        logger.info(f"Loading TF weight {name} with shape {shape}")
         array = tf.train.load_variable(tf_path, name)
         names.append(name)
         arrays.append(array)
@@ -96,7 +97,7 @@ def load_tf_weights_in_{{cookiecutter.lowercase_modelname}}(model, config, tf_ch
             n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
             for n in name
         ):
-            logger.info("Skipping {}".format("/".join(name)))
+            logger.info(f"Skipping {'/'.join(name)}")
             continue
         pointer = model
         for m_name in name:
@@ -116,7 +117,7 @@ def load_tf_weights_in_{{cookiecutter.lowercase_modelname}}(model, config, tf_ch
                 try:
                     pointer = getattr(pointer, scope_names[0])
                 except AttributeError:
-                    logger.info("Skipping {}".format("/".join(name)))
+                    logger.info(f"Skipping {'/'.join(name)}")
                     continue
             if len(scope_names) >= 2:
                 num = int(scope_names[1])
@@ -132,7 +133,7 @@ def load_tf_weights_in_{{cookiecutter.lowercase_modelname}}(model, config, tf_ch
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
             raise
-        logger.info("Initialize PyTorch weight {}".format(name))
+        logger.info(f"Initialize PyTorch weight {name}")
         pointer.data = torch.from_numpy(array)
     return model
 
@@ -195,8 +196,8 @@ class {{cookiecutter.camelcase_modelname}}SelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -530,7 +531,7 @@ class {{cookiecutter.camelcase_modelname}}Encoder(nn.Module):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )
@@ -779,7 +780,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -932,7 +933,7 @@ class {{cookiecutter.camelcase_modelname}}ForMaskedLM({{cookiecutter.camelcase_m
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1190,7 +1191,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1270,7 +1271,7 @@ class {{cookiecutter.camelcase_modelname}}ForMultipleChoice({{cookiecutter.camel
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MultipleChoiceModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1360,7 +1361,7 @@ class {{cookiecutter.camelcase_modelname}}ForTokenClassification({{cookiecutter.
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1447,7 +1448,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -1559,6 +1560,7 @@ from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.c
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "{{cookiecutter.checkpoint_identifier}}"
 _CONFIG_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Config"
 _TOKENIZER_FOR_DOC = "{{cookiecutter.camelcase_modelname}}Tokenizer"
 
@@ -2510,7 +2512,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn("`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`...")
+                    logger.warning("`use_cache = True` is incompatible with `config.gradient_checkpointing = True`. Setting `use_cache = False`...")
                     use_cache = False
 
                 def create_custom_forward(module):
@@ -2607,7 +2609,7 @@ class {{cookiecutter.camelcase_modelname}}Model({{cookiecutter.camelcase_modelna
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2875,7 +2877,7 @@ class {{cookiecutter.camelcase_modelname}}ForSequenceClassification({{cookiecutt
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
@@ -2976,7 +2978,7 @@ class {{cookiecutter.camelcase_modelname}}ForQuestionAnswering({{cookiecutter.ca
     @add_start_docstrings_to_model_forward({{cookiecutter.uppercase_modelname}}_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         tokenizer_class=_TOKENIZER_FOR_DOC,
-        checkpoint="{{cookiecutter.checkpoint_identifier}}",
+        checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )

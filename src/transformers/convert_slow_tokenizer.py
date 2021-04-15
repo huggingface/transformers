@@ -24,7 +24,7 @@ from typing import Dict, List, Tuple
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE, Unigram, WordPiece
 
-from .file_utils import requires_protobuf, requires_sentencepiece
+from .file_utils import requires_backends
 
 
 class SentencePieceExtractor:
@@ -33,7 +33,7 @@ class SentencePieceExtractor:
     """
 
     def __init__(self, model: str):
-        requires_sentencepiece(self)
+        requires_backends(self, "sentencepiece")
         from sentencepiece import SentencePieceProcessor
 
         self.sp = SentencePieceProcessor()
@@ -298,14 +298,15 @@ class RobertaConverter(Converter):
 
 class SpmConverter(Converter):
     def __init__(self, *args):
-        requires_protobuf(self)
+        requires_backends(self, "protobuf")
 
         super().__init__(*args)
 
         from .utils import sentencepiece_model_pb2 as model_pb2
 
         m = model_pb2.ModelProto()
-        m.ParseFromString(open(self.original_tokenizer.vocab_file, "rb").read())
+        with open(self.original_tokenizer.vocab_file, "rb") as f:
+            m.ParseFromString(f.read())
         self.proto = m
 
     def vocab(self, proto):
@@ -633,7 +634,7 @@ class T5Converter(SpmConverter):
     def vocab(self, proto):
         num_extra_ids = self.original_tokenizer._extra_ids
         vocab = [(piece.piece, piece.score) for piece in proto.pieces]
-        vocab += [("<extra_id_{}>".format(i), 0.0) for i in range(num_extra_ids - 1, -1, -1)]
+        vocab += [(f"<extra_id_{i}>", 0.0) for i in range(num_extra_ids - 1, -1, -1)]
         return vocab
 
     def post_processor(self):

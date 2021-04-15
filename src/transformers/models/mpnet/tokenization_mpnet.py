@@ -169,8 +169,8 @@ class MPNetTokenizer(PreTrainedTokenizer):
 
         if not os.path.isfile(vocab_file):
             raise ValueError(
-                "Can't find a vocabulary file at path '{}'. To load the vocabulary from a Google pretrained "
-                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`".format(vocab_file)
+                f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained "
+                "model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -266,12 +266,9 @@ class MPNetTokenizer(PreTrainedTokenizer):
             :obj:`List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
         if already_has_special_tokens:
-            if token_ids_1 is not None:
-                raise ValueError(
-                    "You should not supply a second sequence if the provided sequence of "
-                    "ids is already formated with special tokens for the model."
-                )
-            return list(map(lambda x: 1 if x in [self.sep_token_id, self.cls_token_id] else 0, token_ids_0))
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
+            )
 
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0)) + [1]
@@ -312,8 +309,8 @@ class MPNetTokenizer(PreTrainedTokenizer):
             for token, token_index in sorted(self.vocab.items(), key=lambda kv: kv[1]):
                 if index != token_index:
                     logger.warning(
-                        "Saving vocabulary to {}: vocabulary indices are not consecutive."
-                        " Please check that the vocabulary is not corrupted!".format(vocab_file)
+                        f"Saving vocabulary to {vocab_file}: vocabulary indices are not consecutive."
+                        " Please check that the vocabulary is not corrupted!"
                     )
                     index = token_index
                 writer.write(token + "\n")

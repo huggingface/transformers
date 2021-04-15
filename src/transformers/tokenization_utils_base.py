@@ -685,7 +685,7 @@ class BatchEncoding(UserDict):
         # (mfuntowicz: This code is unreachable)
         # else:
         #     raise ImportError(
-        #         "Unable to convert output to tensors format {}".format(tensor_type)
+        #         f"Unable to convert output to tensors format {tensor_type}"
         #     )
 
         # Do the tensor conversion in batch
@@ -805,9 +805,7 @@ class SpecialTokensMixin:
                 elif isinstance(value, (str, AddedToken)):
                     setattr(self, key, value)
                 else:
-                    raise TypeError(
-                        "special token {} has to be either str or AddedToken but got: {}".format(key, type(value))
-                    )
+                    raise TypeError(f"special token {key} has to be either str or AddedToken but got: {type(value)}")
 
     def sanitize_special_tokens(self) -> int:
         """
@@ -827,7 +825,13 @@ class SpecialTokensMixin:
         special tokens are NOT in the vocabulary, they are added to it (indexed starting from the last index of the
         current vocabulary).
 
-        Using : obj:`add_special_tokens` will ensure your special tokens can be used in several ways:
+        .. Note::
+            When adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix of
+            the model so that its embedding matrix matches the tokenizer.
+
+            In order to do that, please use the :meth:`~transformers.PreTrainedModel.resize_token_embeddings` method.
+
+        Using :obj:`add_special_tokens` will ensure your special tokens can be used in several ways:
 
         - Special tokens are carefully handled by the tokenizer (they are never split).
         - You can easily refer to special tokens using tokenizer class attributes like :obj:`tokenizer.cls_token`. This
@@ -872,7 +876,7 @@ class SpecialTokensMixin:
             assert key in self.SPECIAL_TOKENS_ATTRIBUTES, f"Key {key} is not a special token"
 
             if self.verbose:
-                logger.info("Assigning %s to the %s key of the tokenizer", value, key)
+                logger.info(f"Assigning {value} to the {key} key of the tokenizer")
             setattr(self, key, value)
 
             if key == "additional_special_tokens":
@@ -1596,6 +1600,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", None)
+        from_pipeline = kwargs.pop("_from_pipeline", None)
+        from_auto_class = kwargs.pop("_from_auto", False)
+
+        user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
+        if from_pipeline is not None:
+            user_agent["using_pipeline"] = from_pipeline
 
         if is_offline_mode() and not local_files_only:
             logger.info("Offline mode: forcing local_files_only=True")
@@ -1663,6 +1673,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
                         resume_download=resume_download,
                         local_files_only=local_files_only,
                         use_auth_token=use_auth_token,
+                        user_agent=user_agent,
                     )
 
                 except FileNotFoundError as error:
@@ -1807,17 +1818,29 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             added_tok_encoder_sorted = list(sorted(added_tok_encoder.items(), key=lambda x: x[1]))
 
             for token, index in added_tok_encoder_sorted:
-                assert index == len(tokenizer), (
-                    f"Non-consecutive added token '{token}' found. "
-                    f"Should have index {len(tokenizer)} but has index {index} in saved vocabulary."
-                )
+                if has_tokenizer_file and index != len(tokenizer) and tokenizer.convert_tokens_to_ids(token) != index:
+                    # Tokenizer fast: added token needs to either be in the vocabulary with the proper index or the
+                    # index is the current length of the tokenizer (not in vocabulary)
+                    raise ValueError(
+                        f"Wrong index found for {token}: should be {tokenizer.convert_tokens_to_ids(token)} but found "
+                        f"{index}."
+                    )
+                elif not has_tokenizer_file and index != len(tokenizer):
+                    # Tokenizer slow: added token cannot already be in the vocabulary so its index needs to be the
+                    # current length of the tokenizer.
+                    raise ValueError(
+                        f"Non-consecutive added token '{token}' found. "
+                        f"Should have index {len(tokenizer)} but has index {index} in saved vocabulary."
+                    )
+
+                # Safe to call on a tokenizer fast even if token already there.
                 tokenizer.add_tokens(token, special_tokens=bool(token in special_tokens))
 
         # Check all our special tokens are registered as "no split" token (we don't cut them) and are in the vocab
         added_tokens = tokenizer.sanitize_special_tokens()
         if added_tokens:
             logger.warning(
-                "Special tokens have been added in the vocabulary, make sure the associated word embedding are fine-tuned or trained."
+                "Special tokens have been added in the vocabulary, make sure the associated word embeddings are fine-tuned or trained."
             )
 
         return tokenizer
@@ -1825,7 +1848,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
     def save_pretrained(
         self,
         save_directory: Union[str, os.PathLike],
-        legacy_format: bool = True,
+        legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
         """
@@ -1833,13 +1856,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
 
         This method make sure the full tokenizer can then be re-loaded using the
-        :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained` class method.
-
-        .. Note::
-            A "fast" tokenizer (instance of :class:`transformers.PreTrainedTokenizerFast`) saved with this method will
-            not be possible to load back in a "slow" tokenizer, i.e. in a :class:`transformers.PreTrainedTokenizer`
-            instance. It can only be loaded in a "fast" tokenizer, i.e. in a
-            :class:`transformers.PreTrainedTokenizerFast` instance.
+        :meth:`~transformers.tokenization_utils_base.PreTrainedTokenizer.from_pretrained` class method..
 
         .. Warning::
            This won't save modifications you may have applied to the tokenizer after the instantiation (for instance,
@@ -1847,11 +1864,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
         Args:
             save_directory (:obj:`str` or :obj:`os.PathLike`): The path to a directory where the tokenizer will be saved.
-            legacy_format (:obj:`bool`, `optional`, defaults to :obj:`True`):
-                Whether to save the tokenizer in legacy format (default), i.e. with tokenizer specific vocabulary and a
-                separate added_tokens files or in the unified JSON file format for the `tokenizers` library. It's only
-                possible to save a Fast tokenizer in the unified JSON format and this format is incompatible with
-                "slow" tokenizers (not powered by the `tokenizers` library).
+            legacy_format (:obj:`bool`, `optional`):
+                Only applicable for a fast tokenizer. If unset (default), will save the tokenizer in the unified JSON
+                format as well as in legacy format, i.e. with tokenizer specific vocabulary and a separate added_tokens
+                files.
+
+                If :obj:`False`, will only save the tokenizer in the unified JSON format. This format is incompatible
+                with "slow" tokenizers (not powered by the `tokenizers` library), so the tokenizer will not be able to
+                be loaded in the corresponding "slow" tokenizer.
+
+                If :obj:`True`, will save the tokenizer in legacy format.
             filename_prefix: (:obj:`str`, `optional`):
                 A prefix to add to the names of the files saved by the tokenizer.
 
@@ -1859,7 +1881,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             A tuple of :obj:`str`: The files saved.
         """
         if os.path.isfile(save_directory):
-            logger.error("Provided path ({}) should be a directory, not a file".format(save_directory))
+            logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
 
@@ -1914,7 +1936,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         self,
         save_directory: Union[str, os.PathLike],
         file_names: Tuple[str],
-        legacy_format: bool = True,
+        legacy_format: Optional[bool] = None,
         filename_prefix: Optional[str] = None,
     ) -> Tuple[str]:
         """
@@ -1923,9 +1945,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
         Fast tokenizers can also be saved in a unique JSON file containing {config + vocab + added-tokens} using the
         specific :meth:`~transformers.tokenization_utils_fast.PreTrainedTokenizerFast._save_pretrained`
         """
-        if not legacy_format:
+        if legacy_format is False:
             raise ValueError(
-                "Only fast tokenizers (instances of PretrainedTokenizerFast) can be saved in non legacy format."
+                "Only fast tokenizers (instances of PreTrainedTokenizerFast) can be saved in non legacy format."
             )
 
         save_directory = str(save_directory)
@@ -3130,8 +3152,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
             if not self.deprecation_warnings.get("sequence-length-is-longer-than-the-specified-maximum", False):
                 logger.warning(
                     "Token indices sequence length is longer than the specified maximum sequence length "
-                    "for this model ({} > {}). Running this sequence through the model will result in "
-                    "indexing errors".format(len(ids), self.model_max_length)
+                    f"for this model ({len(ids)} > {self.model_max_length}). Running this sequence through the model "
+                    "will result in indexing errors"
                 )
             self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
 

@@ -26,8 +26,12 @@ VOCAB_FILES_NAMES = {
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"allegro/herbert-base-cased": "https://cdn.huggingface.co/allegro/herbert-base-cased/vocab.json"},
-    "merges_file": {"allegro/herbert-base-cased": "https://cdn.huggingface.co/allegro/herbert-base-cased/merges.txt"},
+    "vocab_file": {
+        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/vocab.json"
+    },
+    "merges_file": {
+        "allegro/herbert-base-cased": "https://huggingface.co/allegro/herbert-base-cased/resolve/main/merges.txt"
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"allegro/herbert-base-cased": 514}
@@ -54,7 +58,7 @@ class HerbertTokenizer(XLMTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
 
         kwargs["cls_token"] = "<s>"
         kwargs["unk_token"] = "<unk>"
@@ -64,7 +68,7 @@ class HerbertTokenizer(XLMTokenizer):
         kwargs["do_lowercase_and_remove_accent"] = False
         kwargs["additional_special_tokens"] = []
 
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
         self.bert_pre_tokenizer = BasicTokenizer(
             do_lower_case=False, never_split=self.all_special_tokens, tokenize_chinese_chars=False, strip_accents=False
         )

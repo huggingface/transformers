@@ -307,7 +307,7 @@ def create_learning_rate_scheduler(
                 progress = jnp.maximum(0.0, (step - warmup_steps) / float(steps_per_cycle))
                 ret *= jnp.maximum(0.0, 0.5 * (1.0 + jnp.cos(jnp.pi * (progress % 1.0))))
             else:
-                raise ValueError("Unknown factor %s." % name)
+                raise ValueError(f"Unknown factor {name}.")
         return jnp.asarray(ret, dtype=jnp.float32)
 
     return step_fn
@@ -332,9 +332,7 @@ def accuracy(logits, targets, weights=None):
       Tuple of scalar loss and batch normalizing factor.
     """
     if logits.ndim != targets.ndim + 1:
-        raise ValueError(
-            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
-        )
+        raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
 
     loss = jnp.equal(jnp.argmax(logits, axis=-1), targets)
     loss *= weights
@@ -353,9 +351,7 @@ def cross_entropy(logits, targets, weights=None, label_smoothing=0.0):
       Tuple of scalar loss and batch normalizing factor.
     """
     if logits.ndim != targets.ndim + 1:
-        raise ValueError(
-            "Incorrect shapes. Got shape %s logits and %s targets" % (str(logits.shape), str(targets.shape))
-        )
+        raise ValueError(f"Incorrect shapes. Got shape {logits.shape} logits and {targets.shape} targets")
 
     vocab_size = logits.shape[-1]
     confidence = 1.0 - label_smoothing
@@ -463,7 +459,7 @@ if __name__ == "__main__":
     )
 
     # Set the verbosity to info of the Transformers logger (on main process only):
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
 
     # Set seed before initializing model.
     set_seed(training_args.seed)
@@ -479,17 +475,19 @@ if __name__ == "__main__":
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
         if "validation" not in datasets.keys():
             datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
             )
             datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
             )
     else:
         data_files = {}
@@ -500,7 +498,7 @@ if __name__ == "__main__":
         extension = data_args.train_file.split(".")[-1]
         if extension == "txt":
             extension = "text"
-        datasets = load_dataset(extension, data_files=data_files)
+        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
