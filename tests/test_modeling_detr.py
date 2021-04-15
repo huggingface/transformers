@@ -167,6 +167,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     is_encoder_decoder = True
+    test_torchscript = False
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
@@ -213,7 +214,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
+            # DETR does not have a get_input_embeddings method
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
@@ -248,39 +249,6 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             else:
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
-
-    def test_save_load_strict(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
-
-
-def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if torch.allclose(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
-        if a.numel() > 100:
-            msg = f"tensor values are {pct_different:.1%} percent different."
-        else:
-            msg = f"{a} != {b}"
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
-
-
-def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
 
 
 TOLERANCE = 1e-4
