@@ -25,7 +25,7 @@ from typing import Optional
 from math import ceil
 from pathlib import Path
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'  # Reduce the amount of console output from TF
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
 
 import numpy as np
 import tensorflow as tf
@@ -56,15 +56,17 @@ class DataSequence(tf.keras.utils.Sequence):
     def __init__(self, dataset, non_label_column_names, batch_size, labels, shuffle=True):
         super().__init__()
         # Retain all of the columns not present in the original data - these are the ones added by the tokenizer
-        self.data = {key: dataset[key] for key in dataset.features.keys()
-                     if key not in non_label_column_names
-                     and key != 'label'}
+        self.data = {
+            key: dataset[key]
+            for key in dataset.features.keys()
+            if key not in non_label_column_names and key != "label"
+        }
         data_lengths = {len(array) for array in self.data.values()}
         assert len(data_lengths) == 1, "Dataset arrays differ in length!"
         self.data_length = data_lengths.pop()
         self.num_batches = ceil(self.data_length / batch_size)
         if labels:
-            self.labels = np.array(dataset['label'])
+            self.labels = np.array(dataset["label"])
             assert len(self.labels) == self.data_length, "Labels not the same length as input arrays!"
         else:
             self.labels = None
@@ -86,14 +88,15 @@ class DataSequence(tf.keras.utils.Sequence):
         batch_start = item * self.batch_size
         batch_end = (item + 1) * self.batch_size
         if self.shuffle:
-            data_indices = self.permutation[batch_start: batch_end]
+            data_indices = self.permutation[batch_start:batch_end]
         else:
             data_indices = np.arange(batch_start, batch_end)
         # We want to pad the data as little as possible, so we only pad each batch
         # to the maximum length within that batch. We do that by stacking the variable-
         # length inputs into a ragged tensor and then densifying it.
-        batch_input = {key: tf.ragged.constant([data[i] for i in data_indices]).to_tensor()
-                       for key, data in self.data.items()}
+        batch_input = {
+            key: tf.ragged.constant([data[i] for i in data_indices]).to_tensor() for key, data in self.data.items()
+        }
         if self.labels is None:
             return batch_input
         else:
@@ -108,14 +111,14 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
     # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
     # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
     # that saves the model with this method after each epoch.
-    def __init__(self,
-                 output_dir,
-                 **kwargs):
+    def __init__(self, output_dir, **kwargs):
         super().__init__()
         self.output_dir = output_dir
 
     def on_epoch_end(self, epoch, logs=None):
         self.model.save_pretrained(self.output_dir)
+
+
 # endregion
 
 # region Command-line arguments
@@ -129,12 +132,8 @@ class DataTrainingArguments:
     the command line.
     """
 
-    train_file: Optional[str] = field(
-        metadata={"help": "A csv or a json file containing the training data."}
-    )
-    validation_file: Optional[str] = field(
-        metadata={"help": "A csv or a json file containing the validation data."}
-    )
+    train_file: Optional[str] = field(metadata={"help": "A csv or a json file containing the training data."})
+    validation_file: Optional[str] = field(metadata={"help": "A csv or a json file containing the validation data."})
     test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
 
     max_seq_length: int = field(
@@ -215,6 +214,8 @@ class ModelArguments:
             "with private models)."
         },
     )
+
+
 # endregion
 
 
@@ -242,8 +243,8 @@ def main():
         if (output_dir / CONFIG_NAME).is_file() and (output_dir / TF2_WEIGHTS_NAME).is_file():
             checkpoint = output_dir
             logger.info(
-                f"Checkpoint detected, resuming training at {checkpoint}. To avoid this behavior, change "
-                "the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
+                f"Checkpoint detected, resuming training from checkpoint in {training_args.output_dir}. To avoid this"
+                " behavior, change the `--output_dir` or add `--overwrite_output_dir` to train from scratch."
             )
         else:
             raise ValueError(
@@ -294,7 +295,7 @@ def main():
             train_extension = data_args.train_file.split(".")[-1]
             test_extension = data_args.test_file.split(".")[-1]
             assert (
-                    test_extension == train_extension
+                test_extension == train_extension
             ), "`test_file` should have the same extension (csv or json) as `train_file`."
             data_files["test"] = data_args.test_file
         else:
@@ -364,7 +365,8 @@ def main():
         beta_1=training_args.adam_beta1,
         beta_2=training_args.adam_beta2,
         epsilon=training_args.adam_epsilon,
-        clipnorm=training_args.max_grad_norm)
+        clipnorm=training_args.max_grad_norm,
+    )
     if is_regression:
         loss = tf.keras.losses.MeanSquaredError()
     else:
@@ -442,11 +444,13 @@ def main():
 
     # region Training
     if training_args.do_train:
-        training_dataset = DataSequence(train_dataset, non_label_column_names,
-                                        batch_size=training_args.per_device_train_batch_size, labels=True)
+        training_dataset = DataSequence(
+            train_dataset, non_label_column_names, batch_size=training_args.per_device_train_batch_size, labels=True
+        )
         if training_args.do_eval:
-            eval_dataset = DataSequence(eval_dataset, non_label_column_names,
-                                        batch_size=training_args.per_device_eval_batch_size, labels=True)
+            eval_dataset = DataSequence(
+                eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
+            )
         else:
             eval_dataset = None
 
@@ -458,9 +462,10 @@ def main():
     if training_args.do_predict:
         logger.info("*** Test ***")
 
-        test_dataset = DataSequence(test_dataset, non_label_column_names,
-                                    batch_size=training_args.per_device_eval_batch_size, labels=False)
-        predictions = model.predict(test_dataset)['logits']
+        test_dataset = DataSequence(
+            test_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=False
+        )
+        predictions = model.predict(test_dataset)["logits"]
         predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
 
         output_test_file = os.path.join(training_args.output_dir, f"test_results.txt")
