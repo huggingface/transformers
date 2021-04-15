@@ -81,6 +81,7 @@ from .trainer_pt_utils import (
     DistributedLengthGroupedSampler,
     DistributedSamplerWithLoop,
     DistributedTensorGatherer,
+    IterableDatasetShard,
     LabelSmoother,
     LengthGroupedSampler,
     SequentialDistributedSampler,
@@ -190,9 +191,15 @@ class Trainer:
             The function to use to form a batch from a list of elements of :obj:`train_dataset` or :obj:`eval_dataset`.
             Will default to :func:`~transformers.default_data_collator` if no ``tokenizer`` is provided, an instance of
             :func:`~transformers.DataCollatorWithPadding` otherwise.
-        train_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
+        train_dataset (:obj:`torch.utils.data.dataset.Dataset` or :obj:`torch.utils.data.dataset.IterableDataset`, `optional`):
             The dataset to use for training. If it is an :obj:`datasets.Dataset`, columns not accepted by the
             ``model.forward()`` method are automatically removed.
+
+            Note that if it's a :obj:`torch.utils.data.dataset.IterableDataset` with some randomization and you are
+            training in a distributed fashion, your iterable dataset should either use a internal attribute
+            :obj:`generator` that is a :obj:`torch.Generator` for the randomization that must be identic on all
+            processes (and the Trainer will manually set the seed of this :obj:`generator` at each epoch) or have a
+            :obj:`set_epoch()` method that internally sets the seed of the RNGs used.
         eval_dataset (:obj:`torch.utils.data.dataset.Dataset`, `optional`):
              The dataset to use for evaluation. If it is an :obj:`datasets.Dataset`, columns not accepted by the
              ``model.forward()`` method are automatically removed.
@@ -493,9 +500,7 @@ class Trainer:
         dataset.set_format(type=dataset.format["type"], columns=columns, format_kwargs=dataset.format["format_kwargs"])
 
     def _get_train_sampler(self) -> Optional[torch.utils.data.sampler.Sampler]:
-        if isinstance(self.train_dataset, torch.utils.data.IterableDataset) or not isinstance(
-            self.train_dataset, collections.abc.Sized
-        ):
+        if not isinstance(self.train_dataset, collections.abc.Sized):
             return None
 
         # Build the sampler.
@@ -553,6 +558,26 @@ class Trainer:
         """
         if self.train_dataset is None:
             raise ValueError("Trainer: training requires a train_dataset.")
+
+        if isinstance(self.train_dataset, torch.utils.data.dataset.IterableDataset):
+            if self.args.world_size > 1:
+                train_dataset = IterableDatasetShard(
+                    self.train_dataset,
+                    batch_size=self.args.train_batch_size,
+                    drop_last=self.args.dataloader_drop_last,
+                    num_processes=self.args.world_size,
+                    process_index=self.args.process_index,
+                )
+            else:
+                train_dataset = self.train_dataset
+            return DataLoader(
+                train_dataset,
+                batch_size=self.args.train_batch_size,
+                collate_fn=self.data_collator,
+                num_workers=self.args.dataloader_num_workers,
+                pin_memory=self.args.dataloader_pin_memory,
+            )
+
         train_sampler = self._get_train_sampler()
 
         return DataLoader(
@@ -1076,6 +1101,8 @@ class Trainer:
         for epoch in range(epochs_trained, num_train_epochs):
             if isinstance(train_dataloader, DataLoader) and isinstance(train_dataloader.sampler, DistributedSampler):
                 train_dataloader.sampler.set_epoch(epoch)
+            elif isinstance(train_dataloader.dataset, IterableDatasetShard):
+                train_dataloader.dataset.set_epoch(epoch)
 
             if is_torch_tpu_available():
                 parallel_loader = pl.ParallelLoader(train_dataloader, [self.args.device]).per_device_loader(
