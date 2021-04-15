@@ -89,15 +89,6 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
 
-    @property
-    def weight(self):
-        if hasattr(self, "word_embeddings") and hasattr(self.word_embeddings, "weight"):
-            return self.word_embeddings.weight
-        else:
-            return None
-
-    def build(self, input_shape: tf.TensorShape):
-
         self.word_embeddings = WordEmbeddings(
             name="word_embeddings",
             embedding_name="weight",
@@ -118,6 +109,19 @@ class TFRobertaEmbeddings(tf.keras.layers.Layer):
             output_dim=self.hidden_size,
             embeddings_initializer=get_initializer(self.initializer_range),
         )
+
+    @property
+    def weight(self):
+        if hasattr(self, "word_embeddings") and hasattr(self.word_embeddings, "weight"):
+            return self.word_embeddings.weight
+        else:
+            return None
+
+    @weight.setter
+    def weight(self, value):
+        self.word_embeddings.weight = value
+
+    def build(self, input_shape: tf.TensorShape):
 
         super().build(input_shape)
 
