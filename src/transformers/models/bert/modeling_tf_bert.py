@@ -164,7 +164,7 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
 
     @property
     def weight(self):
-        if hasattr(self, "word_embeddings"):
+        if hasattr(self, "word_embeddings") and hasattr(self.word_embeddings, "weight"):
             return self.word_embeddings.weight
         else:
             return None
