@@ -128,6 +128,7 @@ class TFBertPreTrainingLoss:
 
         return masked_lm_loss + next_sentence_loss
 
+
 class WordEmbeddings(tf.keras.layers.Layer):
     def __init__(self, name, shape, initializer, embedding_name, **kwargs):
         super().__init__(name=name, **kwargs)
@@ -144,6 +145,7 @@ class WordEmbeddings(tf.keras.layers.Layer):
 
     def call(self, inputs, **kwargs):
         return tf.gather(params=self.weight, indices=inputs)
+
 
 class TFBertEmbeddings(tf.keras.layers.Layer):
     """Construct the embeddings from word, position and token_type embeddings."""
@@ -185,17 +187,15 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
             name="token_type_embeddings",
             input_dim=self.type_vocab_size,
             output_dim=self.hidden_size,
-            embeddings_initializer=get_initializer(self.initializer_range)
+            embeddings_initializer=get_initializer(self.initializer_range),
         )
 
-        #with tf.name_scope("position_embeddings"):
+        # with tf.name_scope("position_embeddings"):
         self.position_embeddings = tf.keras.layers.Embedding(
             name="position_embeddings",
             input_dim=self.max_position_embeddings,
-            output_dim= self.hidden_size,
-            embeddings_initializer=get_initializer(
-                self.initializer_range
-            )
+            output_dim=self.hidden_size,
+            embeddings_initializer=get_initializer(self.initializer_range),
         )
         # self.add_weight(
         #     name="position_embeddings",
@@ -232,9 +232,13 @@ class TFBertEmbeddings(tf.keras.layers.Layer):
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
 
-        position_embeds = self.position_embeddings(position_ids) #tf.gather(params=self.position_embeddings, indices=position_ids)
+        position_embeds = self.position_embeddings(
+            position_ids
+        )  # tf.gather(params=self.position_embeddings, indices=position_ids)
         position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
-        token_type_embeds = self.token_type_embeddings(token_type_ids) #tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
+        token_type_embeds = self.token_type_embeddings(
+            token_type_ids
+        )  # tf.gather(params=self.token_type_embeddings, indices=token_type_ids)
         final_embeddings = self.embeddings_sum(inputs=[inputs_embeds, position_embeds, token_type_embeds])
         final_embeddings = self.LayerNorm(inputs=final_embeddings)
         final_embeddings = self.dropout(inputs=final_embeddings, training=training)
