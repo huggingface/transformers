@@ -456,7 +456,7 @@ def main():
             eval_dataset = None
 
         callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
-        history = model.fit(training_dataset, validation_data=eval_dataset, epochs=10, callbacks=callbacks)
+        model.fit(training_dataset, validation_data=eval_dataset, epochs=10, callbacks=callbacks)
     # endregion
 
     # region Prediction
@@ -469,9 +469,9 @@ def main():
         predictions = model.predict(test_dataset)["logits"]
         predictions = np.squeeze(predictions) if is_regression else np.argmax(predictions, axis=1)
 
-        output_test_file = os.path.join(training_args.output_dir, f"test_results.txt")
+        output_test_file = os.path.join(training_args.output_dir, "test_results.txt")
         with open(output_test_file, "w") as writer:
-            logger.info(f"***** Test results *****")
+            logger.info("***** Test results *****")
             writer.write("index\tprediction\n")
             for index, item in enumerate(predictions):
                 if is_regression:
