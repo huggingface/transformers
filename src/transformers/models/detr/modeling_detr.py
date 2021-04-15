@@ -85,13 +85,15 @@ class DetrObjectDetectionOutput(ModelOutput):
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` are provided)):
-            Total loss as the sum of (...).
+            Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a bounding box loss.
+            The latter is defined as a linear combination of the L1 loss and the generalized scale-invariant IoU loss.
         logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, height, width). These
-            values are normalized in [0, 1], relative to the size of each individual image (disregarding possible
-            padding). See PostProcess for information on how to retrieve the unnormalized bounding box.
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible
+            padding). You can use :class:`~transformers.DetrForObjectDetection.post_process` to retrieve the unnormalized 
+            bounding boxes.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to `True`) and
             labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits` and
@@ -1412,7 +1414,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     def __init__(self, config: DetrConfig):
         super().__init__(config)
 
-        # DETR base model
+        # DETR encoder-decoder model
         self.model = DetrModel(config)
 
         # Object detection heads
@@ -1507,7 +1509,6 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             if self.config.masks:
                 weight_dict["loss_mask"] = self.config.mask_loss_coef
                 weight_dict["loss_dice"] = self.config.dice_loss_coef
-            # TODO this is a hack (doesn't work yet)
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
@@ -1539,6 +1540,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
+            # TODO check whether this works
             if self.config.auxiliary_loss:
                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[6]
                 outputs_class = self.class_labels_classifier(intermediate)
@@ -1601,8 +1603,8 @@ class SetCriterion(nn.Module):
         empty_weight[-1] = self.eos_coef
         self.register_buffer("empty_weight", empty_weight)
 
-    # (Niels): set log to False because we don't want to include accuracy in the modeling file
-    def loss_labels(self, outputs, targets, indices, num_boxes, log=False):
+    # removed logging parameter, which was part of the original implementation
+    def loss_labels(self, outputs, targets, indices, num_boxes):
         """
         Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
         [nb_target_boxes]
@@ -1620,16 +1622,14 @@ class SetCriterion(nn.Module):
         loss_ce = F.cross_entropy(src_logits.transpose(1, 2), target_classes, self.empty_weight)
         losses = {"loss_ce": loss_ce}
 
-        if log:
-            # TODO this should probably be a separate loss, not hacked in this one here
-            losses["class_error"] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
         return losses
 
     @torch.no_grad()
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """
-        Compute the cardinality error, ie the absolute error in the number of predicted non-empty boxes This is not
-        really a loss, it is intended for logging purposes only. It doesn't propagate gradients
+        Compute the cardinality error, i.e. the absolute error in the number of predicted non-empty boxes.
+        
+        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients.
         """
         logits = outputs["logits"]
         device = logits.device
@@ -1643,7 +1643,7 @@ class SetCriterion(nn.Module):
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
         Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss targets dicts must
-        contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4] The target boxes are expected in format
+        contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are expected in format
         (center_x, center_y, w, h), normalized by the image size.
         """
         assert "pred_boxes" in outputs
@@ -1785,10 +1785,11 @@ class MLP(nn.Module):
 # taken from https://github.com/facebookresearch/detr/blob/master/models/matcher.py
 class HungarianMatcher(nn.Module):
     """
-    This class computes an assignment between the targets and the predictions of the network For efficiency reasons,
-    the targets don't include the no_object. Because of this, in general, there are more predictions than targets. In
-    this case, we do a 1-to-1 matching of the best predictions, while the others are un-matched (and thus treated as
-    non-objects).
+    This class computes an assignment between the targets and the predictions of the network.
+    
+    For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more predictions 
+    than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are un-matched (and thus 
+    treated as non-objects).
     """
 
     def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
@@ -1857,16 +1858,24 @@ class HungarianMatcher(nn.Module):
         return [(torch.as_tensor(i, dtype=torch.int64), torch.as_tensor(j, dtype=torch.int64)) for i, j in indices]
 
 
-# below: functies taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+# below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
 
 
 def box_cxcywh_to_xyxy(x):
+    """
+    Converts a bounding box of format (center_x, center_y, width, height) to (x_0, y_0, x_1, y_1).
+    """
+
     x_c, y_c, w, h = x.unbind(-1)
     b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
     return torch.stack(b, dim=-1)
 
 
 def box_xyxy_to_cxcywh(x):
+    """
+    Converts a bounding box of format (x_0, y_0, x_1, y_1) to (center_x, center_y, width, height).
+    """
+
     x0, y0, x1, y1 = x.unbind(-1)
     b = [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0), (y1 - y0)]
     return torch.stack(b, dim=-1)
@@ -1891,8 +1900,10 @@ def box_iou(boxes1, boxes2):
 
 def generalized_box_iou(boxes1, boxes2):
     """
-    Generalized IoU from https://giou.stanford.edu/ The boxes should be in [x0, y0, x1, y1] format Returns a [N, M]
-    pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+    Generalized IoU from https://giou.stanford.edu/ The boxes should be in [x0, y0, x1, y1] format. 
+    
+    Returns: 
+        a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
     # degenerate boxes gives inf / nan results
     # so do an early check

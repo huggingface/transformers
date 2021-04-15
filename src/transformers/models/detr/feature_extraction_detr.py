@@ -23,6 +23,7 @@ from ...feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 from ...file_utils import TensorType, is_flax_available, is_tf_available, is_torch_available
 from ...image_utils import ImageFeatureExtractionMixin, is_torch_tensor
 from ...utils import logging
+from .modeling_detr import box_cxcywh_to_xyxy
 
 
 logger = logging.get_logger(__name__)
@@ -454,3 +455,36 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             encoded_inputs["target"] = annotations
 
         return encoded_inputs
+
+    # taken from https://github.com/facebookresearch/detr/blob/a54b77800eb8e64e3ad0d8237789fcbf2f8350c5/models/detr.py#L258
+    def post_process(self, outputs, target_sizes):
+        """ Converts the output of :class:`~transformers.DetrForObjectDetection` into the format expected by the COCO api.
+
+        Only supports PyTorch. 
+        
+        Args:
+            outputs (:class:`~transformers.DetrForObjectDetection`):  
+                Raw outputs of the model.
+            target_sizes (:obj:`torch.Tensor` of shape :obj:`(batch_size, 2)`, `optional`):
+                Tensor containing the size (h, w) of each images of the batch.
+                For evaluation, this must be the original image size (before any data augmentation).
+                For visualization, this should be the image size after data augment, but before padding.
+        """
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        assert len(out_logits) == len(target_sizes)
+        assert target_sizes.shape[1] == 2
+
+        prob = F.softmax(out_logits, -1)
+        scores, labels = prob[..., :-1].max(-1)
+
+        # convert to [x0, y0, x1, y1] format
+        boxes = box_cxcywh_to_xyxy(out_bbox)
+        # and from relative [0, 1] to absolute [0, height] coordinates
+        img_h, img_w = target_sizes.unbind(1)
+        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+        boxes = boxes * scale_fct[:, None, :]
+
+        results = [{'scores': s, 'labels': l, 'boxes': b} for s, l, b in zip(scores, labels, boxes)]
+
+        return results
