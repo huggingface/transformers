@@ -356,6 +356,9 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
+    # endregion
+
+    # region Optimizer, loss and compilation
     optimizer = tf.keras.optimizers.Adam(
         learning_rate=training_args.learning_rate,
         beta_1=training_args.adam_beta1,
