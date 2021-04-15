@@ -58,7 +58,7 @@ class HerbertTokenizer(XLMTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    def __init__(self, **kwargs):
+    def __init__(self, *args, **kwargs):
 
         kwargs["cls_token"] = "<s>"
         kwargs["unk_token"] = "<unk>"
@@ -68,7 +68,7 @@ class HerbertTokenizer(XLMTokenizer):
         kwargs["do_lowercase_and_remove_accent"] = False
         kwargs["additional_special_tokens"] = []
 
-        super().__init__(**kwargs)
+        super().__init__(*args, **kwargs)
         self.bert_pre_tokenizer = BasicTokenizer(
             do_lower_case=False, never_split=self.all_special_tokens, tokenize_chinese_chars=False, strip_accents=False
         )
