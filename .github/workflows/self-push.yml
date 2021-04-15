@@ -38,6 +38,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
+          pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -121,6 +122,7 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
+          pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -220,6 +222,13 @@ jobs:
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_gpu_failures_short.txt
 
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_tests_torch_cuda_extensions_gpu_test_reports
+          path: reports
+
   run_tests_torch_cuda_extensions_multi_gpu:
     runs-on: [self-hosted, docker-gpu, multi-gpu]
     container:
@@ -252,6 +261,13 @@ jobs:
       - name: Failure short reports
         if: ${{ always() }}
         run: cat reports/tests_torch_cuda_extensions_multi_gpu_failures_short.txt
+
+      - name: Test suite reports artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: run_tests_torch_cuda_extensions_multi_gpu_test_reports
+          path: reports
 
 
   send_results:
