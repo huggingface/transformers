@@ -59,12 +59,12 @@ class DataSequence(tf.keras.utils.Sequence):
                      if key not in non_label_column_names
                      and key != 'label'}
         data_lengths = {len(array) for array in self.data.values()}
-        assert len(data_lengths) == 1, "Error message"  # Assert that all arrays have the same length
+        assert len(data_lengths) == 1, "Dataset arrays differ in length!"
         self.data_length = data_lengths.pop()
         self.num_batches = ceil(self.data_length / batch_size)
         if labels:
             self.labels = np.array(dataset['label'])
-            assert len(self.labels) == self.data_length  # Assert labels have same length as inputs
+            assert len(self.labels) == self.data_length, "Labels not the same length as input arrays!"
         else:
             self.labels = None
         self.batch_size = batch_size
@@ -135,6 +135,7 @@ class DataTrainingArguments:
         metadata={"help": "A csv or a json file containing the validation data."}
     )
     test_file: Optional[str] = field(default=None, metadata={"help": "A csv or a json file containing the test data."})
+
     max_seq_length: int = field(
         default=128,
         metadata={
@@ -201,10 +202,6 @@ class ModelArguments:
     cache_dir: Optional[str] = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
-    )
-    use_fast_tokenizer: bool = field(
-        default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
     )
     model_revision: str = field(
         default="main",
@@ -344,7 +341,6 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
