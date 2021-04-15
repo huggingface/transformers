@@ -27,7 +27,7 @@ if is_torch_available():
 VALID_INPUTS = ["A simple string", ["list of strings", "A simple string that is quite a bit longer"]]
 
 
-class NerPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
+class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.TestCase):
     pipeline_task = "ner"
     small_models = [
         "sshleifer/tiny-dbmdz-bert-large-cased-finetuned-conll03-english"
