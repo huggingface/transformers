@@ -36,18 +36,15 @@ from transformers import (
     AutoConfig,
     TFAutoModelForSequenceClassification,
     AutoTokenizer,
-    DataCollatorWithPadding,
-    EvalPrediction,
     HfArgumentParser,
-    PretrainedConfig,
     TrainingArguments,
-    default_data_collator,
     set_seed,
 )
-from transformers.trainer_utils import is_main_process, get_last_checkpoint
+from transformers.trainer_utils import is_main_process
 from transformers.utils import check_min_version
 
 logger = logging.getLogger(__name__)
+
 
 # region Helper classes
 class DataSequence(tf.keras.utils.Sequence):
@@ -105,7 +102,11 @@ class DataSequence(tf.keras.utils.Sequence):
     def __len__(self):
         return self.num_batches
 
+
 class SavePretrainedCallback(tf.keras.callbacks.Callback):
+    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
+    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
+    # that saves the model with this method after each epoch.
     def __init__(self,
                  output_dir,
                  **kwargs):
@@ -437,29 +438,10 @@ def main():
     if training_args.do_train:
         for index in random.sample(range(len(train_dataset)), 3):
             logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
-
-    if data_args.pad_to_max_length:
-        data_collator = default_data_collator
-    elif training_args.fp16:
-        data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=8)
-    else:
-        data_collator = None
     # endregion
 
     # region Training
     if training_args.do_train:
-        # checkpoint = None
-        # if last_checkpoint is not None:
-        #     checkpoint = last_checkpoint
-        # elif os.path.isdir(model_args.model_name_or_path):
-        #     # Check the config from that potential checkpoint has the right number of labels before using it as a
-        #     # checkpoint.
-        #     if AutoConfig.from_pretrained(model_args.model_name_or_path).num_labels == num_labels:
-        #         checkpoint = model_args.model_name_or_path
-        #
-        # if last_checkpoint is not None:
-        #     model.load_weights(last_checkpoint)
-
         training_dataset = DataSequence(train_dataset, non_label_column_names,
                                         batch_size=training_args.per_device_train_batch_size, labels=True)
         if training_args.do_eval:
