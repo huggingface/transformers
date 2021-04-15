@@ -385,7 +385,7 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
-        output = nlp([sentence]*10, model_batch_size=2)
+        output = nlp([sentence] * 10, model_batch_size=2)
         output_ = simplify(output)
 
         self.assertEqual(
@@ -396,7 +396,8 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
                     {"entity_group": "PER", "score": 0.977, "word": "Jessica", "start": 31, "end": 38},
                     {"entity_group": "LOC", "score": 0.999, "word": "New York", "start": 48, "end": 56},
                 ]
-            ]*10,
+            ]
+            * 10,
         )
 
     @require_torch

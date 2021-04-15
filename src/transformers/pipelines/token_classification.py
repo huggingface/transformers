@@ -143,7 +143,6 @@ class TokenClassificationPipeline(Pipeline):
 
         _inputs, offset_mappings, model_batch_size = self._args_parser(inputs, **kwargs)
 
-
         answers = []
 
         with self.device_placement():
@@ -171,13 +170,12 @@ class TokenClassificationPipeline(Pipeline):
                     batch_entities = self.model(**batch_tokenized)[0].cpu().numpy()
                     batch_input_ids = batch_tokenized["input_ids"].cpu().numpy()
 
-        if offset_mappings is None:
-            offset_mappings = [None] * len(_inputs)
 
         for i, entities in enumerate(batch_entities):
             score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
             labels_idx = score.argmax(axis=-1)
-            offset_mapping = offset_mappings[i]
+            if offset_mappings is not None:
+                offset_mapping = offset_mappings[i]
             sentence = _inputs[i]
             input_ids = batch_input_ids[i]
             special_tokens_mask = batch_special_tokens_mask[i]
