@@ -21,9 +21,10 @@ import os
 import random
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 from math import ceil
 from pathlib import Path
+from typing import Optional
+
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
 
@@ -34,15 +35,16 @@ from datasets import load_dataset, load_metric
 import transformers
 from transformers import (
     AutoConfig,
-    TFAutoModelForSequenceClassification,
     AutoTokenizer,
     HfArgumentParser,
+    TFAutoModelForSequenceClassification,
     TrainingArguments,
     set_seed,
 )
+from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 from transformers.trainer_utils import is_main_process
 from transformers.utils import check_min_version
-from transformers.file_utils import TF2_WEIGHTS_NAME, CONFIG_NAME
+
 
 logger = logging.getLogger(__name__)
 
