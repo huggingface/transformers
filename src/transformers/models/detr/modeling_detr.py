@@ -86,7 +86,7 @@ class DetrObjectDetectionOutput(ModelOutput):
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` are provided)):
             Total loss as the sum of (...).
-        pred_logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
+        logits (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, num_classes + 1)`):
             Classification logits (including no-object) for all queries.
         pred_boxes (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, height, width). These
@@ -94,7 +94,7 @@ class DetrObjectDetectionOutput(ModelOutput):
             padding). See PostProcess for information on how to retrieve the unnormalized bounding box.
         auxiliary_outputs (:obj:`list[Dict]`, `optional`):
             Optional, only returned when auxilary losses are activated (i.e. :obj:`config.auxiliary_loss` is set to `True`) and
-            labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`pred_logits` and
+            labels are provided. It is a list of dictionnaries containing the two above keys (:obj:`logits` and
             :obj:`pred_boxes`) for each decoder layer.
         decoder_hidden_states (:obj:`tuple(torch.FloatTensor)`, `optional`, returned when ``output_hidden_states=True`` is passed or when ``config.output_hidden_states=True``):
             Tuple of :obj:`torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer)
@@ -121,7 +121,7 @@ class DetrObjectDetectionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    pred_logits: torch.FloatTensor = None
+    logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: Optional[List[Dict]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
@@ -1427,7 +1427,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
         # as a dict having both a Tensor and a list.
-        return [{"pred_logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @add_start_docstrings_to_model_forward(DETR_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DetrObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
@@ -1469,7 +1469,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             >>> inputs = feature_extractor(images=image, return_tensors="pt")
             >>> outputs = model(**inputs)
             >>> # model predicts bounding boxes and corresponding COCO classes
-            >>> logits = outputs.pred_logits
+            >>> logits = outputs.logits
             >>> bboxes = outputs.pred_boxes
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1491,7 +1491,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         # class logits + predicted bounding boxes
         # TODO make this as efficient as the original implementation
-        pred_logits = self.class_labels_classifier(sequence_output)
+        logits = self.class_labels_classifier(sequence_output)
         pred_boxes = self.bbox_predictor(sequence_output).sigmoid()
 
         loss, auxiliary_outputs = None, None
@@ -1537,7 +1537,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             criterion.to(self.device)
             # Third: compute the loss, based on outputs and labels
             outputs_loss = {}
-            outputs_loss["pred_logits"] = pred_logits
+            outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
             if self.config.auxiliary_loss:
                 intermediate = outputs.intermediate_hidden_states if return_dict else outputs[6]
@@ -1553,14 +1553,14 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         if not return_dict:
             # to be verified
             if auxiliary_outputs is not None:
-                output = (pred_logits, pred_boxes) + auxiliary_outputs + outputs
+                output = (logits, pred_boxes) + auxiliary_outputs + outputs
             else:
-                output = (pred_logits, pred_boxes) + outputs
+                output = (logits, pred_boxes) + outputs
             return ((loss,) + output) if loss is not None else output
 
         return DetrObjectDetectionOutput(
             loss=loss,
-            pred_logits=pred_logits,
+            logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
             decoder_hidden_states=outputs.decoder_hidden_states,
@@ -1607,8 +1607,8 @@ class SetCriterion(nn.Module):
         Classification loss (NLL) targets dicts must contain the key "class_labels" containing a tensor of dim
         [nb_target_boxes]
         """
-        assert "pred_logits" in outputs
-        src_logits = outputs["pred_logits"]
+        assert "logits" in outputs
+        src_logits = outputs["logits"]
 
         idx = self._get_src_permutation_idx(indices)
         target_classes_o = torch.cat([t["class_labels"][J] for t, (_, J) in zip(targets, indices)])
@@ -1631,11 +1631,11 @@ class SetCriterion(nn.Module):
         Compute the cardinality error, ie the absolute error in the number of predicted non-empty boxes This is not
         really a loss, it is intended for logging purposes only. It doesn't propagate gradients
         """
-        pred_logits = outputs["pred_logits"]
-        device = pred_logits.device
+        logits = outputs["logits"]
+        device = logits.device
         tgt_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
+        card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
         card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
@@ -1813,7 +1813,7 @@ class HungarianMatcher(nn.Module):
 
         Params:
             outputs: This is a dict that contains at least these entries:
-                 "pred_logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
                  "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
             targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
                  "labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
@@ -1827,10 +1827,10 @@ class HungarianMatcher(nn.Module):
                 - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-        bs, num_queries = outputs["pred_logits"].shape[:2]
+        bs, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
-        out_prob = outputs["pred_logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
+        out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes

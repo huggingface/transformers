@@ -146,13 +146,13 @@ class DetrModelTester:
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask)
         result = model(pixel_values)
 
-        self.parent.assertEqual(result.pred_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
         result = model(pixel_values=pixel_values, pixel_mask=pixel_mask, labels=labels)
 
         self.parent.assertEqual(result.loss.shape, ())
-        self.parent.assertEqual(result.pred_logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels + 1))
         self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
 
 
@@ -302,11 +302,11 @@ class DetrModelIntegrationTests(unittest.TestCase):
             outputs = model(pixel_values, pixel_mask)
 
         expected_shape_logits = torch.Size((1, model.config.num_queries, model.config.num_labels + 1))
-        self.assertEqual(outputs.pred_logits.shape, expected_shape_logits)
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
         expected_slice_logits = torch.tensor(
             [[-19.1194, -0.0893, -11.0154], [-17.3640, -1.8035, -14.0219], [-20.0461, -0.5837, -11.1060]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_logits[0, :3, :3], expected_slice_logits, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=1e-4))
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
