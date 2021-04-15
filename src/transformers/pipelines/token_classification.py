@@ -153,6 +153,7 @@ class TokenClassificationPipeline(Pipeline):
                 return_attention_mask=False,
                 return_tensors=self.framework,
                 truncation=True,
+                padding=True,
                 return_special_tokens_mask=True,
                 return_offsets_mapping=self.tokenizer.is_fast,
             )
@@ -170,7 +171,7 @@ class TokenClassificationPipeline(Pipeline):
                     batch_entities = self.model(**batch_tokenized)[0].cpu().numpy()
                     batch_input_ids = batch_tokenized["input_ids"].cpu().numpy()
 
-        if not offset_mappings:
+        if offset_mappings is None:
             offset_mappings = [None] * len(_inputs)
 
         for i, entities in enumerate(batch_entities):

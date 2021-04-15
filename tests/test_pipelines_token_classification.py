@@ -385,6 +385,20 @@ class TokenClassificationPipelineTests(CustomInputPipelineCommonMixin, unittest.
             ],
         )
 
+        output = nlp([sentence]*10, model_batch_size=2)
+        output_ = simplify(output)
+
+        self.assertEqual(
+            output_,
+            [
+                [
+                    {"entity_group": "PER", "score": 0.996, "word": "Sarah Jessica Parker", "start": 6, "end": 26},
+                    {"entity_group": "PER", "score": 0.977, "word": "Jessica", "start": 31, "end": 38},
+                    {"entity_group": "LOC", "score": 0.999, "word": "New York", "start": 48, "end": 56},
+                ]
+            ]*10,
+        )
+
     @require_torch
     def test_pt_small_ignore_subwords_available_for_fast_tokenizers(self):
         for model_name in self.small_models:
