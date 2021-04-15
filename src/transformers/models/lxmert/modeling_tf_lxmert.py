@@ -22,8 +22,6 @@ from typing import Dict, Optional, Tuple
 
 import tensorflow as tf
 
-from .configuration_lxmert import LxmertConfig
-from ..bert.modeling_tf_bert import WordEmbeddings
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     ModelOutput,
@@ -34,6 +32,9 @@ from ...file_utils import (
 )
 from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, input_processing, keras_serializable, shape_list
 from ...utils import logging
+from ..bert.modeling_tf_bert import WordEmbeddings
+from .configuration_lxmert import LxmertConfig
+
 
 logger = logging.get_logger(__name__)
 

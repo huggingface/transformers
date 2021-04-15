@@ -22,8 +22,6 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-from .configuration_roberta import RobertaConfig
-from ..bert.modeling_tf_bert import WordEmbeddings
 from ...activations_tf import get_tf_activation
 from ...file_utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
@@ -54,6 +52,9 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
+from ..bert.modeling_tf_bert import WordEmbeddings
+from .configuration_roberta import RobertaConfig
+
 
 logger = logging.get_logger(__name__)
 
