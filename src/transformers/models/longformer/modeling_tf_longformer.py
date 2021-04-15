@@ -520,6 +520,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         self.word_embeddings.weight = value
 
     def build(self, input_shape: tf.TensorShape):
+
         super().build(input_shape)
 
     def create_position_ids_from_input_ids(self, input_ids):
