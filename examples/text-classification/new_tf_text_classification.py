@@ -24,14 +24,8 @@ from dataclasses import dataclass, field
 from math import ceil
 from pathlib import Path
 from typing import Optional
-
-
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
-
 import numpy as np
-import tensorflow as tf
-from datasets import load_dataset, load_metric
-
+from datasets import load_dataset
 import transformers
 from transformers import (
     AutoConfig,
@@ -43,7 +37,9 @@ from transformers import (
 )
 from transformers.file_utils import CONFIG_NAME, TF2_WEIGHTS_NAME
 from transformers.trainer_utils import is_main_process
-from transformers.utils import check_min_version
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "1"  # Reduce the amount of console output from TF
+import tensorflow as tf  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
