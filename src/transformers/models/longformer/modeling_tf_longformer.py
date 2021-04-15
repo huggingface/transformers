@@ -41,6 +41,7 @@ from ...modeling_tf_utils import (
     shape_list,
 )
 from ...utils import logging
+from ..bert.modeling_tf_bert import WordEmbeddings
 from .configuration_longformer import LongformerConfig
 
 
