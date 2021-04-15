@@ -8,6 +8,8 @@ from ..models.bert.tokenization_bert import BasicTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, Pipeline
 
+import warnings
+
 
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -162,14 +164,15 @@ class TokenClassificationPipeline(Pipeline):
             batch_special_tokens_mask = batch_tokenized.pop("special_tokens_mask").cpu().numpy()
 
             if self.framework == "tf":
-                batch_entities = self.model(**batch_tokenized, batch_size=model_batch_size)[0].cpu().numpy()
+                if model_batch_size > 1:
+                    warnings.warn("The `model_batch_size` argument is not supported for Tensorflow models. Ignoring")
+                batch_entities = self.model(**batch_tokenized)[0].cpu().numpy()
                 batch_input_ids = batch_tokenized["input_ids"].cpu().numpy()
             else:
                 with torch.no_grad():
                     batch_tokenized = self.ensure_tensor_on_device(**batch_tokenized)
                     batch_entities = self.model(**batch_tokenized)[0].cpu().numpy()
                     batch_input_ids = batch_tokenized["input_ids"].cpu().numpy()
-
 
         for i, entities in enumerate(batch_entities):
             score = np.exp(entities) / np.exp(entities).sum(-1, keepdims=True)
