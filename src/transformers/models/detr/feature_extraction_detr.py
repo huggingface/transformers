@@ -323,11 +323,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
         ],
         annotations: Union[List[Dict], List[List[Dict]]] = None,
+        return_masks: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s).
+        Main method to prepare for the model one or several image(s) and optional annotations.
 
         .. warning::
 
@@ -341,10 +342,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
 
-            annotations (:obj:`List[Dict]`, :obj:`List[List[Dict]]`):
+            annotations (:obj:`List[Dict]`, :obj:`List[List[Dict]]`, `optional`):
                 The corresponding annotations in COCO format. Each image can have one or more annotations. Each
                 annotation is a Python dictionary, with the following keys: segmentation, area, iscrowd, image_id,
                 bbox, category_id, id.
+
+            return_masks (:obj:`bool`, `optional`, defaults to :obj:`False`):
+                Whether to return segmentation masks. Should only be set to `True` if the annotations include a "segmentation" key. 
 
             return_tensors (:obj:`str` or :class:`~transformers.file_utils.TensorType`, `optional`):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
@@ -415,7 +419,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 if not isinstance(image, Image.Image):
                     image = self.to_pil_image(image)
                 target = {"image_id": anno[0]["image_id"], "annotations": anno}
-                image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors)
+                image, target = self.convertCocoToDetrFormat(image, target, tensor_type=return_tensors, return_masks=return_masks)
                 images[idx] = image
                 annotations[idx] = target
 

@@ -15,11 +15,12 @@
 
 
 import unittest
+import json
 
 import numpy as np
 
 from transformers.file_utils import is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import require_torch, require_vision, slow
 
 from .test_feature_extraction_common import FeatureExtractionSavingTestMixin
 
@@ -219,3 +220,27 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
                 self.feature_extract_tester.size,
             ),
         )
+
+    @slow
+    def test_call_with_annotations(self):
+        image = Image.open("./tests/fixtures/tests_samples/COCO/cats.png")
+
+        with open("./tests/fixtures/test_samples/COCO/coco_annotations.txt", 'r') as f:
+            target = json.loads(f.read())
+
+        #TODO add .from_pretrained("facebook/detr-resnet-50")
+        feature_extractor = DetrFeatureExtractor()
+
+        encoding = feature_extractor(images=image, annotations=target)
+        
+        # fmt: off
+        expected_results = {'input_ids':[101,2043,2001,8226,15091,2141,1029,102,5889,2287,2193,1997,5691,3058,1997,4182,8226,15091,5179,6584,2324,2285,3699,14720,4487,6178,9488,3429,5187,2340,2281,3326,2577,18856,7828,3240,5354,6353,1020,2089,3777],'attention_mask':[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],'token_type_ids':[[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[0,0,0,0,0,0,0],[1,1,0,0,0,0,0],[1,2,0,0,0,0,0],[1,3,0,0,0,0,0],[1,3,0,0,0,0,0],[1,3,0,0,0,0,0],[1,4,0,0,0,0,0],[1,4,0,0,0,0,0],[1,4,0,0,0,0,0],[1,1,1,0,0,0,0],[1,1,1,0,0,0,0],[1,2,1,0,2,2,0],[1,3,1,0,3,1,0],[1,4,1,0,2,2,0],[1,4,1,0,2,2,0],[1,4,1,0,2,2,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,1,2,0,0,0,0],[1,2,2,0,1,3,0],[1,3,2,0,1,3,0],[1,4,2,0,3,1,0],[1,4,2,0,3,1,0],[1,4,2,0,3,1,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,1,3,0,0,0,0],[1,2,3,0,3,1,0],[1,3,3,0,2,2,0],[1,4,3,0,1,3,0],[1,4,3,0,1,3,0],[1,4,3,0,1,3,0]]}  # noqa: E231
+        # fmt: on
+
+        new_encoded_inputs = tokenizer.encode_plus(table=table, query=queries[0])
+
+        self.assertDictEqual(dict(new_encoded_inputs), expected_results)
+
+
+
+    

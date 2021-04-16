@@ -1503,40 +1503,15 @@ class DetrForObjectDetection(DetrPreTrainedModel):
                 class_cost=self.config.class_cost, bbox_cost=self.config.bbox_cost, giou_cost=self.config.giou_cost
             )
             # Second: create the criterion
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
-            # to do: move the following three lines to DetrForPanopticSegmentation
-            if self.config.masks:
-                weight_dict["loss_mask"] = self.config.mask_loss_coef
-                weight_dict["loss_dice"] = self.config.dice_loss_coef
-            if self.config.auxiliary_loss:
-                aux_weight_dict = {}
-                for i in range(self.config.decoder_layers - 1):
-                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
-                weight_dict.update(aux_weight_dict)
-
             losses = ["labels", "boxes", "cardinality"]
-            # to do: move the following two lines to DetrForPanopticSegmentation
-            if self.config.masks:
-                losses += ["masks"]
-            # (copied from original repo in detr.py):
-            # the naming of the `num_classes` parameter of the criterion is somewhat misleading.
-            # it indeed corresponds to `max_obj_id + 1`, where max_obj_id
-            # is the maximum id for a class in your dataset. For example,
-            # COCO has a max_obj_id of 90, so we pass `num_classes` to be 91.
-            # As another example, for a dataset that has a single class with id 1,
-            # you should pass `num_classes` to be 2 (max_obj_id + 1).
-            # For more details on this, check the following discussion
-            # https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223
             criterion = SetCriterion(
                 matcher=matcher,
                 num_classes=self.config.num_labels,
-                weight_dict=weight_dict,
                 eos_coef=self.config.eos_coefficient,
                 losses=losses,
             )
             criterion.to(self.device)
-            # Third: compute the loss, based on outputs and labels
+            # Third: compute the losses, based on outputs and labels
             outputs_loss = {}
             outputs_loss["logits"] = logits
             outputs_loss["pred_boxes"] = pred_boxes
@@ -1549,7 +1524,14 @@ class DetrForObjectDetection(DetrPreTrainedModel):
                 outputs_loss["auxiliary_outputs"] = auxiliary_outputs
 
             loss_dict = criterion(outputs_loss, labels)
-            weight_dict = criterion.weight_dict
+            # Fourth: compute total loss, as a weighted sum of the various losses 
+            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
+            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+            if self.config.auxiliary_loss:
+                aux_weight_dict = {}
+                for i in range(self.config.decoder_layers - 1):
+                    aux_weight_dict.update({k + f"_{i}": v for k, v in weight_dict.items()})
+                weight_dict.update(aux_weight_dict)
             loss = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         if not return_dict:
@@ -1573,18 +1555,48 @@ class DetrForObjectDetection(DetrPreTrainedModel):
             encoder_attentions=outputs.encoder_attentions,
         )
 
+class DetrForPanopticSegmentation(nn.Module):
+
+    "This corresponds to DetrForObjectDetection + mask head."
+
+    def __init__(self, freeze_detr=False):
+        super().__init__()
+
+        self.detr = DetrForObjectDetection()
+
+    def forward(self):
+        # # to do: move the following two lines to DetrForPanopticSegmentation
+        #         if self.config.masks:
+        #             losses += ["masks"]
+
+        # # to do: move the following three lines to DetrForPanopticSegmentation
+        # if self.config.masks:
+        #     weight_dict["loss_mask"] = self.config.mask_loss_coef
+        #     weight_dict["loss_dice"] = self.config.dice_loss_coef
+        raise NotImplementedError()
+
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class SetCriterion(nn.Module):
     """
-    This class computes the loss for DETRForObjectDetection. The process happens in two steps: 1) we compute hungarian
-    assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
+    This class computes the losses for DetrForObjectDetection/DetrForPanopticSegmentation. The process happens in two steps: 
+    1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair of matched
     ground-truth / prediction (supervise class and box)
     """
 
-    def __init__(self, matcher, num_classes, weight_dict, eos_coef, losses):
+    def __init__(self, matcher, num_classes, eos_coef, losses):
         """
         Create the criterion.
+
+        A note on the num_classes parameter (copied from original repo in detr.py):
+        "the naming of the `num_classes` parameter of the criterion is somewhat misleading.
+        it indeed corresponds to `max_obj_id + 1`, where max_obj_id
+        is the maximum id for a class in your dataset. For example,
+        COCO has a max_obj_id of 90, so we pass `num_classes` to be 91.
+        As another example, for a dataset that has a single class with id 1,
+        you should pass `num_classes` to be 2 (max_obj_id + 1).
+        For more details on this, check the following discussion
+        https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223"
 
         Parameters:
             matcher: module able to compute a matching between targets and proposals.
@@ -1596,7 +1608,6 @@ class SetCriterion(nn.Module):
         super().__init__()
         self.num_classes = num_classes
         self.matcher = matcher
-        self.weight_dict = weight_dict
         self.eos_coef = eos_coef
         self.losses = losses
         empty_weight = torch.ones(self.num_classes + 1)
@@ -1642,9 +1653,10 @@ class SetCriterion(nn.Module):
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
         """
-        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss targets dicts must
-        contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are expected in format
-        (center_x, center_y, w, h), normalized by the image size.
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss.
+        
+        Targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are 
+        expected in format (center_x, center_y, w, h), normalized by the image size.
         """
         assert "pred_boxes" in outputs
         idx = self._get_src_permutation_idx(indices)
@@ -1664,8 +1676,9 @@ class SetCriterion(nn.Module):
 
     def loss_masks(self, outputs, targets, indices, num_boxes):
         """
-        Compute the losses related to the masks: the focal loss and the dice loss. targets dicts must contain the key
-        "masks" containing a tensor of dim [nb_target_boxes, h, w]
+        Compute the losses related to the masks: the focal loss and the dice loss. 
+        
+        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
         """
         assert "pred_masks" in outputs
 
