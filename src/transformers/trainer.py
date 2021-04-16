@@ -1968,6 +1968,8 @@ class Trainer:
         model.eval()
 
         self.callback_handler.eval_dataloader = dataloader
+        # Do this before wrapping.
+        eval_dataset = dataloader.dataset
 
         if is_torch_tpu_available():
             dataloader = pl.ParallelLoader(dataloader, [self.args.device]).per_device_loader(self.args.device)
@@ -2044,10 +2046,10 @@ class Trainer:
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
         # Number of samples
-        if not isinstance(dataloader.dataset, IterableDataset):
-            num_samples = len(dataloader.dataset)
-        elif isinstance(dataloader.dataset, IterableDatasetShard):
-            num_samples = dataloader.dataset.num_examples
+        if not isinstance(eval_dataset, IterableDataset):
+            num_samples = len(eval_dataset)
+        elif isinstance(eval_dataset, IterableDatasetShard):
+            num_samples = eval_dataset.num_examples
         else:
             num_samples = observed_num_examples
 
