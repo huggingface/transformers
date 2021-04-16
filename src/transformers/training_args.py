@@ -276,7 +276,7 @@ class TrainingArguments:
             The label smoothing factor to use. Zero means no label smoothing, otherwise the underlying onehot-encoded
             labels are changed from 0s and 1s to :obj:`label_smoothing_factor/num_labels` and :obj:`1 -
             label_smoothing_factor + label_smoothing_factor/num_labels` respectively.
-        debug (:obj:`str` or list of :class:`~transformers.debug_utils.DebugOption`, `optional`, defaults to :obj:``):
+        debug (:obj:`str` or list of :class:`~transformers.debug_utils.DebugOption`, `optional`, defaults to :obj:`""`):
             Enable one or more debug features. This is an experimental feature.
 
             Possible options are:
