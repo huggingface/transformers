@@ -54,6 +54,7 @@ from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
+from .debug_utils import DebugActivationOverflow, DebugOption
 from .dependency_versions_check import dep_version_check
 from .file_utils import (
     WEIGHTS_NAME,
@@ -961,6 +962,9 @@ class Trainer:
             num_train_epochs = 1
             num_update_steps_per_epoch = max_steps
 
+        if DebugOption.ACIVATION_OVERFLOW in self.args.debug:
+            debug_overflow = DebugActivationOverflow(self.model)  # noqa
+
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
         if self.args.deepspeed:
             deepspeed_engine, optimizer, lr_scheduler = deepspeed_init(
@@ -1179,7 +1183,7 @@ class Trainer:
             self.control = self.callback_handler.on_epoch_end(self.args, self.state, self.control)
             self._maybe_log_save_evaluate(tr_loss, model, trial, epoch)
 
-            if self.args.tpu_metrics_debug or self.args.debug:
+            if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
                 if is_torch_tpu_available():
                     # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
                     xm.master_print(met.metrics_report())
@@ -1787,7 +1791,7 @@ class Trainer:
         output.metrics.update(speed_metrics(metric_key_prefix, start_time, n_samples))
         self.log(output.metrics)
 
-        if self.args.tpu_metrics_debug or self.args.debug:
+        if DebugOption.TPU_METRICS_DEBUG in self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
             xm.master_print(met.metrics_report())
 

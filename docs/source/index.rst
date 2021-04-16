@@ -22,7 +22,7 @@ State-of-the-art NLP for everyone:
 - Hands-on practitioners
 - AI/ML/NLP teachers and educators
 
-.. 
+..
     Copyright 2020 The HuggingFace Team. All rights reserved.
 
     Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
@@ -399,6 +399,7 @@ TensorFlow and/or Flax.
     add_new_model
     fast_tokenizers
     testing
+    debugging
     serialization
 
 .. toctree::

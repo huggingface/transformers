@@ -3128,7 +3128,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin):
 
     def _eventual_warn_about_too_long_sequence(self, ids: List[int], max_length: Optional[int], verbose: bool):
         """
-        Depending on the input and internal state we might trigger a warning about a sequence that is too long for it's
+        Depending on the input and internal state we might trigger a warning about a sequence that is too long for its
         corresponding model
 
         Args:
