@@ -34,6 +34,9 @@ from transformers import (
     AutoTokenizer,
     DataCollatorForSeq2Seq,
     HfArgumentParser,
+    M2M100Tokenizer,
+    MBart50Tokenizer,
+    MBart50TokenizerFast,
     MBartTokenizer,
     MBartTokenizerFast,
     Seq2SeqTrainer,
@@ -49,6 +52,9 @@ from transformers.utils import check_min_version
 check_min_version("4.6.0.dev0")
 
 logger = logging.getLogger(__name__)
+
+# A list of all multilingual tokenizer which require src_lang and tgt_lang attributes.
+MULTILINGUAL_TOKENIZERS = [MBartTokenizer, MBartTokenizerFast, MBart50Tokenizer, MBart50TokenizerFast, M2M100Tokenizer]
 
 
 @dataclass
@@ -191,6 +197,14 @@ class DataTrainingArguments:
     source_prefix: Optional[str] = field(
         default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
     )
+    forced_bos_token: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "The token to force as the first generated token after the :obj:`decoder_start_token_id`."
+            "Useful for multilingual models like :doc:`mBART <../model_doc/mbart>` where the first generated token "
+            "needs to be the target language token.(Usually it is the target language token)"
+        },
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -280,7 +294,7 @@ def main():
     # download the dataset.
     if data_args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name)
+        datasets = load_dataset(data_args.dataset_name, data_args.dataset_config_name, cache_dir=model_args.cache_dir)
     else:
         data_files = {}
         if data_args.train_file is not None:
@@ -292,7 +306,7 @@ def main():
         if data_args.test_file is not None:
             data_files["test"] = data_args.test_file
             extension = data_args.test_file.split(".")[-1]
-        datasets = load_dataset(extension, data_files=data_files)
+        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -325,9 +339,6 @@ def main():
 
     # Set decoder_start_token_id
     if model.config.decoder_start_token_id is None and isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        assert (
-            data_args.target_lang is not None and data_args.source_lang is not None
-        ), "mBart requires --target_lang and --source_lang"
         if isinstance(tokenizer, MBartTokenizer):
             model.config.decoder_start_token_id = tokenizer.lang_code_to_id[data_args.target_lang]
         else:
@@ -352,11 +363,21 @@ def main():
 
     # For translation we set the codes of our source and target languages (only useful for mBART, the others will
     # ignore those attributes).
-    if isinstance(tokenizer, (MBartTokenizer, MBartTokenizerFast)):
-        if data_args.source_lang is not None:
-            tokenizer.src_lang = data_args.source_lang
-        if data_args.target_lang is not None:
-            tokenizer.tgt_lang = data_args.target_lang
+    if isinstance(tokenizer, tuple(MULTILINGUAL_TOKENIZERS)):
+        assert data_args.target_lang is not None and data_args.source_lang is not None, (
+            f"{tokenizer.__class__.__name__} is a multilingual tokenizer which requires --source_lang and "
+            "--target_lang arguments."
+        )
+
+        tokenizer.src_lang = data_args.source_lang
+        tokenizer.tgt_lang = data_args.target_lang
+
+        # For multilingual translation models like mBART-50 and M2M100 we need to force the target language token
+        # as the first generated token. We ask the user to explicitly provide this as --forced_bos_token argument.
+        forced_bos_token_id = (
+            tokenizer.lang_code_to_id[data_args.forced_bos_token] if data_args.forced_bos_token is not None else None
+        )
+        model.config.foced_bos_token_id = forced_bos_token_id
 
     # Get the language codes for input/target.
     source_lang = data_args.source_lang.split("_")[0]
@@ -367,7 +388,7 @@ def main():
     padding = "max_length" if data_args.pad_to_max_length else False
 
     if training_args.label_smoothing_factor > 0 and not hasattr(model, "prepare_decoder_input_ids_from_labels"):
-        logger.warn(
+        logger.warning(
             "label_smoothing is enabled but the `prepare_decoder_input_ids_from_labels` method is not defined for"
             f"`{model.__class__.__name__}`. This will lead to loss being calculated twice and will take up more memory"
         )

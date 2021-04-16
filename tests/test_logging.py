@@ -51,7 +51,7 @@ class HfArgumentParserTest(unittest.TestCase):
         # should be able to log warnings (if default settings weren't overridden by `pytest --log-level-all`)
         if level_origin <= logging.WARNING:
             with CaptureLogger(logger) as cl:
-                logger.warn(msg)
+                logger.warning(msg)
             self.assertEqual(cl.out, msg + "\n")
 
         # this is setting the level for all of `transformers.*` loggers
@@ -59,7 +59,7 @@ class HfArgumentParserTest(unittest.TestCase):
 
         # should not be able to log warnings
         with CaptureLogger(logger) as cl:
-            logger.warn(msg)
+            logger.warning(msg)
         self.assertEqual(cl.out, "")
 
         # should be able to log warnings again

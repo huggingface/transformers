@@ -268,10 +268,10 @@ def main():
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
         extension = data_args.train_file.split(".")[-1]
-        datasets = load_dataset(extension, data_files=data_files)
+        datasets = load_dataset(extension, data_files=data_files, cache_dir=model_args.cache_dir)
     else:
         # Downloading and loading the swag dataset from the hub.
-        datasets = load_dataset("swag", "regular")
+        datasets = load_dataset("swag", "regular", cache_dir=model_args.cache_dir)
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
 
@@ -310,14 +310,14 @@ def main():
     if data_args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
-            logger.warn(
+            logger.warning(
                 f"The tokenizer picked seems to have a very large `model_max_length` ({tokenizer.model_max_length}). "
                 "Picking 1024 instead. You can change that default value by passing --max_seq_length xxx."
             )
             max_seq_length = 1024
     else:
         if data_args.max_seq_length > tokenizer.model_max_length:
-            logger.warn(
+            logger.warning(
                 f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
                 f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
             )

@@ -112,6 +112,10 @@ def load_tf_weights_in_gpt_neo(model, config, gpt_neo_checkpoint_path):
         if name[-1] == "w" and name[-2] in ["out_proj", "k_proj", "q_proj", "v_proj", "c_proj", "c_fc"]:
             array = array.transpose()
 
+        if name == ["wte"]:
+            # if vocab is padded, then trim off the padding embeddings
+            array = array[: config.vocab_size]
+
         try:
             assert (
                 pointer.shape == array.shape
@@ -151,8 +155,8 @@ class GPTNeoAttentionMixin:
     def _look_back(tensor, block_length, window_size, pad_value=0, is_key_value=True):
         """
         Used to implement attention between consecutive blocks. This method assumes that dim 1 of :obj:`tensor`
-        represents the :obj:`seq_length` dimention. It splits :obj:`seq_length` dimention into :obj:`num_blocks` and
-        :obj:`window_size` + :obj:`block_length`. It pads the :obj:`seq_length` dimention if necessary.
+        represents the :obj:`seq_length` dimension. It splits :obj:`seq_length` dimension into :obj:`num_blocks` and
+        :obj:`window_size` + :obj:`block_length`. It pads the :obj:`seq_length` dimension if necessary.
 
         Example::
 
@@ -369,7 +373,7 @@ class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
         # look back into the attention_block such that it will also get padded the same way
         # and have 0s in the padded position
         attention_mask = self._look_back(attention_mask, block_length, self.window_size, is_key_value=False)
-        attention_mask = attention_mask.unsqueeze(-2)  # Add an extra dimention to account for hidden_dim
+        attention_mask = attention_mask.unsqueeze(-2)  # Add an extra dimension to account for hidden_dim
 
         # Multiply the causal_mask with attention_mask so the padded positions (by _look_back operation)
         # will contain 0s.
@@ -383,7 +387,7 @@ class GPTNeoLocalSelfAttention(nn.Module, GPTNeoAttentionMixin):
         visible = torch.gt(relative_position, -self.window_size)
 
         causal_mask = causal_mask * visible
-        causal_mask = causal_mask.unsqueeze(-3).bool()  # Add an extra dimention to account for num_heads
+        causal_mask = causal_mask.unsqueeze(-3).bool()  # Add an extra dimension to account for num_heads
 
         return causal_mask
 
@@ -819,7 +823,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
             if getattr(self.config, "gradient_checkpointing", False) and self.training:
 
                 if use_cache:
-                    logger.warn(
+                    logger.warning(
                         "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
                         "`use_cache=False`..."
                     )

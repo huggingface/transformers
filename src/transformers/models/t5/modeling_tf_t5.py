@@ -954,8 +954,7 @@ T5_INPUTS_DOCSTRING = r"""
             :obj:`decoder_input_ids` have to be input (see :obj:`past_key_values`).
 
             To know more on how to prepare :obj:`decoder_input_ids` for pretraining take a look at `T5 Training
-            <./t5.html#training>`__. If :obj:`decoder_input_ids` and :obj:`decoder_inputs_embeds` are both unset,
-            :obj:`decoder_input_ids` takes the value of :obj:`input_ids`.
+            <./t5.html#training>`__.
         attention_mask (:obj:`tf.Tensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
