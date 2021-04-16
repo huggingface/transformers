@@ -1185,7 +1185,6 @@ class BigBirdPegasusEncoderAttention(nn.Module):
                 past_key_value,
                 output_attentions,
             )
-            self.self_o = self_outputs[0]  # TODO
         else:
             assert (
                 encoder_hidden_states is None
@@ -1195,7 +1194,6 @@ class BigBirdPegasusEncoderAttention(nn.Module):
             )
 
         attention_output = self.output(self_outputs[0])  # , hidden_states)
-        self.so_o = attention_output  # TODO
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         # print("Attention_outputs", attention_output)
@@ -1386,8 +1384,6 @@ class BigBirdPegasusEncoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)  # +
 
-        self.before_attn_o = hidden_states  # TODO
-
         self_attention_outputs = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1400,27 +1396,18 @@ class BigBirdPegasusEncoderLayer(nn.Module):
             from_blocked_mask=from_blocked_mask,
             to_blocked_mask=to_blocked_mask,
         )
-        # print(len(self_attention_outputs), len(self_attention_outputs[0]))
         hidden_states = self_attention_outputs[0]
 
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        # hidden_states = self.self_attn_layer_norm(hidden_states)
-
-        self.after_attn_o = hidden_states  # TODO
 
         residual = hidden_states
         hidden_states = self.final_layer_norm(hidden_states)  # +
-        self.before_inter_o = hidden_states  # TODO
         hidden_states = self.activation_fn(self.fc1(hidden_states))
-        # hidden_states = F.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        self.after_inter_o = hidden_states  # TODO
 
         hidden_states = self.fc2(hidden_states)
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        # hidden_states = self.final_layer_norm(hidden_states)
-        self.output_o = hidden_states  # TODO
 
         if hidden_states.dtype == torch.float16 and (
             torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any()
@@ -1852,11 +1839,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds + embed_pos
-        # hidden_states = self.layernorm_embedding(hidden_states)
-        # TODO: check if its in embedding
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        self.embed_o = hidden_states  # TODO
 
         if attention_mask is None:
             attention_mask = torch.ones(input_shape, device=hidden_states.device)
@@ -1901,7 +1884,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
                         return custom_forward
 
-                    # TODO: fix it
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
@@ -1927,12 +1909,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
                         to_blocked_mask=blocked_encoder_mask,
                         output_attentions=output_attentions,
                     )
-                    # TODO:
-                    if idx == 0:
-                        self.l0_o = layer_outputs[0]
-                    if idx == 15:
-                        self.llast_o = layer_outputs[0]
-                    #
 
                 hidden_states = layer_outputs[0]
 
@@ -2205,8 +2181,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
         positions = self.embed_positions(input_shape, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        # hidden_states = self.layernorm_embedding(hidden_states)
-
         hidden_states = F.dropout(hidden_states, p=self.dropout, training=self.training)  # TODO: check
 
         # decoder layers
