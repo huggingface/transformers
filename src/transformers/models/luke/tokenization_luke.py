@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for LUKE."""
+
 import itertools
 import json
 import os
@@ -95,10 +96,10 @@ class LukeTokenizer(RobertaTokenizer):
         max_mention_length (:obj:`int`, `optional`, defaults to 30):
             The maximum number of tokens inside an entity span.
         entity_token_1 (:obj:`str`, `optional`, defaults to :obj:`<ent>`):
-            The special token representing an entity span. This token is only used when `task` is set to
+            The special token representing an entity span. This token is only used when ``task`` is set to
             "entity_classification" or "entity_pair_classification".
         entity_token_2 (:obj:`str`, `optional`, defaults to :obj:`<ent2>`):
-            The special token representing an entity span. This token is only used when `task` is set to
+            The special token representing an entity span. This token is only used when ``task`` is set to
             "entity_pair_classification".
     """
 
@@ -130,9 +131,7 @@ class LukeTokenizer(RobertaTokenizer):
             if isinstance(entity_token_2, str)
             else entity_token_2
         )
-        kwargs["additional_special_tokens"] = [entity_token_1, entity_token_2] + kwargs.get(
-            "additional_special_tokens", []
-        )
+        kwargs["additional_special_tokens"] = [entity_token_1, entity_token_2] + kwargs.get("additional_special_tokens", [])
 
         super().__init__(
             vocab_file=vocab_file,
@@ -156,7 +155,7 @@ class LukeTokenizer(RobertaTokenizer):
         elif task == "entity_pair_classification":
             self.max_entity_length = 2
         else:
-            raise ValueError(f"Task {task} not supported")
+            raise ValueError(f"Task {task} not supported. Select task from ['entity_classification', 'entity_pair_classification'] only.")
 
         self.max_mention_length = max_mention_length
 
@@ -332,9 +331,9 @@ class LukeTokenizer(RobertaTokenizer):
         **kwargs
     ) -> BatchEncoding:
         """
-        Tokenize and prepare for the model a sequence or a pair of sequences. .. warning:: This method is deprecated,
-        ``__call__`` should be used instead.
-
+        Tokenize and prepare for the model a sequence or a pair of sequences. 
+        
+        .. warning:: This method is deprecated, ``__call__`` should be used instead.
 
         Args:
             text (:obj:`str`):
@@ -1401,7 +1400,7 @@ class LukeTokenizer(RobertaTokenizer):
         return encoded_inputs
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        vocab_file, merge_file = super(LukeTokenizer, self).save_vocabulary(save_directory, filename_prefix)
+        vocab_file, merge_file = super().save_vocabulary(save_directory, filename_prefix)
 
         entity_vocab_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["entity_vocab_file"]

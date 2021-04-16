@@ -21,8 +21,8 @@ from ..roberta.configuration_roberta import RobertaConfig
 logger = logging.get_logger(__name__)
 
 LUKE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/config.json",
-    "luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/config.json",
+    "studio-ousia/luke-base": "https://huggingface.co/studio-ousia/luke-base/resolve/main/config.json",
+    "studio-ousia/luke-large": "https://huggingface.co/studio-ousia/luke-large/resolve/main/config.json",
 }
 
 

@@ -53,8 +53,6 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
     """
     Base class for outputs of the LUKE model.
 
-
-
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
@@ -85,8 +83,6 @@ class BaseLukeModelOutputWithPooling(BaseModelOutputWithPooling):
 class BaseLukeModelOutput(BaseModelOutput):
     """
     Base class for model's outputs, with potential hidden states and attentions.
-
-
 
     Args:
         last_hidden_state (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`):
@@ -119,8 +115,6 @@ class EntityClassificationOutput(ModelOutput):
     """
     Outputs of entity classification models.
 
-
-
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
@@ -152,8 +146,6 @@ class EntityPairClassificationOutput(ModelOutput):
     """
     Outputs of entity pair classification models.
 
-
-
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
@@ -184,8 +176,6 @@ class EntityPairClassificationOutput(ModelOutput):
 class EntitySpanClassificationOutput(ModelOutput):
     """
     Outputs of entity span classification models.
-
-
 
     Args:
         loss (:obj:`torch.FloatTensor` of shape :obj:`(1,)`, `optional`, returned when :obj:`labels` is provided):
@@ -229,10 +219,6 @@ class LukeEmbeddings(nn.Module):
         # any TensorFlow checkpoint file
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
 
         # End copy
         self.padding_idx = config.pad_token_id
@@ -336,8 +322,8 @@ class LukeSelfAttention(nn.Module):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
-                "The hidden size (%d) is not a multiple of the number of attention "
-                "heads (%d)" % (config.hidden_size, config.num_attention_heads)
+                f"The hidden size {config.hidden_size,} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
             )
 
         self.num_attention_heads = config.num_attention_heads
@@ -495,9 +481,7 @@ class LukeAttention(nn.Module):
         else:
             entity_attention_output = attention_output[:, word_size:, :]
 
-        outputs = (word_attention_output, entity_attention_output) + self_outputs[
-            2:
-        ]  # add attentions if we output them
+        outputs = (word_attention_output, entity_attention_output) + self_outputs[2:] # add attentions if we output them
 
         return outputs
 
@@ -721,8 +705,6 @@ LUKE_START_DOCSTRING = r"""
     subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
     general usage and behavior.
 
-
-
     Parameters:
         config (:class:`~transformers.LukeConfig`): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
@@ -731,8 +713,6 @@ LUKE_START_DOCSTRING = r"""
 """
 
 LUKE_INPUTS_DOCSTRING = r"""
-
-
     Args:
         input_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`):
             Indices of input sequence tokens in the vocabulary.
@@ -745,8 +725,6 @@ LUKE_INPUTS_DOCSTRING = r"""
         attention_mask (:obj:`torch.FloatTensor` of shape :obj:`({0})`, `optional`):
             Mask to avoid performing attention on padding token indices. Mask values selected in ``[0, 1]``:
 
-
-
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
@@ -754,8 +732,6 @@ LUKE_INPUTS_DOCSTRING = r"""
         token_type_ids (:obj:`torch.LongTensor` of shape :obj:`({0})`, `optional`):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in ``[0,
             1]``:
-
-
 
             - 0 corresponds to a `sentence A` token,
             - 1 corresponds to a `sentence B` token.
@@ -777,16 +753,12 @@ LUKE_INPUTS_DOCSTRING = r"""
         entity_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, entity_length)`, `optional`):
             Mask to avoid performing attention on padding entity token indices. Mask values selected in ``[0, 1]``:
 
-
-
             - 1 for entity tokens that are **not masked**,
             - 0 for entity tokens that are **masked**.
 
         entity_token_type_ids (:obj:`torch.LongTensor` of shape :obj:`(batch_size, entity_length)`, `optional`):
             Segment token indices to indicate first and second portions of the entity token inputs. Indices are
             selected in ``[0, 1]``:
-
-
 
             - 0 corresponds to a `portion A` entity token,
             - 1 corresponds to a `portion B` entity token.
@@ -802,8 +774,6 @@ LUKE_INPUTS_DOCSTRING = r"""
 
         head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
-
-
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -876,7 +846,6 @@ class LukeModel(LukePreTrainedModel):
         r"""
 
         Returns:
-
 
         Examples::
 
@@ -1232,7 +1201,7 @@ class LukeForEntityPairClassification(LukePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return EntityPairClassificationOutput(
-            loss=loss if loss is not None else None,
+            loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             entity_hidden_states=outputs.entity_hidden_states,
@@ -1354,7 +1323,7 @@ class LukeForEntitySpanClassification(LukePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return EntitySpanClassificationOutput(
-            loss=loss if loss is not None else None,
+            loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             entity_hidden_states=outputs.entity_hidden_states,
