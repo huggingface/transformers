@@ -177,12 +177,15 @@ class DataTrainingArguments:
     )
 
     def __post_init__(self):
-        train_extension = self.train_file.split(".")[-1]
-        assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-        validation_extension = self.validation_file.split(".")[-1]
-        assert (
-            validation_extension == train_extension
-        ), "`validation_file` should have the same extension (csv or json) as `train_file`."
+        train_extension = self.train_file.split(".")[-1].lower() if self.train_file is not None else None
+        validation_extension = self.validation_file.split(".")[-1].lower() if self.validation_file is not None else None
+        test_extension = self.test_file.split(".")[-1].lower() if self.test_file is not None else None
+        extensions = {train_extension, validation_extension, test_extension}
+        extensions.discard(None)
+        assert len(extensions) != 0, "Need to supply either a --train_file or a --test_file!"
+        assert len(extensions) == 1, "All input files should have the same file extension, either csv or json!"
+        assert 'csv' in extensions or 'json' in extensions, "Input files should have either .csv or .json extensions!"
+        self.input_file_extension = extensions.pop()
 
 
 @dataclass
@@ -287,23 +290,15 @@ def main():
     #
     # In distributed training, the load_dataset function guarantee that only one local process can concurrently
     # download the dataset.
-    data_files = {"train": data_args.train_file, "validation": data_args.validation_file}
-
-    # Get the test dataset: you can provide your own CSV/JSON test file (see below)
-    # when you use `do_predict`.
-    if data_args.test_file is not None:
-        if data_args.train_file is not None:
-            train_extension = data_args.train_file.split(".")[-1]
-            test_extension = data_args.test_file.split(".")[-1]
-            assert (
-                test_extension == train_extension
-            ), "`test_file` should have the same extension (csv or json) as `train_file`."
-        data_files["test"] = data_args.test_file
+    data_files = {"train": data_args.train_file,
+                  "validation": data_args.validation_file,
+                  "test": data_args.test_file}
+    data_files = {key: file for key, file in data_files.items() if file is not None}
 
     for key in data_files.keys():
         logger.info(f"Loading a local file for {key}: {data_files[key]}")
 
-    if data_args.train_file.endswith(".csv"):
+    if data_args.input_file_extension == "csv":
         # Loading a dataset from local csv files
         datasets = load_dataset("csv", data_files=data_files, cache_dir=model_args.cache_dir)
     else:
@@ -325,6 +320,8 @@ def main():
         label_list = datasets["train"].unique("label")
         label_list.sort()  # Let's sort it for determinism
         num_labels = len(label_list)
+        label_to_id = {v: i for i, v in enumerate(label_list)}
+        id_to_label = {i: v for v, i in label_to_id.items()}
     # endregion
 
     # region Load pretrained model and tokenizer
@@ -339,6 +336,7 @@ def main():
         cache_dir=model_args.cache_dir,
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
+        id2label=id_to_label
     )
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -394,9 +392,6 @@ def main():
         # We will pad later, dynamically at batch creation, to the max sequence length in each batch
         padding = False
 
-    if not is_regression:
-        label_to_id = {v: i for i, v in enumerate(label_list)}
-
     if data_args.max_seq_length > tokenizer.model_max_length:
         logger.warning(
             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
@@ -417,39 +412,33 @@ def main():
         return result
 
     datasets = datasets.map(preprocess_function, batched=True, load_from_cache_file=not data_args.overwrite_cache)
-    if training_args.do_train:
-        if "train" not in datasets:
-            raise ValueError("--do_train requires a train dataset")
+
+    if "train" in datasets:
         train_dataset = datasets["train"]
         if data_args.max_train_samples is not None:
             train_dataset = train_dataset.select(range(data_args.max_train_samples))
+        # Log a few random samples from the training set so we can see that it's working as expected:
+        for index in random.sample(range(len(train_dataset)), 3):
+            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
 
-    if training_args.do_eval:
-        if "validation" not in datasets:
-            raise ValueError("--do_eval requires a validation dataset")
+    if "validation" in datasets:
         eval_dataset = datasets["validation"]
         if data_args.max_val_samples is not None:
             eval_dataset = eval_dataset.select(range(data_args.max_val_samples))
 
-    if training_args.do_predict or data_args.test_file is not None:
-        if "test" not in datasets:
-            raise ValueError("--do_predict requires a test dataset")
+    if "test" in datasets:
         test_dataset = datasets["test"]
         if data_args.max_test_samples is not None:
             test_dataset = test_dataset.select(range(data_args.max_test_samples))
 
-        # Log a few random samples from the training set:
-    if training_args.do_train:
-        for index in random.sample(range(len(train_dataset)), 3):
-            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
     # endregion
 
     # region Training
-    if training_args.do_train:
+    if "train" in datasets:
         training_dataset = DataSequence(
             train_dataset, non_label_column_names, batch_size=training_args.per_device_train_batch_size, labels=True
         )
-        if training_args.do_eval:
+        if "validation" in datasets:
             eval_dataset = DataSequence(
                 eval_dataset, non_label_column_names, batch_size=training_args.per_device_eval_batch_size, labels=True
             )
@@ -461,7 +450,7 @@ def main():
     # endregion
 
     # region Prediction
-    if training_args.do_predict:
+    if "test" in datasets:
         logger.info("Doing predictions on test dataset...")
 
         test_dataset = DataSequence(
