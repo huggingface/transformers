@@ -14,10 +14,12 @@
 
 import collections
 
-import torch
-
-from .file_utils import ExplicitEnum
+from .file_utils import ExplicitEnum, is_torch_available
 from .utils import logging
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
