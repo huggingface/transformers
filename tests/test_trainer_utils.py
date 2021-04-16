@@ -285,6 +285,10 @@ class TrainerUtilsTest(unittest.TestCase):
             # All shards have the same number of samples
             self.assertEqual(len(shard), len(shard_lists[0]))
 
+        for shard in shards:
+            # All shards know the total number of samples
+            self.assertEqual(shard.num_examples, len(reference))
+
         observed = []
         for idx in range(0, len(shard_lists[0]), batch_size):
             for shard in shard_lists:

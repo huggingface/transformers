@@ -102,6 +102,26 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
         raise TypeError(f"Unsupported type for concatenation: got {type(tensors)}")
 
 
+def find_batch_size(tensors):
+    """
+    Find the first dimension of a tensor in a nested list/tuple/dict of tensors.
+    """
+    if isinstance(tensors, (list, tuple)):
+        for t in tensors:
+            result = find_batch_size(t)
+            if result is not None:
+                return result
+    elif isinstance(tensors, dict):
+        for key, value in tensors.items():
+            result = find_batch_size(value)
+            if result is not None:
+                return result
+    elif isinstance(tensors, torch.Tensor):
+        return tensors.shape[0] if len(tensors.shape) >= 1 else None
+    elif isinstance(tensors, np.ndarray):
+        return tensors.shape[0] if len(tensors.shape) >= 1 else None
+
+
 def nested_numpify(tensors):
     "Numpify `tensors` (even if it's a nested list/tuple of tensors)."
     if isinstance(tensors, (list, tuple)):
@@ -683,6 +703,7 @@ class IterableDatasetShard(IterableDataset):
         self.process_index = process_index
         self.seed = seed
         self.epoch = 0
+        self.num_examples = 0
 
     def set_epoch(self, epoch):
         self.epoch = epoch
@@ -690,6 +711,7 @@ class IterableDatasetShard(IterableDataset):
             self.dataset.set_epoch(epoch)
 
     def __iter__(self):
+        self.num_examples = 0
         if (
             not hasattr(self.dataset, "set_epoch")
             and hasattr(self.dataset, "generator")
@@ -702,6 +724,7 @@ class IterableDatasetShard(IterableDataset):
         first_batch = None
         current_batch = []
         for element in self.dataset:
+            self.num_examples += 1
             current_batch.append(element)
             # Wait to have a full batch before yielding elements.
             if len(current_batch) == real_batch_size:

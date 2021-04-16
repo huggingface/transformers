@@ -81,6 +81,7 @@ class PredictionOutput(NamedTuple):
     predictions: Union[np.ndarray, Tuple[np.ndarray]]
     label_ids: Optional[np.ndarray]
     metrics: Optional[Dict[str, float]]
+    num_samples: Optional[int]
 
 
 class TrainOutput(NamedTuple):

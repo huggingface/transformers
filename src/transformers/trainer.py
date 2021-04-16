@@ -49,7 +49,7 @@ import torch
 from packaging import version
 from torch import nn
 from torch.utils.data.dataloader import DataLoader
-from torch.utils.data.dataset import Dataset
+from torch.utils.data.dataset import Dataset, IterableDataset
 from torch.utils.data.distributed import DistributedSampler
 from torch.utils.data.sampler import RandomSampler, SequentialSampler
 
@@ -88,6 +88,7 @@ from .trainer_pt_utils import (
     ShardSampler,
     distributed_broadcast_scalars,
     distributed_concat,
+    find_batch_size,
     get_parameter_names,
     nested_concat,
     nested_detach,
@@ -383,7 +384,6 @@ class Trainer:
         if args.max_steps > 0:
             logger.info("max_steps is given, it will override any value given in num_train_epochs")
 
-        # Enforce rules on using datasets with no __len__
         if train_dataset is not None and not isinstance(train_dataset, collections.abc.Sized) and args.max_steps <= 0:
             raise ValueError("train_dataset does not implement __len__, max_steps has to be specified")
 
@@ -1029,7 +1029,7 @@ class Trainer:
         else:
             # see __init__. max_steps is set when the dataset has no __len__
             max_steps = self.args.max_steps
-            num_train_epochs = 1
+            num_train_epochs = int(self.args.num_train_epochs)
             num_update_steps_per_epoch = max_steps
 
         delay_optimizer_creation = self.sharded_ddp is not None and self.sharded_ddp != ShardedDDPOption.SIMPLE
@@ -1840,9 +1840,6 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
-        if eval_dataset is not None and not isinstance(eval_dataset, collections.abc.Sized):
-            raise ValueError("eval_dataset must implement __len__")
-
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
         start_time = time.time()
 
@@ -1857,8 +1854,7 @@ class Trainer:
             metric_key_prefix=metric_key_prefix,
         )
 
-        n_samples = len(eval_dataset if eval_dataset is not None else self.eval_dataset)
-        output.metrics.update(speed_metrics(metric_key_prefix, start_time, n_samples))
+        output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
         self.log(output.metrics)
 
         if self.args.tpu_metrics_debug or self.args.debug:
@@ -1907,9 +1903,6 @@ class Trainer:
         # memory metrics - must set up as early as possible
         self._memory_tracker.start()
 
-        if test_dataset is not None and not isinstance(test_dataset, collections.abc.Sized):
-            raise ValueError("test_dataset must implement __len__")
-
         test_dataloader = self.get_test_dataloader(test_dataset)
         start_time = time.time()
 
@@ -1917,7 +1910,7 @@ class Trainer:
         output = eval_loop(
             test_dataloader, description="Prediction", ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix
         )
-        output.metrics.update(speed_metrics(metric_key_prefix, start_time, len(test_dataset)))
+        output.metrics.update(speed_metrics(metric_key_prefix, start_time, output.num_samples))
 
         self._memory_tracker.stop_and_update_metrics(output.metrics)
 
@@ -1963,9 +1956,12 @@ class Trainer:
             model = model.half().to(self.args.device)
 
         batch_size = dataloader.batch_size
-        num_examples = self.num_examples(dataloader)
+
         logger.info(f"***** Running {description} *****")
-        logger.info(f"  Num examples = {num_examples}")
+        if isinstance(dataloader.dataset, collections.abc.Sized):
+            logger.info(f"  Num examples = {self.num_examples(dataloader)}")
+        else:
+            logger.info("  Num examples: Unknown")
         logger.info(f"  Batch size = {batch_size}")
 
         model.eval()
@@ -1978,16 +1974,29 @@ class Trainer:
 
         self.callback_handler.eval_dataloader = dataloader
 
+        # Initialize containers
+        # losses/preds/labels on GPU/TPU (accumulated for eval_accumulation_steps)
         losses_host = None
         preds_host = None
         labels_host = None
-
+        # losses/preds/labels on CPU (final containers)
         all_losses = None
         all_preds = None
         all_labels = None
+        # Will be useful when we have an iterable dataset so don't know its length.
 
+        observed_num_examples = 0
+        # Main evaluation loop
         for step, inputs in enumerate(dataloader):
+            # Update the observed num examples
+            observed_batch_size = find_batch_size(inputs)
+            if observed_batch_size is not None:
+                observed_num_examples += observed_batch_size
+
+            # Prediction step
             loss, logits, labels = self.prediction_step(model, inputs, prediction_loss_only, ignore_keys=ignore_keys)
+
+            # Update containers on host
             if loss is not None:
                 losses = self._nested_gather(loss.repeat(batch_size))
                 losses_host = losses if losses_host is None else torch.cat((losses_host, losses), dim=0)
@@ -2033,8 +2042,16 @@ class Trainer:
             labels = nested_numpify(labels_host)
             all_labels = labels if all_labels is None else nested_concat(all_labels, labels, padding_index=-100)
 
-        # TODO: Do something for iterable dataset here.
-        num_samples = len(dataloader.dataset)
+        # Number of samples
+        if not isinstance(dataloader.dataset, IterableDataset):
+            num_samples = len(dataloader.dataset)
+        elif isinstance(dataloader.dataset, IterableDatasetShard):
+            num_samples = dataloader.dataset.num_examples
+        else:
+            num_samples = observed_num_examples
+
+        # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
+        # samplers has been rounded to a multiple of batch_size, so we truncate.
         if all_losses is not None:
             all_losses = all_losses[:num_samples]
         if all_preds is not None:
@@ -2042,6 +2059,7 @@ class Trainer:
         if all_labels is not None:
             all_labels = nested_truncate(all_labels, num_samples)
 
+        # Metrics!
         if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
             metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
         else:
@@ -2058,7 +2076,7 @@ class Trainer:
             if not key.startswith(f"{metric_key_prefix}_"):
                 metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
 
-        return PredictionOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics)
+        return PredictionOutput(predictions=all_preds, label_ids=all_labels, metrics=metrics, num_samples=num_samples)
 
     def _nested_gather(self, tensors, name=None):
         """
