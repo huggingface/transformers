@@ -98,6 +98,8 @@ class BigBirdTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = BigBirdTokenizer
+    model_input_names = ["input_ids", "attention_mask"]
+    prefix_tokens: List[int] = []
 
     def __init__(
         self,
