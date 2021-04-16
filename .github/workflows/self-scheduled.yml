@@ -34,7 +34,6 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
-          pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
@@ -157,7 +156,6 @@ jobs:
           apt -y update && apt install -y libsndfile1-dev
           pip install --upgrade pip
           pip install .[sklearn,testing,onnxruntime,sentencepiece,speech]
-          pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.8.0+cu111.html
 
       - name: Are GPUs recognized by our DL frameworks
         run: |
