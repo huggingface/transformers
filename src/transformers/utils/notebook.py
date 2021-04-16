@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import collections
 import time
 from typing import Optional
 
@@ -286,6 +287,8 @@ class NotebookProgressCallback(TrainerCallback):
         self._force_next_update = False
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
+        if not isinstance(eval_dataloader.dataset, collections.abc.Sized):
+            return
         if self.prediction_bar is None:
             if self.training_tracker is not None:
                 self.prediction_bar = self.training_tracker.add_child(len(eval_dataloader))

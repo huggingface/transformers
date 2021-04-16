@@ -524,6 +524,9 @@ class TrainingArguments:
     skip_memory_metrics: bool = field(
         default=False, metadata={"help": "Whether or not to skip adding of memory profiler reports to metrics."}
     )
+    use_legacy_prediction_loop: bool = field(
+        default=False, metadata={"help": "Whether or not to use the legacy prediction_loop in the Trainer."}
+    )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
         default="",
