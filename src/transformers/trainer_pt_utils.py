@@ -242,6 +242,10 @@ class SequentialDistributedSampler(Sampler):
     """
 
     def __init__(self, dataset, num_replicas=None, rank=None, batch_size=None):
+        warnings.warn(
+            "SequentialDistributedSampler is deprecated and will be removed in v5 of Tranformers.",
+            FutureWarning,
+        )
         if num_replicas is None:
             if not dist.is_available():
                 raise RuntimeError("Requires distributed package to be available")
@@ -358,6 +362,10 @@ class DistributedTensorGatherer:
     """
 
     def __init__(self, world_size, num_samples, make_multiple_of=None, padding_index=-100):
+        warnings.warn(
+            "DistributedTensorGatherer is deprecated and will be removed in v5 of Tranformers.",
+            FutureWarning,
+        )
         self.world_size = world_size
         self.num_samples = num_samples
         total_size = world_size if make_multiple_of is None else world_size * make_multiple_of
