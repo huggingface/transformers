@@ -623,8 +623,7 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
             :obj:`past_key_values`).
         decoder_attention_mask (:obj:`torch.LongTensor` of shape :obj:`(batch_size, target_sequence_length)`, `optional`):
             Default behavior: generate a tensor that ignores pad tokens in :obj:`decoder_input_ids`. Causal mask will
-            also be used by default.
-<<<<<<< HEAD
+            also be used by default. <<<<<<< HEAD
 
             If you want to change padding behavior, you should read
             :func:`modeling_speech_to_text._prepare_decoder_inputs` and modify to your needs. See diagram 1 in `the
@@ -632,8 +631,8 @@ SPEECH_TO_TEXT_INPUTS_DOCSTRING = r"""
         head_mask (:obj:`torch.Tensor` of shape :obj:`(encoder_layers, encoder_attention_heads)`, `optional`):
 =======
         head_mask (:obj:`torch.Tensor` of shape :obj:`(num_layers, num_heads)`, `optional`):
->>>>>>> upstream/master
-            Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in ``[0, 1]``:
+>>>>>>> upstream/master Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in
+``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.

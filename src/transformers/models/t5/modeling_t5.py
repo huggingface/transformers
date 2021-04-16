@@ -1087,7 +1087,8 @@ T5_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         cross_attn_head_mask (:obj:`torch.Tensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in ``[0, 1]``:
+                Mask to nullify selected heads of the cross-attention modules in the decoder. Mask values selected in
+                ``[0, 1]``:
 
                 - 1 indicates the head is **not masked**,
                 - 0 indicates the head is **masked**.
