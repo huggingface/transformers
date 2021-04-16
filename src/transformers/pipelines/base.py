@@ -616,7 +616,10 @@ class Pipeline(_ScikitCompat):
         Return:
             :obj:`Dict[str, torch.Tensor]`: The same as :obj:`inputs` but on the proper device.
         """
-        return {name: tensor.to(self.device) for name, tensor in inputs.items()}
+        return {
+            name: tensor.to(self.device) if isinstance(tensor, torch.Tensor) else tensor
+            for name, tensor in inputs.items()
+        }
 
     def check_model_type(self, supported_models: Union[List[str], dict]):
         """
