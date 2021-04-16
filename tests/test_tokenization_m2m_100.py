@@ -20,7 +20,7 @@ from shutil import copyfile
 
 from transformers import M2M100Tokenizer, is_torch_available
 from transformers.file_utils import is_sentencepiece_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
 
 
 if is_sentencepiece_available():
@@ -191,3 +191,18 @@ class M2M100TokenizerIntegrationTest(unittest.TestCase):
             self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id("zh")])
             self.assertListEqual(self.tokenizer.suffix_tokens, [self.tokenizer.eos_token_id])
         self.assertListEqual(self.tokenizer.prefix_tokens, [self.tokenizer.get_lang_id(self.tokenizer.src_lang)])
+
+    @require_torch
+    def test_tokenizer_translation(self):
+        inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en", tgt_lang="ar")
+
+        self.assertEqual(
+            nested_simplify(inputs),
+            {
+                # en_XX, A, test, EOS
+                "input_ids": [[128022, 58, 4183, 2]],
+                "attention_mask": [[1, 1, 1, 1]],
+                # ar_AR
+                "forced_bos_token_id": 128006,
+            },
+        )

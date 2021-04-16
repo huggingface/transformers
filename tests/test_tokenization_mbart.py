@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import SPIECE_UNDERLINE, BatchEncoding, MBartTokenizer, MBartTokenizerFast, is_torch_available
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch
+from transformers.testing_utils import nested_simplify, require_sentencepiece, require_tokenizers, require_torch
 
 from .test_tokenization_common import TokenizerTesterMixin
 
@@ -232,3 +232,18 @@ class MBartEnroIntegrationTest(unittest.TestCase):
 
         self.assertEqual(batch.input_ids.shape[1], 3)
         self.assertEqual(batch.decoder_input_ids.shape[1], 10)
+
+    @require_torch
+    def test_tokenizer_translation(self):
+        inputs = self.tokenizer._build_translation_inputs("A test", src_lang="en_XX", tgt_lang="ar_AR")
+
+        self.assertEqual(
+            nested_simplify(inputs),
+            {
+                # A, test, EOS, en_XX
+                "input_ids": [[62, 3034, 2, 250004]],
+                "attention_mask": [[1, 1, 1, 1]],
+                # ar_AR
+                "forced_bos_token_id": 250001,
+            },
+        )
