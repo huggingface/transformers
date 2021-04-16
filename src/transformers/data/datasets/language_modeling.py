@@ -412,7 +412,7 @@ class TextDatasetForNextSentencePrediction(Dataset):
                 logger.info(f"Creating examples from {len(self.documents)} documents.")
                 self.examples = []
                 for doc_index, document in enumerate(self.documents):
-                    self.create_examples_from_document(document, doc_index, blcok_size)
+                    self.create_examples_from_document(document, doc_index, block_size)
 
                 start = time.time()
                 with open(cached_features_file, "wb") as handle:
