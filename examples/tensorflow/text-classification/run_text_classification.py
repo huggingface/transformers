@@ -261,7 +261,7 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    logger.setLevel(logging.WARN)
+    logger.setLevel(logging.INFO)
 
     # Log a short summary for each process:
     logger.warning(
@@ -291,16 +291,14 @@ def main():
 
     # Get the test dataset: you can provide your own CSV/JSON test file (see below)
     # when you use `do_predict`.
-    if training_args.do_predict:
-        if data_args.test_file is not None:
+    if data_args.test_file is not None:
+        if data_args.train_file is not None:
             train_extension = data_args.train_file.split(".")[-1]
             test_extension = data_args.test_file.split(".")[-1]
             assert (
                 test_extension == train_extension
             ), "`test_file` should have the same extension (csv or json) as `train_file`."
-            data_files["test"] = data_args.test_file
-        else:
-            raise ValueError("Need either a GLUE task or a test file for `do_predict`.")
+        data_files["test"] = data_args.test_file
 
     for key in data_files.keys():
         logger.info(f"Loading a local file for {key}: {data_files[key]}")
