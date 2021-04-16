@@ -128,6 +128,12 @@ if __name__ == "__main__":
                 "common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt",
                 "pipeline": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_pipeline_multi_gpu_[].txt",
             },
+            "Torch Cuda Extensions Single GPU": {
+                "common": "run_tests_torch_cuda_extensions_gpu_test_reports/tests_torch_cuda_extensions_gpu_[].txt"
+            },
+            "Torch Cuda Extensions Multi GPU": {
+                "common": "run_tests_torch_cuda_extensions_multi_gpu_test_reports/tests_torch_cuda_extensions_multi_gpu_[].txt"
+            },
         }
     else:
         file_paths = {
@@ -135,6 +141,12 @@ if __name__ == "__main__":
             "Torch Single GPU": {"common": "run_all_tests_torch_gpu_test_reports/tests_torch_gpu_[].txt"},
             "TF Multi GPU": {"common": "run_all_tests_tf_multi_gpu_test_reports/tests_tf_multi_gpu_[].txt"},
             "Torch Multi GPU": {"common": "run_all_tests_torch_multi_gpu_test_reports/tests_torch_multi_gpu_[].txt"},
+            "Torch Cuda Extensions Single GPU": {
+                "common": "run_tests_torch_cuda_extensions_gpu_test_reports/tests_torch_cuda_extensions_gpu_[].txt"
+            },
+            "Torch Cuda Extensions Multi GPU": {
+                "common": "run_tests_torch_cuda_extensions_multi_gpu_test_reports/tests_torch_cuda_extensions_multi_gpu_[].txt"
+            },
         }
 
     client = WebClient(token=os.environ["CI_SLACK_BOT_TOKEN"])
